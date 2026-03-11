@@ -5,47 +5,50 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    /* cart-configurator admin light theme */
+    --background: 210 20% 98%;        /* #f9fafb */
+    --foreground: 220 13% 18%;        /* #111827 */
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card-foreground: 220 13% 18%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
+    --popover-foreground: 220 13% 18%;
+    --primary: 221 83% 53%;           /* #2563eb — cart-configurator admin blue */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 16% 93%;         /* #e5e7eb */
+    --secondary-foreground: 220 13% 18%;
+    --muted: 210 16% 93%;
+    --muted-foreground: 215 13% 44%;  /* #6b7280 */
+    --accent: 210 16% 93%;
+    --accent-foreground: 220 13% 18%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 10% 3.9%;
+    --border: 214 13% 89%;            /* #d1d5db */
+    --input: 214 13% 89%;
+    --ring: 221 83% 53%;
     --radius: 0.5rem;
+    --brand-orange: #D2691E;          /* Bronco Orange — GG identity */
   }
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
+    --background: 222 47% 7%;         /* #0f172a */
+    --foreground: 214 32% 95%;        /* #f1f5f9 */
+    --card: 222 47% 11%;              /* #1e293b */
+    --card-foreground: 214 32% 95%;
+    --popover: 222 47% 11%;
+    --popover-foreground: 214 32% 95%;
+    --primary: 217 91% 60%;           /* #3b82f6 */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 217 33% 17%;         /* #334155 */
+    --secondary-foreground: 214 32% 95%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 68%;  /* #cbd5e1 */
+    --accent: 217 33% 17%;
+    --accent-foreground: 214 32% 95%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 217 91% 60%;
+    --brand-orange: #D2691E;
   }
   * {
     @apply border-border;

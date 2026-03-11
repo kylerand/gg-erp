@@ -1,12 +1,36 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import {
+  Wrench,
+  Package,
+  Users,
+  BookOpen,
+  CalendarDays,
+  Receipt,
+  BarChart3,
+  Settings2,
+  LogOut,
+  type LucideIcon,
+} from 'lucide-react';
 
-const NAV_SECTIONS = [
+interface NavChild {
+  label: string;
+  href: string;
+}
+
+interface NavSection {
+  label: string;
+  href: string;
+  icon: LucideIcon;
+  children: NavChild[];
+}
+
+const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Work Orders',
     href: '/work-orders',
-    icon: '🔧',
+    icon: Wrench,
     children: [
       { label: 'My Queue', href: '/work-orders/my-queue' },
       { label: 'Dispatch Board', href: '/work-orders/dispatch' },
@@ -16,7 +40,7 @@ const NAV_SECTIONS = [
   {
     label: 'Inventory',
     href: '/inventory',
-    icon: '📦',
+    icon: Package,
     children: [
       { label: 'Part Lookup', href: '/inventory/parts' },
       { label: 'Reservations', href: '/inventory/reservations' },
@@ -24,9 +48,9 @@ const NAV_SECTIONS = [
     ],
   },
   {
-    label: 'Customer & Dealers',
+    label: 'Customers',
     href: '/customer-dealers',
-    icon: '👥',
+    icon: Users,
     children: [
       { label: 'Customers', href: '/customer-dealers/customers' },
       { label: 'Dealers', href: '/customer-dealers/dealers' },
@@ -36,7 +60,7 @@ const NAV_SECTIONS = [
   {
     label: 'Training',
     href: '/training',
-    icon: '📚',
+    icon: BookOpen,
     children: [
       { label: 'My OJT', href: '/training/my-ojt' },
       { label: 'Assignments', href: '/training/assignments' },
@@ -46,7 +70,7 @@ const NAV_SECTIONS = [
   {
     label: 'Planning',
     href: '/planning',
-    icon: '📅',
+    icon: CalendarDays,
     children: [
       { label: 'Build Slots', href: '/planning/slots' },
     ],
@@ -54,7 +78,7 @@ const NAV_SECTIONS = [
   {
     label: 'Accounting',
     href: '/accounting',
-    icon: '💰',
+    icon: Receipt,
     children: [
       { label: 'Sync Monitor', href: '/accounting/sync' },
       { label: 'Reconciliation', href: '/accounting/reconciliation' },
@@ -63,13 +87,13 @@ const NAV_SECTIONS = [
   {
     label: 'Reporting',
     href: '/reporting',
-    icon: '📊',
+    icon: BarChart3,
     children: [],
   },
   {
     label: 'Admin',
     href: '/admin',
-    icon: '⚙️',
+    icon: Settings2,
     children: [
       { label: 'User Access', href: '/admin/access' },
       { label: 'Audit Trail', href: '/admin/audit' },
@@ -82,41 +106,59 @@ export function SidebarNav() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-56 min-h-screen bg-gray-900 text-gray-100 flex flex-col flex-shrink-0">
-      <div className="px-4 py-5 border-b border-gray-800">
-        <span className="font-bold text-base tracking-tight">⛳ Golfin Garage</span>
-        <span className="block text-xs text-gray-400 mt-0.5">ERP</span>
+    <aside className="w-56 min-h-screen bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
+      {/* Logo */}
+      <div className="px-4 py-4 border-b border-gray-200">
+        <div className="flex items-center gap-2.5">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
+            style={{ backgroundColor: 'var(--brand-orange)' }}
+          >
+            GG
+          </div>
+          <div>
+            <span className="font-semibold text-sm text-gray-900 leading-tight block">Golfin Garage</span>
+            <span className="text-xs text-gray-400 leading-tight block">ERP</span>
+          </div>
+        </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto py-3">
+      {/* Nav */}
+      <nav className="flex-1 overflow-y-auto py-2">
         {NAV_SECTIONS.map((section) => {
+          const Icon = section.icon;
           const isActive = pathname === section.href || pathname.startsWith(section.href + '/');
           return (
-            <div key={section.href} className="mb-1">
+            <div key={section.href} className="px-2 mb-0.5">
               <Link
                 href={section.href}
-                className={`flex items-center gap-2.5 px-4 py-2 text-sm font-medium transition-colors ${
-                  isActive ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-blue-50 text-blue-600'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                 }`}
               >
-                <span className="text-base" aria-hidden>{section.icon}</span>
+                <Icon size={16} strokeWidth={isActive ? 2.5 : 2} className="flex-shrink-0" />
                 {section.label}
               </Link>
               {isActive && section.children.length > 0 && (
-                <div className="ml-8 mt-0.5 space-y-0.5">
-                  {section.children.map((child) => (
-                    <Link
-                      key={child.href}
-                      href={child.href}
-                      className={`block px-3 py-1.5 text-xs rounded transition-colors ${
-                        pathname === child.href
-                          ? 'text-yellow-400 font-medium'
-                          : 'text-gray-400 hover:text-gray-100'
-                      }`}
-                    >
-                      {child.label}
-                    </Link>
-                  ))}
+                <div className="ml-6 mt-0.5 space-y-0.5">
+                  {section.children.map((child) => {
+                    const isChildActive = pathname === child.href;
+                    return (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        className={`block px-3 py-1.5 text-xs rounded-md transition-colors ${
+                          isChildActive
+                            ? 'text-blue-600 bg-blue-50 font-medium'
+                            : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'
+                        }`}
+                      >
+                        {child.label}
+                      </Link>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -124,9 +166,13 @@ export function SidebarNav() {
         })}
       </nav>
 
-      <div className="px-4 py-4 border-t border-gray-800">
-        <Link href="/auth" className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-100">
-          <span aria-hidden>👤</span>
+      {/* Footer */}
+      <div className="px-4 py-3 border-t border-gray-200">
+        <Link
+          href="/auth"
+          className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-700 transition-colors"
+        >
+          <LogOut size={14} />
           <span>Sign out</span>
         </Link>
       </div>

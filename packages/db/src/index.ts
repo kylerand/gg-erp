@@ -5,3 +5,6 @@ export * from './repositories/part.repository.js';
 export * from './repositories/vendor.repository.js';
 export * from './repositories/user.repository.js';
 export * from './repositories/wo-order.repository.js';
+export * from './repositories/customer.repository.js';
+export * from './repositories/invoice-sync.repository.js';
+export * from './repositories/tickets.repository.js';

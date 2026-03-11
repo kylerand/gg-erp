@@ -7,7 +7,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DB_DATABASE_URL")
-  schemas  = ["planning", "audit", "obs", "migration", "identity", "hr", "inventory", "work_orders", "integrations", "sop_ojt"]
+  schemas  = ["planning", "audit", "obs", "migration", "identity", "hr", "inventory", "work_orders", "integrations", "sop_ojt", "customers", "tickets", "accounting"]
 }
 
 enum WorkOrderStatus {
@@ -1026,4 +1026,159 @@ model WebhookInboxEvent {
   @@index([processingStatus, receivedAt])
   @@map("webhook_inbox_events")
   @@schema("integrations")
+}
+
+// ============================================================
+// customers schema
+// ============================================================
+
+enum CustomerLifecycleState {
+  LEAD
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+
+  @@schema("customers")
+}
+
+model Customer {
+  id                     String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  state                  CustomerLifecycleState @default(LEAD)
+  externalReference      String?                @map("external_reference")
+  fullName               String                 @map("full_name")
+  companyName            String?                @map("company_name")
+  email                  String
+  phone                  String?
+  billingAddress         String?                @map("billing_address")
+  shippingAddress        String?                @map("shipping_address")
+  preferredContactMethod String                 @default("EMAIL") @map("preferred_contact_method")
+  createdAt              DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime               @default(now()) @map("updated_at") @db.Timestamptz(6)
+  archivedAt             DateTime?              @map("archived_at") @db.Timestamptz(6)
+  version                Int                    @default(0)
+
+  @@index([state])
+  @@map("customers")
+  @@schema("customers")
+}
+
+// ============================================================
+// tickets schema
+// ============================================================
+
+enum TechnicianTaskState {
+  READY
+  IN_PROGRESS
+  BLOCKED
+  DONE
+  CANCELLED
+
+  @@schema("tickets")
+}
+
+model TechnicianTask {
+  id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workOrderId    String              @map("work_order_id") @db.Uuid
+  routingStepId  String              @map("routing_step_id")
+  technicianId   String?             @map("technician_id") @db.Uuid
+  state          TechnicianTaskState @default(READY)
+  startedAt      DateTime?           @map("started_at") @db.Timestamptz(6)
+  completedAt    DateTime?           @map("completed_at") @db.Timestamptz(6)
+  blockedReason  String?             @map("blocked_reason")
+  correlationId  String              @map("correlation_id")
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime            @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version        Int                 @default(0)
+
+  @@index([workOrderId, state])
+  @@index([technicianId, state])
+  @@map("technician_tasks")
+  @@schema("tickets")
+}
+
+enum ReworkIssueState {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  REOPENED
+  CLOSED
+
+  @@schema("tickets")
+}
+
+model ReworkIssue {
+  id           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workOrderId  String           @map("work_order_id") @db.Uuid
+  title        String
+  description  String
+  severity     String           @default("MEDIUM")
+  state        ReworkIssueState @default(OPEN)
+  reportedBy   String           @map("reported_by") @db.Uuid
+  assignedTo   String?          @map("assigned_to") @db.Uuid
+  resolvedAt   DateTime?        @map("resolved_at") @db.Timestamptz(6)
+  correlationId String          @map("correlation_id")
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime         @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version      Int              @default(0)
+
+  @@index([workOrderId, state])
+  @@map("rework_issues")
+  @@schema("tickets")
+}
+
+model FileAttachment {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  entityType   String    @map("entity_type")
+  entityId     String    @map("entity_id") @db.Uuid
+  fileName     String    @map("file_name")
+  mimeType     String    @map("mime_type")
+  sizeBytes    Int       @map("size_bytes")
+  s3Key        String    @map("s3_key")
+  s3Bucket     String    @map("s3_bucket")
+  uploadedBy   String    @map("uploaded_by") @db.Uuid
+  correlationId String   @map("correlation_id")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(6)
+  version      Int       @default(0)
+
+  @@index([entityType, entityId])
+  @@index([uploadedBy])
+  @@map("file_attachments")
+  @@schema("tickets")
+}
+
+// ============================================================
+// accounting schema
+// ============================================================
+
+enum InvoiceSyncState {
+  PENDING
+  IN_PROGRESS
+  SYNCED
+  FAILED
+  CANCELLED
+
+  @@schema("accounting")
+}
+
+model InvoiceSyncRecord {
+  id                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoiceNumber     String           @map("invoice_number")
+  workOrderId       String           @map("work_order_id") @db.Uuid
+  provider          String           @default("QUICKBOOKS")
+  state             InvoiceSyncState @default(PENDING)
+  attemptCount      Int              @default(0) @map("attempt_count")
+  lastErrorCode     String?          @map("last_error_code")
+  lastErrorMessage  String?          @map("last_error_message")
+  externalReference String?          @map("external_reference")
+  syncedAt          DateTime?        @map("synced_at") @db.Timestamptz(6)
+  correlationId     String           @map("correlation_id")
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime         @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version           Int              @default(0)
+
+  @@index([workOrderId])
+  @@index([state])
+  @@map("invoice_sync_records")
+  @@schema("accounting")
 }

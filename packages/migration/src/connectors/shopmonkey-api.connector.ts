@@ -74,14 +74,17 @@ interface ListResponse<T> {
   };
 }
 
-async function fetchAll<T>(
+async function fetchAll<T extends { id: string }>(
   session: ShopMonkeySession,
   path: string,
   extraParams: Record<string, string> = {},
 ): Promise<T[]> {
   const results: T[] = [];
+  const seenIds = new Set<string>();
   let offset = 0;
   let page = 1;
+  // Use meta.total as a hard cap when the API provides it
+  let totalKnown: number | null = null;
 
   while (true) {
     const params = new URLSearchParams({
@@ -94,15 +97,34 @@ async function fetchAll<T>(
       headers: { Authorization: `Bearer ${session.token}` },
     }, MAX_RETRIES);
 
-    if (!Array.isArray(res.data)) break;
-    results.push(...res.data);
+    if (!Array.isArray(res.data) || res.data.length === 0) break;
 
-    if (page === 1 || results.length % 250 === 0) {
-      console.log(`[shopmonkey] ${path}: fetched ${results.length} records (page ${page})`);
+    // Capture total from first page if available
+    if (page === 1 && res.meta?.total != null) {
+      totalKnown = res.meta.total;
     }
 
-    const hasMore = res.meta?.hasMore ?? res.data.length === DEFAULT_PAGE_SIZE;
-    if (!hasMore || res.data.length === 0) break;
+    // Detect infinite loop: stop if every record on this page is a duplicate
+    const newRecords = res.data.filter(r => !seenIds.has(r.id));
+    if (newRecords.length === 0) {
+      console.warn(`[shopmonkey] ${path}: all ${res.data.length} records on page ${page} already seen — stopping (duplicate page detected)`);
+      break;
+    }
+
+    for (const r of newRecords) seenIds.add(r.id);
+    results.push(...newRecords);
+
+    if (page === 1 || results.length % 250 === 0) {
+      const progress = totalKnown ? ` / ${totalKnown}` : '';
+      console.log(`[shopmonkey] ${path}: fetched ${results.length}${progress} records (page ${page})`);
+    }
+
+    // Hard cap: stop when we have everything according to meta.total
+    if (totalKnown !== null && results.length >= totalKnown) break;
+
+    const hasMore = res.meta?.hasMore ?? (res.data.length === DEFAULT_PAGE_SIZE);
+    if (!hasMore) break;
+
     offset += DEFAULT_PAGE_SIZE;
     page++;
 

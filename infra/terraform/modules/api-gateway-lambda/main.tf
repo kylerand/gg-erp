@@ -42,6 +42,12 @@ variable "accounting_lambda_zip_path" {
   default     = "apps/api/dist/accounting-lambda.zip"
 }
 
+variable "migration_lambda_zip_path" {
+  description = "Path to the zipped migration admin Lambda artifact."
+  type        = string
+  default     = "apps/api/dist/migration-lambda.zip"
+}
+
 variable "qb_client_id" {
   description = "QuickBooks app client ID for OAuth2"
   type        = string
@@ -1132,6 +1138,111 @@ resource "aws_apigatewayv2_route" "accounting_trigger_sync" {
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
+# ============================================================
+# Migration Admin Lambdas
+# ============================================================
+
+resource "aws_lambda_function" "migration_trigger_batch" {
+  function_name = "${var.name_prefix}-migration-trigger-batch"
+  role          = aws_iam_role.lambda_exec.arn
+  runtime       = "nodejs20.x"
+  handler       = "trigger-batch.handler"
+  filename      = var.migration_lambda_zip_path
+  timeout       = 30
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+resource "aws_lambda_function" "migration_list_batches" {
+  function_name = "${var.name_prefix}-migration-list-batches"
+  role          = aws_iam_role.lambda_exec.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-batches.handler"
+  filename      = var.migration_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+resource "aws_lambda_function" "migration_get_batch" {
+  function_name = "${var.name_prefix}-migration-get-batch"
+  role          = aws_iam_role.lambda_exec.arn
+  runtime       = "nodejs20.x"
+  handler       = "get-batch.handler"
+  filename      = var.migration_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+resource "aws_lambda_function" "migration_cancel_batch" {
+  function_name = "${var.name_prefix}-migration-cancel-batch"
+  role          = aws_iam_role.lambda_exec.arn
+  runtime       = "nodejs20.x"
+  handler       = "cancel-batch.handler"
+  filename      = var.migration_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
+resource "aws_apigatewayv2_integration" "migration_trigger_batch" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.migration_trigger_batch.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "migration_trigger_batch" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /migration/batches"
+  target             = "integrations/${aws_apigatewayv2_integration.migration_trigger_batch.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "migration_list_batches" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.migration_list_batches.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "migration_list_batches" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /migration/batches"
+  target             = "integrations/${aws_apigatewayv2_integration.migration_list_batches.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "migration_get_batch" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.migration_get_batch.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "migration_get_batch" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /migration/batches/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.migration_get_batch.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "migration_cancel_batch" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.migration_cancel_batch.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "migration_cancel_batch" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /migration/batches/{id}/cancel"
+  target             = "integrations/${aws_apigatewayv2_integration.migration_cancel_batch.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
 locals {
   erp_lambdas = {
     customers_list        = aws_lambda_function.customers_list
@@ -1165,6 +1276,10 @@ locals {
     accounting_list_sync         = aws_lambda_function.accounting_list_sync
     accounting_retry_sync        = aws_lambda_function.accounting_retry_sync
     accounting_trigger_sync      = aws_lambda_function.accounting_trigger_sync
+    migration_trigger_batch      = aws_lambda_function.migration_trigger_batch
+    migration_list_batches       = aws_lambda_function.migration_list_batches
+    migration_get_batch          = aws_lambda_function.migration_get_batch
+    migration_cancel_batch       = aws_lambda_function.migration_cancel_batch
   }
 }
 

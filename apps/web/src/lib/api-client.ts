@@ -337,3 +337,101 @@ export const MOCK_DEALERS: Dealer[] = [
 export async function listDealers(): Promise<Dealer[]> {
   return apiFetch('/identity/dealers', undefined, MOCK_DEALERS);
 }
+
+// ─── SOP Documents ────────────────────────────────────────────────────────────
+
+export interface SopDocument {
+  id: string;
+  documentCode: string;
+  title: string;
+  documentStatus: 'DRAFT' | 'PUBLISHED' | 'RETIRED';
+  category?: string;
+  ownerEmployeeId?: string;
+  currentVersion?: {
+    versionNumber: number;
+    effectiveAt?: string;
+    changeSummary?: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+}
+
+export interface CreateSopInput {
+  documentCode: string;
+  title: string;
+  category?: string;
+  ownerEmployeeId?: string;
+}
+
+export async function listSops(params?: { status?: string; search?: string }): Promise<{ items: SopDocument[]; total: number }> {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  if (params?.search) qs.set('search', params.search);
+  return apiFetch(`/sop${qs.size ? `?${qs}` : ''}`, undefined, { items: [], total: 0 });
+}
+
+export async function createSop(input: CreateSopInput): Promise<SopDocument> {
+  const data = await apiFetch<{ sop: SopDocument }>('/sop', { method: 'POST', body: JSON.stringify(input) });
+  return data.sop;
+}
+
+// ─── Training Modules ─────────────────────────────────────────────────────────
+
+export interface TrainingModule {
+  id: string;
+  moduleCode: string;
+  moduleName: string;
+  description?: string;
+  moduleStatus: 'ACTIVE' | 'INACTIVE' | 'RETIRED';
+  passScore?: number;
+  validityDays?: number;
+  isRequired: boolean;
+  sopDocument?: { documentCode: string; title: string; documentStatus: string };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function listTrainingModules(params?: { status?: string }): Promise<{ items: TrainingModule[]; total: number }> {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  return apiFetch(`/ojt/modules${qs.size ? `?${qs}` : ''}`, undefined, { items: [], total: 0 });
+}
+
+// ─── Training Assignments ─────────────────────────────────────────────────────
+
+export interface TrainingAssignment {
+  id: string;
+  moduleId: string;
+  employeeId: string;
+  assignmentStatus: 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'EXEMPT' | 'CANCELLED';
+  dueAt?: string;
+  startedAt?: string;
+  completedAt?: string;
+  score?: number;
+  module?: {
+    moduleCode: string;
+    moduleName: string;
+    passScore?: number;
+    validityDays?: number;
+    isRequired: boolean;
+    sopDocument?: { documentCode: string; title: string };
+  };
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+}
+
+export async function listMyAssignments(employeeId: string, params?: { status?: string }): Promise<{ items: TrainingAssignment[]; total: number }> {
+  const qs = new URLSearchParams({ employeeId });
+  if (params?.status) qs.set('status', params.status);
+  return apiFetch(`/ojt/assignments?${qs}`, undefined, { items: [], total: 0 });
+}
+
+export async function completeAssignment(id: string, score?: number): Promise<TrainingAssignment> {
+  const data = await apiFetch<{ assignment: TrainingAssignment }>(
+    `/ojt/assignments/${id}/complete`,
+    { method: 'PATCH', body: JSON.stringify({ score }) }
+  );
+  return data.assignment;
+}

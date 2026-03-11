@@ -30,6 +30,12 @@ variable "attachments_lambda_zip_path" {
   default     = "apps/api/dist/attachments-lambda.zip"
 }
 
+variable "sop_lambda_zip_path" {
+  description = "Path to the zipped SOP/OJT Lambda artifact."
+  type        = string
+  default     = "apps/api/dist/sop-lambda.zip"
+}
+
 variable "cognito_user_pool_endpoint" {
   description = "Cognito issuer URL for JWT authorizer (e.g. https://cognito-idp.{region}.amazonaws.com/{userPoolId})"
   type        = string
@@ -748,7 +754,189 @@ resource "aws_apigatewayv2_route" "attachments_presign_download" {
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
-# ─── Lambda Permissions ───────────────────────────────────────────────────────
+# ─── SOP / OJT Lambdas ────────────────────────────────────────────────────────
+
+resource "aws_lambda_function" "sop_list" {
+  function_name = "${var.name_prefix}-sop-list"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list.handler"
+  filename      = var.sop_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
+resource "aws_lambda_function" "sop_get" {
+  function_name = "${var.name_prefix}-sop-get"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "get.handler"
+  filename      = var.sop_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
+resource "aws_lambda_function" "sop_create" {
+  function_name = "${var.name_prefix}-sop-create"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "create.handler"
+  filename      = var.sop_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
+resource "aws_lambda_function" "sop_publish_version" {
+  function_name = "${var.name_prefix}-sop-publish-version"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "publish-version.handler"
+  filename      = var.sop_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
+resource "aws_lambda_function" "sop_list_modules" {
+  function_name = "${var.name_prefix}-sop-list-modules"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-modules.handler"
+  filename      = var.sop_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
+resource "aws_lambda_function" "sop_list_assignments" {
+  function_name = "${var.name_prefix}-sop-list-assignments"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-assignments.handler"
+  filename      = var.sop_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
+resource "aws_lambda_function" "sop_complete_assignment" {
+  function_name = "${var.name_prefix}-sop-complete-assignment"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "complete-assignment.handler"
+  filename      = var.sop_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
+resource "aws_apigatewayv2_integration" "sop_list" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.sop_list.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "sop_list" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /sop"
+  target             = "integrations/${aws_apigatewayv2_integration.sop_list.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "sop_get" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.sop_get.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "sop_get" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /sop/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.sop_get.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "sop_create" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.sop_create.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "sop_create" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /sop"
+  target             = "integrations/${aws_apigatewayv2_integration.sop_create.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "sop_publish_version" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.sop_publish_version.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "sop_publish_version" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /sop/{id}/versions"
+  target             = "integrations/${aws_apigatewayv2_integration.sop_publish_version.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "sop_list_modules" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.sop_list_modules.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "sop_list_modules" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /ojt/modules"
+  target             = "integrations/${aws_apigatewayv2_integration.sop_list_modules.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "sop_list_assignments" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.sop_list_assignments.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "sop_list_assignments" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /ojt/assignments"
+  target             = "integrations/${aws_apigatewayv2_integration.sop_list_assignments.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "sop_complete_assignment" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.sop_complete_assignment.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "sop_complete_assignment" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /ojt/assignments/{id}/complete"
+  target             = "integrations/${aws_apigatewayv2_integration.sop_complete_assignment.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
 
 locals {
   erp_lambdas = {
@@ -770,6 +958,13 @@ locals {
     attachments_confirm_upload   = aws_lambda_function.attachments_confirm_upload
     attachments_list             = aws_lambda_function.attachments_list
     attachments_presign_download = aws_lambda_function.attachments_presign_download
+    sop_list                     = aws_lambda_function.sop_list
+    sop_get                      = aws_lambda_function.sop_get
+    sop_create                   = aws_lambda_function.sop_create
+    sop_publish_version          = aws_lambda_function.sop_publish_version
+    sop_list_modules             = aws_lambda_function.sop_list_modules
+    sop_list_assignments         = aws_lambda_function.sop_list_assignments
+    sop_complete_assignment      = aws_lambda_function.sop_complete_assignment
   }
 }
 

@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.6.0"
+  required_version = ">= 1.4.0"
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -7,14 +7,15 @@ terraform {
     }
   }
 
-  # Uncomment after running bootstrap: cd infra/terraform/bootstrap && terraform apply
-  # backend "s3" {
-  #   bucket         = "gg-erp-terraform-state"
-  #   key            = "prod/terraform.tfstate"
-  #   region         = "us-east-1"
-  #   dynamodb_table = "gg-erp-terraform-locks"
-  #   encrypt        = true
-  # }
+  # Run bootstrap first: cd infra/terraform/bootstrap && terraform apply
+  # Then: terraform init -migrate-state
+  backend "s3" {
+    bucket         = "gg-erp-terraform-state"
+    key            = "prod/terraform.tfstate"
+    region         = "us-east-1"
+    dynamodb_table = "gg-erp-terraform-locks"
+    encrypt        = true
+  }
 }
 
 provider "aws" {

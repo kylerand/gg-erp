@@ -7,7 +7,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DB_DATABASE_URL")
-  schemas  = ["planning", "audit", "obs", "migration"]
+  schemas  = ["planning", "audit", "obs", "migration", "identity", "hr", "inventory", "work_orders", "integrations", "sop_ojt"]
 }
 
 enum WorkOrderStatus {
@@ -215,4 +215,815 @@ model MigrationError {
   @@index([batchId])
   @@index([retryable])
   @@schema("migration")
+}
+
+// ============================================================
+// identity schema
+// ============================================================
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  DISABLED
+
+  @@schema("identity")
+}
+
+model User {
+  id               String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cognitoSubject   String     @unique @map("cognito_subject")
+  email            String
+  displayName      String     @map("display_name")
+  status           UserStatus @default(ACTIVE)
+  lastLoginAt      DateTime?  @map("last_login_at") @db.Timestamptz(6)
+  createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime   @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime?  @map("deleted_at") @db.Timestamptz(6)
+  version          Int        @default(0)
+
+  userRoles        UserRole[]
+  employee         Employee?
+
+  @@index([status])
+  @@map("users")
+  @@schema("identity")
+}
+
+model Role {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  roleCode    String    @map("role_code")
+  roleName    String    @map("role_name")
+  description String?
+  isSystem    Boolean   @default(false) @map("is_system")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  version     Int       @default(0)
+
+  userRoles   UserRole[]
+
+  @@map("roles")
+  @@schema("identity")
+}
+
+enum UserRoleAssignmentStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+
+  @@schema("identity")
+}
+
+model UserRole {
+  id               String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String                   @map("user_id") @db.Uuid
+  roleId           String                   @map("role_id") @db.Uuid
+  assignmentStatus UserRoleAssignmentStatus @default(ACTIVE) @map("assignment_status")
+  effectiveFrom    DateTime                 @default(now()) @map("effective_from") @db.Timestamptz(6)
+  effectiveTo      DateTime?                @map("effective_to") @db.Timestamptz(6)
+  correlationId    String                   @map("correlation_id")
+  createdAt        DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                 @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version          Int                      @default(0)
+
+  user User @relation(fields: [userId], references: [id])
+  role Role @relation(fields: [roleId], references: [id])
+
+  @@index([roleId, assignmentStatus])
+  @@map("user_roles")
+  @@schema("identity")
+}
+
+// ============================================================
+// hr schema
+// ============================================================
+
+enum EmploymentState {
+  ACTIVE
+  ON_LEAVE
+  TERMINATED
+
+  @@schema("hr")
+}
+
+model Employee {
+  id                   String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId               String?         @unique @map("user_id") @db.Uuid
+  employeeNumber       String          @map("employee_number")
+  firstName            String          @map("first_name")
+  lastName             String          @map("last_name")
+  employmentState      EmploymentState @default(ACTIVE) @map("employment_state")
+  hireDate             DateTime        @map("hire_date") @db.Date
+  terminationDate      DateTime?       @map("termination_date") @db.Date
+  supervisorEmployeeId String?         @map("supervisor_employee_id") @db.Uuid
+  createdAt            DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime        @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt            DateTime?       @map("deleted_at") @db.Timestamptz(6)
+  version              Int             @default(0)
+
+  user                 User?                 @relation(fields: [userId], references: [id])
+  supervisor           Employee?             @relation("EmployeeSupervisor", fields: [supervisorEmployeeId], references: [id])
+  subordinates         Employee[]            @relation("EmployeeSupervisor")
+  skills               EmployeeSkill[]
+  certifications       EmployeeCertification[]
+  workOrderAssignments WoAssignment[]
+  trainingAssignments  TrainingAssignment[]
+
+  @@index([employmentState])
+  @@map("employees")
+  @@schema("hr")
+}
+
+model EmployeeSkill {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId       String    @map("employee_id") @db.Uuid
+  skillCode        String    @map("skill_code")
+  proficiencyLevel Int       @map("proficiency_level")
+  isCertified      Boolean   @default(false) @map("is_certified")
+  lastValidatedAt  DateTime? @map("last_validated_at") @db.Date
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(6)
+  version          Int       @default(0)
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("employee_skills")
+  @@schema("hr")
+}
+
+enum CertificationStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+
+  @@schema("hr")
+}
+
+model EmployeeCertification {
+  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId          String              @map("employee_id") @db.Uuid
+  certificationCode   String              @map("certification_code")
+  certificationName   String              @map("certification_name")
+  certificationStatus CertificationStatus @default(ACTIVE) @map("certification_status")
+  issuedAt            DateTime?           @map("issued_at") @db.Date
+  expiresAt           DateTime?           @map("expires_at") @db.Date
+  issuer              String?
+  evidenceUri         String?             @map("evidence_uri")
+  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime            @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt           DateTime?           @map("deleted_at") @db.Timestamptz(6)
+  version             Int                 @default(0)
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("employee_certifications")
+  @@schema("hr")
+}
+
+// ============================================================
+// inventory schema
+// ============================================================
+
+enum UomCategory {
+  COUNT
+  LENGTH
+  WEIGHT
+  VOLUME
+  TIME
+  OTHER
+
+  @@schema("inventory")
+}
+
+model UnitOfMeasure {
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  uomCode         String      @map("uom_code")
+  uomName         String      @map("uom_name")
+  uomCategory     UomCategory @default(COUNT) @map("uom_category")
+  decimalScale    Int         @default(3) @map("decimal_scale")
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime    @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime?   @map("deleted_at") @db.Timestamptz(6)
+  version         Int         @default(0)
+
+  purchaseOrderLines PurchaseOrderLine[]
+
+  @@map("units_of_measure")
+  @@schema("inventory")
+}
+
+enum PartState {
+  ACTIVE
+  INACTIVE
+  DISCONTINUED
+
+  @@schema("inventory")
+}
+
+model Part {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sku             String
+  name            String
+  description     String?
+  unitOfMeasure   String    @default("EA") @map("unit_of_measure")
+  partState       PartState @default(ACTIVE) @map("part_state")
+  reorderPoint    Decimal   @default(0) @map("reorder_point") @db.Decimal(14, 3)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(6)
+  version         Int       @default(0)
+
+  stockLots          StockLot[]
+  workOrderParts     WoPartLine[]
+  purchaseOrderLines PurchaseOrderLine[]
+
+  @@index([partState])
+  @@map("parts")
+  @@schema("inventory")
+}
+
+enum StockLocationType {
+  WAREHOUSE
+  BAY
+  VAN
+  STAGING
+
+  @@schema("inventory")
+}
+
+model StockLocation {
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationCode     String            @map("location_code")
+  locationName     String            @map("location_name")
+  locationType     StockLocationType @map("location_type")
+  parentLocationId String?           @map("parent_location_id") @db.Uuid
+  isPickable       Boolean           @default(true) @map("is_pickable")
+  timezoneName     String            @default("UTC") @map("timezone_name")
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime          @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime?         @map("deleted_at") @db.Timestamptz(6)
+  version          Int               @default(0)
+
+  parent   StockLocation?  @relation("LocationHierarchy", fields: [parentLocationId], references: [id])
+  children StockLocation[] @relation("LocationHierarchy")
+  stockLots StockLot[]
+  workOrders WoOrder[]
+
+  @@map("stock_locations")
+  @@schema("inventory")
+}
+
+enum LotState {
+  AVAILABLE
+  QUARANTINED
+  CONSUMED
+  CLOSED
+
+  @@schema("inventory")
+}
+
+model StockLot {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  partId          String    @map("part_id") @db.Uuid
+  stockLocationId String    @map("stock_location_id") @db.Uuid
+  lotNumber       String?   @map("lot_number")
+  serialNumber    String?   @map("serial_number")
+  lotState        LotState  @default(AVAILABLE) @map("lot_state")
+  manufacturredAt DateTime? @map("manufactured_at") @db.Date
+  receivedAt      DateTime  @default(now()) @map("received_at") @db.Timestamptz(6)
+  expiresAt       DateTime? @map("expires_at") @db.Date
+  metadata        Json      @default("{}") @db.JsonB
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version         Int       @default(0)
+
+  part          Part          @relation(fields: [partId], references: [id])
+  stockLocation StockLocation @relation(fields: [stockLocationId], references: [id])
+
+  @@index([partId, lotState])
+  @@map("stock_lots")
+  @@schema("inventory")
+}
+
+enum VendorState {
+  ACTIVE
+  ON_HOLD
+  INACTIVE
+
+  @@schema("inventory")
+}
+
+model Vendor {
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vendorCode     String      @map("vendor_code")
+  vendorName     String      @map("vendor_name")
+  vendorState    VendorState @default(ACTIVE) @map("vendor_state")
+  email          String?
+  phone          String?
+  leadTimeDays   Int?        @map("lead_time_days")
+  paymentTerms   String?     @map("payment_terms")
+  notes          String?
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime    @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime?   @map("deleted_at") @db.Timestamptz(6)
+  version        Int         @default(0)
+
+  purchaseOrders PurchaseOrder[]
+
+  @@index([vendorState])
+  @@map("vendors")
+  @@schema("inventory")
+}
+
+enum PurchaseOrderState {
+  DRAFT
+  APPROVED
+  SENT
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+
+  @@schema("inventory")
+}
+
+model PurchaseOrder {
+  id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  poNumber           String             @map("po_number")
+  vendorId           String             @map("vendor_id") @db.Uuid
+  purchaseOrderState PurchaseOrderState @default(DRAFT) @map("purchase_order_state")
+  orderedAt          DateTime           @default(now()) @map("ordered_at") @db.Timestamptz(6)
+  expectedAt         DateTime?          @map("expected_at") @db.Timestamptz(6)
+  sentAt             DateTime?          @map("sent_at") @db.Timestamptz(6)
+  closedAt           DateTime?          @map("closed_at") @db.Timestamptz(6)
+  notes              String?
+  correlationId      String             @map("correlation_id")
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime           @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version            Int                @default(0)
+
+  vendor  Vendor             @relation(fields: [vendorId], references: [id])
+  lines   PurchaseOrderLine[]
+
+  @@index([vendorId, purchaseOrderState])
+  @@map("purchase_orders")
+  @@schema("inventory")
+}
+
+model PurchaseOrderLine {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  purchaseOrderId  String    @map("purchase_order_id") @db.Uuid
+  lineNumber       Int       @map("line_number")
+  partId           String    @map("part_id") @db.Uuid
+  orderedQuantity  Decimal   @map("ordered_quantity") @db.Decimal(14, 3)
+  receivedQuantity Decimal   @default(0) @map("received_quantity") @db.Decimal(14, 3)
+  rejectedQuantity Decimal   @default(0) @map("rejected_quantity") @db.Decimal(14, 3)
+  unitOfMeasureId  String    @map("unit_of_measure_id") @db.Uuid
+  unitCost         Decimal   @map("unit_cost") @db.Decimal(14, 4)
+  promisedAt       DateTime? @map("promised_at") @db.Timestamptz(6)
+  lineState        String    @default("OPEN") @map("line_state")
+  correlationId    String    @map("correlation_id")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version          Int       @default(0)
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  part          Part          @relation(fields: [partId], references: [id])
+  unitOfMeasure UnitOfMeasure @relation(fields: [unitOfMeasureId], references: [id])
+
+  @@index([partId, lineState])
+  @@map("purchase_order_lines")
+  @@schema("inventory")
+}
+
+// ============================================================
+// work_orders schema (execution layer)
+// ============================================================
+
+enum WoStatus {
+  DRAFT
+  READY
+  SCHEDULED
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+  CANCELLED
+
+  @@schema("work_orders")
+}
+
+model WoOrder {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workOrderNumber   String    @map("work_order_number")
+  customerReference String?   @map("customer_reference")
+  assetReference    String?   @map("asset_reference")
+  title             String
+  description       String?
+  status            WoStatus  @default(DRAFT)
+  priority          Int       @default(3)
+  stockLocationId   String?   @map("stock_location_id") @db.Uuid
+  openedAt          DateTime  @default(now()) @map("opened_at") @db.Timestamptz(6)
+  dueAt             DateTime? @map("due_at") @db.Timestamptz(6)
+  completedAt       DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdByUserId   String    @map("created_by_user_id") @db.Uuid
+  updatedByUserId   String?   @map("updated_by_user_id") @db.Uuid
+  correlationId     String    @map("correlation_id")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version           Int       @default(0)
+
+  stockLocation  StockLocation?       @relation(fields: [stockLocationId], references: [id])
+  operations     WoOperation[]
+  parts          WoPartLine[]
+  statusHistory  WoStatusHistory[]
+
+  @@unique([workOrderNumber])
+  @@index([status, dueAt])
+  @@map("work_orders")
+  @@schema("work_orders")
+}
+
+enum WoOperationStatus {
+  PENDING
+  READY
+  IN_PROGRESS
+  BLOCKED
+  DONE
+  SKIPPED
+  CANCELLED
+
+  @@schema("work_orders")
+}
+
+model WoOperation {
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workOrderId      String            @map("work_order_id") @db.Uuid
+  operationCode    String            @map("operation_code")
+  sequenceNo       Int               @map("sequence_no")
+  operationName    String            @map("operation_name")
+  requiredSkillCode String?          @map("required_skill_code")
+  estimatedMinutes Int               @map("estimated_minutes")
+  operationStatus  WoOperationStatus @default(PENDING) @map("operation_status")
+  plannedStartAt   DateTime?         @map("planned_start_at") @db.Timestamptz(6)
+  plannedEndAt     DateTime?         @map("planned_end_at") @db.Timestamptz(6)
+  actualStartAt    DateTime?         @map("actual_start_at") @db.Timestamptz(6)
+  actualEndAt      DateTime?         @map("actual_end_at") @db.Timestamptz(6)
+  blockingReason   String?           @map("blocking_reason")
+  correlationId    String?           @map("correlation_id")
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime          @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version          Int               @default(0)
+
+  workOrder   WoOrder        @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  assignments WoAssignment[]
+  partLines   WoPartLine[]
+
+  @@unique([workOrderId, sequenceNo])
+  @@index([operationStatus])
+  @@map("work_order_operations")
+  @@schema("work_orders")
+}
+
+enum WoPartStatus {
+  REQUESTED
+  RESERVED
+  PARTIALLY_CONSUMED
+  CONSUMED
+  SHORT
+  CANCELLED
+
+  @@schema("work_orders")
+}
+
+model WoPartLine {
+  id                    String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workOrderId           String       @map("work_order_id") @db.Uuid
+  workOrderOperationId  String?      @map("work_order_operation_id") @db.Uuid
+  partId                String       @map("part_id") @db.Uuid
+  requestedQuantity     Decimal      @map("requested_quantity") @db.Decimal(14, 3)
+  reservedQuantity      Decimal      @default(0) @map("reserved_quantity") @db.Decimal(14, 3)
+  consumedQuantity      Decimal      @default(0) @map("consumed_quantity") @db.Decimal(14, 3)
+  partStatus            WoPartStatus @default(REQUESTED) @map("part_status")
+  shortageReason        String?      @map("shortage_reason")
+  correlationId         String       @map("correlation_id")
+  createdAt             DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime     @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version               Int          @default(0)
+
+  workOrder  WoOrder      @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  operation  WoOperation? @relation(fields: [workOrderOperationId], references: [id])
+  part       Part         @relation(fields: [partId], references: [id])
+
+  @@index([workOrderId])
+  @@index([partId, partStatus])
+  @@map("work_order_parts")
+  @@schema("work_orders")
+}
+
+enum WoAssignmentStatus {
+  ASSIGNED
+  IN_PROGRESS
+  PAUSED
+  COMPLETED
+  CANCELLED
+
+  @@schema("work_orders")
+}
+
+model WoAssignment {
+  id                   String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workOrderId          String             @map("work_order_id") @db.Uuid
+  workOrderOperationId String             @map("work_order_operation_id") @db.Uuid
+  employeeId           String             @map("employee_id") @db.Uuid
+  assignmentStatus     WoAssignmentStatus @default(ASSIGNED) @map("assignment_status")
+  assignedStartAt      DateTime?          @map("assigned_start_at") @db.Timestamptz(6)
+  assignedEndAt        DateTime?          @map("assigned_end_at") @db.Timestamptz(6)
+  actualStartAt        DateTime?          @map("actual_start_at") @db.Timestamptz(6)
+  actualEndAt          DateTime?          @map("actual_end_at") @db.Timestamptz(6)
+  notes                String?
+  correlationId        String             @map("correlation_id")
+  createdAt            DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime           @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version              Int                @default(0)
+
+  operation WoOperation @relation(fields: [workOrderOperationId], references: [id], onDelete: Cascade)
+  employee  Employee    @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId, assignmentStatus])
+  @@index([workOrderOperationId])
+  @@map("work_order_assignments")
+  @@schema("work_orders")
+}
+
+model WoStatusHistory {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workOrderId   String    @map("work_order_id") @db.Uuid
+  fromStatus    String?   @map("from_status")
+  toStatus      String    @map("to_status")
+  reasonCode    String?   @map("reason_code")
+  reasonNote    String?   @map("reason_note")
+  actorUserId   String?   @map("actor_user_id") @db.Uuid
+  correlationId String    @map("correlation_id")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workOrder WoOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  @@index([workOrderId, createdAt])
+  @@map("work_order_status_history")
+  @@schema("work_orders")
+}
+
+// ============================================================
+// sop_ojt schema
+// ============================================================
+
+enum SopDocumentStatus {
+  DRAFT
+  PUBLISHED
+  RETIRED
+
+  @@schema("sop_ojt")
+}
+
+model SopDocument {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  documentCode    String            @map("document_code")
+  title           String
+  documentStatus  SopDocumentStatus @default(DRAFT) @map("document_status")
+  category        String?
+  ownerEmployeeId String?           @map("owner_employee_id") @db.Uuid
+  currentVersionId String?          @map("current_version_id") @db.Uuid
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime          @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime?         @map("deleted_at") @db.Timestamptz(6)
+  version         Int               @default(0)
+
+  docVersions      SopDocumentVersion[]
+  trainingModules  TrainingModule[]
+
+  @@map("sop_documents")
+  @@schema("sop_ojt")
+}
+
+model SopDocumentVersion {
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sopDocumentId  String      @map("sop_document_id") @db.Uuid
+  versionNumber  Int         @map("version_number")
+  contentMarkdown String     @map("content_markdown")
+  contentHash    String      @map("content_hash")
+  changeSummary  String?     @map("change_summary")
+  effectiveAt    DateTime?   @map("effective_at") @db.Timestamptz(6)
+  correlationId  String      @map("correlation_id")
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  sopDocument SopDocument @relation(fields: [sopDocumentId], references: [id], onDelete: Cascade)
+
+  @@unique([sopDocumentId, versionNumber])
+  @@map("sop_document_versions")
+  @@schema("sop_ojt")
+}
+
+enum TrainingModuleStatus {
+  ACTIVE
+  INACTIVE
+  RETIRED
+
+  @@schema("sop_ojt")
+}
+
+model TrainingModule {
+  id             String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  moduleCode     String               @map("module_code")
+  sopDocumentId  String?              @map("sop_document_id") @db.Uuid
+  moduleName     String               @map("module_name")
+  description    String?
+  moduleStatus   TrainingModuleStatus @default(ACTIVE) @map("module_status")
+  passScore      Int?                 @map("pass_score")
+  validityDays   Int?                 @map("validity_days")
+  isRequired     Boolean              @default(true) @map("is_required")
+  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime             @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime?            @map("deleted_at") @db.Timestamptz(6)
+  version        Int                  @default(0)
+
+  sopDocument         SopDocument?         @relation(fields: [sopDocumentId], references: [id])
+  trainingAssignments TrainingAssignment[]
+
+  @@map("training_modules")
+  @@schema("sop_ojt")
+}
+
+enum TrainingAssignmentStatus {
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  EXEMPT
+  CANCELLED
+
+  @@schema("sop_ojt")
+}
+
+model TrainingAssignment {
+  id               String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  moduleId         String                   @map("module_id") @db.Uuid
+  employeeId       String                   @map("employee_id") @db.Uuid
+  assignmentStatus TrainingAssignmentStatus @default(ASSIGNED) @map("assignment_status")
+  dueAt            DateTime?                @map("due_at") @db.Timestamptz(6)
+  startedAt        DateTime?                @map("started_at") @db.Timestamptz(6)
+  completedAt      DateTime?                @map("completed_at") @db.Timestamptz(6)
+  score            Decimal?                 @db.Decimal(5, 2)
+  correlationId    String                   @map("correlation_id")
+  createdAt        DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                 @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version          Int                      @default(0)
+
+  module   TrainingModule @relation(fields: [moduleId], references: [id])
+  employee Employee       @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId, assignmentStatus])
+  @@map("training_assignments")
+  @@schema("sop_ojt")
+}
+
+// ============================================================
+// integrations schema
+// ============================================================
+
+enum IntegrationProvider {
+  QUICKBOOKS
+  SHOPMONKEY
+  GENERIC
+
+  @@schema("integrations")
+}
+
+enum IntegrationAccountStatus {
+  ACTIVE
+  PAUSED
+  ERROR
+  DISCONNECTED
+
+  @@schema("integrations")
+}
+
+model IntegrationAccount {
+  id            String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  provider      IntegrationProvider
+  accountKey    String                   @map("account_key")
+  displayName   String                   @map("display_name")
+  accountStatus IntegrationAccountStatus @default(ACTIVE) @map("account_status")
+  configuration Json                     @default("{}") @db.JsonB
+  lastSyncedAt  DateTime?                @map("last_synced_at") @db.Timestamptz(6)
+  createdAt     DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime                 @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt     DateTime?                @map("deleted_at") @db.Timestamptz(6)
+  version       Int                      @default(0)
+
+  syncJobs            SyncJob[]
+  externalIdMappings  ExternalIdMapping[]
+  webhookInboxEvents  WebhookInboxEvent[]
+
+  @@map("integration_accounts")
+  @@schema("integrations")
+}
+
+enum SyncJobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  PARTIAL
+  FAILED
+  CANCELLED
+
+  @@schema("integrations")
+}
+
+model SyncJob {
+  id                   String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  integrationAccountId String        @map("integration_account_id") @db.Uuid
+  jobType              String        @map("job_type")
+  direction            String
+  jobStatus            SyncJobStatus @default(QUEUED) @map("job_status")
+  startedAt            DateTime?     @map("started_at") @db.Timestamptz(6)
+  completedAt          DateTime?     @map("completed_at") @db.Timestamptz(6)
+  attemptCount         Int           @default(0) @map("attempt_count")
+  maxAttempts          Int           @default(5) @map("max_attempts")
+  lastErrorCode        String?       @map("last_error_code")
+  lastErrorMessage     String?       @map("last_error_message")
+  correlationId        String        @map("correlation_id")
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime      @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version              Int           @default(0)
+
+  integrationAccount IntegrationAccount @relation(fields: [integrationAccountId], references: [id])
+  items              SyncJobItem[]
+
+  @@index([integrationAccountId, jobStatus])
+  @@map("sync_jobs")
+  @@schema("integrations")
+}
+
+model SyncJobItem {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  syncJobId    String    @map("sync_job_id") @db.Uuid
+  entityType   String    @map("entity_type")
+  entityId     String?   @map("entity_id") @db.Uuid
+  externalId   String?   @map("external_id")
+  itemStatus   String    @default("PENDING") @map("item_status")
+  attemptCount Int       @default(0) @map("attempt_count")
+  errorCode    String?   @map("error_code")
+  errorMessage String?   @map("error_message")
+  payload      Json      @default("{}") @db.JsonB
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version      Int       @default(0)
+
+  syncJob SyncJob @relation(fields: [syncJobId], references: [id], onDelete: Cascade)
+
+  @@index([syncJobId, itemStatus])
+  @@map("sync_job_items")
+  @@schema("integrations")
+}
+
+model ExternalIdMapping {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  integrationAccountId String   @map("integration_account_id") @db.Uuid
+  entityType           String   @map("entity_type")
+  entityId             String   @map("entity_id") @db.Uuid
+  externalId           String   @map("external_id")
+  namespace            String   @default("default")
+  isActive             Boolean  @default(true) @map("is_active")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version              Int      @default(0)
+
+  integrationAccount IntegrationAccount @relation(fields: [integrationAccountId], references: [id])
+
+  @@unique([integrationAccountId, entityType, entityId, namespace])
+  @@map("external_id_mappings")
+  @@schema("integrations")
+}
+
+model WebhookInboxEvent {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  integrationAccountId String   @map("integration_account_id") @db.Uuid
+  providerEventId      String   @map("provider_event_id")
+  eventType            String   @map("event_type")
+  payload              Json     @db.JsonB
+  processingStatus     String   @default("RECEIVED") @map("processing_status")
+  attemptCount         Int      @default(0) @map("attempt_count")
+  receivedAt           DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+  processedAt          DateTime? @map("processed_at") @db.Timestamptz(6)
+  lastError            String?  @map("last_error")
+  correlationId        String   @map("correlation_id")
+  version              Int      @default(0)
+
+  integrationAccount IntegrationAccount @relation(fields: [integrationAccountId], references: [id])
+
+  @@unique([integrationAccountId, providerEventId])
+  @@index([processingStatus, receivedAt])
+  @@map("webhook_inbox_events")
+  @@schema("integrations")
 }

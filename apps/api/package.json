@@ -1,0 +1,14 @@
+{
+  "name": "@gg-erp/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "tsx --test \"src/tests/**/*.test.ts\"",
+    "dev": "tsx watch --env-file=../../.env src/server.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0"
+  }
+}

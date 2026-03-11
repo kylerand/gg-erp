@@ -1,0 +1,218 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+  binaryTargets   = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DB_DATABASE_URL")
+  schemas  = ["planning", "audit", "obs", "migration"]
+}
+
+enum WorkOrderStatus {
+  PLANNED
+  RELEASED
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+  CANCELLED
+
+  @@schema("planning")
+}
+
+model WorkOrder {
+  id                   String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workOrderNumber      String          @unique @map("work_order_number")
+  vehicleId            String          @map("vehicle_id")
+  buildConfigurationId String          @map("build_configuration_id")
+  bomId                String          @map("bom_id")
+  state                WorkOrderStatus @default(PLANNED)
+  scheduledStartAt     DateTime?       @map("scheduled_start_at") @db.Timestamptz(6)
+  scheduledEndAt       DateTime?       @map("scheduled_end_at") @db.Timestamptz(6)
+  completedAt          DateTime?       @map("completed_at") @db.Timestamptz(6)
+  createdAt            DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime        @default(now()) @map("updated_at") @db.Timestamptz(6)
+  createdByUserId      String?         @map("created_by_user_id") @db.Uuid
+  updatedByUserId      String?         @map("updated_by_user_id") @db.Uuid
+  lastCorrelationId    String?         @map("last_correlation_id")
+  lastRequestId        String?         @map("last_request_id")
+
+  @@index([state], map: "work_orders_state_idx")
+  @@index([vehicleId], map: "work_orders_vehicle_idx")
+  @@index([createdAt], map: "work_orders_created_idx")
+  @@map("work_orders")
+  @@schema("planning")
+}
+
+model AuditEvent {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorId       String?  @map("actor_id") @db.Uuid
+  action        String
+  entityType    String   @map("entity_type")
+  entityId      String   @map("entity_id")
+  correlationId String   @map("correlation_id")
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([entityType, entityId], map: "audit_events_entity_idx")
+  @@index([correlationId], map: "audit_events_correlation_idx")
+  @@map("audit_events")
+  @@schema("audit")
+}
+
+model EventOutbox {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventName     String    @map("event_name")
+  correlationId String    @map("correlation_id")
+  payload       Json
+  state         String    @default("PENDING")
+  attemptCount  Int       @default(0) @map("attempt_count")
+  lastError     String?   @map("last_error")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(6)
+
+  @@index([state, createdAt], map: "event_outbox_state_created_idx")
+  @@map("event_outbox")
+  @@schema("obs")
+}
+
+// ============================================================
+// ShopMonkey Migration Staging Schema
+// ============================================================
+
+enum ImportBatchStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+
+  @@schema("migration")
+}
+
+enum ImportEntityType {
+  ORGANIZATION
+  EMPLOYEE
+  PART
+  INVENTORY_LOT
+  CUSTOMER
+  ASSET
+  WORK_ORDER
+  WORK_ORDER_OPERATION
+  WORK_ORDER_PART
+  VENDOR
+
+  @@schema("migration")
+}
+
+enum ValidationStatus {
+  VALID
+  WARN
+  INVALID
+
+  @@schema("migration")
+}
+
+model ImportBatch {
+  id            String            @id @default(cuid())
+  status        ImportBatchStatus @default(QUEUED)
+  wave          String
+  sourceFile    String
+  recordCount   Int               @default(0)
+  errorCount    Int               @default(0)
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  rawRecords            RawRecord[]
+  reconciliationResults ReconciliationResult[]
+  migrationErrors       MigrationError[]
+
+  @@schema("migration")
+}
+
+model RawRecord {
+  id         String           @id @default(cuid())
+  batchId    String
+  entityType ImportEntityType
+  sourceId   String
+  rawJson    Json
+  checksum   String
+  createdAt  DateTime         @default(now())
+
+  batch        ImportBatch   @relation(fields: [batchId], references: [id])
+  stageRecord  StageRecord?
+  errors       MigrationError[]
+
+  @@unique([batchId, sourceId, entityType])
+  @@index([batchId])
+  @@index([entityType, sourceId])
+  @@schema("migration")
+}
+
+model StageRecord {
+  id               String           @id @default(cuid())
+  rawRecordId      String           @unique
+  entityType       ImportEntityType
+  stagingJson      Json
+  validationStatus ValidationStatus @default(VALID)
+  warnings         String[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  rawRecord RawRecord @relation(fields: [rawRecordId], references: [id])
+
+  @@index([entityType])
+  @@index([validationStatus])
+  @@schema("migration")
+}
+
+model DuplicateCandidate {
+  id           String           @id @default(cuid())
+  entityType   ImportEntityType
+  candidateAId String
+  candidateBId String
+  confidence   Float
+  resolution   String?
+  resolvedAt   DateTime?
+  createdAt    DateTime         @default(now())
+
+  @@index([entityType])
+  @@index([resolution])
+  @@schema("migration")
+}
+
+model ReconciliationResult {
+  id            String           @id @default(cuid())
+  batchId       String
+  entityType    ImportEntityType
+  sourceCount   Int
+  importedCount Int
+  mismatches    Json[]
+  createdAt     DateTime         @default(now())
+
+  batch ImportBatch @relation(fields: [batchId], references: [id])
+
+  @@index([batchId])
+  @@schema("migration")
+}
+
+model MigrationError {
+  id           String           @id @default(cuid())
+  batchId      String
+  rawRecordId  String?
+  phase        String
+  errorCode    String
+  errorMessage String
+  retryable    Boolean          @default(false)
+  resolvedAt   DateTime?
+  createdAt    DateTime         @default(now())
+
+  batch     ImportBatch @relation(fields: [batchId], references: [id])
+  rawRecord RawRecord?  @relation(fields: [rawRecordId], references: [id])
+
+  @@index([batchId])
+  @@index([retryable])
+  @@schema("migration")
+}

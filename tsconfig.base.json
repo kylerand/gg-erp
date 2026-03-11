@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@gg-erp/ai": ["packages/ai/src/index.ts"],
+      "@gg-erp/auth": ["packages/auth/src/index.ts"],
+      "@gg-erp/db": ["packages/db/src/index.ts"],
+      "@gg-erp/domain": ["packages/domain/src/index.ts"],
+      "@gg-erp/events": ["packages/events/src/index.ts"],
+      "@gg-erp/scheduling": ["packages/scheduling/src/index.ts"],
+      "@gg-erp/ui": ["packages/ui/src/index.ts"],
+      "@gg-erp/migration": ["packages/migration/src/index.ts"]
+    },
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@gg-erp/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "db:generate": "prisma generate --schema prisma/schema.prisma",
+    "db:schema:check": "prisma format --schema prisma/schema.prisma --check && prisma generate --schema prisma/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema prisma/schema.prisma",
+    "db:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:reset": "prisma migrate reset --schema prisma/schema.prisma --force"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "prisma": "^5.22.0",
+    "tsx": "^4.20.5"
+  }
+}

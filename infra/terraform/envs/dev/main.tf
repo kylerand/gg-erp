@@ -1,0 +1,79 @@
+terraform {
+  required_version = ">= 1.6.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+
+  # Uncomment after running bootstrap: cd infra/terraform/bootstrap && terraform apply
+  # backend "s3" {
+  #   bucket         = "gg-erp-terraform-state"
+  #   key            = "dev/terraform.tfstate"
+  #   region         = "us-east-1"
+  #   dynamodb_table = "gg-erp-terraform-locks"
+  #   encrypt        = true
+  # }
+}
+
+provider "aws" {
+  region = var.aws_region
+}
+
+module "vpc" {
+  source             = "../../modules/vpc"
+  name_prefix        = var.name_prefix
+  single_nat_gateway = true
+}
+
+module "aurora_postgres" {
+  source              = "../../modules/aurora-postgres"
+  name_prefix         = var.name_prefix
+  subnet_ids          = module.vpc.private_subnet_ids
+  security_group_id   = module.vpc.aurora_security_group_id
+  min_acu             = 0.5
+  max_acu             = 16
+  deletion_protection = false
+}
+
+module "s3" {
+  source      = "../../modules/s3"
+  name_prefix = var.name_prefix
+}
+
+module "cognito" {
+  source      = "../../modules/cognito"
+  name_prefix = var.name_prefix
+}
+
+module "eventbridge" {
+  source                 = "../../modules/eventbridge"
+  name_prefix            = var.name_prefix
+  archive_retention_days = 30
+}
+
+module "step_functions" {
+  source      = "../../modules/step-functions"
+  name_prefix = var.name_prefix
+}
+
+module "observability" {
+  source             = "../../modules/observability"
+  name_prefix        = var.name_prefix
+  log_retention_days = 14
+}
+
+module "secrets" {
+  source               = "../../modules/secrets"
+  name_prefix          = var.name_prefix
+  db_secret_arn        = module.aurora_postgres.master_secret_arn
+  event_bus_name       = module.eventbridge.event_bus_name
+  document_bucket_name = module.s3.document_bucket_name
+}
+
+module "api_gateway_lambda" {
+  source                      = "../../modules/api-gateway-lambda"
+  name_prefix                 = var.name_prefix
+  work_orders_lambda_zip_path = var.work_orders_lambda_zip_path
+}

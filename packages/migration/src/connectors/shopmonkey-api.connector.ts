@@ -9,7 +9,7 @@
  *   GET  /v3/customer
  *   GET  /v3/vehicle
  *   GET  /v3/order  (work orders)
- *   GET  /v3/inventory/part
+ *   GET  /v3/part   (was /v3/inventory/part in older versions)
  *   GET  /v3/user   (employees)
  *   GET  /v3/vendor
  */
@@ -83,13 +83,18 @@ async function fetchAll<T extends { id: string }>(
   const seenIds = new Set<string>();
   let offset = 0;
   let page = 1;
-  // Use meta.total as a hard cap when the API provides it
   let totalKnown: number | null = null;
+  let consecutiveDuplicatePages = 0;
+  const MAX_CONSECUTIVE_DUPLICATE_PAGES = 3;
+
+  // Force stable sort so offset pagination is deterministic
+  const stableSort: Record<string, string> = { sortBy: 'createdDate', sortDir: 'asc' };
 
   while (true) {
     const params = new URLSearchParams({
       limit: String(DEFAULT_PAGE_SIZE),
       offset: String(offset),
+      ...stableSort,
       ...extraParams,
     });
 
@@ -104,15 +109,20 @@ async function fetchAll<T extends { id: string }>(
       totalKnown = res.meta.total;
     }
 
-    // Detect infinite loop: stop if every record on this page is a duplicate
     const newRecords = res.data.filter(r => !seenIds.has(r.id));
-    if (newRecords.length === 0) {
-      console.warn(`[shopmonkey] ${path}: all ${res.data.length} records on page ${page} already seen — stopping (duplicate page detected)`);
-      break;
-    }
 
-    for (const r of newRecords) seenIds.add(r.id);
-    results.push(...newRecords);
+    if (newRecords.length === 0) {
+      consecutiveDuplicatePages++;
+      console.warn(`[shopmonkey] ${path}: page ${page} fully duplicate (${consecutiveDuplicatePages}/${MAX_CONSECUTIVE_DUPLICATE_PAGES}) — ${seenIds.size} unique so far`);
+      if (consecutiveDuplicatePages >= MAX_CONSECUTIVE_DUPLICATE_PAGES) {
+        console.warn(`[shopmonkey] ${path}: stopping after ${MAX_CONSECUTIVE_DUPLICATE_PAGES} consecutive duplicate pages`);
+        break;
+      }
+    } else {
+      consecutiveDuplicatePages = 0;
+      for (const r of newRecords) seenIds.add(r.id);
+      results.push(...newRecords);
+    }
 
     if (page === 1 || results.length % 250 === 0) {
       const progress = totalKnown ? ` / ${totalKnown}` : '';
@@ -236,7 +246,26 @@ export async function fetchOrders(session: ShopMonkeySession): Promise<SmOrder[]
 }
 
 export async function fetchParts(session: ShopMonkeySession): Promise<SmPart[]> {
-  return fetchAll<SmPart>(session, '/inventory/part');
+  // Try /part first; ShopMonkey v3 moved away from /inventory/part
+  try {
+    return await fetchAll<SmPart>(session, '/part');
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('404')) {
+      console.warn('[shopmonkey] /part returned 404 — trying /service/part');
+      try {
+        return await fetchAll<SmPart>(session, '/service/part');
+      } catch (err2) {
+        const msg2 = err2 instanceof Error ? err2.message : String(err2);
+        if (msg2.includes('404')) {
+          console.warn('[shopmonkey] /service/part also 404 — parts not available in this account');
+          return [];
+        }
+        throw err2;
+      }
+    }
+    throw err;
+  }
 }
 
 export async function fetchUsers(session: ShopMonkeySession): Promise<SmUser[]> {

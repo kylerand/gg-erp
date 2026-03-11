@@ -2,7 +2,7 @@ data "aws_region" "current" {}
 
 locals {
   user_pool_name = coalesce(var.user_pool_name, "${var.name_prefix}-user-pool")
-  domain_prefix  = lower(regexreplace(coalesce(var.domain_prefix, "${var.name_prefix}-auth"), "[^a-z0-9-]", "-"))
+  domain_prefix  = lower(replace(coalesce(var.domain_prefix, "${var.name_prefix}-auth"), "/[^a-z0-9-]/", "-"))
   domain         = "${aws_cognito_user_pool_domain.this.domain}.auth.${data.aws_region.current.name}.amazoncognito.com"
   issuer_url     = "https://cognito-idp.${data.aws_region.current.name}.amazonaws.com/${aws_cognito_user_pool.this.id}"
 }

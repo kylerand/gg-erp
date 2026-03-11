@@ -1,0 +1,308 @@
+/**
+ * ShopMonkey API v3 connector
+ *
+ * Authenticates with email/password, fetches a bearer token, then paginates
+ * through all entities needed for the migration pipeline.
+ *
+ * Endpoints confirmed from https://shopmonkey.dev
+ *   POST /v3/auth/login  → { data: { token, user: { companyId } } }
+ *   GET  /v3/customer
+ *   GET  /v3/vehicle
+ *   GET  /v3/order  (work orders)
+ *   GET  /v3/inventory/part
+ *   GET  /v3/user   (employees)
+ *   GET  /v3/vendor
+ */
+
+const BASE_URL = 'https://api.shopmonkey.cloud/v3';
+const DEFAULT_PAGE_SIZE = 100;
+const RATE_LIMIT_RETRY_MS = 2000;
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+
+export interface ShopMonkeySession {
+  token: string;
+  companyId: string;
+  locationId: string | null;
+  userEmail: string;
+}
+
+interface LoginResponse {
+  success: boolean;
+  data: {
+    token: string;
+    user: {
+      id: string;
+      email: string;
+      companyId: string;
+      currentLocationId?: string;
+      firstName: string;
+      lastName: string;
+    };
+  };
+}
+
+export async function login(email: string, password: string): Promise<ShopMonkeySession> {
+  const res = await apiFetch<LoginResponse>('/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, audience: 'api' }),
+  });
+
+  if (!res.success || !res.data?.token) {
+    throw new Error('ShopMonkey login failed: no token in response');
+  }
+
+  return {
+    token: res.data.token,
+    companyId: res.data.user.companyId,
+    locationId: res.data.user.currentLocationId ?? null,
+    userEmail: res.data.user.email,
+  };
+}
+
+// ─── Paginated list fetcher ───────────────────────────────────────────────────
+
+interface ListResponse<T> {
+  data: T[];
+  meta?: {
+    hasMore?: boolean;
+    total?: number;
+    count?: number;
+  };
+}
+
+async function fetchAll<T>(
+  session: ShopMonkeySession,
+  path: string,
+  extraParams: Record<string, string> = {},
+): Promise<T[]> {
+  const results: T[] = [];
+  let offset = 0;
+
+  while (true) {
+    const params = new URLSearchParams({
+      limit: String(DEFAULT_PAGE_SIZE),
+      offset: String(offset),
+      ...extraParams,
+    });
+
+    const res = await apiFetch<ListResponse<T>>(`${path}?${params}`, {
+      headers: { Authorization: `Bearer ${session.token}` },
+    }, /* retries */ 3);
+
+    if (!Array.isArray(res.data)) break;
+    results.push(...res.data);
+
+    const hasMore = res.meta?.hasMore ?? res.data.length === DEFAULT_PAGE_SIZE;
+    if (!hasMore || res.data.length === 0) break;
+    offset += DEFAULT_PAGE_SIZE;
+  }
+
+  return results;
+}
+
+// ─── Entity fetchers ──────────────────────────────────────────────────────────
+
+export interface SmCustomer {
+  id: string;
+  firstName?: string;
+  lastName?: string;
+  companyName?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  createdDate?: string;
+  updatedDate?: string;
+  notes?: string;
+}
+
+export interface SmVehicle {
+  id: string;
+  customerId?: string;
+  vin?: string;
+  year?: number;
+  make?: string;
+  model?: string;
+  submodel?: string;
+  color?: string;
+  licensePlate?: string;
+  mileageIn?: number;
+  createdDate?: string;
+}
+
+export interface SmOrder {
+  id: string;
+  number?: string;
+  customerId?: string;
+  vehicleId?: string;
+  assignedToUserId?: string;
+  name?: string;
+  note?: string;
+  status?: string;
+  priority?: string;
+  laborTotalCents?: number;
+  partsTotalCents?: number;
+  totalCents?: number;
+  completedDate?: string;
+  createdDate?: string;
+  updatedDate?: string;
+  locationId?: string;
+}
+
+export interface SmPart {
+  id: string;
+  name?: string;
+  partNumber?: string;
+  description?: string;
+  categoryId?: string;
+  retailCostCents?: number;
+  wholesaleCostCents?: number;
+  quantity?: number;
+  binLocation?: string;
+  vendorId?: string;
+  createdDate?: string;
+}
+
+export interface SmUser {
+  id: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  role?: string;
+  active?: boolean;
+  createdDate?: string;
+}
+
+export interface SmVendor {
+  id: string;
+  name?: string;
+  contactName?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  accountNumber?: string;
+  createdDate?: string;
+}
+
+export async function fetchCustomers(session: ShopMonkeySession): Promise<SmCustomer[]> {
+  return fetchAll<SmCustomer>(session, '/customer');
+}
+
+export async function fetchVehicles(session: ShopMonkeySession): Promise<SmVehicle[]> {
+  return fetchAll<SmVehicle>(session, '/vehicle');
+}
+
+export async function fetchOrders(session: ShopMonkeySession): Promise<SmOrder[]> {
+  return fetchAll<SmOrder>(session, '/order');
+}
+
+export async function fetchParts(session: ShopMonkeySession): Promise<SmPart[]> {
+  return fetchAll<SmPart>(session, '/inventory/part');
+}
+
+export async function fetchUsers(session: ShopMonkeySession): Promise<SmUser[]> {
+  return fetchAll<SmUser>(session, '/user');
+}
+
+export async function fetchVendors(session: ShopMonkeySession): Promise<SmVendor[]> {
+  return fetchAll<SmVendor>(session, '/vendor');
+}
+
+// ─── Bulk export ──────────────────────────────────────────────────────────────
+
+export interface ShopMonkeyExport {
+  exportedAt: string;
+  companyId: string;
+  customers: SmCustomer[];
+  vehicles: SmVehicle[];
+  orders: SmOrder[];
+  parts: SmPart[];
+  users: SmUser[];
+  vendors: SmVendor[];
+  counts: Record<string, number>;
+}
+
+export async function exportAll(session: ShopMonkeySession): Promise<ShopMonkeyExport> {
+  console.log('[shopmonkey] Fetching customers...');
+  const customers = await fetchCustomers(session);
+  console.log(`[shopmonkey]   → ${customers.length} customers`);
+
+  console.log('[shopmonkey] Fetching vehicles...');
+  const vehicles = await fetchVehicles(session);
+  console.log(`[shopmonkey]   → ${vehicles.length} vehicles`);
+
+  console.log('[shopmonkey] Fetching orders...');
+  const orders = await fetchOrders(session);
+  console.log(`[shopmonkey]   → ${orders.length} orders`);
+
+  console.log('[shopmonkey] Fetching parts...');
+  const parts = await fetchParts(session);
+  console.log(`[shopmonkey]   → ${parts.length} parts`);
+
+  console.log('[shopmonkey] Fetching users...');
+  const users = await fetchUsers(session);
+  console.log(`[shopmonkey]   → ${users.length} users`);
+
+  console.log('[shopmonkey] Fetching vendors...');
+  const vendors = await fetchVendors(session);
+  console.log(`[shopmonkey]   → ${vendors.length} vendors`);
+
+  return {
+    exportedAt: new Date().toISOString(),
+    companyId: session.companyId,
+    customers,
+    vehicles,
+    orders,
+    parts,
+    users,
+    vendors,
+    counts: {
+      customers: customers.length,
+      vehicles: vehicles.length,
+      orders: orders.length,
+      parts: parts.length,
+      users: users.length,
+      vendors: vendors.length,
+    },
+  };
+}
+
+// ─── HTTP helper ──────────────────────────────────────────────────────────────
+
+async function apiFetch<T>(
+  path: string,
+  init: RequestInit = {},
+  retries = 3,
+): Promise<T> {
+  const url = path.startsWith('http') ? path : `${BASE_URL}${path}`;
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const res = await fetch(url, init);
+
+    if (res.status === 429) {
+      const retryAfter = Number(res.headers.get('retry-after') ?? 2);
+      const waitMs = (retryAfter * 1000) || RATE_LIMIT_RETRY_MS;
+      console.warn(`[shopmonkey] Rate limited — waiting ${waitMs}ms (attempt ${attempt}/${retries})`);
+      await sleep(waitMs);
+      continue;
+    }
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`ShopMonkey API error ${res.status} on ${url}: ${body}`);
+    }
+
+    return res.json() as Promise<T>;
+  }
+
+  throw new Error(`ShopMonkey API: exceeded ${retries} retries for ${url}`);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

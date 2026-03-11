@@ -159,6 +159,12 @@ output "master_secret_arn" {
   value = aws_secretsmanager_secret.db_master.arn
 }
 
+output "database_url" {
+  description = "Full PostgreSQL connection URL — use as DATABASE_URL env var in Lambda"
+  value       = jsondecode(aws_secretsmanager_secret_version.db_master.secret_string).url
+  sensitive   = true
+}
+
 output "db_name" {
   value = var.db_name
 }

@@ -6,6 +6,55 @@ variable "work_orders_lambda_zip_path" {
   default     = "apps/api/dist/work-orders-lambda.zip"
 }
 
+variable "customers_lambda_zip_path" {
+  description = "Path to the zipped customers Lambda artifact."
+  type        = string
+  default     = "apps/api/dist/customers-lambda.zip"
+}
+
+variable "inventory_lambda_zip_path" {
+  description = "Path to the zipped inventory Lambda artifact."
+  type        = string
+  default     = "apps/api/dist/inventory-lambda.zip"
+}
+
+variable "tickets_lambda_zip_path" {
+  description = "Path to the zipped tickets Lambda artifact."
+  type        = string
+  default     = "apps/api/dist/tickets-lambda.zip"
+}
+
+variable "attachments_lambda_zip_path" {
+  description = "Path to the zipped attachments Lambda artifact."
+  type        = string
+  default     = "apps/api/dist/attachments-lambda.zip"
+}
+
+variable "cognito_user_pool_endpoint" {
+  description = "Cognito issuer URL for JWT authorizer (e.g. https://cognito-idp.{region}.amazonaws.com/{userPoolId})"
+  type        = string
+  default     = ""
+}
+
+variable "cognito_audience" {
+  description = "Cognito app client ID(s) to validate in the JWT audience claim"
+  type        = list(string)
+  default     = []
+}
+
+variable "database_url" {
+  description = "PostgreSQL connection URL injected into all Lambda functions as DATABASE_URL"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "document_bucket_name" {
+  description = "S3 document bucket name injected into attachment Lambda functions"
+  type        = string
+  default     = ""
+}
+
 resource "aws_iam_role" "work_orders_lambda" {
   name = "${var.name_prefix}-work-orders-lambda-role"
 
@@ -101,6 +150,598 @@ resource "aws_apigatewayv2_stage" "default" {
   auto_deploy = true
 }
 
+# ─── Cognito JWT Authorizer ────────────────────────────────────────────────────
+
+resource "aws_apigatewayv2_authorizer" "cognito_jwt" {
+  count            = var.cognito_user_pool_endpoint != "" ? 1 : 0
+  api_id           = aws_apigatewayv2_api.erp.id
+  authorizer_type  = "JWT"
+  identity_sources = ["$request.header.Authorization"]
+  name             = "${var.name_prefix}-cognito-jwt-authorizer"
+
+  jwt_configuration {
+    audience = var.cognito_audience
+    issuer   = var.cognito_user_pool_endpoint
+  }
+}
+
+locals {
+  authorizer_id = var.cognito_user_pool_endpoint != "" ? aws_apigatewayv2_authorizer.cognito_jwt[0].id : null
+}
+
+# ─── Shared Lambda IAM Role (customers / inventory / tickets) ─────────────────
+
+resource "aws_iam_role" "erp_lambda" {
+  name = "${var.name_prefix}-erp-lambda-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect    = "Allow"
+        Principal = { Service = "lambda.amazonaws.com" }
+        Action    = "sts:AssumeRole"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "erp_lambda_basic" {
+  role       = aws_iam_role.erp_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# ─── Customers Lambda Functions ───────────────────────────────────────────────
+
+locals {
+  lambda_common_env = {
+    NODE_ENV                    = "production"
+    PRISMA_QUERY_ENGINE_LIBRARY = "/var/task/libquery_engine-rhel-openssl-3.0.x.so.node"
+    DATABASE_URL                = var.database_url
+  }
+}
+
+resource "aws_lambda_function" "customers_list" {
+  function_name = "${var.name_prefix}-customers-list"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list.handler"
+  filename      = var.customers_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
+resource "aws_lambda_function" "customers_create" {
+  function_name = "${var.name_prefix}-customers-create"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "create.handler"
+  filename      = var.customers_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
+resource "aws_lambda_function" "customers_get" {
+  function_name = "${var.name_prefix}-customers-get"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "get.handler"
+  filename      = var.customers_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
+resource "aws_lambda_function" "customers_transition" {
+  function_name = "${var.name_prefix}-customers-transition"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "transition.handler"
+  filename      = var.customers_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
+# ─── Inventory Lambda Functions ───────────────────────────────────────────────
+
+resource "aws_lambda_function" "inventory_list_parts" {
+  function_name = "${var.name_prefix}-inventory-list-parts"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-parts.handler"
+  filename      = var.inventory_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
+resource "aws_lambda_function" "inventory_create_part" {
+  function_name = "${var.name_prefix}-inventory-create-part"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "create-part.handler"
+  filename      = var.inventory_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
+resource "aws_lambda_function" "inventory_get_part" {
+  function_name = "${var.name_prefix}-inventory-get-part"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "get-part.handler"
+  filename      = var.inventory_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
+resource "aws_lambda_function" "inventory_list_vendors" {
+  function_name = "${var.name_prefix}-inventory-list-vendors"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-vendors.handler"
+  filename      = var.inventory_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
+# ─── Tickets Lambda Functions ─────────────────────────────────────────────────
+
+resource "aws_lambda_function" "tickets_list_tasks" {
+  function_name = "${var.name_prefix}-tickets-list-tasks"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-tasks.handler"
+  filename      = var.tickets_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
+resource "aws_lambda_function" "tickets_create_task" {
+  function_name = "${var.name_prefix}-tickets-create-task"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "create-task.handler"
+  filename      = var.tickets_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
+resource "aws_lambda_function" "tickets_transition_task" {
+  function_name = "${var.name_prefix}-tickets-transition-task"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "transition-task.handler"
+  filename      = var.tickets_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
+resource "aws_lambda_function" "tickets_list_rework" {
+  function_name = "${var.name_prefix}-tickets-list-rework"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-rework.handler"
+  filename      = var.tickets_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
+resource "aws_lambda_function" "tickets_create_rework" {
+  function_name = "${var.name_prefix}-tickets-create-rework"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "create-rework.handler"
+  filename      = var.tickets_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
+resource "aws_lambda_function" "tickets_list_sync" {
+  function_name = "${var.name_prefix}-accounting-list-sync"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-sync.handler"
+  filename      = var.tickets_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
+# ─── API GW Integrations + Routes — Customers ─────────────────────────────────
+
+resource "aws_apigatewayv2_integration" "customers_list" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.customers_list.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "customers_list" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /identity/customers"
+  target    = "integrations/${aws_apigatewayv2_integration.customers_list.id}"
+  authorizer_id = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "customers_create" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.customers_create.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "customers_create" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "POST /identity/customers"
+  target    = "integrations/${aws_apigatewayv2_integration.customers_create.id}"
+  authorizer_id = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "customers_get" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.customers_get.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "customers_get" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /identity/customers/{id}"
+  target    = "integrations/${aws_apigatewayv2_integration.customers_get.id}"
+  authorizer_id = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "customers_transition" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.customers_transition.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "customers_transition" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "PATCH /identity/customers/{id}/state"
+  target    = "integrations/${aws_apigatewayv2_integration.customers_transition.id}"
+  authorizer_id = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+# ─── API GW Integrations + Routes — Inventory ─────────────────────────────────
+
+resource "aws_apigatewayv2_integration" "inventory_list_parts" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.inventory_list_parts.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "inventory_list_parts" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /inventory/parts"
+  target    = "integrations/${aws_apigatewayv2_integration.inventory_list_parts.id}"
+  authorizer_id = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "inventory_create_part" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.inventory_create_part.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "inventory_create_part" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "POST /inventory/parts"
+  target    = "integrations/${aws_apigatewayv2_integration.inventory_create_part.id}"
+  authorizer_id = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "inventory_get_part" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.inventory_get_part.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "inventory_get_part" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /inventory/parts/{id}"
+  target    = "integrations/${aws_apigatewayv2_integration.inventory_get_part.id}"
+  authorizer_id = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "inventory_list_vendors" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.inventory_list_vendors.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "inventory_list_vendors" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /inventory/vendors"
+  target    = "integrations/${aws_apigatewayv2_integration.inventory_list_vendors.id}"
+  authorizer_id = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+# ─── API GW Integrations + Routes — Tickets ───────────────────────────────────
+
+resource "aws_apigatewayv2_integration" "tickets_list_tasks" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.tickets_list_tasks.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "tickets_list_tasks" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /tickets/tasks"
+  target    = "integrations/${aws_apigatewayv2_integration.tickets_list_tasks.id}"
+  authorizer_id = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "tickets_create_task" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.tickets_create_task.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "tickets_create_task" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "POST /tickets/tasks"
+  target    = "integrations/${aws_apigatewayv2_integration.tickets_create_task.id}"
+  authorizer_id = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "tickets_transition_task" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.tickets_transition_task.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "tickets_transition_task" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "PATCH /tickets/tasks/{id}/transition"
+  target    = "integrations/${aws_apigatewayv2_integration.tickets_transition_task.id}"
+  authorizer_id = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "tickets_list_rework" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.tickets_list_rework.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "tickets_list_rework" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /tickets/rework"
+  target    = "integrations/${aws_apigatewayv2_integration.tickets_list_rework.id}"
+  authorizer_id = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "tickets_create_rework" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.tickets_create_rework.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "tickets_create_rework" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "POST /tickets/rework"
+  target    = "integrations/${aws_apigatewayv2_integration.tickets_create_rework.id}"
+  authorizer_id = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "tickets_list_sync" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.tickets_list_sync.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "tickets_list_sync" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /accounting/invoice-sync"
+  target    = "integrations/${aws_apigatewayv2_integration.tickets_list_sync.id}"
+  authorizer_id = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+# ─── Attachments Lambda Functions ────────────────────────────────────────────
+
+locals {
+  lambda_attachments_env = merge(local.lambda_common_env, {
+    DOCUMENT_BUCKET_NAME = var.document_bucket_name
+  })
+}
+
+resource "aws_lambda_function" "attachments_presign_upload" {
+  function_name = "${var.name_prefix}-attachments-presign-upload"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "presign-upload.handler"
+  filename      = var.attachments_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_attachments_env }
+}
+
+resource "aws_lambda_function" "attachments_confirm_upload" {
+  function_name = "${var.name_prefix}-attachments-confirm-upload"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "confirm-upload.handler"
+  filename      = var.attachments_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_attachments_env }
+}
+
+resource "aws_lambda_function" "attachments_list" {
+  function_name = "${var.name_prefix}-attachments-list"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list.handler"
+  filename      = var.attachments_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_attachments_env }
+}
+
+resource "aws_lambda_function" "attachments_presign_download" {
+  function_name = "${var.name_prefix}-attachments-presign-download"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "presign-download.handler"
+  filename      = var.attachments_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_attachments_env }
+}
+
+# S3 read/write policy for attachment Lambdas
+resource "aws_iam_role_policy" "erp_lambda_s3_documents" {
+  name = "${var.name_prefix}-erp-lambda-s3-documents"
+  role = aws_iam_role.erp_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
+        Resource = "arn:aws:s3:::${var.document_bucket_name}/*"
+      }
+    ]
+  })
+}
+
+# ─── API GW Integrations + Routes — Attachments ───────────────────────────────
+
+resource "aws_apigatewayv2_integration" "attachments_presign_upload" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.attachments_presign_upload.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "attachments_presign_upload" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /attachments/presign"
+  target             = "integrations/${aws_apigatewayv2_integration.attachments_presign_upload.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "attachments_confirm_upload" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.attachments_confirm_upload.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "attachments_confirm_upload" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PUT /attachments/{id}/confirm"
+  target             = "integrations/${aws_apigatewayv2_integration.attachments_confirm_upload.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "attachments_list" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.attachments_list.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "attachments_list" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /attachments"
+  target             = "integrations/${aws_apigatewayv2_integration.attachments_list.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "attachments_presign_download" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.attachments_presign_download.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "attachments_presign_download" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /attachments/{id}/download"
+  target             = "integrations/${aws_apigatewayv2_integration.attachments_presign_download.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+# ─── Lambda Permissions ───────────────────────────────────────────────────────
+
+locals {
+  erp_lambdas = {
+    customers_list        = aws_lambda_function.customers_list
+    customers_create      = aws_lambda_function.customers_create
+    customers_get         = aws_lambda_function.customers_get
+    customers_transition  = aws_lambda_function.customers_transition
+    inventory_list_parts  = aws_lambda_function.inventory_list_parts
+    inventory_create_part = aws_lambda_function.inventory_create_part
+    inventory_get_part    = aws_lambda_function.inventory_get_part
+    inventory_list_vendors = aws_lambda_function.inventory_list_vendors
+    tickets_list_tasks    = aws_lambda_function.tickets_list_tasks
+    tickets_create_task   = aws_lambda_function.tickets_create_task
+    tickets_transition    = aws_lambda_function.tickets_transition_task
+    tickets_list_rework   = aws_lambda_function.tickets_list_rework
+    tickets_create_rework = aws_lambda_function.tickets_create_rework
+    tickets_list_sync     = aws_lambda_function.tickets_list_sync
+    attachments_presign_upload   = aws_lambda_function.attachments_presign_upload
+    attachments_confirm_upload   = aws_lambda_function.attachments_confirm_upload
+    attachments_list             = aws_lambda_function.attachments_list
+    attachments_presign_download = aws_lambda_function.attachments_presign_download
+  }
+}
+
+resource "aws_lambda_permission" "allow_api_gateway_erp" {
+  for_each      = local.erp_lambdas
+  statement_id  = "AllowExecution-${each.key}"
+  action        = "lambda:InvokeFunction"
+  function_name = each.value.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*/*"
+}
+
+
+
 resource "aws_lambda_permission" "allow_api_gateway_create" {
   statement_id  = "AllowExecutionFromApiGatewayCreate"
   action        = "lambda:InvokeFunction"
@@ -127,4 +768,12 @@ output "work_orders_create_lambda_name" {
 
 output "work_orders_list_lambda_name" {
   value = aws_lambda_function.work_orders_list.function_name
+}
+
+output "api_gateway_id" {
+  value = aws_apigatewayv2_api.erp.id
+}
+
+output "cognito_authorizer_id" {
+  value = length(aws_apigatewayv2_authorizer.cognito_jwt) > 0 ? aws_apigatewayv2_authorizer.cognito_jwt[0].id : null
 }

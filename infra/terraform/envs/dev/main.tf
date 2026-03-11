@@ -77,4 +77,8 @@ module "api_gateway_lambda" {
   source                      = "../../modules/api-gateway-lambda"
   name_prefix                 = var.name_prefix
   work_orders_lambda_zip_path = var.work_orders_lambda_zip_path
+  cognito_user_pool_endpoint  = module.cognito.issuer_url
+  cognito_audience            = [module.cognito.app_client_ids["web"]]
+  database_url                = module.aurora_postgres.database_url
+  document_bucket_name        = module.s3.document_bucket_name
 }

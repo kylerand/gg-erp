@@ -6,7 +6,8 @@
   "main": "./src/index.ts",
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "fetch-shopmonkey": "tsx src/cli/fetch-shopmonkey.ts"
   },
   "dependencies": {
     "@gg-erp/db": "*",

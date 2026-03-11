@@ -3,25 +3,37 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { PageHeader, EmptyState, LoadingSkeleton, SyncStatusBadge } from '@gg-erp/ui';
 import type { SyncStatus } from '@gg-erp/ui';
-import { listInvoiceSyncRecords, type InvoiceSyncRecord } from '@/lib/api-client';
+import { listInvoiceSyncRecords, retryInvoiceSync, getQbStatus, type InvoiceSyncRecord } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 
 export default function SyncMonitorPage() {
   const [records, setRecords] = useState<InvoiceSyncRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'ALL' | 'FAILED' | 'PENDING' | 'SYNCED'>('ALL');
+  const [qbConnected, setQbConnected] = useState<boolean | null>(null);
+  const [qbCompany, setQbCompany] = useState<string | undefined>();
+  const [retrying, setRetrying] = useState<string | null>(null);
 
   useEffect(() => {
-    listInvoiceSyncRecords().then(r => { setRecords(r.items); setLoading(false); });
+    Promise.allSettled([
+      listInvoiceSyncRecords().then(r => setRecords(r.items)),
+      getQbStatus().then(s => { setQbConnected(s.connected); setQbCompany(s.companyName); }),
+    ]).finally(() => setLoading(false));
   }, []);
 
-  function retry(id: string) {
-    setRecords(prev => prev.map(r => r.id === id ? { ...r, state: 'IN_PROGRESS' as const, attemptCount: r.attemptCount + 1 } : r));
-    setTimeout(() => {
-      setRecords(prev => prev.map(r => r.id === id ? { ...r, state: 'SYNCED' as const } : r));
-      toast.success('Sync retry succeeded');
-    }, 1500);
-    toast.info('Retry queued…');
+  async function retry(id: string) {
+    setRetrying(id);
+    setRecords(prev => prev.map(r => r.id === id ? { ...r, state: 'IN_PROGRESS' as const } : r));
+    try {
+      await retryInvoiceSync(id);
+      setRecords(prev => prev.map(r => r.id === id ? { ...r, state: 'PENDING' as const } : r));
+      toast.success('Retry queued');
+    } catch (err) {
+      setRecords(prev => prev.map(r => r.id === id ? { ...r, state: 'FAILED' as const } : r));
+      toast.error(err instanceof Error ? err.message : 'Retry failed');
+    } finally {
+      setRetrying(null);
+    }
   }
 
   const filtered = records.filter(r => filter === 'ALL' || r.state === filter);
@@ -29,11 +41,25 @@ export default function SyncMonitorPage() {
 
   return (
     <div>
-      <PageHeader title="Sync Monitor" description="QuickBooks invoice sync status" />
+      <PageHeader
+        title="Sync Monitor"
+        description="QuickBooks invoice sync status"
+        action={
+          qbConnected === false ? (
+            <a href="/api/accounting/oauth/connect">
+              <Button className="bg-yellow-400 hover:bg-yellow-300 text-gray-900">Connect QuickBooks</Button>
+            </a>
+          ) : qbConnected ? (
+            <span className="text-xs text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded-full">
+              ✓ Connected: {qbCompany}
+            </span>
+          ) : null
+        }
+      />
       {failedCount > 0 && (
         <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center justify-between">
           <p className="text-sm font-semibold text-red-700">❌ {failedCount} sync failure{failedCount > 1 ? 's' : ''} require attention</p>
-          <Button size="sm" variant="outline" className="text-red-600 border-red-300" onClick={() => toast.info('Bulk retry queued')}>
+          <Button size="sm" variant="outline" className="text-red-600 border-red-300" onClick={() => toast.info('Bulk retry — select records individually')}>
             Retry All Failed
           </Button>
         </div>
@@ -75,8 +101,15 @@ export default function SyncMonitorPage() {
                   <td className="px-4 py-3 text-gray-500">{r.attemptCount}</td>
                   <td className="px-4 py-3 text-xs text-red-600 max-w-xs truncate">{r.lastErrorMessage ?? '—'}</td>
                   <td className="px-4 py-3">
-                    {r.state === 'FAILED' && (
-                      <Button size="sm" variant="outline" onClick={() => retry(r.id)}>Retry</Button>
+                    {(r.state === 'FAILED' || r.state === 'CANCELLED') && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={retrying === r.id}
+                        onClick={() => retry(r.id)}
+                      >
+                        {retrying === r.id ? 'Queuing…' : 'Retry'}
+                      </Button>
                     )}
                   </td>
                 </tr>

@@ -7,7 +7,8 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "fetch-shopmonkey": "tsx src/cli/fetch-shopmonkey.ts"
+    "fetch-shopmonkey": "tsx src/cli/fetch-shopmonkey.ts",
+    "sanitize-shopmonkey": "tsx src/cli/sanitize-shopmonkey.ts"
   },
   "dependencies": {
     "@gg-erp/db": "*",

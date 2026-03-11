@@ -36,6 +36,38 @@ variable "sop_lambda_zip_path" {
   default     = "apps/api/dist/sop-lambda.zip"
 }
 
+variable "accounting_lambda_zip_path" {
+  description = "Path to the zipped accounting (QB OAuth + sync) Lambda artifact."
+  type        = string
+  default     = "apps/api/dist/accounting-lambda.zip"
+}
+
+variable "qb_client_id" {
+  description = "QuickBooks app client ID for OAuth2"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "qb_client_secret" {
+  description = "QuickBooks app client secret for OAuth2"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "qb_redirect_uri" {
+  description = "QuickBooks OAuth redirect URI (must match QB app settings)"
+  type        = string
+  default     = ""
+}
+
+variable "frontend_url" {
+  description = "Frontend URL for OAuth redirect after QB connection"
+  type        = string
+  default     = ""
+}
+
 variable "cognito_user_pool_endpoint" {
   description = "Cognito issuer URL for JWT authorizer (e.g. https://cognito-idp.{region}.amazonaws.com/{userPoolId})"
   type        = string
@@ -247,6 +279,12 @@ locals {
     PRISMA_QUERY_ENGINE_LIBRARY = "/var/task/libquery_engine-rhel-openssl-3.0.x.so.node"
     DATABASE_URL                = var.database_url
   }
+  lambda_accounting_env = merge(local.lambda_common_env, {
+    QB_CLIENT_ID     = var.qb_client_id
+    QB_CLIENT_SECRET = var.qb_client_secret
+    QB_REDIRECT_URI  = var.qb_redirect_uri
+    FRONTEND_URL     = var.frontend_url
+  })
 }
 
 resource "aws_lambda_function" "customers_list" {
@@ -938,6 +976,162 @@ resource "aws_apigatewayv2_route" "sop_complete_assignment" {
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
+# ─── Accounting / QuickBooks Lambdas ─────────────────────────────────────────
+
+resource "aws_lambda_function" "accounting_oauth_connect" {
+  function_name = "${var.name_prefix}-accounting-oauth-connect"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "oauth-connect.handler"
+  filename      = var.accounting_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_accounting_env }
+}
+
+resource "aws_lambda_function" "accounting_oauth_callback" {
+  function_name = "${var.name_prefix}-accounting-oauth-callback"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "oauth-callback.handler"
+  filename      = var.accounting_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_accounting_env }
+}
+
+resource "aws_lambda_function" "accounting_status" {
+  function_name = "${var.name_prefix}-accounting-status"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "status.handler"
+  filename      = var.accounting_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_accounting_env }
+}
+
+resource "aws_lambda_function" "accounting_list_sync" {
+  function_name = "${var.name_prefix}-accounting-list-sync"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-sync.handler"
+  filename      = var.accounting_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_accounting_env }
+}
+
+resource "aws_lambda_function" "accounting_retry_sync" {
+  function_name = "${var.name_prefix}-accounting-retry-sync"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "retry-sync.handler"
+  filename      = var.accounting_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_accounting_env }
+}
+
+resource "aws_lambda_function" "accounting_trigger_sync" {
+  function_name = "${var.name_prefix}-accounting-trigger-sync"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "trigger-sync.handler"
+  filename      = var.accounting_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_accounting_env }
+}
+
+resource "aws_apigatewayv2_integration" "accounting_oauth_connect" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.accounting_oauth_connect.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "accounting_oauth_connect" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /accounting/oauth/connect"
+  target             = "integrations/${aws_apigatewayv2_integration.accounting_oauth_connect.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "accounting_oauth_callback" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.accounting_oauth_callback.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "accounting_oauth_callback" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /accounting/oauth/callback"
+  target             = "integrations/${aws_apigatewayv2_integration.accounting_oauth_callback.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "accounting_status" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.accounting_status.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "accounting_status" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /accounting/status"
+  target             = "integrations/${aws_apigatewayv2_integration.accounting_status.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "accounting_list_sync" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.accounting_list_sync.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "accounting_list_sync" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /accounting/invoice-sync"
+  target             = "integrations/${aws_apigatewayv2_integration.accounting_list_sync.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "accounting_retry_sync" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.accounting_retry_sync.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "accounting_retry_sync" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /accounting/invoice-sync/{id}/retry"
+  target             = "integrations/${aws_apigatewayv2_integration.accounting_retry_sync.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "accounting_trigger_sync" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.accounting_trigger_sync.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "accounting_trigger_sync" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /accounting/invoice-sync"
+  target             = "integrations/${aws_apigatewayv2_integration.accounting_trigger_sync.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
 locals {
   erp_lambdas = {
     customers_list        = aws_lambda_function.customers_list
@@ -965,6 +1159,12 @@ locals {
     sop_list_modules             = aws_lambda_function.sop_list_modules
     sop_list_assignments         = aws_lambda_function.sop_list_assignments
     sop_complete_assignment      = aws_lambda_function.sop_complete_assignment
+    accounting_oauth_connect     = aws_lambda_function.accounting_oauth_connect
+    accounting_oauth_callback    = aws_lambda_function.accounting_oauth_callback
+    accounting_status            = aws_lambda_function.accounting_status
+    accounting_list_sync         = aws_lambda_function.accounting_list_sync
+    accounting_retry_sync        = aws_lambda_function.accounting_retry_sync
+    accounting_trigger_sync      = aws_lambda_function.accounting_trigger_sync
   }
 }
 

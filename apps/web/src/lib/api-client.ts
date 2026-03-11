@@ -316,7 +316,20 @@ export async function listInvoiceSyncRecords(params?: { state?: string; workOrde
   const qs = new URLSearchParams();
   if (params?.state) qs.set('state', params.state);
   if (params?.workOrderId) qs.set('workOrderId', params.workOrderId);
-  return apiFetch(`/accounting/invoice-sync${qs.size ? `?${qs}` : ''}`, undefined, { items: MOCK_SYNC_RECORDS });
+  const res = await apiFetch<{ items: InvoiceSyncRecord[]; total: number }>(
+    `/accounting/invoice-sync${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    { items: MOCK_SYNC_RECORDS, total: MOCK_SYNC_RECORDS.length }
+  );
+  return { items: res.items };
+}
+
+export async function retryInvoiceSync(id: string): Promise<{ id: string; state: string }> {
+  return apiFetch(`/accounting/invoice-sync/${id}/retry`, { method: 'POST' });
+}
+
+export async function getQbStatus(): Promise<{ connected: boolean; companyName?: string; realmId?: string; message?: string }> {
+  return apiFetch('/accounting/status', undefined, { connected: false, message: 'Not connected' });
 }
 
 // ─── Dealers (legacy alias) ───────────────────────────────────────────────────

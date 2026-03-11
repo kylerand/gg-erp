@@ -211,6 +211,43 @@ export interface SmPart {
   createdDate?: string;
 }
 
+/** A service line item on a ShopMonkey order (labor job or parts group) */
+export interface SmService {
+  id: string;
+  orderId?: string;
+  name?: string;
+  note?: string;
+  serviceType?: string; // 'labor' | 'part' | 'sublet' | 'fee' etc.
+  laborCents?: number;
+  partsCents?: number;
+  totalCents?: number;
+  completedDate?: string;
+  createdDate?: string;
+  updatedDate?: string;
+}
+
+/** A line item assignment — parts and labor line items in ShopMonkey v3 */
+export interface SmLineItemAssignment {
+  id: string;
+  orderId?: string;
+  serviceId?: string;
+  type?: string; // 'part' | 'labor' | 'sublet' | 'fee' | 'tire' etc.
+  name?: string;
+  partNumber?: string;
+  description?: string;
+  quantity?: number;
+  retailCostCents?: number;
+  wholesaleCostCents?: number;
+  totalCostCents?: number;
+  laborCents?: number;
+  vendorId?: string;
+  binLocation?: string;
+  partId?: string;
+  taxable?: boolean;
+  createdDate?: string;
+  updatedDate?: string;
+}
+
 export interface SmUser {
   id: string;
   firstName?: string;
@@ -245,27 +282,13 @@ export async function fetchOrders(session: ShopMonkeySession): Promise<SmOrder[]
   return fetchAll<SmOrder>(session, '/order');
 }
 
-export async function fetchParts(session: ShopMonkeySession): Promise<SmPart[]> {
-  // Try /part first; ShopMonkey v3 moved away from /inventory/part
-  try {
-    return await fetchAll<SmPart>(session, '/part');
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('404')) {
-      console.warn('[shopmonkey] /part returned 404 — trying /service/part');
-      try {
-        return await fetchAll<SmPart>(session, '/service/part');
-      } catch (err2) {
-        const msg2 = err2 instanceof Error ? err2.message : String(err2);
-        if (msg2.includes('404')) {
-          console.warn('[shopmonkey] /service/part also 404 — parts not available in this account');
-          return [];
-        }
-        throw err2;
-      }
-    }
-    throw err;
-  }
+export async function fetchParts(_session: ShopMonkeySession): Promise<SmPart[]> {
+  // ShopMonkey v3 has no standalone parts catalog — parts live as line item assignments.
+  return [];
+}
+
+export async function fetchLineItemAssignments(session: ShopMonkeySession): Promise<SmLineItemAssignment[]> {
+  return fetchAll<SmLineItemAssignment>(session, '/line_item_assignment');
 }
 
 export async function fetchUsers(session: ShopMonkeySession): Promise<SmUser[]> {
@@ -284,6 +307,7 @@ export interface ShopMonkeyExport {
   customers: SmCustomer[];
   vehicles: SmVehicle[];
   orders: SmOrder[];
+  lineItemAssignments: SmLineItemAssignment[];
   parts: SmPart[];
   users: SmUser[];
   vendors: SmVendor[];
@@ -303,9 +327,9 @@ export async function exportAll(session: ShopMonkeySession): Promise<ShopMonkeyE
   const orders = await fetchOrders(session);
   console.log(`[shopmonkey]   → ${orders.length} orders`);
 
-  console.log('[shopmonkey] Fetching parts...');
-  const parts = await fetchParts(session);
-  console.log(`[shopmonkey]   → ${parts.length} parts`);
+  console.log('[shopmonkey] Fetching line item assignments (parts + labor)...');
+  const lineItemAssignments = await fetchLineItemAssignments(session);
+  console.log(`[shopmonkey]   → ${lineItemAssignments.length} line item assignments`);
 
   console.log('[shopmonkey] Fetching users...');
   const users = await fetchUsers(session);
@@ -315,12 +339,15 @@ export async function exportAll(session: ShopMonkeySession): Promise<ShopMonkeyE
   const vendors = await fetchVendors(session);
   console.log(`[shopmonkey]   → ${vendors.length} vendors`);
 
+  const parts: SmPart[] = []; // No standalone parts catalog in ShopMonkey v3
+
   return {
     exportedAt: new Date().toISOString(),
     companyId: session.companyId,
     customers,
     vehicles,
     orders,
+    lineItemAssignments,
     parts,
     users,
     vendors,
@@ -328,6 +355,7 @@ export async function exportAll(session: ShopMonkeySession): Promise<ShopMonkeyE
       customers: customers.length,
       vehicles: vehicles.length,
       orders: orders.length,
+      lineItemAssignments: lineItemAssignments.length,
       parts: parts.length,
       users: users.length,
       vendors: vendors.length,

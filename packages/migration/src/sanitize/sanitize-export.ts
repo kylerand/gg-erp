@@ -12,7 +12,7 @@ import type {
   SmCustomer,
   SmVehicle,
   SmOrder,
-  SmPart,
+  SmLineItemAssignment,
   SmUser,
   SmVendor,
   ShopMonkeyExport,
@@ -55,14 +55,18 @@ export interface SanitizedOrder {
   skip: boolean;
 }
 
-export interface SanitizedPart {
+export interface SanitizedLineItemAssignment {
   smId: string;
+  smOrderId?: string;
+  smServiceId?: string;
+  type?: string;
   name: string;
   partNumber?: string;
-  description?: string;
+  quantity: number;
   retailCostCents?: number;
   wholesaleCostCents?: number;
-  quantity: number;
+  totalCostCents?: number;
+  vendorId?: string;
   validationWarnings: string[];
   skip: boolean;
 }
@@ -95,14 +99,14 @@ export interface SanitizationReport {
     customers: { total: number; valid: number; warned: number; skipped: number };
     vehicles: { total: number; valid: number; warned: number; skipped: number };
     orders: { total: number; valid: number; warned: number; skipped: number };
-    parts: { total: number; valid: number; warned: number; skipped: number };
+    lineItemAssignments: { total: number; valid: number; warned: number; skipped: number };
     vendors: { total: number; valid: number; warned: number; skipped: number };
     users: { total: number; valid: number; warned: number; skipped: number };
   };
   customers: SanitizedCustomer[];
   vehicles: SanitizedVehicle[];
   orders: SanitizedOrder[];
-  parts: SanitizedPart[];
+  lineItemAssignments: SanitizedLineItemAssignment[];
   vendors: SanitizedVendor[];
   users: SanitizedUser[];
 }
@@ -208,24 +212,28 @@ function sanitizeOrder(o: SmOrder): SanitizedOrder {
   };
 }
 
-function sanitizePart(p: SmPart): SanitizedPart {
+function sanitizeLineItemAssignment(li: SmLineItemAssignment): SanitizedLineItemAssignment {
   const warnings: string[] = [];
-  const name = p.name?.trim();
-  if (!name) warnings.push('No part name');
+  const name = li.name?.trim();
+  if (!name) warnings.push('No line item name');
 
-  const qty = typeof p.quantity === 'number' && p.quantity >= 0 ? p.quantity : 0;
-  if (typeof p.quantity !== 'number') warnings.push(`Invalid quantity: ${p.quantity} — defaulting to 0`);
+  const qty = typeof li.quantity === 'number' && li.quantity >= 0 ? li.quantity : 0;
+  if (typeof li.quantity !== 'number') warnings.push(`Invalid quantity: ${li.quantity} — defaulting to 0`);
 
   return {
-    smId: p.id,
-    name: name ?? `PART-${p.id}`,
-    partNumber: p.partNumber?.trim() || undefined,
-    description: p.description?.trim() || undefined,
-    retailCostCents: p.retailCostCents,
-    wholesaleCostCents: p.wholesaleCostCents,
+    smId: li.id,
+    smOrderId: li.orderId,
+    smServiceId: li.serviceId,
+    type: li.type,
+    name: name ?? `LINEITEM-${li.id}`,
+    partNumber: li.partNumber?.trim() || undefined,
     quantity: qty,
+    retailCostCents: li.retailCostCents,
+    wholesaleCostCents: li.wholesaleCostCents,
+    totalCostCents: li.totalCostCents,
+    vendorId: li.vendorId,
     validationWarnings: warnings,
-    skip: !name && !p.partNumber,
+    skip: !name && !li.partNumber,
   };
 }
 
@@ -288,7 +296,7 @@ export function sanitizeExport(data: ShopMonkeyExport, sourceFile: string): Sani
   const customers = data.customers.map(sanitizeCustomer);
   const vehicles = data.vehicles.map(sanitizeVehicle);
   const orders = data.orders.map(sanitizeOrder);
-  const parts = data.parts.map(sanitizePart);
+  const lineItemAssignments = (data.lineItemAssignments ?? []).map(sanitizeLineItemAssignment);
   const vendors = data.vendors.map(sanitizeVendor);
   const users = data.users.map(sanitizeUser);
 
@@ -299,14 +307,14 @@ export function sanitizeExport(data: ShopMonkeyExport, sourceFile: string): Sani
       customers: countResults(customers),
       vehicles: countResults(vehicles),
       orders: countResults(orders),
-      parts: countResults(parts),
+      lineItemAssignments: countResults(lineItemAssignments),
       vendors: countResults(vendors),
       users: countResults(users),
     },
     customers,
     vehicles,
     orders,
-    parts,
+    lineItemAssignments,
     vendors,
     users,
   };

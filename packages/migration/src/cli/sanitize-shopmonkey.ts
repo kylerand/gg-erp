@@ -49,7 +49,7 @@ const allWarnings: Array<{ entity: string; id: string; warnings: string[] }> = [
   ...report.customers.filter(r => r.validationWarnings.length).map(r => ({ entity: 'customer', id: r.smId, warnings: r.validationWarnings })),
   ...report.vehicles.filter(r => r.validationWarnings.length).map(r => ({ entity: 'vehicle', id: r.smId, warnings: r.validationWarnings })),
   ...report.orders.filter(r => r.validationWarnings.length).map(r => ({ entity: 'order', id: r.smId, warnings: r.validationWarnings })),
-  ...report.parts.filter(r => r.validationWarnings.length).map(r => ({ entity: 'part', id: r.smId, warnings: r.validationWarnings })),
+  ...report.lineItemAssignments.filter(r => r.validationWarnings.length).map(r => ({ entity: 'line_item', id: r.smId, warnings: r.validationWarnings })),
 ];
 
 if (allWarnings.length > 0) {

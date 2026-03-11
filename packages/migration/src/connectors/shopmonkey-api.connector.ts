@@ -15,8 +15,10 @@
  */
 
 const BASE_URL = 'https://api.shopmonkey.cloud/v3';
-const DEFAULT_PAGE_SIZE = 100;
+const DEFAULT_PAGE_SIZE = 25; // Reduced from 100 — large pages cause socket resets
 const RATE_LIMIT_RETRY_MS = 2000;
+const PAGE_DELAY_MS = 300; // Pause between pages to avoid connection saturation
+const MAX_RETRIES = 5;
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -79,6 +81,7 @@ async function fetchAll<T>(
 ): Promise<T[]> {
   const results: T[] = [];
   let offset = 0;
+  let page = 1;
 
   while (true) {
     const params = new URLSearchParams({
@@ -89,16 +92,25 @@ async function fetchAll<T>(
 
     const res = await apiFetch<ListResponse<T>>(`${path}?${params}`, {
       headers: { Authorization: `Bearer ${session.token}` },
-    }, /* retries */ 3);
+    }, MAX_RETRIES);
 
     if (!Array.isArray(res.data)) break;
     results.push(...res.data);
 
+    if (page === 1 || results.length % 250 === 0) {
+      console.log(`[shopmonkey] ${path}: fetched ${results.length} records (page ${page})`);
+    }
+
     const hasMore = res.meta?.hasMore ?? res.data.length === DEFAULT_PAGE_SIZE;
     if (!hasMore || res.data.length === 0) break;
     offset += DEFAULT_PAGE_SIZE;
+    page++;
+
+    // Brief pause to avoid saturating the connection pool
+    await sleep(PAGE_DELAY_MS);
   }
 
+  console.log(`[shopmonkey] ${path}: done — ${results.length} total records`);
   return results;
 }
 
@@ -277,27 +289,46 @@ export async function exportAll(session: ShopMonkeySession): Promise<ShopMonkeyE
 async function apiFetch<T>(
   path: string,
   init: RequestInit = {},
-  retries = 3,
+  retries = MAX_RETRIES,
 ): Promise<T> {
   const url = path.startsWith('http') ? path : `${BASE_URL}${path}`;
 
   for (let attempt = 1; attempt <= retries; attempt++) {
-    const res = await fetch(url, init);
+    try {
+      const res = await fetch(url, init);
 
-    if (res.status === 429) {
-      const retryAfter = Number(res.headers.get('retry-after') ?? 2);
-      const waitMs = (retryAfter * 1000) || RATE_LIMIT_RETRY_MS;
-      console.warn(`[shopmonkey] Rate limited — waiting ${waitMs}ms (attempt ${attempt}/${retries})`);
-      await sleep(waitMs);
-      continue;
+      if (res.status === 429) {
+        const retryAfter = Number(res.headers.get('retry-after') ?? 2);
+        const waitMs = (retryAfter * 1000) || RATE_LIMIT_RETRY_MS;
+        console.warn(`[shopmonkey] Rate limited — waiting ${waitMs}ms (attempt ${attempt}/${retries})`);
+        await sleep(waitMs);
+        continue;
+      }
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`ShopMonkey API error ${res.status} on ${url}: ${body}`);
+      }
+
+      return res.json() as Promise<T>;
+    } catch (err: unknown) {
+      // Retry socket/network errors with exponential backoff
+      const isNetworkError =
+        err instanceof TypeError ||
+        (err instanceof Error && ('code' in err) &&
+          ['UND_ERR_SOCKET', 'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND'].includes(
+            (err as NodeJS.ErrnoException).code ?? ''
+          ));
+
+      if (isNetworkError && attempt < retries) {
+        const backoff = Math.min(1000 * 2 ** (attempt - 1), 15000);
+        console.warn(`[shopmonkey] Network error on attempt ${attempt}/${retries} — retrying in ${backoff}ms: ${(err as Error).message}`);
+        await sleep(backoff);
+        continue;
+      }
+
+      throw err;
     }
-
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(`ShopMonkey API error ${res.status} on ${url}: ${body}`);
-    }
-
-    return res.json() as Promise<T>;
   }
 
   throw new Error(`ShopMonkey API: exceeded ${retries} retries for ${url}`);

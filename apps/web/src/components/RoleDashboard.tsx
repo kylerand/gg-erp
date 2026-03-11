@@ -1,6 +1,8 @@
 'use client';
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { useRole } from '@/lib/role-context';
+import { listWorkOrders, listParts, listInvoiceSyncRecords } from '@/lib/api-client';
 import type { UserRole } from '@/lib/auth';
 
 interface DashboardCard {
@@ -70,6 +72,51 @@ const DEFAULT_ROLE_LANDING: Record<UserRole, string> = {
 
 export function RoleDashboard() {
   const { role, user, loading } = useRole();
+  const [counts, setCounts] = useState<Record<string, number | string>>({});
+
+  useEffect(() => {
+    async function fetchCounts() {
+      try {
+        const [woResult, partsResult, syncResult, woBlocked, woPlanned, woInProgress, woCompleted] = await Promise.allSettled([
+          listWorkOrders({ limit: 1 }),
+          listParts({ limit: 1 }),
+          listInvoiceSyncRecords({ state: 'FAILED' }),
+          listWorkOrders({ state: 'BLOCKED', limit: 100 }),
+          listWorkOrders({ state: 'PLANNED', limit: 100 }),
+          listWorkOrders({ state: 'IN_PROGRESS', limit: 100 }),
+          listWorkOrders({ state: 'COMPLETED', limit: 100 }),
+        ]);
+
+        const blockedCount = woBlocked.status === 'fulfilled' ? woBlocked.value.total : 0;
+        const plannedCount = woPlanned.status === 'fulfilled' ? woPlanned.value.total : 0;
+        const inProgressCount = woInProgress.status === 'fulfilled' ? woInProgress.value.total : 0;
+        const syncFailures = syncResult.status === 'fulfilled' ? syncResult.value.items.length : 0;
+        const totalParts = partsResult.status === 'fulfilled' ? partsResult.value.total : 0;
+
+        const outOfStock = partsResult.status === 'fulfilled'
+          ? partsResult.value.items.filter((p) => (p.quantityOnHand ?? 0) === 0).length
+          : 0;
+
+        const today = new Date().toDateString();
+        const completedToday = woCompleted.status === 'fulfilled'
+          ? woCompleted.value.items.filter(w => w.completedAt && new Date(w.completedAt).toDateString() === today).length
+          : 0;
+
+        void woResult; void totalParts;
+        setCounts({
+          blocked: blockedCount,
+          planned: plannedCount,
+          inProgress: inProgressCount,
+          syncFailures,
+          outOfStock,
+          completedToday,
+        });
+      } catch {
+        // silently keep static fallback values
+      }
+    }
+    void fetchCounts();
+  }, []);
 
   if (loading) {
     return (
@@ -84,7 +131,25 @@ export function RoleDashboard() {
   }
 
   const effectiveRole: UserRole = role ?? 'technician';
-  const cards = CARDS_BY_ROLE[effectiveRole] ?? CARDS_BY_ROLE.technician;
+  const staticCards = CARDS_BY_ROLE[effectiveRole] ?? CARDS_BY_ROLE.technician;
+
+  // Merge real counts into cards by id
+  const VALUE_OVERRIDES: Record<string, number | string | undefined> = {
+    t1: counts.blocked,
+    t2: counts.inProgress,
+    t4: counts.completedToday,
+    m1: counts.blocked,
+    m2: counts.planned,
+    m4: counts.inProgress !== undefined ? `${counts.inProgress}` : undefined,
+    p3c: counts.outOfStock,
+    ac1: counts.syncFailures,
+    ac3: counts.syncFailures,
+  };
+
+  const cards = staticCards.map(c =>
+    VALUE_OVERRIDES[c.id] !== undefined ? { ...c, value: VALUE_OVERRIDES[c.id]! } : c
+  );
+
   const landing = DEFAULT_ROLE_LANDING[effectiveRole];
   const p1Cards = cards.filter(c => c.priority === 'p1');
   const p2Cards = cards.filter(c => c.priority === 'p2');

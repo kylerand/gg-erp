@@ -110,6 +110,35 @@ export async function listWorkOrdersHandler(
   return json(200, response);
 }
 
+export async function transitionWorkOrderHandler(
+  event: ApiGatewayProxyEventLike & { pathParameters?: { id?: string } },
+): Promise<ApiGatewayProxyResultLike> {
+  const correlationId = resolveCorrelationId(event);
+  const actorId = resolveActorId(event);
+  const id = event.pathParameters?.id;
+  if (!id) return json(400, { message: 'Work order ID is required.', correlationId });
+
+  const parseResult = parseJsonBody<{ state: string }>(event.body);
+  if (!parseResult.ok || !parseResult.value.state) {
+    return json(400, { message: 'Body must include { state }.', correlationId });
+  }
+
+  const nextState = parseResult.value.state as WorkOrderState;
+  if (!Object.values(WorkOrderState).includes(nextState)) {
+    return json(422, { message: `Invalid state: ${nextState}`, correlationId });
+  }
+
+  try {
+    const workOrder = await routes.transitionWorkOrder(id, nextState, correlationId, actorId);
+    return json(200, { workOrder: toWorkOrderResponse(workOrder) });
+  } catch (error) {
+    if (error instanceof InvariantViolationError) {
+      return json(409, { message: error.message, correlationId });
+    }
+    throw error;
+  }
+}
+
 function resolveCorrelationId(event: ApiGatewayProxyEventLike): string {
   return (
     event.headers?.['x-correlation-id'] ??

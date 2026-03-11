@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { StatusBadge } from '@gg-erp/ui';
-import type { WorkOrder } from '@/lib/api-client';
+import { transitionWorkOrderState, type WorkOrder } from '@/lib/api-client';
 
 const COLUMNS: { state: WorkOrder['state']; label: string }[] = [
   { state: 'PLANNED', label: 'Planned' },
@@ -13,10 +13,19 @@ const COLUMNS: { state: WorkOrder['state']; label: string }[] = [
 
 export function DispatchClient({ initialItems }: { initialItems: WorkOrder[] }) {
   const [items, setItems] = useState(initialItems);
+  const [transitioning, setTransitioning] = useState<string | null>(null);
 
-  function reassign(wo: WorkOrder, toState: WorkOrder['state']) {
-    setItems(prev => prev.map(w => w.id === wo.id ? { ...w, state: toState } : w));
-    toast.success(`${wo.workOrderNumber} moved to ${toState}`, { description: 'Reassignment recorded (mock)' });
+  async function reassign(wo: WorkOrder, toState: WorkOrder['state']) {
+    setTransitioning(wo.id);
+    try {
+      const updated = await transitionWorkOrderState(wo.id, toState);
+      setItems(prev => prev.map(w => w.id === wo.id ? updated : w));
+      toast.success(`${wo.workOrderNumber} → ${toState}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : `Failed to move ${wo.workOrderNumber}`);
+    } finally {
+      setTransitioning(null);
+    }
   }
 
   return (
@@ -37,8 +46,12 @@ export function DispatchClient({ initialItems }: { initialItems: WorkOrder[] }) 
                   <div className="text-xs text-gray-400 mt-1">{wo.vehicleId}</div>
                   <div className="mt-2 flex flex-wrap gap-1">
                     {COLUMNS.filter(c => c.state !== col.state).map(c => (
-                      <button key={c.state} onClick={() => reassign(wo, c.state)}
-                        className="text-xs text-gray-500 border border-gray-200 hover:border-yellow-400 hover:text-yellow-700 px-2 py-0.5 rounded transition-colors">
+                      <button
+                        key={c.state}
+                        disabled={transitioning === wo.id}
+                        onClick={() => reassign(wo, c.state)}
+                        className="text-xs text-gray-500 border border-gray-200 hover:border-yellow-400 hover:text-yellow-700 px-2 py-0.5 rounded transition-colors disabled:opacity-40"
+                      >
                         → {c.label}
                       </button>
                     ))}

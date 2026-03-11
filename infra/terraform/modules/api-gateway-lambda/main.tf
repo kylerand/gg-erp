@@ -90,6 +90,7 @@ resource "aws_lambda_function" "work_orders_create" {
     variables = {
       NODE_ENV                    = "production"
       PRISMA_QUERY_ENGINE_LIBRARY = "/var/task/libquery_engine-rhel-openssl-3.0.x.so.node"
+      DATABASE_URL                = var.database_url
     }
   }
 }
@@ -107,6 +108,25 @@ resource "aws_lambda_function" "work_orders_list" {
     variables = {
       NODE_ENV                    = "production"
       PRISMA_QUERY_ENGINE_LIBRARY = "/var/task/libquery_engine-rhel-openssl-3.0.x.so.node"
+      DATABASE_URL                = var.database_url
+    }
+  }
+}
+
+resource "aws_lambda_function" "work_orders_transition" {
+  function_name = "${var.name_prefix}-work-orders-transition"
+  role          = aws_iam_role.work_orders_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "transition.handler"
+  filename      = var.work_orders_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+
+  environment {
+    variables = {
+      NODE_ENV                    = "production"
+      PRISMA_QUERY_ENGINE_LIBRARY = "/var/task/libquery_engine-rhel-openssl-3.0.x.so.node"
+      DATABASE_URL                = var.database_url
     }
   }
 }
@@ -142,6 +162,28 @@ resource "aws_apigatewayv2_route" "work_orders_list" {
   api_id    = aws_apigatewayv2_api.erp.id
   route_key = "GET /planning/work-orders"
   target    = "integrations/${aws_apigatewayv2_integration.work_orders_list.id}"
+}
+
+resource "aws_apigatewayv2_integration" "work_orders_transition" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.work_orders_transition.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "work_orders_transition" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "PATCH /planning/work-orders/{id}/state"
+  target    = "integrations/${aws_apigatewayv2_integration.work_orders_transition.id}"
+}
+
+resource "aws_lambda_permission" "allow_api_gateway_transition_wo" {
+  statement_id  = "AllowExecutionFromApiGatewayTransitionWO"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.work_orders_transition.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*/planning/work-orders/*/state"
 }
 
 resource "aws_apigatewayv2_stage" "default" {

@@ -40,6 +40,7 @@ export interface WorkOrder {
   description?: string;
   scheduledDate?: string;
   assigneeId?: string;
+  completedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -71,6 +72,14 @@ export async function createWorkOrder(input: CreateWorkOrderInput): Promise<Work
   const data = await apiFetch<{ workOrder: WorkOrder }>('/planning/work-orders', {
     method: 'POST',
     body: JSON.stringify(input),
+  });
+  return data.workOrder;
+}
+
+export async function transitionWorkOrderState(id: string, state: WorkOrder['state']): Promise<WorkOrder> {
+  const data = await apiFetch<{ workOrder: WorkOrder }>(`/planning/work-orders/${id}/state`, {
+    method: 'PATCH',
+    body: JSON.stringify({ state }),
   });
   return data.workOrder;
 }
@@ -150,6 +159,14 @@ export async function createCustomer(input: CreateCustomerInput): Promise<Custom
   const data = await apiFetch<{ customer: Customer }>('/identity/customers', {
     method: 'POST',
     body: JSON.stringify(input),
+  });
+  return data.customer;
+}
+
+export async function transitionCustomerState(id: string, state: Customer['state']): Promise<Customer> {
+  const data = await apiFetch<{ customer: Customer }>(`/identity/customers/${id}/state`, {
+    method: 'PATCH',
+    body: JSON.stringify({ state }),
   });
   return data.customer;
 }

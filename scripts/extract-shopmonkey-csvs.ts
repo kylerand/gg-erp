@@ -44,9 +44,10 @@ function writeCsv(outPath: string, headers: string[], rows: Record<string, unkno
 }
 
 // ---------------------------------------------------------------------------
-// Extractors
+// Extractors — Shopmonkey export shapes are dynamic / untyped
 // ---------------------------------------------------------------------------
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 function extractCustomers(customers: Record<string, any>[]): Record<string, unknown>[] {
   return customers
     .filter(c => !c.deleted)
@@ -141,6 +142,7 @@ function extractVendors(vendors: Record<string, any>[]): Record<string, unknown>
       accountNumber: v.accountNumber ?? '',
     }));
 }
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 // ---------------------------------------------------------------------------
 // Main

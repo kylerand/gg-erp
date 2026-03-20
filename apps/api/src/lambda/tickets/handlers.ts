@@ -393,10 +393,24 @@ function formatAge(date: Date | null): string {
   return `Started ${Math.floor(hours / 24)}d ago`;
 }
 
+interface WoOperation {
+  id: string;
+  operationName: string;
+  operationStatus: string;
+}
+
+interface WoPart {
+  id: string;
+  partId: string;
+  partStatus: string;
+  requestedQuantity?: number | null;
+  part?: { name?: string; sku?: string } | null;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toQueueItem(order: any) {
-  const ops: any[] = order.operations ?? [];
-  const parts: any[] = order.parts ?? [];
+  const ops: WoOperation[] = order.operations ?? [];
+  const parts: WoPart[] = order.parts ?? [];
   const doneOps = ops.filter((op) => ['DONE', 'SKIPPED', 'CANCELLED'].includes(op.operationStatus)).length;
   const firstPending = ops.find((op) => !['DONE', 'SKIPPED', 'CANCELLED'].includes(op.operationStatus));
   const shortageCount = parts.filter((p) => p.partStatus === 'SHORT').length;
@@ -426,8 +440,8 @@ function toQueueItem(order: any) {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toDetailItem(order: any) {
-  const ops: any[] = order.operations ?? [];
-  const partLines: any[] = order.parts ?? [];
+  const ops: WoOperation[] = order.operations ?? [];
+  const partLines: WoPart[] = order.parts ?? [];
   const shortageCount = partLines.filter((p) => p.partStatus === 'SHORT').length;
   const materialReadiness =
     partLines.length === 0 ? 'READY'

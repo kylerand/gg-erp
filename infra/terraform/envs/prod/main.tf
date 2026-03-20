@@ -77,8 +77,31 @@ module "api_gateway_lambda" {
   source                      = "../../modules/api-gateway-lambda"
   name_prefix                 = var.name_prefix
   work_orders_lambda_zip_path = var.work_orders_lambda_zip_path
+  customers_lambda_zip_path   = var.customers_lambda_zip_path
+  inventory_lambda_zip_path   = var.inventory_lambda_zip_path
+  tickets_lambda_zip_path     = var.tickets_lambda_zip_path
+  attachments_lambda_zip_path = var.attachments_lambda_zip_path
+  sop_lambda_zip_path         = var.sop_lambda_zip_path
+  accounting_lambda_zip_path  = var.accounting_lambda_zip_path
+  migration_lambda_zip_path   = var.migration_lambda_zip_path
   cognito_user_pool_endpoint  = module.cognito.issuer_url
   cognito_audience            = [module.cognito.app_client_ids["web"]]
   database_url                = module.aurora_postgres.database_url
   document_bucket_name        = module.s3.document_bucket_name
+  qb_client_id                = var.qb_client_id
+  qb_client_secret            = var.qb_client_secret
+  qb_redirect_uri             = var.qb_redirect_uri
+  frontend_url                = module.amplify_hosting.web_url
+}
+
+module "amplify_hosting" {
+  source               = "../../modules/amplify-hosting"
+  name_prefix          = var.name_prefix
+  repository_url       = var.repository_url
+  github_access_token  = var.github_access_token
+  branch               = "main"
+  api_base_url         = module.api_gateway_lambda.api_base_url
+  cognito_user_pool_id = module.cognito.user_pool_id
+  cognito_client_id    = module.cognito.app_client_ids["web"]
+  aws_region           = var.aws_region
 }

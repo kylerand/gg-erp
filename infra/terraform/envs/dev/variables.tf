@@ -61,3 +61,40 @@ variable "migration_lambda_zip_path" {
   default     = "../../../../apps/api/dist/migration-lambda.zip"
 }
 
+# QuickBooks OAuth
+
+variable "qb_client_id" {
+  description = "QuickBooks app client ID for OAuth2"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "qb_client_secret" {
+  description = "QuickBooks app client secret for OAuth2"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "qb_redirect_uri" {
+  description = "QuickBooks OAuth redirect URI"
+  type        = string
+  default     = ""
+}
+
+# Frontend (Amplify Hosting)
+
+variable "repository_url" {
+  description = "GitHub repository URL for Amplify to clone"
+  type        = string
+  default     = "https://github.com/kylerand/gg-erp"
+}
+
+variable "github_access_token" {
+  description = "GitHub personal access token for Amplify repo access"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+

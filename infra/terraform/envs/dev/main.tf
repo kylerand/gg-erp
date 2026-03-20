@@ -88,4 +88,20 @@ module "api_gateway_lambda" {
   cognito_audience            = [module.cognito.app_client_ids["web"]]
   database_url                = module.aurora_postgres.database_url
   document_bucket_name        = module.s3.document_bucket_name
+  qb_client_id                = var.qb_client_id
+  qb_client_secret            = var.qb_client_secret
+  qb_redirect_uri             = var.qb_redirect_uri
+  frontend_url                = module.amplify_hosting.web_url
+}
+
+module "amplify_hosting" {
+  source               = "../../modules/amplify-hosting"
+  name_prefix          = var.name_prefix
+  repository_url       = var.repository_url
+  github_access_token  = var.github_access_token
+  branch               = "main"
+  api_base_url         = module.api_gateway_lambda.api_base_url
+  cognito_user_pool_id = module.cognito.user_pool_id
+  cognito_client_id    = module.cognito.app_client_ids["web"]
+  aws_region           = var.aws_region
 }

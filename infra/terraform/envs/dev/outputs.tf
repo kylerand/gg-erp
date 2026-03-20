@@ -9,3 +9,13 @@ output "api_gateway_url" {
 output "event_bus_name" {
   value = module.eventbridge.event_bus_name
 }
+
+output "web_url" {
+  description = "Employee web dashboard URL"
+  value       = module.amplify_hosting.web_url
+}
+
+output "floor_tech_url" {
+  description = "Floor tech mobile interface URL"
+  value       = module.amplify_hosting.floor_tech_url
+}

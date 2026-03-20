@@ -2,6 +2,15 @@ name: CD
 
 on:
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prod
   push:
     branches:
       - main
@@ -80,7 +89,10 @@ jobs:
       - name: Determine environment
         id: env
         run: |
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          # Manual dispatch: use selected environment
+          # Push to main: default to dev (change to prod when ready for production)
+          ENV="${{ github.event.inputs.environment || 'dev' }}"
+          if [[ "$ENV" == "prod" ]]; then
             echo "name=prod" >> $GITHUB_OUTPUT
             echo "name_prefix=gg-erp-prod" >> $GITHUB_OUTPUT
             echo "tf_env=prod" >> $GITHUB_OUTPUT
@@ -124,6 +136,11 @@ jobs:
           TF_VAR_sop_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/sop-lambda.zip"
           TF_VAR_accounting_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/accounting-lambda.zip"
           TF_VAR_migration_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/migration-lambda.zip"
+          TF_VAR_qb_client_id: ${{ secrets.QB_CLIENT_ID }}
+          TF_VAR_qb_client_secret: ${{ secrets.QB_CLIENT_SECRET }}
+          TF_VAR_qb_redirect_uri: ${{ vars.QB_REDIRECT_URI || '' }}
+          TF_VAR_github_access_token: ${{ secrets.AMPLIFY_GITHUB_TOKEN }}
+          TF_VAR_repository_url: "https://github.com/${{ github.repository }}"
         continue-on-error: true
         id: plan
 
@@ -142,6 +159,11 @@ jobs:
           TF_VAR_sop_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/sop-lambda.zip"
           TF_VAR_accounting_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/accounting-lambda.zip"
           TF_VAR_migration_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/migration-lambda.zip"
+          TF_VAR_qb_client_id: ${{ secrets.QB_CLIENT_ID }}
+          TF_VAR_qb_client_secret: ${{ secrets.QB_CLIENT_SECRET }}
+          TF_VAR_qb_redirect_uri: ${{ vars.QB_REDIRECT_URI || '' }}
+          TF_VAR_github_access_token: ${{ secrets.AMPLIFY_GITHUB_TOKEN }}
+          TF_VAR_repository_url: "https://github.com/${{ github.repository }}"
 
       - name: Run database migrations
         run: npm run db:deploy
@@ -172,3 +194,18 @@ jobs:
         env:
           TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-2' }}
           TF_VAR_name_prefix: ${{ steps.env.outputs.name_prefix }}
+
+      - name: Deployment summary
+        if: always()
+        working-directory: infra/terraform/envs/${{ steps.env.outputs.tf_env }}
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          API_URL=$(terraform output -raw api_gateway_url 2>/dev/null || echo "N/A")
+          WEB_URL=$(terraform output -raw web_url 2>/dev/null || echo "N/A")
+          FLOOR_URL=$(terraform output -raw floor_tech_url 2>/dev/null || echo "N/A")
+          echo "| Resource | URL |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-----|" >> $GITHUB_STEP_SUMMARY
+          echo "| API | $API_URL |" >> $GITHUB_STEP_SUMMARY
+          echo "| Web Dashboard | $WEB_URL |" >> $GITHUB_STEP_SUMMARY
+          echo "| Floor Tech | $FLOOR_URL |" >> $GITHUB_STEP_SUMMARY

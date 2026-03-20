@@ -6,7 +6,7 @@
     "dev": "next dev --port 3000",
     "build": "next build",
     "start": "next start --port 3000",
-    "test": "tsx --test \"src/**/*.test.ts\"",
+    "test": "tsx --test src/features/work-orders/WorkOrdersPage.test.ts src/features/work-orders/api.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

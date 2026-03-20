@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "tsx --test \"src/tests/**/*.test.ts\"",
+    "test": "tsx --test src/tests/",
     "dev": "tsx watch --env-file=../../.env src/server.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },

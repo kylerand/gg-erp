@@ -55,7 +55,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-2' }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -92,7 +92,7 @@ jobs:
 
       - name: Upload Lambda artifacts to S3
         run: |
-          for zipfile in dist/lambdas/*.zip; do
+          for zipfile in apps/api/dist/*-lambda.zip; do
             name=$(basename "$zipfile" .zip)
             aws s3 cp "$zipfile" "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/${name}.zip"
             echo "✓ Uploaded ${name}.zip"
@@ -107,16 +107,23 @@ jobs:
         working-directory: infra/terraform/envs/${{ steps.env.outputs.tf_env }}
         run: terraform init
         env:
-          TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-2' }}
           TF_VAR_name_prefix: ${{ steps.env.outputs.name_prefix }}
 
       - name: Terraform Plan
         working-directory: infra/terraform/envs/${{ steps.env.outputs.tf_env }}
         run: terraform plan -out=tfplan -detailed-exitcode
         env:
-          TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-2' }}
           TF_VAR_name_prefix: ${{ steps.env.outputs.name_prefix }}
-          TF_VAR_work_orders_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/work-orders-create.zip"
+          TF_VAR_work_orders_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/work-orders-lambda.zip"
+          TF_VAR_customers_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/customers-lambda.zip"
+          TF_VAR_inventory_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/inventory-lambda.zip"
+          TF_VAR_tickets_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/tickets-lambda.zip"
+          TF_VAR_attachments_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/attachments-lambda.zip"
+          TF_VAR_sop_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/sop-lambda.zip"
+          TF_VAR_accounting_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/accounting-lambda.zip"
+          TF_VAR_migration_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/migration-lambda.zip"
         continue-on-error: true
         id: plan
 
@@ -125,9 +132,16 @@ jobs:
         working-directory: infra/terraform/envs/${{ steps.env.outputs.tf_env }}
         run: terraform apply -auto-approve tfplan
         env:
-          TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-2' }}
           TF_VAR_name_prefix: ${{ steps.env.outputs.name_prefix }}
-          TF_VAR_work_orders_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/work-orders-create.zip"
+          TF_VAR_work_orders_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/work-orders-lambda.zip"
+          TF_VAR_customers_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/customers-lambda.zip"
+          TF_VAR_inventory_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/inventory-lambda.zip"
+          TF_VAR_tickets_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/tickets-lambda.zip"
+          TF_VAR_attachments_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/attachments-lambda.zip"
+          TF_VAR_sop_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/sop-lambda.zip"
+          TF_VAR_accounting_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/accounting-lambda.zip"
+          TF_VAR_migration_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/migration-lambda.zip"
 
       - name: Run database migrations
         run: npm run db:deploy
@@ -156,5 +170,5 @@ jobs:
             exit 1
           fi
         env:
-          TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-2' }}
           TF_VAR_name_prefix: ${{ steps.env.outputs.name_prefix }}

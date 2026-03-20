@@ -2,19 +2,21 @@ import type { PrismaClient } from '@prisma/client';
 
 const SHOPMONKEY_NAMESPACE = 'shopmonkey:v1';
 
+/** Stable ID for the ShopMonkey migration integration account (seeded once). */
+export const MIGRATION_INTEGRATION_ACCOUNT_ID = '00000000-0000-0000-0000-000000000003';
+
 export async function isAlreadyImported(
   prisma: PrismaClient,
   entityType: string,
   sourceId: string,
 ): Promise<boolean> {
-  // Check integrations.external_id_mappings table for existing mapping
-  // Uses raw query since this table may be in a different schema
   const result = await prisma.$queryRaw<Array<{ count: bigint }>>`
     SELECT COUNT(*) as count
     FROM integrations.external_id_mappings
-    WHERE namespace = ${SHOPMONKEY_NAMESPACE}
+    WHERE integration_account_id = CAST(${MIGRATION_INTEGRATION_ACCOUNT_ID} AS uuid)
       AND entity_type = ${entityType}
       AND external_id = ${sourceId}
+      AND namespace = ${SHOPMONKEY_NAMESPACE}
   `;
   return Number(result[0]?.count ?? 0) > 0;
 }
@@ -27,9 +29,9 @@ export async function recordImportMapping(
 ): Promise<void> {
   await prisma.$executeRaw`
     INSERT INTO integrations.external_id_mappings
-      (namespace, entity_type, external_id, internal_id, created_at)
+      (integration_account_id, namespace, entity_type, external_id, entity_id)
     VALUES
-      (${SHOPMONKEY_NAMESPACE}, ${entityType}, ${sourceId}, ${internalId}, NOW())
-    ON CONFLICT (namespace, entity_type, external_id) DO NOTHING
+      (CAST(${MIGRATION_INTEGRATION_ACCOUNT_ID} AS uuid), ${SHOPMONKEY_NAMESPACE}, ${entityType}, ${sourceId}, CAST(${internalId} AS uuid))
+    ON CONFLICT (integration_account_id, entity_type, entity_id, namespace) DO NOTHING
   `;
 }

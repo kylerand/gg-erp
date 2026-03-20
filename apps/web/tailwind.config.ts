@@ -41,11 +41,26 @@ const config: Config = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+        brand: {
+          orange: 'var(--brand-orange)',
+          orangeDark: 'var(--brand-orange-dark)',
+          charcoal: 'var(--brand-charcoal)',
+          cream: 'var(--brand-cream)',
+          sand: 'var(--brand-sand)',
+          line: 'var(--brand-line)',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
+      },
+      fontFamily: {
+        brand: ['Obrega', 'Georgia', 'serif'],
+        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+      },
+      boxShadow: {
+        brand: '0 18px 50px rgba(53, 53, 53, 0.12)',
       },
     },
   },

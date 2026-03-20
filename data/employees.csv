@@ -1,0 +1,10 @@
+id,firstName,lastName,email,role,phone,hireDate,active
+572e6eb7-3161-4c98-a387-110f9323aad5,Frame,Assembly,frame@golfingarage.com,Technician,,2025-08-21T15:31:38.045Z,true
+850dcf80-0caf-46dd-8d0f-3a885ca02c8f,John,Langston,john@golfingarage.com,Technician,+17063314364,2026-02-02T15:43:52.020Z,true
+0168d9a1-29c6-453a-ab92-11021b182d20,Jimmy,Allen,jimmy@golfingarage.com,Admin,+16788963084,2025-07-07T15:12:18.769Z,true
+837d3a7c-eaf0-4065-951a-7454567c42a3,David,Ocasek,david@golfingarage.com,Admin,,2025-07-29T16:02:55.296Z,true
+655bb74ffbccbf0023728ef5,Finley,McRae,finley@golfingarage.com,Admin,+17065026050,2023-11-20T19:45:19.557Z,true
+505be1af-7737-4fda-a4f2-ec2fc1a3a7e9,Libby,McRae,libby@golfingarage.com,Admin,+18162170598,2025-11-02T01:07:56.808Z,true
+5bcfc2cf-e857-447c-96f5-811d936b8149,Kyle,Badyle,krand40@gmail.com,Admin,+14702551974,2026-03-10T04:13:41.498Z,true
+e930fa13-c4ee-4e0f-a0ee-62ab468d1a6a,Clark,Harrison,clark@golfingarage.com,Admin,+16788993561,2025-05-13T15:04:33.900Z,true
+4f491ae2-0e7c-4707-a39d-797d6e28e7d0,Wesley,Giambra,wesley@golfingarage.com,Custom Service Writer (Wesley Giambra),,2025-12-23T20:51:53.222Z,true

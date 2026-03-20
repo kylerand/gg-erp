@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: 'Obrega';
+  src: url('/brand/Obrega.ttf') format('truetype');
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    --background: 36 60% 95%;
+    --foreground: 20 7% 13%;
+    --card: 0 0% 100%;
+    --card-foreground: 20 7% 13%;
+    --primary: 24 77% 52%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 48 69% 96%;
+    --secondary-foreground: 20 7% 13%;
+    --muted: 34 38% 90%;
+    --muted-foreground: 18 8% 38%;
+    --border: 22 24% 82%;
+    --input: 22 24% 82%;
+    --ring: 24 77% 52%;
+    --radius: 1.25rem;
+  }
+
+  * {
+    @apply border-border;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html,
+  body {
+    @apply min-h-screen bg-background text-foreground font-sans;
+  }
+
+  body {
+    background-image:
+      radial-gradient(circle at top, rgba(227, 113, 37, 0.12), transparent 26%),
+      linear-gradient(180deg, rgba(249, 248, 209, 0.65), rgba(247, 240, 230, 0));
+  }
+
+  h1,
+  h2,
+  h3,
+  [data-brand-heading='true'] {
+    font-family: 'Obrega', Georgia, serif;
+  }
+
+  button,
+  a,
+  input,
+  textarea,
+  select {
+    touch-action: manipulation;
+  }
+}
+
+@layer components {
+  .tech-card {
+    @apply rounded-[1.5rem] border border-border/80 bg-white shadow-tech;
+  }
+
+  .tech-button {
+    @apply inline-flex min-h-[52px] items-center justify-center rounded-2xl px-4 text-sm font-semibold transition-colors;
+  }
+}

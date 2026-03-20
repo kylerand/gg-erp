@@ -10,7 +10,7 @@ export const listCustomersHandler = wrapHandler(async (ctx) => {
   const qs = ctx.event.queryStringParameters ?? {};
   const state = qs.state as string | undefined;
   const search = qs.search;
-  const limit = Math.min(parseInt(qs.limit ?? '100', 10), 200);
+  const limit = Math.min(parseInt(qs.limit ?? '100', 10), 500);
   const offset = parseInt(qs.offset ?? '0', 10);
 
   const where = {

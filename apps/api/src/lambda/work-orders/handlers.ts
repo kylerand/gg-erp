@@ -23,6 +23,8 @@ export interface ApiGatewayProxyEventLike {
   body?: string | null;
   headers?: Record<string, string | undefined> | null;
   queryStringParameters?: Record<string, string | undefined> | null;
+  pathParameters?: Record<string, string | undefined> | null;
+  httpMethod?: string;
   requestContext?: {
     requestId?: string;
   };

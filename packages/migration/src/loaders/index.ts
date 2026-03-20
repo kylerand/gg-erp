@@ -1,6 +1,10 @@
+export { runWaveA, GG_LOCATION_SOURCE_ID, MIGRATION_SYSTEM_USER_ID } from './wave-a.loader.js';
 export { runWaveB } from './wave-b.loader.js';
+export { runWaveC } from './wave-c.loader.js';
 export { runWaveD } from './wave-d.loader.js';
 export { runWaveE } from './wave-e.loader.js';
+export { runWaveF } from './wave-f.loader.js';
+export { runWaveG } from './wave-g.loader.js';
 export { createBatch, completeBatch, recordRawRecord, recordError } from './loader.js';
 export { isAlreadyImported, recordImportMapping } from './idempotency.js';
 export type { LoadResult, Wave } from './loader.js';

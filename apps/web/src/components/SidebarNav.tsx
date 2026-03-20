@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import Image from 'next/image';
 import {
   Wrench,
   Package,
@@ -106,53 +107,59 @@ export function SidebarNav() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-56 min-h-screen bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
+    <aside className="hidden xl:flex w-72 min-h-screen bg-[#211F1E] text-white border-r border-white/10 flex-col flex-shrink-0">
       {/* Logo */}
-      <div className="px-4 py-4 border-b border-gray-200">
-        <div className="flex items-center gap-2.5">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
-            style={{ backgroundColor: 'var(--brand-orange)' }}
-          >
-            GG
-          </div>
-          <div>
-            <span className="font-semibold text-sm text-gray-900 leading-tight block">Golfin Garage</span>
-            <span className="text-xs text-gray-400 leading-tight block">ERP</span>
+      <div className="px-5 py-5 border-b border-white/10">
+        <div className="rounded-[1.4rem] border border-white/10 bg-white/5 p-4">
+          <Image
+            src="/brand/golfingarage-logo.svg"
+            alt="Golfin Garage"
+            width={190}
+            height={76}
+            className="h-auto w-full"
+            priority
+          />
+          <div className="mt-4 flex items-center justify-between">
+            <div>
+              <span className="brand-pill border-white/15 bg-white/10 text-[#F9F8D1]">Service OS</span>
+            </div>
+            <span className="text-xs uppercase tracking-[0.2em] text-white/45">ERP</span>
           </div>
         </div>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto py-2">
+      <nav className="flex-1 overflow-y-auto px-3 py-4">
         {NAV_SECTIONS.map((section) => {
           const Icon = section.icon;
           const isActive = pathname === section.href || pathname.startsWith(section.href + '/');
           return (
-            <div key={section.href} className="px-2 mb-0.5">
+            <div key={section.href} className="mb-1.5">
               <Link
                 href={section.href}
-                className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-colors ${
                   isActive
-                    ? 'bg-blue-50 text-blue-600'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    ? 'bg-[#E37125] text-white shadow-lg shadow-[#E37125]/20'
+                    : 'text-white/72 hover:bg-white/8 hover:text-white'
                 }`}
               >
-                <Icon size={16} strokeWidth={isActive ? 2.5 : 2} className="flex-shrink-0" />
-                {section.label}
+                <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${isActive ? 'bg-white/18' : 'bg-white/8'}`}>
+                  <Icon size={17} strokeWidth={isActive ? 2.5 : 2} className="flex-shrink-0" />
+                </span>
+                <span className="flex-1">{section.label}</span>
               </Link>
               {isActive && section.children.length > 0 && (
-                <div className="ml-6 mt-0.5 space-y-0.5">
+                <div className="ml-12 mt-2 space-y-1">
                   {section.children.map((child) => {
                     const isChildActive = pathname === child.href;
                     return (
                       <Link
                         key={child.href}
                         href={child.href}
-                        className={`block px-3 py-1.5 text-xs rounded-md transition-colors ${
+                        className={`block px-3 py-2 text-xs rounded-xl transition-colors ${
                           isChildActive
-                            ? 'text-blue-600 bg-blue-50 font-medium'
-                            : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'
+                            ? 'text-[#F9F8D1] bg-white/10 font-semibold'
+                            : 'text-white/55 hover:text-white hover:bg-white/5'
                         }`}
                       >
                         {child.label}
@@ -167,10 +174,10 @@ export function SidebarNav() {
       </nav>
 
       {/* Footer */}
-      <div className="px-4 py-3 border-t border-gray-200">
+      <div className="px-5 py-4 border-t border-white/10">
         <Link
           href="/auth"
-          className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-700 transition-colors"
+          className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70 hover:text-white hover:bg-white/8 transition-colors"
         >
           <LogOut size={14} />
           <span>Sign out</span>

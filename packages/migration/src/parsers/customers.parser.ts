@@ -1,7 +1,9 @@
 import { parseCsvFile } from './base.parser.js';
 import type { ParseResult, RawCustomerRow } from '../types.js';
 
-const REQUIRED_COLUMNS = ['id', 'firstName', 'lastName', 'email'];
+// email is intentionally NOT required — many walk-in customers provide only a phone number.
+// Rows missing email are still imported; the field is nullable in the ERP schema.
+const REQUIRED_COLUMNS = ['id', 'firstName', 'lastName'];
 
 export async function parseCustomersCsv(filePath: string): Promise<ParseResult<RawCustomerRow>> {
   return parseCsvFile<RawCustomerRow>(
@@ -10,9 +12,6 @@ export async function parseCustomersCsv(filePath: string): Promise<ParseResult<R
     (row, rowNum) => {
       if (!row.id?.trim()) {
         return { row: rowNum, field: 'id', message: 'id is required' };
-      }
-      if (!row.email?.trim()) {
-        return { row: rowNum, field: 'email', message: 'email is required', rawValue: row.id };
       }
       return {
         id: row.id.trim(),

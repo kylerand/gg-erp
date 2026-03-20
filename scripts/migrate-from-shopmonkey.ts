@@ -19,7 +19,7 @@ import { validateCsvContract } from '../packages/migration/src/validation/index.
 import { parseCustomersCsv, parseAssetsCsv, parseEmployeesCsv, parseWorkOrdersCsv } from '../packages/migration/src/parsers/index.js';
 
 const CSV_CONTRACTS: Record<string, string[]> = {
-  'customers.csv':             ['id', 'firstName', 'lastName', 'email'],
+  'customers.csv':             ['id', 'firstName', 'lastName'],
   'assets.csv':                ['id', 'customerId'],
   'employees.csv':             ['id', 'firstName', 'lastName', 'email', 'role'],
   'parts.csv':                 ['id', 'sku', 'name'],

@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Golfin Garage ERP — Business Overview</title>
+<style>
+  :root {
+    --bg: #0b0d13;
+    --surface: #13161f;
+    --surface2: #1a1e2a;
+    --surface3: #222738;
+    --border: #2a2f42;
+    --text: #e4e7f1;
+    --text2: #7d8299;
+    --text3: #555b73;
+    --accent: #6c8cff;
+    --accent-dim: rgba(108,140,255,.12);
+    --green: #4caf87;
+    --green-dim: rgba(76,175,135,.12);
+    --orange: #e8a84c;
+    --orange-dim: rgba(232,168,76,.12);
+    --red: #e05c5c;
+    --red-dim: rgba(224,92,92,.12);
+    --cyan: #4ecdc4;
+    --cyan-dim: rgba(78,205,196,.12);
+    --purple: #a78bfa;
+    --purple-dim: rgba(167,139,250,.12);
+    --pink: #f472b6;
+    --pink-dim: rgba(244,114,182,.12);
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    overflow-x: hidden;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ─── Header ─── */
+  .hero {
+    background: linear-gradient(135deg, #0f1320 0%, #141a2e 50%, #0f1320 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 48px 40px 40px;
+    text-align: center;
+  }
+  .hero-badge {
+    display: inline-block;
+    background: var(--accent-dim);
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 4px 14px;
+    border-radius: 20px;
+    margin-bottom: 12px;
+  }
+  .hero h1 {
+    font-size: 36px;
+    font-weight: 800;
+    letter-spacing: -.5px;
+    margin-bottom: 8px;
+  }
+  .hero h1 span { color: var(--accent); }
+  .hero p { color: var(--text2); font-size: 16px; max-width: 600px; margin: 0 auto; }
+
+  /* ─── Nav tabs ─── */
+  .nav-bar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 2px;
+    padding: 0 40px;
+    overflow-x: auto;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .nav-tab {
+    padding: 12px 20px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text2);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all .2s;
+    white-space: nowrap;
+  }
+  .nav-tab:hover { color: var(--text); }
+  .nav-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ─── Sections ─── */
+  .section { display: none; padding: 32px 40px 56px; max-width: 1400px; margin: 0 auto; }
+  .section.active { display: block; }
+  .section-title { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .section-desc { color: var(--text2); font-size: 14px; margin-bottom: 24px; }
+
+  /* ─── Cards grid ─── */
+  .cards { display: grid; gap: 16px; }
+  .cards-2 { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+  .cards-3 { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+  .cards-4 { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    transition: border-color .2s, transform .15s;
+  }
+  .card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .card-icon {
+    width: 40px; height: 40px;
+    border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    margin-bottom: 12px;
+  }
+  .card h3 { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .card p { font-size: 13px; color: var(--text2); }
+
+  /* ─── Status badges ─── */
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .3px;
+  }
+  .badge-built { background: var(--green-dim); color: var(--green); }
+  .badge-partial { background: var(--orange-dim); color: var(--orange); }
+  .badge-planned { background: var(--accent-dim); color: var(--accent); }
+  .badge-scaffold { background: var(--purple-dim); color: var(--purple); }
+
+  /* ─── Stats row ─── */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    text-align: center;
+  }
+  .kpi .number { font-size: 32px; font-weight: 800; }
+  .kpi .label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; }
+
+  /* ─── Tables ─── */
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+  .table-wrap h4 {
+    padding: 14px 16px 10px;
+    font-size: 14px;
+    font-weight: 700;
+    border-bottom: 1px solid var(--border);
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: var(--text2);
+    font-weight: 600;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(108,140,255,.03); }
+  td.dim { color: var(--text2); }
+  td code {
+    background: var(--surface3);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--cyan);
+  }
+
+  /* ─── Entity relationship diagram (CSS-only) ─── */
+  .erd-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    overflow-x: auto;
+    margin-bottom: 24px;
+  }
+  .erd-row {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .erd-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    min-width: 140px;
+    font-size: 12px;
+  }
+  .erd-box .erd-title {
+    font-weight: 700;
+    font-size: 13px;
+    margin-bottom: 4px;
+  }
+  .erd-box .erd-fields { color: var(--text2); font-size: 11px; }
+  .erd-arrow {
+    color: var(--text3);
+    font-size: 18px;
+    align-self: center;
+    flex-shrink: 0;
+  }
+
+  /* ─── Feature list ─── */
+  .feature-group { margin-bottom: 28px; }
+  .feature-group h4 {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .feature-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 8px;
+  }
+  .feature-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .feature-item .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .dot-green { background: var(--green); }
+  .dot-orange { background: var(--orange); }
+  .dot-blue { background: var(--accent); }
+  .dot-purple { background: var(--purple); }
+
+  /* ─── Tech stack pills ─── */
+  .pill-row {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px;
+  }
+  .pill {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  /* ─── Timeline ─── */
+  .timeline { position: relative; padding-left: 28px; margin-bottom: 24px; }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 8px; top: 4px; bottom: 4px;
+    width: 2px;
+    background: var(--border);
+  }
+  .tl-item { position: relative; margin-bottom: 20px; }
+  .tl-item::before {
+    content: '';
+    position: absolute;
+    left: -24px; top: 6px;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    background: var(--bg);
+  }
+  .tl-item.done::before { background: var(--green); border-color: var(--green); }
+  .tl-item.active::before { background: var(--accent); border-color: var(--accent); }
+  .tl-item h4 { font-size: 14px; font-weight: 700; }
+  .tl-item p { font-size: 13px; color: var(--text2); }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .hero { padding: 32px 20px; }
+    .hero h1 { font-size: 24px; }
+    .nav-bar { padding: 0 16px; }
+    .section { padding: 20px 16px 40px; }
+    .cards-2, .cards-3, .cards-4 { grid-template-columns: 1fr; }
+    .kpi-row { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<!-- ─── Hero ─── -->
+<div class="hero">
+  <div class="hero-badge">Custom Golf Cart Manufacturing ERP</div>
+  <h1><span>Golfin Garage</span> ERP</h1>
+  <p>End-to-end manufacturing platform covering order-to-delivery: customers, build planning, shop-floor execution, inventory, procurement, QC, training, accounting, and AI-assisted operations.</p>
+</div>
+
+<!-- ─── Navigation ─── -->
+<div class="nav-bar" id="navBar">
+  <div class="nav-tab active" data-tab="overview">Overview</div>
+  <div class="nav-tab" data-tab="domain">Domain Model</div>
+  <div class="nav-tab" data-tab="features">Features</div>
+  <div class="nav-tab" data-tab="architecture">Architecture</div>
+  <div class="nav-tab" data-tab="packages">Packages</div>
+  <div class="nav-tab" data-tab="infra">Infrastructure</div>
+  <div class="nav-tab" data-tab="status">Implementation Status</div>
+  <div class="nav-tab" data-tab="migration">Migration</div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- OVERVIEW                                                           -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<div class="section active" id="sec-overview">
+  <h2 class="section-title">System Overview</h2>
+  <p class="section-desc">Key metrics and domain coverage of the Golfin Garage ERP system.</p>
+
+  <div class="kpi-row">
+    <div class="kpi"><div class="number" style="color:var(--accent)">13</div><div class="label">DB Schemas</div></div>
+    <div class="kpi"><div class="number" style="color:var(--green)">40+</div><div class="label">Data Models</div></div>
+    <div class="kpi"><div class="number" style="color:var(--cyan)">80+</div><div class="label">Domain Events</div></div>
+    <div class="kpi"><div class="number" style="color:var(--orange)">17</div><div class="label">Permissions</div></div>
+    <div class="kpi"><div class="number" style="color:var(--purple)">8</div><div class="label">Roles</div></div>
+    <div class="kpi"><div class="number" style="color:var(--pink)">20+</div><div class="label">Web Pages</div></div>
+    <div class="kpi"><div class="number" style="color:var(--green)">9</div><div class="label">Terraform Modules</div></div>
+    <div class="kpi"><div class="number" style="color:var(--accent)">9</div><div class="label">Internal Packages</div></div>
+  </div>
+
+  <div class="cards cards-3">
+    <div class="card">
+      <div class="card-icon" style="background:var(--accent-dim);color:var(--accent)">🏭</div>
+      <h3>Build Planning</h3>
+      <p>Schedule and plan custom golf cart builds. VIN generation, routing steps, QC gates, deterministic slot planning engine.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--green-dim);color:var(--green)">🔧</div>
+      <h3>Work Orders</h3>
+      <p>Full lifecycle management — draft through completion. Operations, part lines, technician assignments, time tracking, status audit trail.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--cyan-dim);color:var(--cyan)">📦</div>
+      <h3>Inventory</h3>
+      <p>Part catalog, hierarchical stock locations, lot/serial tracking, reservations, cycle counts, purchase orders, vendor management.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--orange-dim);color:var(--orange)">👥</div>
+      <h3>Customers & Dealers</h3>
+      <p>Customer lifecycle (lead → active → archived), contact management, vehicle/cart registration, dealer relationships.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--purple-dim);color:var(--purple)">📋</div>
+      <h3>SOP & Training</h3>
+      <p>Versioned standard operating procedures, OJT training modules, employee skill certification tracking, evidence upload.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--pink-dim);color:var(--pink)">💰</div>
+      <h3>Accounting</h3>
+      <p>QuickBooks integration for invoice sync, payment status tracking, reconciliation, webhook-driven updates.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--green-dim);color:var(--green)">🤖</div>
+      <h3>AI Layer</h3>
+      <p>Amazon Bedrock integration for SOP retrieval, ticket summarization, planning copilot, inventory anomaly detection, NL search.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--accent-dim);color:var(--accent)">🔒</div>
+      <h3>Auth & RBAC</h3>
+      <p>Cognito JWT auth, 8 roles with 17 granular permissions, scope guards, row-level access controls, full audit trail.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--orange-dim);color:var(--orange)">🔄</div>
+      <h3>Migration</h3>
+      <p>Full ShopMonkey data migration pipeline — API fetch, CSV fallback, validation, dedup, transformation, staged loading.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- DOMAIN MODEL                                                       -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<div class="section" id="sec-domain">
+  <h2 class="section-title">Domain Model</h2>
+  <p class="section-desc">40+ entities across 13 PostgreSQL schemas modeling the full manufacturing lifecycle.</p>
+
+  <!-- Core entity flow -->
+  <div class="erd-container">
+    <h4 style="margin-bottom:16px;font-size:14px;font-weight:700;color:var(--text2)">Core Entity Flow: Order → Build → Deliver</h4>
+    <div class="erd-row">
+      <div class="erd-box" style="border-color:var(--orange)">
+        <div class="erd-title" style="color:var(--orange)">Customer</div>
+        <div class="erd-fields">name, email, phone<br>status: lead→active→archived<br>addresses, dealer links</div>
+      </div>
+      <div class="erd-arrow">→</div>
+      <div class="erd-box" style="border-color:var(--cyan)">
+        <div class="erd-title" style="color:var(--cyan)">CartVehicle</div>
+        <div class="erd-fields">VIN (NHTSA-compliant)<br>serial, model code, year<br>customer ownership link</div>
+      </div>
+      <div class="erd-arrow">→</div>
+      <div class="erd-box" style="border-color:var(--accent)">
+        <div class="erd-title" style="color:var(--accent)">WorkOrder (planning)</div>
+        <div class="erd-fields">build scheduling<br>QC gate states<br>SOP routing steps</div>
+      </div>
+      <div class="erd-arrow">→</div>
+      <div class="erd-box" style="border-color:var(--green)">
+        <div class="erd-title" style="color:var(--green)">WoOrder (execution)</div>
+        <div class="erd-fields">DRAFT→IN_PROGRESS→COMPLETED<br>priority, stock location<br>status audit trail</div>
+      </div>
+    </div>
+    <div class="erd-row" style="margin-left:40px">
+      <div class="erd-box" style="border-color:var(--green)">
+        <div class="erd-title" style="color:var(--green)">WoOperation</div>
+        <div class="erd-fields">sequenced steps<br>skill requirements<br>est/actual hours</div>
+      </div>
+      <div class="erd-arrow">→</div>
+      <div class="erd-box" style="border-color:var(--purple)">
+        <div class="erd-title" style="color:var(--purple)">WoPartLine</div>
+        <div class="erd-fields">part reference<br>requested/reserved/consumed<br>linked to inventory</div>
+      </div>
+      <div class="erd-arrow" style="margin:0 8px">|</div>
+      <div class="erd-box" style="border-color:var(--purple)">
+        <div class="erd-title" style="color:var(--purple)">WoAssignment</div>
+        <div class="erd-fields">technician link<br>clock in/out<br>time tracking</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- All schemas table -->
+  <div class="table-wrap">
+    <h4>Database Schemas & Entities</h4>
+    <table>
+      <thead><tr><th>Schema</th><th>Entities</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>identity</code></td><td>User, Role, UserRole</td><td>Cognito-linked accounts, roles, temporal assignments</td></tr>
+        <tr><td><code>hr</code></td><td>Employee, EmployeeSkill, EmployeeCertification</td><td>Employee master, skills, certifications w/ expiry</td></tr>
+        <tr><td><code>planning</code></td><td>CartVehicle, VinSequence, WorkOrder, RoutingSopStep</td><td>Build planning, VIN generation, SOP step execution</td></tr>
+        <tr><td><code>work_orders</code></td><td>WoOrder, WoOperation, WoPartLine, WoAssignment, WoStatusHistory, WorkOrderQcGate</td><td>Shop-floor execution layer with full lifecycle</td></tr>
+        <tr><td><code>inventory</code></td><td>Part, StockLocation, StockLot, Vendor, PurchaseOrder, PurchaseOrderLine, UnitOfMeasure</td><td>Part catalog, lot tracking, hierarchical locations, procurement</td></tr>
+        <tr><td><code>customers</code></td><td>Customer</td><td>Customer lifecycle management</td></tr>
+        <tr><td><code>tickets</code></td><td>TechnicianTask, ReworkIssue, FileAttachment, StepEvidenceAttachment, LaborTimeEntry</td><td>Task management, defect tracking, files, time logging</td></tr>
+        <tr><td><code>sop_ojt</code></td><td>SopDocument, SopDocumentVersion, TrainingModule, TrainingAssignment</td><td>SOPs with versioning, OJT training progress</td></tr>
+        <tr><td><code>accounting</code></td><td>InvoiceSyncRecord</td><td>QuickBooks invoice sync state & retries</td></tr>
+        <tr><td><code>integrations</code></td><td>IntegrationAccount, SyncJob, SyncJobItem, ExternalIdMapping, WebhookInboxEvent</td><td>External system connections & sync lifecycle</td></tr>
+        <tr><td><code>migration</code></td><td>ImportBatch, RawRecord, StageRecord, DuplicateCandidate, ReconciliationResult, MigrationError</td><td>ShopMonkey data migration pipeline state</td></tr>
+        <tr><td><code>audit</code></td><td>AuditEvent</td><td>Immutable audit trail with correlation IDs</td></tr>
+        <tr><td><code>obs</code></td><td>EventOutbox</td><td>Transactional outbox for domain event publishing</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Roles & Permissions -->
+  <div class="table-wrap">
+    <h4>Roles & Permissions (RBAC)</h4>
+    <table>
+      <thead><tr><th>Role</th><th>Permissions</th></tr></thead>
+      <tbody>
+        <tr><td><code>admin</code></td><td>Full access — all 17 permissions</td></tr>
+        <tr><td><code>shop_manager</code></td><td>work_orders:*, inventory:*, customers:*, parts_orders:*, reports:read</td></tr>
+        <tr><td><code>technician</code></td><td>work_orders:read+write, inventory:read</td></tr>
+        <tr><td><code>parts_manager</code></td><td>inventory:*, parts_orders:*</td></tr>
+        <tr><td><code>sales</code></td><td>customers:*, sales_quotes:*, work_orders:read</td></tr>
+        <tr><td><code>accounting</code></td><td>accounting:*, reports:read</td></tr>
+        <tr><td><code>trainer_ojt_lead</code></td><td>training:*, work_orders:read</td></tr>
+        <tr><td><code>read_only_executive</code></td><td>reports:read (all domains read-only)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- FEATURES                                                           -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<div class="section" id="sec-features">
+  <h2 class="section-title">Feature Map</h2>
+  <p class="section-desc">Green = built, Orange = partially built, Blue = designed, Purple = scaffold only.</p>
+
+  <div class="feature-group">
+    <h4>🔧 Work Orders & Execution</h4>
+    <div class="feature-list">
+      <div class="feature-item"><div class="dot dot-green"></div>Work order CRUD (create, list, update, status transitions)</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Operation sequencing with skill requirements</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Part line management (request, reserve, consume)</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Technician assignment & time tracking</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Status audit trail (immutable history)</div>
+      <div class="feature-item"><div class="dot dot-green"></div>QC gate checkpoints (pass/fail)</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Web: My Queue, Dispatch, Open WOs, Time Logging</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Web: SOP Runner & QC Checklists</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Worker: work-order-created event handler</div>
+    </div>
+  </div>
+
+  <div class="feature-group">
+    <h4>📦 Inventory & Procurement</h4>
+    <div class="feature-list">
+      <div class="feature-item"><div class="dot dot-green"></div>Part catalog management (SKU, UOM, reorder points)</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Hierarchical stock locations (warehouse/bay/van/staging)</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Lot/serial-level tracking with quarantine states</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Stock movements & reservations</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Cycle count management</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Purchase order lifecycle (create → receive)</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Vendor management</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Web: Parts Lookup, Reservations, Receiving</div>
+    </div>
+  </div>
+
+  <div class="feature-group">
+    <h4>🏭 Build Planning</h4>
+    <div class="feature-list">
+      <div class="feature-item"><div class="dot dot-green"></div>Cart/vehicle registration with NHTSA VIN generation</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Deterministic slot planner (priority + due-date greedy)</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Routing SOP steps with completion tracking</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Web: Build Slots page</div>
+      <div class="feature-item"><div class="dot dot-blue"></div>Advanced multi-objective optimization (designed)</div>
+      <div class="feature-item"><div class="dot dot-blue"></div>What-if simulation for schedule changes (designed)</div>
+    </div>
+  </div>
+
+  <div class="feature-group">
+    <h4>👥 Customers & Sales</h4>
+    <div class="feature-list">
+      <div class="feature-item"><div class="dot dot-green"></div>Customer service layer & routes</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Customer lifecycle (lead → active → archived)</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Web: Customers, Dealers, Relationships pages</div>
+      <div class="feature-item"><div class="dot dot-orange"></div>Sales quotes (permissions defined, partial implementation)</div>
+    </div>
+  </div>
+
+  <div class="feature-group">
+    <h4>📋 SOP/OJT & Training</h4>
+    <div class="feature-list">
+      <div class="feature-item"><div class="dot dot-green"></div>SOP document schema with immutable versioning</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Training module & assignment tracking</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Employee skill & certification management</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Web: My OJT, Assignments, SOP Library</div>
+      <div class="feature-item"><div class="dot dot-blue"></div>Full SOP authoring workflow (designed)</div>
+      <div class="feature-item"><div class="dot dot-blue"></div>Bedrock Knowledge Base ingestion (designed)</div>
+    </div>
+  </div>
+
+  <div class="feature-group">
+    <h4>🔒 Identity, Auth & Audit</h4>
+    <div class="feature-list">
+      <div class="feature-item"><div class="dot dot-green"></div>Cognito JWT authentication</div>
+      <div class="feature-item"><div class="dot dot-green"></div>RBAC with 8 roles, 17 permissions</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Scope guards & row-level access controls</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Immutable audit trail with correlation IDs</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Web: User Access, Audit Trail, Integrations</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Worker: audit log forwarder</div>
+      <div class="feature-item"><div class="dot dot-blue"></div>PostgreSQL Row-Level Security (designed, phase 2)</div>
+    </div>
+  </div>
+
+  <div class="feature-group">
+    <h4>💰 Accounting & Integrations</h4>
+    <div class="feature-list">
+      <div class="feature-item"><div class="dot dot-purple"></div>QuickBooks invoice sync (scaffold)</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Worker: QB invoice sync job</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Web: Sync Monitor, Reconciliation pages</div>
+      <div class="feature-item"><div class="dot dot-blue"></div>Full QB integration — customers, payments, GL (designed)</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Integration schema (accounts, sync jobs, webhook inbox)</div>
+    </div>
+  </div>
+
+  <div class="feature-group">
+    <h4>🤖 AI</h4>
+    <div class="feature-list">
+      <div class="feature-item"><div class="dot dot-purple"></div>Baseline AI provider (scaffold)</div>
+      <div class="feature-item"><div class="dot dot-purple"></div>AI service & routes (scaffold)</div>
+      <div class="feature-item"><div class="dot dot-blue"></div>Bedrock Knowledge Bases — RAG, tool registry (designed)</div>
+      <div class="feature-item"><div class="dot dot-blue"></div>SOP retrieval, ticket summarization (designed)</div>
+      <div class="feature-item"><div class="dot dot-blue"></div>Planning copilot, NL search (designed)</div>
+    </div>
+  </div>
+
+  <div class="feature-group">
+    <h4>🔄 Migration</h4>
+    <div class="feature-list">
+      <div class="feature-item"><div class="dot dot-green"></div>ShopMonkey API connector with multi-pass fetch</div>
+      <div class="feature-item"><div class="dot dot-green"></div>CSV fallback import (dashboard exports)</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Data transformers, validators, dedup engine</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Staged loading with batch tracking</div>
+      <div class="feature-item"><div class="dot dot-green"></div>Export review UI</div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- ARCHITECTURE                                                       -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<div class="section" id="sec-architecture">
+  <h2 class="section-title">Architecture</h2>
+  <p class="section-desc">TypeScript monorepo with bounded-context service architecture, event-driven async, and AWS serverless infrastructure.</p>
+
+  <h4 style="margin-bottom:12px">Tech Stack</h4>
+  <div class="pill-row">
+    <div class="pill">TypeScript</div>
+    <div class="pill">Next.js (App Router)</div>
+    <div class="pill">React</div>
+    <div class="pill">Tailwind CSS</div>
+    <div class="pill">Prisma ORM</div>
+    <div class="pill">PostgreSQL 16</div>
+    <div class="pill">AWS Lambda</div>
+    <div class="pill">API Gateway</div>
+    <div class="pill">Cognito</div>
+    <div class="pill">EventBridge</div>
+    <div class="pill">Step Functions</div>
+    <div class="pill">S3</div>
+    <div class="pill">Bedrock AI</div>
+    <div class="pill">Aurora Serverless v2</div>
+    <div class="pill">Terraform</div>
+    <div class="pill">Docker</div>
+    <div class="pill">Vitest</div>
+  </div>
+
+  <!-- Architecture layers -->
+  <div class="cards cards-2" style="margin-bottom:24px">
+    <div class="card">
+      <div class="card-icon" style="background:var(--accent-dim);color:var(--accent)">🖥️</div>
+      <h3>Frontend — Next.js</h3>
+      <p>App Router with role-based navigation. 20+ pages across 9 sections. Shared UI library with shadcn-style components (Button, DataTable, FormField, workflow primitives). Tailwind CSS styling.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--green-dim);color:var(--green)">⚡</div>
+      <h3>API — Lambda Handlers</h3>
+      <p>Bounded-context service architecture. Lambda handlers behind API Gateway. Middleware stack: JWT auth → permission guard → scope guard → row-level access → audit context → error handling.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--cyan-dim);color:var(--cyan)">🗄️</div>
+      <h3>Database — PostgreSQL</h3>
+      <p>Aurora Serverless v2 (Docker locally). Prisma ORM with 13 schemas, 40+ models. Repository pattern for complex transactional writes. 4 incremental migrations.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--orange-dim);color:var(--orange)">📡</div>
+      <h3>Events — Outbox + Workers</h3>
+      <p>80+ domain event types. Transactional outbox pattern ensures at-least-once delivery. Worker runtime with retry logic, subscriber registry. EventBridge in production.</p>
+    </div>
+  </div>
+
+  <!-- Service boundaries -->
+  <div class="table-wrap">
+    <h4>Service Boundaries (Bounded Contexts)</h4>
+    <table>
+      <thead><tr><th>Context</th><th>Responsibilities</th><th>Key Services</th></tr></thead>
+      <tbody>
+        <tr><td><code>Identity</code></td><td>User accounts, roles, session management</td><td>AuthService, RBACService</td></tr>
+        <tr><td><code>HR</code></td><td>Employees, skills, certifications</td><td>EmployeeService</td></tr>
+        <tr><td><code>Build-Planning</code></td><td>Cart registration, VIN gen, scheduling, routing</td><td>PlanningService, SchedulingEngine</td></tr>
+        <tr><td><code>Work Orders</code></td><td>Execution lifecycle, operations, assignments</td><td>WorkOrderService, OperationService</td></tr>
+        <tr><td><code>Inventory</code></td><td>Parts, stock, movements, reservations, POs</td><td>CatalogService, StockService, POService + 10 more</td></tr>
+        <tr><td><code>Customers</code></td><td>Customer lifecycle, contacts</td><td>CustomerService</td></tr>
+        <tr><td><code>Tickets</code></td><td>Tasks, rework, attachments, time logging</td><td>TaskService, ReworkService</td></tr>
+        <tr><td><code>SOP/OJT</code></td><td>SOPs, training modules, assignments</td><td>SopService, TrainingService</td></tr>
+        <tr><td><code>Accounting</code></td><td>Invoice sync, QuickBooks integration</td><td>InvoiceSyncService, QBClient</td></tr>
+        <tr><td><code>AI</code></td><td>AI-assisted operations, NL search</td><td>AIService, BaselineProvider</td></tr>
+        <tr><td><code>Migration</code></td><td>ShopMonkey data import pipeline</td><td>Connectors, Transformers, Loaders</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Middleware stack -->
+  <div class="table-wrap">
+    <h4>API Middleware Stack (Request Flow)</h4>
+    <table>
+      <thead><tr><th style="width:40px">#</th><th>Layer</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Error Handler</td><td>Catches unhandled errors, formats response</td></tr>
+        <tr><td>2</td><td>Cognito JWT Verification</td><td>Validates Bearer token, extracts user identity</td></tr>
+        <tr><td>3</td><td>Permission Guard</td><td>Checks user has required permission for the endpoint</td></tr>
+        <tr><td>4</td><td>Scope Guard</td><td>Enforces data scope restrictions (location, department)</td></tr>
+        <tr><td>5</td><td>Row-Level Access</td><td>Filters query results based on user's access rules</td></tr>
+        <tr><td>6</td><td>Audit Context</td><td>Attaches correlation ID, records action to audit trail</td></tr>
+        <tr><td>7</td><td>Route Handler</td><td>Business logic execution</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- PACKAGES                                                           -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<div class="section" id="sec-packages">
+  <h2 class="section-title">Monorepo Packages</h2>
+  <p class="section-desc">9 internal packages + 3 apps providing shared infrastructure across the platform.</p>
+
+  <div class="cards cards-2">
+    <div class="card">
+      <div class="card-icon" style="background:var(--accent-dim);color:var(--accent)">📐</div>
+      <h3>packages/domain</h3>
+      <p>Canonical domain contracts — entity types, event catalog (80+ events), audit interfaces, observability metrics, VIN generator. The shared language of the system.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--cyan-dim);color:var(--cyan)">🗄️</div>
+      <h3>packages/db</h3>
+      <p>Prisma schema (1300+ lines, 40+ models, 13 schemas), database client, 9 repository modules. The persistence layer source of truth.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--green-dim);color:var(--green)">🔐</div>
+      <h3>packages/auth</h3>
+      <p>JWT handling, password utilities, RBAC engine, 17 permissions, 8 roles, scope management, row-level access, session primitives.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--orange-dim);color:var(--orange)">📡</div>
+      <h3>packages/events</h3>
+      <p>Event bus abstraction, typed event contracts, publisher/subscriber interfaces. Foundation for the event-driven architecture.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--purple-dim);color:var(--purple)">📅</div>
+      <h3>packages/scheduling</h3>
+      <p>Deterministic build-slot planning engine. Greedy algorithm with priority/due-date sorting for shop-floor capacity planning.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--pink-dim);color:var(--pink)">🤖</div>
+      <h3>packages/ai</h3>
+      <p>AI provider port interface, services (work order summarization), Bedrock integration scaffolding. Pluggable AI capabilities.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--orange-dim);color:var(--orange)">🔄</div>
+      <h3>packages/migration</h3>
+      <p>Full ShopMonkey migration pipeline — CLI tools (fetch, sanitize), API connector, CSV parsers, transformers, validators, dedup engine, staged loaders.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--accent-dim);color:var(--accent)">🎨</div>
+      <h3>packages/ui</h3>
+      <p>Reusable UI primitives (Button, DataTable, FormField), theme tokens, workflow components (BlockedReasonDialog, QueueList, SyncStatusBadge).</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--green-dim);color:var(--green)">🧪</div>
+      <h3>packages/test-utils</h3>
+      <p>Cross-project architecture and contract verification tests. Ensures structural integrity across packages.</p>
+    </div>
+  </div>
+
+  <h3 style="margin:28px 0 12px">Applications</h3>
+  <div class="cards cards-3">
+    <div class="card">
+      <div class="card-icon" style="background:var(--accent-dim);color:var(--accent)">🌐</div>
+      <h3>apps/web</h3>
+      <p>Next.js employee web app with role-based dashboard. 20+ pages across work orders, inventory, customers, training, planning, accounting, admin.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--green-dim);color:var(--green)">⚡</div>
+      <h3>apps/api</h3>
+      <p>Lambda handlers behind API Gateway. Bounded-context service architecture with full middleware stack (auth, RBAC, audit).</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--orange-dim);color:var(--orange)">⚙️</div>
+      <h3>apps/workers</h3>
+      <p>Background job runtime with subscriber registry. Jobs: audit log forwarder, QB invoice sync, work-order-created event handler.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- INFRASTRUCTURE                                                     -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<div class="section" id="sec-infra">
+  <h2 class="section-title">Infrastructure</h2>
+  <p class="section-desc">AWS serverless architecture managed by Terraform. Docker Compose for local development.</p>
+
+  <div class="cards cards-3" style="margin-bottom:28px">
+    <div class="card">
+      <div class="card-icon" style="background:var(--accent-dim);color:var(--accent)">☁️</div>
+      <h3>Compute</h3>
+      <p>API Gateway + Lambda for API handlers. Step Functions for complex workflows. Workers run as scheduled Lambdas.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--cyan-dim);color:var(--cyan)">🗄️</div>
+      <h3>Database</h3>
+      <p>Aurora PostgreSQL Serverless v2. Auto-scaling, multi-AZ. 13 schemas with Prisma-managed migrations.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--green-dim);color:var(--green)">🔐</div>
+      <h3>Authentication</h3>
+      <p>Cognito User Pool with JWT tokens. Bearer token auth on all API endpoints. Secrets in AWS Secrets Manager + SSM.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--orange-dim);color:var(--orange)">📡</div>
+      <h3>Events</h3>
+      <p>EventBridge for async domain events. Transactional outbox pattern ensures reliability. 80+ event types.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--purple-dim);color:var(--purple)">📁</div>
+      <h3>Storage</h3>
+      <p>S3 for file attachments, evidence uploads, export files. Versioning enabled for compliance.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--pink-dim);color:var(--pink)">📊</div>
+      <h3>Observability</h3>
+      <p>CloudWatch logs + metrics. X-Ray distributed tracing. Custom metric definitions in domain contracts.</p>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <h4>Terraform Modules</h4>
+    <table>
+      <thead><tr><th>Module</th><th>Resources</th><th>Config</th></tr></thead>
+      <tbody>
+        <tr><td><code>vpc</code></td><td>VPC, subnets, NAT gateway, security groups</td><td>us-east-2</td></tr>
+        <tr><td><code>aurora</code></td><td>Aurora PostgreSQL Serverless v2 cluster</td><td>Multi-AZ, auto-scaling</td></tr>
+        <tr><td><code>cognito</code></td><td>User pool, app client, identity pool</td><td>JWT auth flow</td></tr>
+        <tr><td><code>api-gateway</code></td><td>HTTP API, routes, Lambda integrations</td><td>REST endpoints</td></tr>
+        <tr><td><code>lambda</code></td><td>Function definitions, IAM roles, layers</td><td>Node.js 20 runtime</td></tr>
+        <tr><td><code>eventbridge</code></td><td>Event bus, rules, targets</td><td>Domain event routing</td></tr>
+        <tr><td><code>step-functions</code></td><td>State machines for workflows</td><td>Build planning, sync</td></tr>
+        <tr><td><code>s3</code></td><td>Buckets for attachments & exports</td><td>Versioning enabled</td></tr>
+        <tr><td><code>observability</code></td><td>CloudWatch dashboards, alarms, X-Ray</td><td>Custom metrics</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="table-wrap">
+    <h4>Local Development</h4>
+    <table>
+      <thead><tr><th>Component</th><th>Setup</th></tr></thead>
+      <tbody>
+        <tr><td>Database</td><td>Docker Compose — PostgreSQL 16 on port 5432, database <code>gg_erp</code></td></tr>
+        <tr><td>Dev Server</td><td><code>npm run dev:stack</code> — starts DB, runs migrations, launches all apps</td></tr>
+        <tr><td>Testing</td><td>Vitest workspace with per-package test configs</td></tr>
+        <tr><td>Linting</td><td>ESLint flat config, TypeScript strict mode</td></tr>
+        <tr><td>Environments</td><td><code>dev</code> and <code>prod</code> (staging deferred per ADR-006)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- IMPLEMENTATION STATUS                                              -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<div class="section" id="sec-status">
+  <h2 class="section-title">Implementation Status</h2>
+  <p class="section-desc">Current build state across all domains — what's shipped, in progress, and planned.</p>
+
+  <div class="table-wrap" style="margin-bottom:28px">
+    <table>
+      <thead><tr><th>Domain</th><th>Schema</th><th>API</th><th>Web UI</th><th>Workers</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Identity / Auth</strong></td>
+          <td><span class="badge badge-built">Done</span></td>
+          <td><span class="badge badge-built">Done</span></td>
+          <td><span class="badge badge-built">Auth page</span></td>
+          <td class="dim">—</td>
+          <td><span class="badge badge-built">Built</span></td>
+        </tr>
+        <tr>
+          <td><strong>Work Orders</strong></td>
+          <td><span class="badge badge-built">Done</span></td>
+          <td><span class="badge badge-built">Done</span></td>
+          <td><span class="badge badge-built">7 pages</span></td>
+          <td><span class="badge badge-built">1 job</span></td>
+          <td><span class="badge badge-built">Core Built</span></td>
+        </tr>
+        <tr>
+          <td><strong>Inventory</strong></td>
+          <td><span class="badge badge-built">Done</span></td>
+          <td><span class="badge badge-built">13+ svc</span></td>
+          <td><span class="badge badge-built">3 pages</span></td>
+          <td class="dim">—</td>
+          <td><span class="badge badge-built">Core Built</span></td>
+        </tr>
+        <tr>
+          <td><strong>Customers</strong></td>
+          <td><span class="badge badge-built">Done</span></td>
+          <td><span class="badge badge-built">Done</span></td>
+          <td><span class="badge badge-built">3 pages</span></td>
+          <td class="dim">—</td>
+          <td><span class="badge badge-built">Core Built</span></td>
+        </tr>
+        <tr>
+          <td><strong>Build Planning</strong></td>
+          <td><span class="badge badge-built">Done</span></td>
+          <td><span class="badge badge-built">Engine</span></td>
+          <td><span class="badge badge-built">1 page</span></td>
+          <td class="dim">—</td>
+          <td><span class="badge badge-built">Core Built</span></td>
+        </tr>
+        <tr>
+          <td><strong>HR / Employees</strong></td>
+          <td><span class="badge badge-built">Done</span></td>
+          <td><span class="badge badge-partial">Partial</span></td>
+          <td class="dim">—</td>
+          <td class="dim">—</td>
+          <td><span class="badge badge-partial">Schema Built</span></td>
+        </tr>
+        <tr>
+          <td><strong>SOP / OJT</strong></td>
+          <td><span class="badge badge-built">Done</span></td>
+          <td><span class="badge badge-scaffold">Scaffold</span></td>
+          <td><span class="badge badge-built">3 pages</span></td>
+          <td class="dim">—</td>
+          <td><span class="badge badge-partial">Partial</span></td>
+        </tr>
+        <tr>
+          <td><strong>Tickets / Rework</strong></td>
+          <td><span class="badge badge-built">Done</span></td>
+          <td><span class="badge badge-partial">Partial</span></td>
+          <td class="dim">—</td>
+          <td class="dim">—</td>
+          <td><span class="badge badge-partial">Partial</span></td>
+        </tr>
+        <tr>
+          <td><strong>Accounting / QB</strong></td>
+          <td><span class="badge badge-built">Done</span></td>
+          <td><span class="badge badge-scaffold">Scaffold</span></td>
+          <td><span class="badge badge-built">2 pages</span></td>
+          <td><span class="badge badge-built">1 job</span></td>
+          <td><span class="badge badge-scaffold">Scaffold</span></td>
+        </tr>
+        <tr>
+          <td><strong>AI</strong></td>
+          <td class="dim">—</td>
+          <td><span class="badge badge-scaffold">Scaffold</span></td>
+          <td class="dim">—</td>
+          <td class="dim">—</td>
+          <td><span class="badge badge-scaffold">Scaffold</span></td>
+        </tr>
+        <tr>
+          <td><strong>Migration</strong></td>
+          <td><span class="badge badge-built">Done</span></td>
+          <td class="dim">CLI</td>
+          <td class="dim">Review UI</td>
+          <td class="dim">—</td>
+          <td><span class="badge badge-built">Built</span></td>
+        </tr>
+        <tr>
+          <td><strong>Audit / Observability</strong></td>
+          <td><span class="badge badge-built">Done</span></td>
+          <td><span class="badge badge-built">Done</span></td>
+          <td><span class="badge badge-built">2 pages</span></td>
+          <td><span class="badge badge-built">1 job</span></td>
+          <td><span class="badge badge-built">Built</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 style="margin-bottom:16px">Implementation Roadmap</h3>
+  <div class="timeline">
+    <div class="tl-item done">
+      <h4>Phase 1 — Foundation <span class="badge badge-built" style="margin-left:8px">Complete</span></h4>
+      <p>Monorepo setup, Prisma schema, auth/RBAC, core domain contracts, event system, audit trail, Docker dev environment.</p>
+    </div>
+    <div class="tl-item done">
+      <h4>Phase 2 — Core Operations <span class="badge badge-built" style="margin-left:8px">Complete</span></h4>
+      <p>Work orders, inventory, procurement, customers, build planning, scheduling engine, web UI for all core modules.</p>
+    </div>
+    <div class="tl-item done">
+      <h4>Phase 3 — Migration <span class="badge badge-built" style="margin-left:8px">Complete</span></h4>
+      <p>ShopMonkey API connector, CSV fallback, transformation pipeline, dedup engine, staged loading, review tools.</p>
+    </div>
+    <div class="tl-item active">
+      <h4>Phase 4 — Integration & Training <span class="badge badge-partial" style="margin-left:8px">In Progress</span></h4>
+      <p>QuickBooks full integration, SOP authoring & execution, OJT training assignment workflow, tickets/rework system.</p>
+    </div>
+    <div class="tl-item">
+      <h4>Phase 5 — Intelligence <span class="badge badge-planned" style="margin-left:8px">Planned</span></h4>
+      <p>Bedrock AI integration, knowledge base ingestion, planning copilot, NL search, anomaly detection, advanced scheduling optimization.</p>
+    </div>
+    <div class="tl-item">
+      <h4>Phase 6 — Scale & Polish <span class="badge badge-planned" style="margin-left:8px">Planned</span></h4>
+      <p>PostgreSQL RLS, BI/analytics dashboards, what-if simulation, mobile optimizations, production hardening.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- MIGRATION                                                          -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<div class="section" id="sec-migration">
+  <h2 class="section-title">ShopMonkey Migration</h2>
+  <p class="section-desc">Phased migration from ShopMonkey automotive SaaS to the custom GG ERP.</p>
+
+  <div class="cards cards-3" style="margin-bottom:28px">
+    <div class="card">
+      <div class="card-icon" style="background:var(--accent-dim);color:var(--accent)">📥</div>
+      <h3>Data Source</h3>
+      <p>ShopMonkey API v3 + CSV dashboard exports. Multi-pass fetching strategy to overcome non-deterministic API pagination.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--green-dim);color:var(--green)">🔄</div>
+      <h3>Pipeline</h3>
+      <p>Fetch → Parse → Validate → Transform → Dedup → Stage → Load. Full error tracking with retry flags per record.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:var(--orange-dim);color:var(--orange)">📊</div>
+      <h3>Reconciliation</h3>
+      <p>Source vs imported count comparison. Confidence-scored duplicate detection. Batch-level progress tracking.</p>
+    </div>
+  </div>
+
+  <div class="table-wrap" style="margin-bottom:24px">
+    <h4>Entity Migration Map</h4>
+    <table>
+      <thead><tr><th>ShopMonkey Entity</th><th>ERP Target</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Customers (454 in SM)</td><td><code>customers.Customer</code></td><td><span class="badge badge-built">Mapped</span></td></tr>
+        <tr><td>Vehicles (84)</td><td><code>planning.CartVehicle</code></td><td><span class="badge badge-built">Mapped</span></td></tr>
+        <tr><td>Orders (570)</td><td><code>work_orders.WoOrder</code></td><td><span class="badge badge-built">Mapped</span></td></tr>
+        <tr><td>Users (28)</td><td><code>identity.User</code> + <code>hr.Employee</code></td><td><span class="badge badge-built">Mapped</span></td></tr>
+        <tr><td>Vendors (26)</td><td><code>inventory.Vendor</code></td><td><span class="badge badge-built">Mapped</span></td></tr>
+        <tr><td>Parts / Line Items</td><td><code>inventory.Part</code> + <code>work_orders.WoPartLine</code></td><td><span class="badge badge-partial">Partial</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="table-wrap">
+    <h4>Migration Pipeline Components</h4>
+    <table>
+      <thead><tr><th>Component</th><th>File</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>API Connector</td><td><code>shopmonkey-api.connector.ts</code></td><td>Auth, multi-pass fetch, rate limiting, retries</td></tr>
+        <tr><td>CSV Parser</td><td><code>parseCustomerCsv()</code></td><td>Dashboard CSV import with auto-detection</td></tr>
+        <tr><td>CLI: Fetch</td><td><code>fetch-shopmonkey.ts</code></td><td>Pull data from API + CSV, save JSON export</td></tr>
+        <tr><td>CLI: Sanitize</td><td><code>sanitize-shopmonkey.ts</code></td><td>Clean and validate exported records</td></tr>
+        <tr><td>Status Map</td><td><code>status.map.ts</code></td><td>ShopMonkey → ERP status translation table</td></tr>
+        <tr><td>Transformers</td><td><code>transformers/</code></td><td>Entity-specific data transformation logic</td></tr>
+        <tr><td>Validators</td><td><code>validators/</code></td><td>Schema validation with error collection</td></tr>
+        <tr><td>Dedup Engine</td><td><code>dedup/</code></td><td>Confidence-scored duplicate detection</td></tr>
+        <tr><td>Loaders</td><td><code>loaders/</code></td><td>Staged database insertion with batch tracking</td></tr>
+        <tr><td>Review UI</td><td><code>review-export.html</code></td><td>Interactive export data browser</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+// ─── Tab navigation ──────────────────────────────────────────────────
+const tabs = document.querySelectorAll('.nav-tab');
+const sections = document.querySelectorAll('.section');
+
+tabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    const target = tab.dataset.tab;
+    tabs.forEach(t => t.classList.toggle('active', t === tab));
+    sections.forEach(s => s.classList.toggle('active', s.id === `sec-${target}`));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+});
+</script>
+</body>
+</html>

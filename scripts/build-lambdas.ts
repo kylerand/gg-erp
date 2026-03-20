@@ -1,11 +1,12 @@
 #!/usr/bin/env tsx
 /**
  * Lambda build pipeline using esbuild.
- * Bundles each Lambda handler to dist/lambdas/{name}/index.js
+ * Bundles each Lambda handler to dist/lambdas/{context}/{handler}.js
+ * All handlers in a context share one output directory, which is then zipped
+ * into apps/api/dist/{context}-lambda.zip by package-lambdas.ts.
  *
  * Usage:
  *   npm run build:lambdas
- *   npm run build:lambdas -- --watch
  */
 
 import { build } from 'esbuild';
@@ -17,23 +18,74 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 
 interface LambdaEntry {
-  name: string;
-  entry: string;
+  context: string; // output subdir and zip name, e.g. 'work-orders'
+  handler: string; // output filename stem matching Terraform handler attr, e.g. 'create'
+  entry: string;   // source path relative to repo root
 }
 
 const lambdas: LambdaEntry[] = [
-  {
-    name: 'work-orders-create',
-    entry: 'apps/api/src/lambda/work-orders/create.handler.ts',
-  },
-  {
-    name: 'work-orders-list',
-    entry: 'apps/api/src/lambda/work-orders/list.handler.ts',
-  },
-  // Add new Lambda handlers here as contexts are implemented
+  // work-orders
+  { context: 'work-orders', handler: 'create',     entry: 'apps/api/src/lambda/work-orders/create.handler.ts' },
+  { context: 'work-orders', handler: 'list',        entry: 'apps/api/src/lambda/work-orders/list.handler.ts' },
+  { context: 'work-orders', handler: 'transition',  entry: 'apps/api/src/lambda/work-orders/transition.handler.ts' },
+
+  // customers
+  { context: 'customers', handler: 'create',      entry: 'apps/api/src/lambda/customers/create.handler.ts' },
+  { context: 'customers', handler: 'get',          entry: 'apps/api/src/lambda/customers/get.handler.ts' },
+  { context: 'customers', handler: 'list',          entry: 'apps/api/src/lambda/customers/list.handler.ts' },
+  { context: 'customers', handler: 'transition',    entry: 'apps/api/src/lambda/customers/transition.handler.ts' },
+
+  // inventory
+  { context: 'inventory', handler: 'create-part',  entry: 'apps/api/src/lambda/inventory/create-part.handler.ts' },
+  { context: 'inventory', handler: 'get-part',      entry: 'apps/api/src/lambda/inventory/get-part.handler.ts' },
+  { context: 'inventory', handler: 'list-lots',     entry: 'apps/api/src/lambda/inventory/list-lots.handler.ts' },
+  { context: 'inventory', handler: 'list-parts',    entry: 'apps/api/src/lambda/inventory/list-parts.handler.ts' },
+  { context: 'inventory', handler: 'list-vendors',  entry: 'apps/api/src/lambda/inventory/list-vendors.handler.ts' },
+
+  // tickets
+  { context: 'tickets', handler: 'create-rework',    entry: 'apps/api/src/lambda/tickets/create-rework.handler.ts' },
+  { context: 'tickets', handler: 'create-task',      entry: 'apps/api/src/lambda/tickets/create-task.handler.ts' },
+  { context: 'tickets', handler: 'list-rework',      entry: 'apps/api/src/lambda/tickets/list-rework.handler.ts' },
+  { context: 'tickets', handler: 'list-sync',        entry: 'apps/api/src/lambda/tickets/list-sync.handler.ts' },
+  { context: 'tickets', handler: 'list-tasks',        entry: 'apps/api/src/lambda/tickets/list-tasks.handler.ts' },
+  { context: 'tickets', handler: 'transition-task',  entry: 'apps/api/src/lambda/tickets/transition-task.handler.ts' },
+
+  // attachments
+  { context: 'attachments', handler: 'confirm-upload',    entry: 'apps/api/src/lambda/attachments/confirm-upload.handler.ts' },
+  { context: 'attachments', handler: 'list',              entry: 'apps/api/src/lambda/attachments/list.handler.ts' },
+  { context: 'attachments', handler: 'presign-download',  entry: 'apps/api/src/lambda/attachments/presign-download.handler.ts' },
+  { context: 'attachments', handler: 'presign-upload',    entry: 'apps/api/src/lambda/attachments/presign-upload.handler.ts' },
+
+  // sop
+  { context: 'sop', handler: 'complete-assignment',  entry: 'apps/api/src/lambda/sop/complete-assignment.handler.ts' },
+  { context: 'sop', handler: 'create',                entry: 'apps/api/src/lambda/sop/create.handler.ts' },
+  { context: 'sop', handler: 'get',                    entry: 'apps/api/src/lambda/sop/get.handler.ts' },
+  { context: 'sop', handler: 'list',                  entry: 'apps/api/src/lambda/sop/list.handler.ts' },
+  { context: 'sop', handler: 'list-assignments',      entry: 'apps/api/src/lambda/sop/list-assignments.handler.ts' },
+  { context: 'sop', handler: 'list-modules',          entry: 'apps/api/src/lambda/sop/list-modules.handler.ts' },
+  { context: 'sop', handler: 'publish-version',        entry: 'apps/api/src/lambda/sop/publish-version.handler.ts' },
+
+  // accounting
+  { context: 'accounting', handler: 'list-sync',        entry: 'apps/api/src/lambda/accounting/list-sync.handler.ts' },
+  { context: 'accounting', handler: 'oauth-callback',    entry: 'apps/api/src/lambda/accounting/oauth-callback.handler.ts' },
+  { context: 'accounting', handler: 'oauth-connect',    entry: 'apps/api/src/lambda/accounting/oauth-connect.handler.ts' },
+  { context: 'accounting', handler: 'retry-sync',        entry: 'apps/api/src/lambda/accounting/retry-sync.handler.ts' },
+  { context: 'accounting', handler: 'status',            entry: 'apps/api/src/lambda/accounting/status.handler.ts' },
+  { context: 'accounting', handler: 'trigger-sync',      entry: 'apps/api/src/lambda/accounting/trigger-sync.handler.ts' },
+
+  // migration
+  { context: 'migration', handler: 'cancel-batch',    entry: 'apps/api/src/lambda/migration/cancel-batch.handler.ts' },
+  { context: 'migration', handler: 'get-batch',        entry: 'apps/api/src/lambda/migration/get-batch.handler.ts' },
+  { context: 'migration', handler: 'list-batches',    entry: 'apps/api/src/lambda/migration/list-batches.handler.ts' },
+  { context: 'migration', handler: 'trigger-batch',    entry: 'apps/api/src/lambda/migration/trigger-batch.handler.ts' },
 ];
 
+// Tracks which context dirs have already had the Prisma engine copied.
+const prismaEngineCopied = new Set<string>();
+
 function copyPrismaEngine(outDir: string): void {
+  if (prismaEngineCopied.has(outDir)) return;
+
   const enginePattern = /libquery_engine.*\.so\.node/;
   const searchPaths = [
     join(root, 'node_modules/.prisma/client'),
@@ -45,22 +97,22 @@ function copyPrismaEngine(outDir: string): void {
     if (!existsSync(searchPath)) continue;
     const files = readdirSync(searchPath).filter(f => enginePattern.test(f));
     for (const file of files) {
-      const src = join(searchPath, file);
-      const dest = join(outDir, file);
-      copyFileSync(src, dest);
-      console.log(`  ↳ Copied Prisma engine: ${file}`);
+      copyFileSync(join(searchPath, file), join(outDir, file));
+      console.log(`  ↳ Copied Prisma engine to ${outDir.split('/').slice(-1)[0]}/: ${file}`);
+      prismaEngineCopied.add(outDir);
       return;
     }
   }
   // Not found is OK during local dev (native binary used instead)
   console.log('  ↳ Prisma engine binary not found (OK for local dev, required for Lambda deploy)');
+  prismaEngineCopied.add(outDir);
 }
 
 async function buildLambda(lambda: LambdaEntry): Promise<void> {
-  const outDir = join(root, 'dist', 'lambdas', lambda.name);
+  const outDir = join(root, 'dist', 'lambdas', lambda.context);
   mkdirSync(outDir, { recursive: true });
 
-  const outfile = join(outDir, 'index.js');
+  const outfile = join(outDir, `${lambda.handler}.js`);
 
   await build({
     entryPoints: [join(root, lambda.entry)],
@@ -70,25 +122,23 @@ async function buildLambda(lambda: LambdaEntry): Promise<void> {
     format: 'cjs',
     outfile,
     // aws-sdk v3 is available in Lambda runtime; prisma client must be bundled
-    external: [
-      '@aws-sdk/*',
-    ],
+    external: ['@aws-sdk/*'],
     minify: false,
     sourcemap: true,
     metafile: true,
     logLevel: 'info',
   });
 
-  console.log(`✓ Built ${lambda.name} → dist/lambdas/${lambda.name}/index.js`);
+  console.log(`✓ Built ${lambda.context}/${lambda.handler} → dist/lambdas/${lambda.context}/${lambda.handler}.js`);
   copyPrismaEngine(outDir);
 }
 
 async function main(): Promise<void> {
-  console.log(`Building ${lambdas.length} Lambda functions...`);
+  console.log(`Building ${lambdas.length} Lambda handlers across ${new Set(lambdas.map(l => l.context)).size} contexts...\n`);
 
   try {
     await Promise.all(lambdas.map(buildLambda));
-    console.log('\n✅ All Lambda functions built successfully');
+    console.log('\n✅ All Lambda handlers built successfully');
   } catch (err) {
     console.error('❌ Build failed:', err);
     process.exit(1);

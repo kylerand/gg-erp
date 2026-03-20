@@ -95,6 +95,12 @@ npm run progress:plans -- --path docs/architecture/employee-web-api-dependency-m
 npm run progress:plans -- --path docs/architecture --json
 ```
 
+The authoritative implementation tracker lives in [docs/architecture/IMPLEMENTATION_STATUS.md](docs/architecture/IMPLEMENTATION_STATUS.md).
+
+- Update that file in the same PR that changes completion status.
+- Use supporting architecture docs as evidence, not as competing status trackers.
+- `npm run progress:plans` will include that file in the default dashboard scan.
+
 ## Local PostgreSQL (Docker)
 
 - `docker-compose.yml` defines a local PostgreSQL 16 instance on `localhost:5432`.

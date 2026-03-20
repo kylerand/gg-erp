@@ -21,6 +21,40 @@ enum WorkOrderStatus {
   @@schema("planning")
 }
 
+enum CartVehicleStatus {
+  REGISTERED
+  IN_BUILD
+  QUALITY_HOLD
+  COMPLETED
+  RETIRED
+
+  @@schema("planning")
+}
+
+model CartVehicle {
+  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vin          String            @unique @map("vin")
+  serialNumber String            @unique @map("serial_number")
+  modelCode    String            @map("model_code")
+  modelYear    Int               @map("model_year")
+  customerId   String            @map("customer_id") @db.Uuid
+  state        CartVehicleStatus @default(REGISTERED)
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime          @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([customerId, state], map: "cart_vehicles_customer_state_idx")
+  @@map("cart_vehicles")
+  @@schema("planning")
+}
+
+model VinSequence {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("vin_sequences")
+  @@schema("planning")
+}
+
 model WorkOrder {
   id                   String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workOrderNumber      String          @unique @map("work_order_number")
@@ -37,11 +71,78 @@ model WorkOrder {
   updatedByUserId      String?         @map("updated_by_user_id") @db.Uuid
   lastCorrelationId    String?         @map("last_correlation_id")
   lastRequestId        String?         @map("last_request_id")
+  activeReworkLoopCount Int            @default(0) @map("active_rework_loop_count")
+  qcGateState          String          @default("PENDING") @map("qc_gate_state")
 
   @@index([state], map: "work_orders_state_idx")
   @@index([vehicleId], map: "work_orders_vehicle_idx")
   @@index([createdAt], map: "work_orders_created_idx")
   @@map("work_orders")
+  @@schema("planning")
+}
+
+enum PlanningScenarioStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+
+  @@schema("planning")
+}
+
+enum PlanPublicationStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+
+  @@schema("planning")
+}
+
+model PlanningScenario {
+  id             String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  scenarioName   String                 @unique @map("scenario_name")
+  scenarioStatus PlanningScenarioStatus @default(ACTIVE) @map("scenario_status")
+  description    String?
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime               @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version        Int                    @default(0)
+
+  constraints  PlanningConstraint[]
+  publications PlanPublication[]
+
+  @@map("planning_scenarios")
+  @@schema("planning")
+}
+
+model PlanningConstraint {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  scenarioId      String           @map("scenario_id") @db.Uuid
+  constraintKey   String           @map("constraint_key")
+  constraintValue Json             @default("{}") @map("constraint_value") @db.JsonB
+  isEnabled       Boolean          @default(true) @map("is_enabled")
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version         Int              @default(0)
+
+  scenario PlanningScenario @relation(fields: [scenarioId], references: [id])
+
+  @@unique([scenarioId, constraintKey], map: "planning_constraints_scenario_id_constraint_key_key")
+  @@map("planning_constraints")
+  @@schema("planning")
+}
+
+model PlanPublication {
+  id                String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  publicationKey    String                @unique @map("publication_key")
+  scenarioId        String?               @map("scenario_id") @db.Uuid
+  publicationStatus PlanPublicationStatus @default(DRAFT) @map("publication_status")
+  effectiveFrom     DateTime?             @map("effective_from") @db.Timestamptz(6)
+  createdAt         DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime              @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version           Int                   @default(0)
+
+  scenario PlanningScenario? @relation(fields: [scenarioId], references: [id])
+
+  @@map("plan_publications")
   @@schema("planning")
 }
 
@@ -244,6 +345,7 @@ model User {
 
   userRoles        UserRole[]
   employee         Employee?
+  grantedRolePermissions RolePermission[] @relation("RolePermissionGrantedByUser")
 
   @@index([status])
   @@map("users")
@@ -261,9 +363,48 @@ model Role {
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   version     Int       @default(0)
 
-  userRoles   UserRole[]
+  userRoles        UserRole[]
+  rolePermissions RolePermission[]
+
+  @@index([roleCode])
 
   @@map("roles")
+  @@schema("identity")
+}
+
+model Permission {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  permissionCode String    @map("permission_code")
+  permissionName String    @map("permission_name")
+  description    String?
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
+  version        Int       @default(0)
+
+  rolePermissions RolePermission[]
+
+  @@index([permissionCode])
+
+  @@map("permissions")
+  @@schema("identity")
+}
+
+model RolePermission {
+  roleId          String   @map("role_id") @db.Uuid
+  permissionId    String   @map("permission_id") @db.Uuid
+  grantedByUserId String?  @map("granted_by_user_id") @db.Uuid
+  correlationId   String   @map("correlation_id")
+  requestId       String?  @map("request_id")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  role          Role       @relation(fields: [roleId], references: [id])
+  permission    Permission @relation(fields: [permissionId], references: [id])
+  grantedByUser User?      @relation("RolePermissionGrantedByUser", fields: [grantedByUserId], references: [id])
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
   @@schema("identity")
 }
 
@@ -637,6 +778,7 @@ model WoOrder {
   operations     WoOperation[]
   parts          WoPartLine[]
   statusHistory  WoStatusHistory[]
+  qcGates        WorkOrderQcGate[]
 
   @@unique([workOrderNumber])
   @@index([status, dueAt])
@@ -833,24 +975,159 @@ enum TrainingModuleStatus {
 }
 
 model TrainingModule {
-  id             String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  moduleCode     String               @map("module_code")
-  sopDocumentId  String?              @map("sop_document_id") @db.Uuid
-  moduleName     String               @map("module_name")
-  description    String?
-  moduleStatus   TrainingModuleStatus @default(ACTIVE) @map("module_status")
-  passScore      Int?                 @map("pass_score")
-  validityDays   Int?                 @map("validity_days")
-  isRequired     Boolean              @default(true) @map("is_required")
-  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime             @default(now()) @map("updated_at") @db.Timestamptz(6)
-  deletedAt      DateTime?            @map("deleted_at") @db.Timestamptz(6)
-  version        Int                  @default(0)
+  id                        String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  moduleCode                String               @map("module_code")
+  sopDocumentId             String?              @map("sop_document_id") @db.Uuid
+  moduleName                String               @map("module_name")
+  description               String?
+  moduleStatus              TrainingModuleStatus @default(ACTIVE) @map("module_status")
+  passScore                 Int?                 @map("pass_score")
+  validityDays              Int?                 @map("validity_days")
+  isRequired                Boolean              @default(true) @map("is_required")
+  // OJT-specific content fields
+  steps                     Json?                @default("[]")
+  knowledgeChecks           Json?                @default("[]") @map("knowledge_checks")
+  estimatedTime             String?              @map("estimated_time")
+  prerequisites             String[]             @default([]) @map("prerequisites")
+  jobRoles                  String[]             @default([]) @map("job_roles")
+  requiresSupervisorSignoff Boolean              @default(false) @map("requires_supervisor_signoff")
+  thumbnailUrl              String?              @map("thumbnail_url")
+  sortOrder                 Int                  @default(0) @map("sort_order")
+  createdAt                 DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                 DateTime             @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt                 DateTime?            @map("deleted_at") @db.Timestamptz(6)
+  version                   Int                  @default(0)
 
   sopDocument         SopDocument?         @relation(fields: [sopDocumentId], references: [id])
   trainingAssignments TrainingAssignment[]
+  moduleProgress      ModuleProgress[]
+  stepProgress        StepProgress[]
+  quizAttempts        QuizAttempt[]
+  ojtNotes            OjtNote[]
+  ojtBookmarks        OjtBookmark[]
+  ojtQuestions        OjtQuestion[]
 
   @@map("training_modules")
+  @@schema("sop_ojt")
+}
+
+model ModuleProgress {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId   String    @map("employee_id") @db.Uuid
+  moduleId     String    @map("module_id") @db.Uuid
+  status       String    @default("not-started")
+  currentStep  String?   @map("current_step")
+  startedAt    DateTime? @map("started_at") @db.Timestamptz(6)
+  completedAt  DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  module TrainingModule @relation(fields: [moduleId], references: [id])
+
+  @@unique([employeeId, moduleId])
+  @@index([employeeId])
+  @@map("module_progress")
+  @@schema("sop_ojt")
+}
+
+model StepProgress {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId    String    @map("employee_id") @db.Uuid
+  moduleId      String    @map("module_id") @db.Uuid
+  stepId        String    @map("step_id")
+  status        String    @default("not-started")
+  videoWatched  Boolean   @default(false) @map("video_watched")
+  videoProgress Decimal   @default(0) @map("video_progress") @db.Decimal(5, 2)
+  completedAt   DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  module TrainingModule @relation(fields: [moduleId], references: [id])
+
+  @@unique([employeeId, moduleId, stepId])
+  @@index([employeeId])
+  @@map("step_progress")
+  @@schema("sop_ojt")
+}
+
+model QuizAttempt {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId     String   @map("employee_id") @db.Uuid
+  moduleId       String   @map("module_id") @db.Uuid
+  score          Int
+  totalQuestions Int      @map("total_questions")
+  passed         Boolean
+  answers        Json     @default("[]")
+  attemptedAt    DateTime @default(now()) @map("attempted_at") @db.Timestamptz(6)
+
+  module TrainingModule @relation(fields: [moduleId], references: [id])
+
+  @@index([employeeId])
+  @@map("quiz_attempts")
+  @@schema("sop_ojt")
+}
+
+model OjtNote {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId String   @map("employee_id") @db.Uuid
+  moduleId   String   @map("module_id") @db.Uuid
+  stepId     String?  @map("step_id")
+  content    String
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  module TrainingModule @relation(fields: [moduleId], references: [id])
+
+  @@index([employeeId])
+  @@map("ojt_notes")
+  @@schema("sop_ojt")
+}
+
+model OjtBookmark {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId String   @map("employee_id") @db.Uuid
+  moduleId   String   @map("module_id") @db.Uuid
+  stepId     String   @map("step_id")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  module TrainingModule @relation(fields: [moduleId], references: [id])
+
+  @@unique([employeeId, moduleId, stepId])
+  @@index([employeeId])
+  @@map("ojt_bookmarks")
+  @@schema("sop_ojt")
+}
+
+model OjtQuestion {
+  id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId   String      @map("employee_id") @db.Uuid
+  employeeName String      @default("") @map("employee_name")
+  moduleId     String      @map("module_id") @db.Uuid
+  stepId       String?     @map("step_id")
+  question     String
+  status       String      @default("pending")
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  module  TrainingModule @relation(fields: [moduleId], references: [id])
+  answers OjtAnswer[]
+
+  @@index([moduleId])
+  @@index([status])
+  @@map("ojt_questions")
+  @@schema("sop_ojt")
+}
+
+model OjtAnswer {
+  id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  questionId   String      @map("question_id") @db.Uuid
+  adminId      String      @map("admin_id") @db.Uuid
+  adminName    String      @default("") @map("admin_name")
+  answer       String
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  question OjtQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@map("ojt_answers")
   @@schema("sop_ojt")
 }
 
@@ -887,6 +1164,39 @@ model TrainingAssignment {
   @@schema("sop_ojt")
 }
 
+
+model InspectionTemplate {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  smId            String    @unique @map("sm_id")
+  name            String?
+  category        String?
+  isActive        Boolean   @default(true) @map("is_active")
+  smCreatedDate   DateTime? @map("sm_created_date") @db.Timestamptz(6)
+  smUpdatedDate   DateTime? @map("sm_updated_date") @db.Timestamptz(6)
+  importedAt      DateTime  @default(now()) @map("imported_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  items InspectionTemplateItem[]
+
+  @@map("inspection_templates")
+  @@schema("sop_ojt")
+}
+
+model InspectionTemplateItem {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  smId                 String   @unique @map("sm_id")
+  inspectionTemplateId String   @map("inspection_template_id") @db.Uuid
+  name                 String?
+  message              String?
+  ordinal              BigInt   @default(0)
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  template InspectionTemplate @relation(fields: [inspectionTemplateId], references: [id], onDelete: Cascade)
+
+  @@index([inspectionTemplateId], map: "inspection_template_items_template_idx")
+  @@map("inspection_template_items")
+  @@schema("sop_ojt")
+}
 // ============================================================
 // integrations schema
 // ============================================================
@@ -1090,6 +1400,8 @@ model TechnicianTask {
   updatedAt      DateTime            @default(now()) @map("updated_at") @db.Timestamptz(6)
   version        Int                 @default(0)
 
+  laborTimeEntries LaborTimeEntry[]
+
   @@index([workOrderId, state])
   @@index([technicianId, state])
   @@map("technician_tasks")
@@ -1141,6 +1453,8 @@ model FileAttachment {
   deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(6)
   version      Int       @default(0)
 
+  stepEvidenceAttachments StepEvidenceAttachment[]
+
   @@index([entityType, entityId])
   @@index([uploadedBy])
   @@map("file_attachments")
@@ -1181,4 +1495,94 @@ model InvoiceSyncRecord {
   @@index([state])
   @@map("invoice_sync_records")
   @@schema("accounting")
+}
+
+// ============================================================
+// planning schema — technician floor additions
+// ============================================================
+
+model RoutingSopStep {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workOrderId      String    @map("work_order_id") @db.Uuid
+  stepCode         String    @map("step_code")
+  stepName         String    @map("step_name")
+  sequenceNo       Int       @map("sequence_no")
+  description      String?
+  estimatedMinutes Int?      @map("estimated_minutes")
+  executionState   String    @default("PENDING") @map("execution_state")
+  completedBy      String?   @map("completed_by")
+  completedAt      DateTime? @map("completed_at") @db.Timestamptz(6)
+  failedReason     String?   @map("failed_reason")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  stepEvidenceAttachments StepEvidenceAttachment[]
+
+  @@index([workOrderId])
+  @@map("routing_sop_steps")
+  @@schema("planning")
+}
+
+// ============================================================
+// tickets schema — technician floor additions
+// ============================================================
+
+model StepEvidenceAttachment {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  routingStepId    String   @map("routing_step_id") @db.Uuid
+  fileAttachmentId String   @map("file_attachment_id") @db.Uuid
+  uploadedBy       String   @map("uploaded_by")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  routingStep    RoutingSopStep @relation(fields: [routingStepId], references: [id], onDelete: Cascade)
+  fileAttachment FileAttachment @relation(fields: [fileAttachmentId], references: [id], onDelete: Cascade)
+
+  @@index([routingStepId], map: "step_evidence_routing_step_idx")
+  @@map("step_evidence_attachments")
+  @@schema("tickets")
+}
+
+model LaborTimeEntry {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  technicianTaskId   String?   @map("technician_task_id") @db.Uuid
+  workOrderId        String    @map("work_order_id") @db.Uuid
+  technicianId       String    @map("technician_id")
+  startedAt          DateTime  @map("started_at") @db.Timestamptz(6)
+  endedAt            DateTime? @map("ended_at") @db.Timestamptz(6)
+  manualHours        Decimal?  @map("manual_hours") @db.Decimal(6, 2)
+  description        String?
+  source             String    @default("MANUAL") @map("source")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  technicianTask TechnicianTask? @relation(fields: [technicianTaskId], references: [id])
+
+  @@index([workOrderId, technicianId], map: "labor_entries_wo_tech_idx")
+  @@index([technicianTaskId], map: "labor_entries_task_idx")
+  @@map("labor_time_entries")
+  @@schema("tickets")
+}
+
+// ============================================================
+// work_orders schema — technician floor additions
+// ============================================================
+
+model WorkOrderQcGate {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workOrderId  String    @map("work_order_id") @db.Uuid
+  taskId       String?   @map("task_id") @db.Uuid
+  gateLabel    String    @map("gate_label")
+  isCritical   Boolean   @default(false) @map("is_critical")
+  result       String?
+  failureNote  String?   @map("failure_note")
+  reviewedBy   String?   @map("reviewed_by")
+  reviewedAt   DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workOrder WoOrder @relation(fields: [workOrderId], references: [id])
+
+  @@index([workOrderId], map: "qc_gates_work_order_idx")
+  @@index([taskId], map: "qc_gates_task_idx")
+  @@map("work_order_qc_gates")
+  @@schema("work_orders")
 }

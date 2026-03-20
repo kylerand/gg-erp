@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Golfin Garage ERP — Product Requirements Document</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --fg: #1a1a2e;
+      --accent: #2563eb;
+      --accent-light: #dbeafe;
+      --border: #e2e8f0;
+      --muted: #64748b;
+      --surface: #f8fafc;
+      --green: #16a34a;
+      --green-bg: #dcfce7;
+      --amber: #d97706;
+      --amber-bg: #fef3c7;
+      --red: #dc2626;
+      --red-bg: #fee2e2;
+      --purple: #7c3aed;
+      --purple-bg: #ede9fe;
+      --radius: 8px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      color: var(--fg);
+      background: var(--bg);
+      line-height: 1.6;
+      font-size: 15px;
+    }
+
+    .container { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+
+    /* Header */
+    .prd-header {
+      border-bottom: 3px solid var(--accent);
+      padding-bottom: 1.5rem;
+      margin-bottom: 2.5rem;
+    }
+    .prd-header h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem; }
+    .prd-header .subtitle { color: var(--muted); font-size: 1.05rem; }
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 0.75rem;
+      margin-top: 1.25rem;
+      font-size: 0.875rem;
+    }
+    .meta-item { background: var(--surface); padding: 0.5rem 0.75rem; border-radius: var(--radius); border: 1px solid var(--border); }
+    .meta-item dt { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .meta-item dd { font-weight: 600; }
+
+    /* TOC */
+    .toc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 2.5rem;
+    }
+    .toc h2 { font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 0.75rem; }
+    .toc ol { padding-left: 1.25rem; }
+    .toc li { margin-bottom: 0.3rem; }
+    .toc a { color: var(--accent); text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+
+    /* Sections */
+    section { margin-bottom: 2.5rem; }
+    h2 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    h3 { font-size: 1.1rem; font-weight: 600; margin: 1.25rem 0 0.5rem; }
+    h4 { font-size: 0.95rem; font-weight: 600; margin: 1rem 0 0.4rem; }
+    p { margin-bottom: 0.75rem; }
+    ul, ol { margin-bottom: 0.75rem; padding-left: 1.5rem; }
+    li { margin-bottom: 0.3rem; }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; font-size: 0.875rem; }
+    th, td { text-align: left; padding: 0.5rem 0.75rem; border: 1px solid var(--border); }
+    th { background: var(--surface); font-weight: 600; white-space: nowrap; }
+    td { vertical-align: top; }
+
+    /* Badges / tags */
+    .badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      vertical-align: middle;
+    }
+    .badge-mvp { background: var(--green-bg); color: var(--green); }
+    .badge-p2 { background: var(--purple-bg); color: var(--purple); }
+    .badge-sync { background: var(--accent-light); color: var(--accent); }
+    .badge-async { background: var(--amber-bg); color: var(--amber); }
+
+    /* Callouts */
+    .callout {
+      border-left: 4px solid var(--accent);
+      background: var(--surface);
+      padding: 0.75rem 1rem;
+      margin-bottom: 1rem;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      font-size: 0.9rem;
+    }
+    .callout-warn { border-left-color: var(--amber); }
+
+    /* Diagrams (ASCII-art style) */
+    .diagram {
+      background: var(--fg);
+      color: #e2e8f0;
+      padding: 1.25rem 1.5rem;
+      border-radius: var(--radius);
+      overflow-x: auto;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 0.8rem;
+      line-height: 1.5;
+      margin-bottom: 1rem;
+      white-space: pre;
+    }
+
+    code {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.85em;
+      background: var(--surface);
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+
+    /* Print */
+    @media print {
+      .container { max-width: 100%; }
+      .diagram { background: #fff; color: #000; border: 1px solid #000; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- ─── HEADER ─── -->
+  <header class="prd-header">
+    <h1>Golfin Garage ERP</h1>
+    <p class="subtitle">Product Requirements Document — Custom AWS-Hosted ERP Platform</p>
+    <dl class="meta-grid">
+      <div class="meta-item"><dt>Status</dt><dd>In Development (MVP)</dd></div>
+      <div class="meta-item"><dt>Version</dt><dd>0.1.0</dd></div>
+      <div class="meta-item"><dt>Last Updated</dt><dd>March 2026</dd></div>
+      <div class="meta-item"><dt>Stack</dt><dd>TypeScript · AWS · PostgreSQL</dd></div>
+      <div class="meta-item"><dt>Runtime</dt><dd>Serverless (Lambda + Aurora v2)</dd></div>
+    </dl>
+  </header>
+
+  <!-- ─── TABLE OF CONTENTS ─── -->
+  <nav class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#overview">Product Overview</a></li>
+      <li><a href="#goals">Goals &amp; Principles</a></li>
+      <li><a href="#users">Users &amp; Roles</a></li>
+      <li><a href="#architecture">System Architecture</a></li>
+      <li><a href="#bounded-contexts">Bounded Contexts</a></li>
+      <li><a href="#features-mvp">MVP Feature Requirements</a></li>
+      <li><a href="#features-p2">Phase 2 Features</a></li>
+      <li><a href="#data-model">Data Model &amp; Ownership</a></li>
+      <li><a href="#events">Event-Driven Architecture</a></li>
+      <li><a href="#auth">Authentication &amp; Authorization</a></li>
+      <li><a href="#ai">AI Capabilities</a></li>
+      <li><a href="#migration">Shopmonkey Migration</a></li>
+      <li><a href="#infra">Infrastructure &amp; Deployment</a></li>
+      <li><a href="#apps">Application Surface Area</a></li>
+      <li><a href="#nfr">Non-Functional Requirements</a></li>
+      <li><a href="#risks">Risks &amp; Tradeoffs</a></li>
+    </ol>
+  </nav>
+
+  <!-- ─── 1. OVERVIEW ─── -->
+  <section id="overview">
+    <h2>1. Product Overview</h2>
+    <p>
+      Golfin Garage ERP is a custom-built enterprise resource planning system for a golf cart operations,
+      service, and build execution business. It replaces the legacy <strong>Shopmonkey</strong> platform with a
+      purpose-built system designed around the company's specific domain: work orders, inventory management,
+      build-slot planning, ticketing/rework workflows, technician task tracking, and QuickBooks accounting integration.
+    </p>
+    <p>
+      The system follows an <strong>MVP-first</strong> strategy — shipping a focused, production-ready
+      feature set quickly, with explicit extension points planned for Phase 2. The architecture is
+      serverless-first on AWS to minimize idle cost while preserving scale headroom.
+    </p>
+  </section>
+
+  <!-- ─── 2. GOALS ─── -->
+  <section id="goals">
+    <h2>2. Goals &amp; Principles</h2>
+    <table>
+      <thead><tr><th>Principle</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>Bounded Contexts</td><td>Clear domain boundaries — each context owns its schema, routes, events, and data access. Cross-context communication is event-first.</td></tr>
+        <tr><td>AWS-First</td><td>All infrastructure defined in Terraform. Lambda, Aurora Serverless v2, EventBridge, Cognito, S3, Step Functions, Bedrock.</td></tr>
+        <tr><td>Operational Safety</td><td>Audit logging, domain events, observability, and migration tooling are first-class artifacts — not afterthoughts.</td></tr>
+        <tr><td>Low Idle Cost</td><td>Serverless-first runtime. Aurora scales to zero-ish (0.5 ACU min). No always-on servers in dev.</td></tr>
+        <tr><td>Fail Closed</td><td>Authorization denials are deterministic with reason codes. Missing scope = denied, never silently permitted.</td></tr>
+        <tr><td>Type Safety</td><td>Strict TypeScript everywhere. No <code>any</code>. Prisma for type-safe DB access. Shared domain contracts in <code>@gg-erp/domain</code>.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ─── 3. USERS ─── -->
+  <section id="users">
+    <h2>3. Users &amp; Roles</h2>
+    <p>All users authenticate via AWS Cognito. Roles map to Cognito groups with custom claims (<code>custom:org_id</code>, <code>custom:shop_id</code>).</p>
+    <table>
+      <thead><tr><th>Role</th><th>Permission Profile</th><th>Primary Interface</th></tr></thead>
+      <tbody>
+        <tr><td><code>admin</code></td><td>Full system access</td><td>Web dashboard</td></tr>
+        <tr><td><code>shop_manager</code></td><td>Broad operational (work orders, inventory, planning, tickets)</td><td>Web dashboard</td></tr>
+        <tr><td><code>technician</code></td><td>Work-order execution, time entries, task completion</td><td>Floor Tech app</td></tr>
+        <tr><td><code>parts_manager</code></td><td>Inventory management, purchase orders</td><td>Web dashboard</td></tr>
+        <tr><td><code>sales</code></td><td>Customer management, quoting</td><td>Web dashboard</td></tr>
+        <tr><td><code>accounting</code></td><td>QuickBooks sync, invoicing, reconciliation</td><td>Web dashboard</td></tr>
+        <tr><td><code>trainer_ojt_lead</code></td><td>Training content, OJT assignments, progress visibility</td><td>Web dashboard</td></tr>
+        <tr><td><code>read_only_executive</code></td><td>Cross-domain read-only access</td><td>Web dashboard</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Scope Hierarchy</h3>
+    <p>Access is scoped at three levels, enforced fail-closed:</p>
+    <ul>
+      <li><strong>ORG</strong> — <code>identity.organizations</code></li>
+      <li><strong>SHOP</strong> — <code>identity.shops</code> (within an org)</li>
+      <li><strong>TEAM</strong> — <code>identity.teams</code> (within a shop)</li>
+    </ul>
+  </section>
+
+  <!-- ─── 4. ARCHITECTURE ─── -->
+  <section id="architecture">
+    <h2>4. System Architecture</h2>
+    <div class="diagram">┌──────────────────────────────────────────────────────────────────────┐
+│                         Clients                                      │
+│   ┌─────────────┐   ┌──────────────┐   ┌──────────────────────┐     │
+│   │  Web App     │   │ Floor Tech   │   │ QuickBooks / Legacy  │     │
+│   │  (Next.js)   │   │  (Next.js)   │   │   (Integrations)     │     │
+│   └──────┬───────┘   └──────┬───────┘   └──────────┬───────────┘     │
+└──────────┼──────────────────┼──────────────────────┼─────────────────┘
+           │                  │                      │
+           ▼                  ▼                      ▼
+    ┌──────────────────────────────────────────────────────────┐
+    │              API Gateway + Cognito Authorizer             │
+    └──────────────────────────┬───────────────────────────────┘
+                               │
+    ┌──────────────────────────▼───────────────────────────────┐
+    │                    Lambda Handlers                        │
+    │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐  │
+    │  │Work Orders│ │Inventory │ │ Tickets  │ │ Planning   │  │
+    │  └──────────┘ └──────────┘ └──────────┘ └────────────┘  │
+    │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐  │
+    │  │Customers │ │Accounting│ │ SOP/OJT  │ │   AI       │  │
+    │  └──────────┘ └──────────┘ └──────────┘ └────────────┘  │
+    └───────┬───────────────┬──────────────────┬───────────────┘
+            │               │                  │
+     ┌──────▼──────┐  ┌─────▼──────┐   ┌──────▼──────────┐
+     │   Aurora     │  │ EventBridge│   │  S3 (files,     │
+     │ PostgreSQL   │  │  (events)  │   │   SOP docs,     │
+     │ Serverless v2│  │            │   │   exports)      │
+     └─────────────┘  └─────┬──────┘   └─────────────────┘
+                            │
+                     ┌──────▼──────┐
+                     │   Workers   │     ┌────────────────┐
+                     │  (Lambda /  │────▶│ Step Functions  │
+                     │   custom)   │     │ (orchestration) │
+                     └─────────────┘     └────────────────┘</div>
+  </section>
+
+  <!-- ─── 5. BOUNDED CONTEXTS ─── -->
+  <section id="bounded-contexts">
+    <h2>5. Bounded Contexts</h2>
+    <p>The system is decomposed into 10 bounded contexts. Each owns its schema, routes, and event contracts.</p>
+    <table>
+      <thead><tr><th>Context</th><th>Responsibilities</th><th>Key Endpoints</th><th>Events Emitted</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Identity &amp; Access</strong></td>
+          <td>AuthN, AuthZ, user/role management</td>
+          <td><code>POST /auth/login</code>, <code>GET /auth/me</code></td>
+          <td><code>identity.user.logged_in</code>, <code>identity.user.role_changed</code></td>
+        </tr>
+        <tr>
+          <td><strong>Employee Workspace</strong></td>
+          <td>Shell UI composition, dashboard summaries</td>
+          <td><code>GET /workspace/summary</code></td>
+          <td><code>workspace.viewed</code></td>
+        </tr>
+        <tr>
+          <td><strong>Inventory</strong></td>
+          <td>Parts catalog, stock levels, reservations</td>
+          <td><code>GET/POST /inventory/*</code></td>
+          <td><code>inventory.part_reserved</code>, <code>inventory.shortage_detected</code>, <code>inventory.lot.changed</code></td>
+        </tr>
+        <tr>
+          <td><strong>Tickets</strong></td>
+          <td>Service/build ticket lifecycle, rework</td>
+          <td><code>POST /tickets</code>, <code>PATCH /tickets/:id</code></td>
+          <td><code>ticket.created</code>, <code>ticket.status_changed</code>, <code>ticket.rework.escalated</code></td>
+        </tr>
+        <tr>
+          <td><strong>SOP / OJT</strong></td>
+          <td>Standard operating procedures, on-the-job training</td>
+          <td><code>GET /sop/*</code>, <code>POST /ojt/*</code></td>
+          <td><code>ojt.assignment_created</code>, <code>ojt.step_completed</code>, <code>sop_ojt.document.updated</code></td>
+        </tr>
+        <tr>
+          <td><strong>Build Planning</strong></td>
+          <td>Deterministic slot optimization for work orders</td>
+          <td><code>POST /planning/slots/compute</code></td>
+          <td><code>planning.slot_plan_published</code>, <code>build_slot.locked</code></td>
+        </tr>
+        <tr>
+          <td><strong>Accounting Integration</strong></td>
+          <td>QuickBooks sync (customers, invoices, payments, items, vendors, GL)</td>
+          <td><code>POST /integrations/quickbooks/sync</code></td>
+          <td><code>accounting.sync_started</code>, <code>accounting.sync_failed</code>, <code>invoice_sync.succeeded</code></td>
+        </tr>
+        <tr>
+          <td><strong>Migration Intake</strong></td>
+          <td>Shopmonkey data import, transformation, validation</td>
+          <td><code>POST /migration/shopmonkey/start</code></td>
+          <td><code>migration.batch_imported</code>, <code>migration.record_failed</code></td>
+        </tr>
+        <tr>
+          <td><strong>AI Orchestration</strong></td>
+          <td>Bedrock-backed RAG, summarization, planning copilot</td>
+          <td><code>POST /ai/query</code></td>
+          <td><code>ai.request_completed</code>, <code>ai.request_blocked</code></td>
+        </tr>
+        <tr>
+          <td><strong>Platform Controls</strong></td>
+          <td>Audit logging, observability, operational alerts</td>
+          <td>Internal only</td>
+          <td><code>audit.recorded</code>, <code>observability.alert_triggered</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <strong>Cross-context rule:</strong> Only the owning context writes to its schema. Cross-context
+      communication is event-first — no direct cross-schema writes. Read models are generated from
+      events or read-only SQL views.
+    </div>
+  </section>
+
+  <!-- ─── 6. MVP FEATURES ─── -->
+  <section id="features-mvp">
+    <h2>6. MVP Feature Requirements <span class="badge badge-mvp">MVP</span></h2>
+
+    <h3>6.1 Work Orders &amp; Ticket Lifecycle</h3>
+    <ul>
+      <li>Create, list, and transition work orders through defined states</li>
+      <li>Ticket creation with assignment to technicians</li>
+      <li>Status transitions with audit trail and event emission</li>
+      <li>Rework/escalation subsystem for quality issues</li>
+      <li>QC gate checkpoints within work order workflows</li>
+      <li>Time entry tracking per technician per work order</li>
+    </ul>
+
+    <h3>6.2 Inventory Management</h3>
+    <ul>
+      <li>Parts catalog with lot tracking</li>
+      <li>Stock level monitoring with reservation mechanics</li>
+      <li>Shortage detection with automatic event notification</li>
+      <li>Vendor management and procurement tracking</li>
+      <li>Failure-case handling (over-reservation, concurrent modifications)</li>
+    </ul>
+
+    <h3>6.3 Build-Slot Planning</h3>
+    <ul>
+      <li>Deterministic slot-planning engine with baseline scoring algorithm</li>
+      <li>Capacity-aware scheduling (reject over-capacity assignments)</li>
+      <li>Snapshot-based plan computation for reproducibility</li>
+      <li>Plan publication with downstream event propagation</li>
+    </ul>
+
+    <h3>6.4 Customer &amp; Dealer Management</h3>
+    <ul>
+      <li>Customer records with contact information</li>
+      <li>Dealer relationship tracking</li>
+      <li>Customer-linked work orders and invoices</li>
+    </ul>
+
+    <h3>6.5 Accounting Integration (QuickBooks)</h3>
+    <ul>
+      <li>Bidirectional sync: customers, invoices, payments, items, vendors, GL entries</li>
+      <li>Outbox pattern for reliable sync delivery</li>
+      <li>Reconciliation and error recovery workflows</li>
+      <li>Invoice sync state tracking</li>
+    </ul>
+
+    <h3>6.6 SOP &amp; On-the-Job Training</h3>
+    <ul>
+      <li>Standard operating procedure document management</li>
+      <li>OJT assignment creation and step-by-step tracking</li>
+      <li>Training progress visibility for leads</li>
+    </ul>
+
+    <h3>6.7 Employee Web Dashboard</h3>
+    <ul>
+      <li>Role-based dashboards (admin, shop manager, technician, etc.)</li>
+      <li>Navigation: work orders, inventory, customers, planning, accounting, training, reporting, admin</li>
+      <li>Toast notifications, role context provider</li>
+      <li>Responsive layout via <code>AppShell</code> component</li>
+    </ul>
+
+    <h3>6.8 Floor Technician App</h3>
+    <ul>
+      <li>Touch-first mobile-responsive interface</li>
+      <li>Work order viewing and task completion</li>
+      <li>Shift management (start/end shift)</li>
+      <li>Offline-capable data sync</li>
+      <li>Minimal chrome via <code>TechShell</code> wrapper</li>
+    </ul>
+
+    <h3>6.9 Shopmonkey Migration</h3>
+    <ul>
+      <li>Import master/open records first (active customers, open tickets, parts)</li>
+      <li>ETL pipeline: parse → transform → deduplicate → validate → load</li>
+      <li>Record-level error tracking with reject queue</li>
+      <li>Batch checkpoints for resumable reruns</li>
+      <li>Audit evidence (actor, source hashes, accepted/rejected counts)</li>
+    </ul>
+
+    <h3>6.10 AI Capabilities (Bedrock)</h3>
+    <ul>
+      <li>SOP/OJT assistant (RAG over training documents)</li>
+      <li>Ticket summarization</li>
+      <li>Planning copilot</li>
+      <li>Inventory anomaly detection</li>
+      <li>Natural-language search across domain data</li>
+      <li>Per-feature budget controls and tool allow-lists</li>
+    </ul>
+
+    <h3>6.11 Platform &amp; Observability</h3>
+    <ul>
+      <li>Immutable audit log pipeline with correlation IDs</li>
+      <li>Structured logging, CloudWatch metrics, X-Ray tracing</li>
+      <li>App-layer row-level authorization (fail-closed, deterministic denial codes)</li>
+      <li>Audit points: <code>authn.success/failure</code>, <code>authz.allow/deny/scope_deny</code></li>
+    </ul>
+  </section>
+
+  <!-- ─── 7. PHASE 2 ─── -->
+  <section id="features-p2">
+    <h2>7. Phase 2 Features <span class="badge badge-p2">Phase 2</span></h2>
+    <table>
+      <thead><tr><th>Feature</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>Advanced Optimization</td><td>Multi-objective planning with what-if scenario analysis</td></tr>
+        <tr><td>Additional Accounting Automations</td><td>Deeper QuickBooks integration, automated reconciliation</td></tr>
+        <tr><td>BI &amp; Self-Service Analytics</td><td>Rich reporting dashboards, ad-hoc queries</td></tr>
+        <tr><td>Expanded AI Toolset</td><td>Human-in-the-loop workflows, additional Bedrock capabilities</td></tr>
+        <tr><td>PostgreSQL RLS Policies</td><td>Database-level row-level security as defense-in-depth (additive to app-layer)</td></tr>
+        <tr><td>Staging Environment</td><td>Optional pre-prod environment for validation</td></tr>
+        <tr><td>Tenant-Awareness</td><td>Multi-tenant data isolation (contracts designed tenant_id-compatible from MVP)</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ─── 8. DATA MODEL ─── -->
+  <section id="data-model">
+    <h2>8. Data Model &amp; Ownership</h2>
+    <p>
+      PostgreSQL (Aurora Serverless v2) is the single source of truth. Schema is managed by Prisma ORM
+      with 17 versioned migrations. Each bounded context owns its schema namespace.
+    </p>
+
+    <table>
+      <thead><tr><th>Schema</th><th>Owning Context</th><th>Key Entities</th></tr></thead>
+      <tbody>
+        <tr><td><code>identity</code></td><td>Identity &amp; Access</td><td>users, roles, user_role_history, role_scope_grants, user_scope_assignments</td></tr>
+        <tr><td><code>inventory</code></td><td>Inventory</td><td>parts, stock_levels, stock_movements, reservations</td></tr>
+        <tr><td><code>tickets</code></td><td>Tickets</td><td>tickets, comments, assignments</td></tr>
+        <tr><td><code>sop_ojt</code></td><td>SOP / OJT</td><td>documents, modules, progress</td></tr>
+        <tr><td><code>planning</code></td><td>Build Planning</td><td>inputs, plans, runs</td></tr>
+        <tr><td><code>accounting</code></td><td>Accounting</td><td>QB sync jobs, items, reconciliation</td></tr>
+        <tr><td><code>migration</code></td><td>Migration Intake</td><td>import_batches, records, errors</td></tr>
+        <tr><td><code>audit</code></td><td>Platform Controls</td><td>audit_logs (immutable)</td></tr>
+        <tr><td><code>obs</code></td><td>Platform Controls</td><td>traces, metrics, alerts</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Data Access Patterns</h3>
+    <ul>
+      <li><strong>Repository pattern</strong> for contexts with complex queries: Inventory, Tickets, Accounting, Migration (e.g., <code>work-order.repository.ts</code>, <code>customer.repository.ts</code>)</li>
+      <li><strong>Direct Prisma access</strong> for simple workflows: SOP/OJT, AI</li>
+      <li><strong>Row-level access:</strong> <code>filterRowsByScope()</code> and <code>requireScope()</code> guards at context boundaries</li>
+    </ul>
+
+    <h3>Database Workflow</h3>
+    <div class="callout">
+      Schema lives at <code>packages/db/prisma/schema.prisma</code>. After editing: run <code>npm run db:migrate</code>
+      to create a migration, then <code>npm run db:generate</code> to update the Prisma client. Both are enforced in CI.
+    </div>
+  </section>
+
+  <!-- ─── 9. EVENTS ─── -->
+  <section id="events">
+    <h2>9. Event-Driven Architecture</h2>
+
+    <h3>Event Contract</h3>
+    <ul>
+      <li><strong>Delivery guarantee:</strong> at-least-once (consumers must be idempotent)</li>
+      <li><strong>Naming:</strong> snake_case with dots — e.g., <code>work_order.created</code>, <code>inventory.lot.changed</code></li>
+      <li><strong>Versioning:</strong> in envelope/payload, not in event names</li>
+      <li><strong>Atomic writes:</strong> domain write + audit write + outbox append in a single database transaction</li>
+      <li><strong>Correlation:</strong> every mutation carries a <code>correlationId</code>; retry-safe commands include <code>Idempotency-Key</code></li>
+    </ul>
+
+    <h3>Sync vs. Async Flow Patterns</h3>
+    <table>
+      <thead><tr><th>Pattern</th><th>Example</th><th>Type</th></tr></thead>
+      <tbody>
+        <tr><td>Create ticket</td><td><code>POST /tickets</code> → DB write → return</td><td><span class="badge badge-sync">Sync</span></td></tr>
+        <tr><td>Reserve inventory</td><td><code>POST /inventory/reservations</code></td><td><span class="badge badge-sync">Sync</span></td></tr>
+        <tr><td>Compute draft plan</td><td><code>POST /planning/slots/compute</code></td><td><span class="badge badge-sync">Sync</span></td></tr>
+        <tr><td>Shortage check after ticket</td><td>Ticket created → inventory shortage check</td><td><span class="badge badge-async">Async</span></td></tr>
+        <tr><td>Planning constraint update</td><td>Part reserved → recalc planning constraints</td><td><span class="badge badge-async">Async</span></td></tr>
+        <tr><td>Accounting sync</td><td>Status changed → QuickBooks sync trigger</td><td><span class="badge badge-async">Async</span></td></tr>
+        <tr><td>Workspace refresh</td><td>Plan published → dashboard projections refresh</td><td><span class="badge badge-async">Async</span></td></tr>
+      </tbody>
+    </table>
+
+    <h3>Failure Handling</h3>
+    <table>
+      <thead><tr><th>Failure Mode</th><th>Mitigation</th></tr></thead>
+      <tbody>
+        <tr><td>Duplicate delivery</td><td>Idempotency keys + processed-event table</td></tr>
+        <tr><td>API timeouts</td><td>Exponential backoff + DLQ + reconciliation</td></tr>
+        <tr><td>Planner timeout</td><td>Step Functions timeout + audit log</td></tr>
+        <tr><td>Partial batch failure</td><td>Record-level status + resumable reruns</td></tr>
+        <tr><td>Missing snapshots</td><td>Fail explicitly — never silently continue</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ─── 10. AUTH ─── -->
+  <section id="auth">
+    <h2>10. Authentication &amp; Authorization</h2>
+
+    <h3>Authentication (Cognito)</h3>
+    <ul>
+      <li>AWS Cognito User Pool with password policy and MFA support</li>
+      <li>App Clients per application (web, API, floor-tech)</li>
+      <li>Cognito Groups map to ERP roles</li>
+      <li>JWT token claims: standard (<code>sub</code>, <code>iss</code>, <code>aud</code>, <code>exp</code>) + custom (<code>custom:org_id</code>, <code>custom:shop_id</code>)</li>
+      <li>Implementation: <code>packages/auth/src/jwt.ts</code> — <code>normalizeCognitoJwtClaims()</code></li>
+    </ul>
+
+    <h3>Authorization Middleware Stack</h3>
+    <table>
+      <thead><tr><th>Middleware</th><th>Purpose</th><th>Location</th></tr></thead>
+      <tbody>
+        <tr><td><code>authenticateCognito</code></td><td>Validate JWT → extract <code>AuthPrincipal</code></td><td><code>apps/api/src/middleware/</code></td></tr>
+        <tr><td><code>authorizePermission</code></td><td>Permission gate (RBAC)</td><td><code>packages/auth/src/rbac.ts</code></td></tr>
+        <tr><td><code>requireScope</code></td><td>Org/shop/team scope gate</td><td><code>packages/auth/src/scope.ts</code></td></tr>
+        <tr><td><code>requireRowLevelAccess</code></td><td>Row-level data gate</td><td><code>packages/auth/src/row-access.ts</code></td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-warn">
+      <strong>Fail-closed:</strong> All authorization denials produce typed <code>AuthorizationGuardError</code>
+      with deterministic reason codes and correlation IDs. Missing scope = denied.
+    </div>
+  </section>
+
+  <!-- ─── 11. AI ─── -->
+  <section id="ai">
+    <h2>11. AI Capabilities</h2>
+    <p>AI features are powered by AWS Bedrock with guardrails enforced at the orchestration layer.</p>
+    <table>
+      <thead><tr><th>Capability</th><th>Description</th><th>Phase</th></tr></thead>
+      <tbody>
+        <tr><td>SOP/OJT Assistant</td><td>RAG over training documents and SOPs via Bedrock knowledge bases</td><td><span class="badge badge-mvp">MVP</span></td></tr>
+        <tr><td>Ticket Summarization</td><td>Auto-summarize ticket history and status</td><td><span class="badge badge-mvp">MVP</span></td></tr>
+        <tr><td>Planning Copilot</td><td>AI-assisted build-slot planning suggestions</td><td><span class="badge badge-mvp">MVP</span></td></tr>
+        <tr><td>Inventory Anomaly Detection</td><td>Flag unusual stock patterns and shortages</td><td><span class="badge badge-mvp">MVP</span></td></tr>
+        <tr><td>Natural-Language Search</td><td>Query domain data in plain English</td><td><span class="badge badge-mvp">MVP</span></td></tr>
+        <tr><td>Human-in-the-Loop Workflows</td><td>AI suggestions with human approval gates</td><td><span class="badge badge-p2">Phase 2</span></td></tr>
+      </tbody>
+    </table>
+    <p>
+      <strong>Governance:</strong> Per-feature budget controls, tool allow-lists, and request blocking
+      (<code>ai.request_blocked</code> event) to prevent cost overrun and prompt drift.
+    </p>
+  </section>
+
+  <!-- ─── 12. MIGRATION ─── -->
+  <section id="migration">
+    <h2>12. Shopmonkey Migration</h2>
+
+    <h3>Strategy</h3>
+    <ol>
+      <li><strong>Master/open records first</strong> — active customers, open tickets, active parts</li>
+      <li><strong>Run ERP in production</strong> for new activity alongside legacy cutover</li>
+      <li><strong>Historical backfill</strong> in controlled batches with throttling and checkpoints</li>
+    </ol>
+
+    <h3>Migration Phases</h3>
+    <table>
+      <thead><tr><th>Phase</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>1. Discovery &amp; Mapping</td><td>Field mapping, data quality rules, reject conditions</td></tr>
+        <tr><td>2. Staging Import</td><td>Load raw Shopmonkey records into <code>migration</code> schema staging tables</td></tr>
+        <tr><td>3. Canonical Transform</td><td>Map staging data → context-owned schemas via transformers</td></tr>
+        <tr><td>4. Cutover &amp; Replay</td><td>Freeze legacy, reconcile deltas, emit audit evidence</td></tr>
+        <tr><td>5. Historical Backfill</td><td>Replay historical records with throttling and checkpoints</td></tr>
+      </tbody>
+    </table>
+
+    <h3>ETL Pipeline (<code>@gg-erp/migration</code>)</h3>
+    <p>The migration package provides a modular pipeline:</p>
+    <ul>
+      <li><code>src/parsers/</code> — Parse Shopmonkey export formats</li>
+      <li><code>src/transformers/</code> — Map to ERP domain schema</li>
+      <li><code>src/dedup/</code> — Deduplication logic</li>
+      <li><code>src/validation/</code> — Data quality validation</li>
+      <li><code>src/loaders/</code> — Load into PostgreSQL</li>
+      <li><code>src/cli/</code> — CLI tools: <code>fetch-shopmonkey</code>, <code>sanitize-shopmonkey</code>, <code>load-shopmonkey</code></li>
+    </ul>
+  </section>
+
+  <!-- ─── 13. INFRASTRUCTURE ─── -->
+  <section id="infra">
+    <h2>13. Infrastructure &amp; Deployment</h2>
+
+    <h3>AWS Services</h3>
+    <table>
+      <thead><tr><th>Service</th><th>Usage</th><th>Rationale</th></tr></thead>
+      <tbody>
+        <tr><td>API Gateway + Lambda</td><td>API edge / compute</td><td>Low idle cost, fast iteration</td></tr>
+        <tr><td>Cognito</td><td>Identity management</td><td>Managed auth + app DB role extension</td></tr>
+        <tr><td>Aurora PostgreSQL Serverless v2</td><td>Primary database</td><td>Relational integrity + scale headroom</td></tr>
+        <tr><td>EventBridge</td><td>Event bus</td><td>Native routing, context decoupling</td></tr>
+        <tr><td>Step Functions</td><td>Workflow orchestration</td><td>Deterministic multi-step workflows</td></tr>
+        <tr><td>S3</td><td>File storage</td><td>SOP files, migration payloads, exports</td></tr>
+        <tr><td>Bedrock</td><td>AI/ML capabilities</td><td>Native AWS, controlled access</td></tr>
+        <tr><td>CloudWatch + X-Ray</td><td>Observability</td><td>Standard telemetry, minimal ops burden</td></tr>
+        <tr><td>Secrets Manager + SSM</td><td>Secrets &amp; config</td><td>Separation of sensitive/non-sensitive config</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Terraform Structure</h3>
+    <ul>
+      <li><code>infra/terraform/bootstrap/</code> — One-time setup (S3 state bucket, DynamoDB locks, GitHub OIDC)</li>
+      <li><code>infra/terraform/modules/</code> — Reusable modules (VPC, Aurora, Cognito, EventBridge, Lambda, S3, Step Functions, Observability, Secrets)</li>
+      <li><code>infra/terraform/envs/dev/</code> — Dev environment config</li>
+      <li><code>infra/terraform/envs/prod/</code> — Prod environment config</li>
+    </ul>
+
+    <h3>Environment Configuration</h3>
+    <table>
+      <thead><tr><th>Environment</th><th>Branch</th><th>Aurora ACU</th><th>EventBridge Archive</th><th>Log Retention</th></tr></thead>
+      <tbody>
+        <tr><td>Dev</td><td>any</td><td>0.5 – 16</td><td>30 days</td><td>14 days</td></tr>
+        <tr><td>Prod</td><td>main</td><td>0.5 – 64</td><td>365 days</td><td>90 days</td></tr>
+      </tbody>
+    </table>
+
+    <h3>CI/CD (GitHub Actions)</h3>
+    <p><strong>CI</strong> (every push/PR): install → lint → typecheck → test → Prisma schema check → migration check → bootstrap check</p>
+    <p><strong>CD</strong> (push to main): CI gates → build Lambdas → package → Terraform plan/apply → <code>db:deploy</code> → smoke test</p>
+
+    <h3>Deployment Commands</h3>
+    <div class="callout">
+      <strong>Manual deploy:</strong>
+      <code>npm run build:lambdas &amp;&amp; npm run package:lambdas</code> →
+      <code>cd infra/terraform/envs/dev &amp;&amp; terraform apply</code> →
+      <code>DATABASE_URL="..." npm run db:deploy</code>
+    </div>
+  </section>
+
+  <!-- ─── 14. APPS ─── -->
+  <section id="apps">
+    <h2>14. Application Surface Area</h2>
+
+    <h3>API (<code>apps/api</code>)</h3>
+    <ul>
+      <li><strong>Runtime:</strong> Node.js HTTP server locally, Lambda handlers in production</li>
+      <li><strong>Entry points:</strong> <code>src/server.ts</code> (local dev), <code>src/index.ts</code> (Lambda)</li>
+      <li><strong>Structure:</strong> <code>contexts/</code> (10 domain modules), <code>lambda/</code> (12 handler modules), <code>middleware/</code> (6 modules), <code>events/</code>, <code>audit/</code>, <code>observability/</code></li>
+      <li><strong>Dependencies:</strong> <code>@prisma/client</code>, <code>@aws-sdk/client-s3</code>, <code>@aws-sdk/s3-request-presigner</code></li>
+      <li><strong>Lambda domains:</strong> work-orders, customers, inventory, tasks, invoices, QC gates, time entries, and more</li>
+    </ul>
+
+    <h3>Web Dashboard (<code>apps/web</code>)</h3>
+    <ul>
+      <li><strong>Framework:</strong> Next.js (App Router) + React 18</li>
+      <li><strong>Routes:</strong> accounting, admin, auth, customer-dealers, customers, inventory, planning, reporting, training, work-orders</li>
+      <li><strong>State:</strong> Role context provider (<code>RoleProvider</code>), feature-specific modules in <code>features/</code></li>
+      <li><strong>UI:</strong> Tailwind CSS, <code>@gg-erp/ui</code> shared components, Sonner toasts, Lucide icons</li>
+      <li><strong>Auth:</strong> <code>aws-amplify</code> (Cognito client-side integration)</li>
+    </ul>
+
+    <h3>Floor Tech (<code>apps/floor-tech</code>)</h3>
+    <ul>
+      <li><strong>Framework:</strong> Next.js 14 + React 18 — touch-first mobile-responsive</li>
+      <li><strong>Routes:</strong> work-orders, auth, shift management, data sync</li>
+      <li><strong>Shell:</strong> <code>TechShell</code> wrapper with minimal chrome for mobile use</li>
+      <li><strong>UI:</strong> Tailwind CSS, <code>@gg-erp/ui</code>, Lucide icons</li>
+    </ul>
+
+    <h3>Workers (<code>apps/workers</code>)</h3>
+    <ul>
+      <li><strong>Runtime:</strong> Custom <code>WorkerRuntime</code> class with event registration and retry logic</li>
+      <li><strong>Registered handlers:</strong> <code>work_order.created</code>, <code>audit.event.recorded</code></li>
+      <li><strong>Features:</strong> configurable max retries, structured logging, metrics emission</li>
+      <li><strong>Pattern:</strong> <code>runtime.register(eventName, handler)</code> → <code>runtime.handle(event)</code></li>
+    </ul>
+  </section>
+
+  <!-- ─── 15. NFR ─── -->
+  <section id="nfr">
+    <h2>15. Non-Functional Requirements</h2>
+    <table>
+      <thead><tr><th>Requirement</th><th>Target</th></tr></thead>
+      <tbody>
+        <tr><td>Type Safety</td><td>Strict TypeScript, no <code>any</code>, Prisma-generated types, shared domain contracts</td></tr>
+        <tr><td>Auditability</td><td>Immutable audit logs with correlation IDs for every state mutation</td></tr>
+        <tr><td>Observability</td><td>Structured logging, CloudWatch metrics, X-Ray tracing on all Lambda functions</td></tr>
+        <tr><td>Idempotency</td><td>All event consumers idempotent; retry-safe commands carry idempotency keys</td></tr>
+        <tr><td>Cost Efficiency</td><td>Serverless-first; Aurora min 0.5 ACU; no provisioned Lambda concurrency in dev</td></tr>
+        <tr><td>Schema Integrity</td><td>Prisma migrations enforced in CI; schema check + migration check gates</td></tr>
+        <tr><td>Authorization</td><td>Fail-closed RBAC + row-level access with deterministic denial codes</td></tr>
+        <tr><td>Data Isolation</td><td>Context-owned schemas; tenant_id-compatible contracts from MVP (multi-tenant ready)</td></tr>
+        <tr><td>Resilience</td><td>Outbox pattern for guaranteed event delivery; DLQ for failed async processing</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ─── 16. RISKS ─── -->
+  <section id="risks">
+    <h2>16. Risks &amp; Tradeoffs</h2>
+    <table>
+      <thead><tr><th>Risk</th><th>Impact</th><th>Mitigation</th></tr></thead>
+      <tbody>
+        <tr><td>Eventual consistency</td><td>Dashboard data lag</td><td>Explicit freshness indicators + replayable projections</td></tr>
+        <tr><td>QuickBooks API variability</td><td>Stalled sync workflows</td><td>Outbox pattern + retry policy + reconciliation</td></tr>
+        <tr><td>Planner complexity</td><td>Opaque optimization results</td><td>Deterministic scoring + snapshots + explainability</td></tr>
+        <tr><td>Bedrock cost / prompt drift</td><td>Budget overrun</td><td>Per-feature budgets, tool allow-list, governance</td></tr>
+        <tr><td>Migration data quality</td><td>Constraint violations on import</td><td>Staging schema, validation reports, reject queue</td></tr>
+        <tr><td>Too many abstractions early</td><td>Slow MVP delivery</td><td>Start modular; add abstractions only where pain repeats</td></tr>
+        <tr><td>Serverless cold starts</td><td>Latency spikes on critical paths</td><td>Cache warmers for critical paths only</td></tr>
+        <tr><td>Schema evolution pressure</td><td>Cross-team conflicts</td><td>Context-owned schemas + migration review gate in CI</td></tr>
+        <tr><td>No staging environment (MVP)</td><td>Less pre-prod safety</td><td>Strong contract tests + canary release + feature flags</td></tr>
+        <tr><td>Single-tenant assumptions</td><td>Costly future multi-tenant migration</td><td>tenant_id-compatible contracts designed from day one</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ─── FOOTER ─── -->
+  <footer style="border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 3rem; color: var(--muted); font-size: 0.8rem;">
+    <p>Golfin Garage ERP — Product Requirements Document · Generated March 2026</p>
+  </footer>
+
+</div>
+</body>
+</html>

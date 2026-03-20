@@ -1,94 +1,211 @@
+import { readFileSync } from 'fs';
 import type { PrismaClient } from '@prisma/client';
-import { parseCustomersCsv, parseAssetsCsv } from '../parsers/index.js';
 import { isAlreadyImported, recordImportMapping } from './idempotency.js';
 import { createBatch, completeBatch, recordRawRecord, recordError } from './loader.js';
 import type { LoadResult } from './loader.js';
 
+interface SmCustomer {
+  id: string;
+  firstName: string;
+  lastName: string;
+  companyName: string;
+  emails: Array<{ address: string; primary?: boolean }>;
+  phoneNumbers: Array<{ number: string; primary?: boolean }>;
+  address1?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  customerType?: string;
+}
+
+interface SmVehicle {
+  id: string;
+  vin?: string | null;
+  serial?: string | null;
+  year?: number | null;
+  make?: string | null;
+  model?: string | null;
+  color?: string | null;
+}
+
+interface SmOrder {
+  customerId?: string | null;
+  vehicleId?: string | null;
+}
+
+interface SmExport {
+  customers: SmCustomer[];
+  vehicles: SmVehicle[];
+  orders: SmOrder[];
+}
+
+function buildFullName(c: SmCustomer): string {
+  const parts = [c.firstName, c.lastName].filter(Boolean);
+  return parts.length > 0 ? parts.join(' ') : (c.companyName || 'Unknown');
+}
+
+function primaryEmail(c: SmCustomer, fallbackId: string): string {
+  const primary = c.emails?.find(e => e.primary) ?? c.emails?.[0];
+  return primary?.address || `noemail+${fallbackId}@noemail.local`;
+}
+
+function primaryPhone(c: SmCustomer): string | null {
+  const primary = c.phoneNumbers?.find(p => p.primary) ?? c.phoneNumbers?.[0];
+  return primary?.number ?? null;
+}
+
+function billingAddress(c: SmCustomer): string | null {
+  const parts = [c.address1, c.city, c.state, c.postalCode].filter(Boolean);
+  return parts.length > 0 ? parts.join(', ') : null;
+}
+
+/** Derive a stable VIN placeholder when the vehicle has no real VIN. */
+function resolvedVin(v: SmVehicle): string {
+  return v.vin || (v.serial ? `SER-${v.serial}` : `IMPORT-${v.id}`);
+}
+
+/** Derive a stable serial placeholder when the vehicle has no real serial. */
+function resolvedSerial(v: SmVehicle): string {
+  return v.serial || (v.vin ? `VIN-${v.vin}` : `IMPORT-${v.id}`);
+}
+
 export async function runWaveD(
   prisma: PrismaClient,
-  customersCsvPath: string,
-  assetsCsvPath: string,
+  exportJsonPath: string,
+  _unused?: string,
   dryRun = false,
-): Promise<{ customers: LoadResult; assets: LoadResult }> {
-  // Customers
-  const custBatchId = await createBatch(prisma, 'D', customersCsvPath);
-  const { records: customers, errors: custParseErrors } = await parseCustomersCsv(customersCsvPath);
-  let custInserted = 0, custSkipped = 0, custErrors = custParseErrors.length;
+): Promise<{ customers: LoadResult; vehicles: LoadResult }> {
+  const raw = JSON.parse(readFileSync(exportJsonPath, 'utf-8')) as SmExport;
+  const smCustomers = raw.customers ?? [];
+  const smVehicles = raw.vehicles ?? [];
 
-  for (const parseError of custParseErrors) {
-    await recordError(prisma, custBatchId, 'PARSE', 'PARSE_ERROR', parseError.message);
+  // Build vehicle → customer map from orders (most reliable link in ShopMonkey)
+  const vehicleCustomerMap = new Map<string, string>();
+  for (const order of raw.orders ?? []) {
+    if (order.vehicleId && order.customerId && !vehicleCustomerMap.has(order.vehicleId)) {
+      vehicleCustomerMap.set(order.vehicleId, order.customerId);
+    }
   }
 
-  for (const cust of customers) {
+  // ── Wave D-1: Customers ──────────────────────────────────────────────────
+  const custBatchId = await createBatch(prisma, 'D', exportJsonPath);
+  let custInserted = 0, custSkipped = 0, custErrors = 0;
+
+  for (const cust of smCustomers) {
     try {
       if (await isAlreadyImported(prisma, 'CUSTOMER', cust.id)) { custSkipped++; continue; }
-      await recordRawRecord(prisma, custBatchId, 'CUSTOMER', cust.id, cust);
+      await recordRawRecord(prisma, custBatchId, 'CUSTOMER', cust.id, cust as unknown as Record<string, unknown>);
 
       if (!dryRun) {
+        const fullName = buildFullName(cust);
+        const email = primaryEmail(cust, cust.id);
+        const phone = primaryPhone(cust);
+        const address = billingAddress(cust);
+        const contactMethod = phone ? 'PHONE' : 'EMAIL';
+
         const result = await prisma.$queryRaw<Array<{ id: string }>>`
           INSERT INTO customers.customers
-            (first_name, last_name, email, phone, created_at, updated_at)
-          VALUES (${cust.firstName}, ${cust.lastName}, ${cust.email}, ${cust.phone ?? null}, NOW(), NOW())
-          ON CONFLICT (email) DO UPDATE SET updated_at = NOW()
+            (full_name, company_name, email, phone, billing_address,
+             external_reference, preferred_contact_method,
+             state, created_at, updated_at, version)
+          VALUES (
+            ${fullName}, ${cust.companyName || null}, ${email}, ${phone}, ${address},
+            ${cust.id}, ${contactMethod},
+            'ACTIVE', NOW(), NOW(), 0
+          )
+          ON CONFLICT DO NOTHING
           RETURNING id
         `;
-        await recordImportMapping(prisma, 'CUSTOMER', cust.id, result[0].id);
+        if (result[0]) {
+          await recordImportMapping(prisma, 'CUSTOMER', cust.id, result[0].id);
+          custInserted++;
+        } else {
+          custSkipped++;
+        }
+      } else {
+        custInserted++;
       }
-      custInserted++;
     } catch (err) {
       custErrors++;
       await recordError(prisma, custBatchId, 'LOAD', 'INSERT_FAILED', err instanceof Error ? err.message : String(err));
     }
   }
 
-  await completeBatch(prisma, custBatchId, customers.length, custErrors, custErrors === 0 ? 'COMPLETED' : 'FAILED');
+  await completeBatch(prisma, custBatchId, smCustomers.length, custErrors, custErrors === 0 ? 'COMPLETED' : 'FAILED');
 
-  // Assets
-  const assetBatchId = await createBatch(prisma, 'D', assetsCsvPath);
-  const { records: assets, errors: assetParseErrors } = await parseAssetsCsv(assetsCsvPath);
-  let assetInserted = 0, assetSkipped = 0, assetErrors = assetParseErrors.length;
+  // ── Wave D-2: Vehicles (cart_vehicles) ──────────────────────────────────
+  const vehBatchId = await createBatch(prisma, 'D', exportJsonPath);
+  let vehInserted = 0, vehSkipped = 0, vehErrors = 0;
 
-  for (const parseError of assetParseErrors) {
-    await recordError(prisma, assetBatchId, 'PARSE', 'PARSE_ERROR', parseError.message);
-  }
-
-  for (const asset of assets) {
+  for (const veh of smVehicles) {
     try {
-      if (await isAlreadyImported(prisma, 'ASSET', asset.id)) { assetSkipped++; continue; }
-      await recordRawRecord(prisma, assetBatchId, 'ASSET', asset.id, asset);
+      if (await isAlreadyImported(prisma, 'ASSET', veh.id)) { vehSkipped++; continue; }
+
+      const smCustomerId = vehicleCustomerMap.get(veh.id);
+      if (!smCustomerId) {
+        // Vehicle not linked to any order — skip quietly
+        vehSkipped++;
+        continue;
+      }
+
+      if (!veh.year || !veh.model) {
+        await recordError(prisma, vehBatchId, 'LOAD', 'MISSING_DATA',
+          `Vehicle ${veh.id} missing year or model — skipping`);
+        vehErrors++;
+        continue;
+      }
+
+      await recordRawRecord(prisma, vehBatchId, 'ASSET', veh.id, veh as unknown as Record<string, unknown>);
 
       if (!dryRun) {
-        const custInternalId = await prisma.$queryRaw<Array<{ internal_id: string }>>`
-          SELECT internal_id FROM integrations.external_id_mappings
-          WHERE namespace = 'shopmonkey:v1' AND entity_type = 'CUSTOMER' AND external_id = ${asset.customerId}
+        const custRow = await prisma.$queryRaw<Array<{ entity_id: string }>>`
+          SELECT entity_id FROM integrations.external_id_mappings
+          WHERE namespace = 'shopmonkey:v1'
+            AND entity_type = 'CUSTOMER'
+            AND external_id = ${smCustomerId}
+            AND integration_account_id = CAST(${'00000000-0000-0000-0000-000000000003'} AS uuid)
         `;
-        if (!custInternalId[0]) {
-          await recordError(prisma, assetBatchId, 'LOAD', 'MISSING_FK', `Customer ${asset.customerId} not found`);
-          assetErrors++;
+        if (!custRow[0]) {
+          await recordError(prisma, vehBatchId, 'LOAD', 'MISSING_FK',
+            `Customer mapping not found for sm:${smCustomerId}`);
+          vehErrors++;
           continue;
         }
 
+        const vin = resolvedVin(veh);
+        const serial = resolvedSerial(veh);
+        const modelCode = [veh.make, veh.model].filter(Boolean).join(' ') || 'UNKNOWN';
+
         const result = await prisma.$queryRaw<Array<{ id: string }>>`
-          INSERT INTO customers.assets
-            (customer_id, vin, year, make, model, color, license_plate, created_at, updated_at)
-          VALUES (${custInternalId[0].internal_id}, ${asset.vin ?? null}, ${asset.year ? parseInt(asset.year) : null},
-                  ${asset.make ?? null}, ${asset.model ?? null}, ${asset.color ?? null},
-                  ${asset.licensePlate ?? null}, NOW(), NOW())
+          INSERT INTO planning.cart_vehicles
+            (vin, serial_number, model_code, model_year, customer_id, state, created_at, updated_at)
+          VALUES (
+            ${vin}, ${serial}, ${modelCode}, ${veh.year},
+            CAST(${custRow[0].entity_id} AS uuid),
+            'REGISTERED', NOW(), NOW()
+          )
+          ON CONFLICT DO NOTHING
           RETURNING id
         `;
-        await recordImportMapping(prisma, 'ASSET', asset.id, result[0].id);
+        if (result[0]) {
+          await recordImportMapping(prisma, 'ASSET', veh.id, result[0].id);
+          vehInserted++;
+        } else {
+          vehSkipped++;
+        }
+      } else {
+        vehInserted++;
       }
-      assetInserted++;
     } catch (err) {
-      assetErrors++;
-      await recordError(prisma, assetBatchId, 'LOAD', 'INSERT_FAILED', err instanceof Error ? err.message : String(err));
+      vehErrors++;
+      await recordError(prisma, vehBatchId, 'LOAD', 'INSERT_FAILED', err instanceof Error ? err.message : String(err));
     }
   }
 
-  await completeBatch(prisma, assetBatchId, assets.length, assetErrors, assetErrors === 0 ? 'COMPLETED' : 'FAILED');
+  await completeBatch(prisma, vehBatchId, smVehicles.length, vehErrors, vehErrors === 0 ? 'COMPLETED' : 'FAILED');
 
   return {
     customers: { batchId: custBatchId, wave: 'D', inserted: custInserted, skipped: custSkipped, errors: custErrors },
-    assets: { batchId: assetBatchId, wave: 'D', inserted: assetInserted, skipped: assetSkipped, errors: assetErrors },
+    vehicles: { batchId: vehBatchId, wave: 'D', inserted: vehInserted, skipped: vehSkipped, errors: vehErrors },
   };
 }

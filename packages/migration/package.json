@@ -8,7 +8,9 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "fetch-shopmonkey": "tsx src/cli/fetch-shopmonkey.ts",
-    "sanitize-shopmonkey": "tsx src/cli/sanitize-shopmonkey.ts"
+    "sanitize-shopmonkey": "tsx src/cli/sanitize-shopmonkey.ts",
+    "load-shopmonkey": "tsx --env-file=../../.env src/cli/load-shopmonkey.ts",
+    "migrate": "tsx --env-file=../../.env src/cli/run-wave.ts"
   },
   "dependencies": {
     "@gg-erp/db": "*",

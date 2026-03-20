@@ -9,13 +9,39 @@
  *
  * Optional:
  *   SM_OUTPUT_PATH=./sm-export.json  (default: ./shopmonkey-export-<timestamp>.json)
+ *   SM_CUSTOMER_CSV=./customer-export.csv  (ShopMonkey dashboard CSV export for customers)
+ *
+ * Because the ShopMonkey API pagination is non-deterministic, the customer CSV
+ * export is used to fill in any records the API misses.
  *
  * The output file is a ShopMonkeyExport JSON object with arrays for each entity type.
  * Feed it into the loader pipeline once you've reviewed the counts.
  */
 
 import { writeFile } from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { login, exportAll } from '../connectors/shopmonkey-api.connector.js';
+
+/** Auto-detect a customer CSV export in packages/migration/ */
+async function findCustomerCsv(): Promise<string | undefined> {
+  // Look in the migration package directory
+  const migrationDir = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+  try {
+    const files = await readdir(migrationDir);
+    const csvFiles = files
+      .filter(f => /^customer.*\.csv$/i.test(f))
+      .sort()
+      .reverse(); // newest first by name
+    if (csvFiles.length > 0) {
+      return resolve(migrationDir, csvFiles[0]);
+    }
+  } catch {
+    // ignore
+  }
+  return undefined;
+}
 
 async function main() {
   const email = process.env.SM_EMAIL;
@@ -36,7 +62,17 @@ async function main() {
   const session = await login(email, password);
   console.log(`[fetch-shopmonkey] Authenticated. companyId=${session.companyId} locationId=${session.locationId ?? 'n/a'}`);
 
-  const data = await exportAll(session);
+  let customerCsvPath = process.env.SM_CUSTOMER_CSV;
+  if (!customerCsvPath) {
+    customerCsvPath = await findCustomerCsv();
+  }
+  if (customerCsvPath) {
+    console.log(`[fetch-shopmonkey] Will merge customer CSV: ${customerCsvPath}`);
+  } else {
+    console.log(`[fetch-shopmonkey] No customer CSV found. Set SM_CUSTOMER_CSV or place a customer*.csv in packages/migration/`);
+  }
+
+  const data = await exportAll(session, { customerCsvPath });
 
   console.log('\n[fetch-shopmonkey] Export summary:');
   for (const [entity, count] of Object.entries(data.counts)) {

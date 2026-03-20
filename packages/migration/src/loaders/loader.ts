@@ -1,6 +1,6 @@
 import type { PrismaClient, Prisma, ImportEntityType } from '@prisma/client';
 
-export type Wave = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G';
+export type Wave = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H';
 
 export interface LoadResult {
   batchId: string;

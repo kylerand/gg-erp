@@ -211,3 +211,108 @@ export const FileAttachmentDesign: EntityDesign<FileAttachmentState> = {
     { method: 'DELETE', path: '/tickets/attachments/:id', summary: 'Delete attachment' }
   ]
 };
+
+// ─── QC Gate Results ──────────────────────────────────────────────────────────
+
+export type QCGateResultValue = 'PASS' | 'FAIL' | 'NA';
+
+export interface QCGateDefinition {
+  id: string;
+  workOrderId: string;
+  taskId?: string;
+  gateLabel: string;
+  isCritical: boolean;
+  displayOrder: number;
+}
+
+export interface QCGateResult {
+  id: string;
+  workOrderId: string;
+  taskId?: string;
+  gateLabel: string;
+  isCritical: boolean;
+  result: QCGateResultValue;
+  failureNote?: string;
+  reviewedBy: string;   // employeeId
+  reviewedAt: string;
+  evidenceAttachmentIds: string[];
+  createdAt: string;
+}
+
+export interface QCGateBatchSubmitInput {
+  workOrderId: string;
+  taskId?: string;
+  reviewedBy: string;
+  results: Array<{
+    gateLabel: string;
+    isCritical: boolean;
+    result: QCGateResultValue;
+    failureNote?: string;
+  }>;
+}
+
+export interface QCGateBatchSubmitResponse {
+  results: QCGateResult[];
+  overallResult: 'PASSED' | 'FAILED';
+  reworkIssuesCreated: number;
+  activeReworkLoopCount: number;
+}
+
+// ─── QC Events ────────────────────────────────────────────────────────────────
+
+export type QCGateEventName =
+  | 'qc_gate.submitted'
+  | 'qc_gate.failed_critical'
+  | 'qc_gate.passed';
+
+export interface QCGateSubmittedEvent {
+  type: 'QCGateSubmitted';
+  eventName: 'qc_gate.submitted';
+  correlationId: string;
+  workOrderId: string;
+  taskId?: string;
+  overallResult: 'PASSED' | 'FAILED';
+  criticalFailureCount: number;
+}
+
+export interface QCGatePassedEvent {
+  type: 'QCGatePassed';
+  eventName: 'qc_gate.passed';
+  correlationId: string;
+  workOrderId: string;
+}
+
+// ─── Labor Time Entries ───────────────────────────────────────────────────────
+
+export type LaborTimeEntrySource = 'AUTO' | 'MANUAL' | 'ADJUSTED';
+
+export interface LaborTimeEntry {
+  id: string;
+  technicianTaskId?: string;
+  workOrderId: string;
+  technicianId: string;
+  startedAt: string;
+  endedAt?: string;
+  manualHours?: number;       // overrides computed duration
+  description?: string;
+  source: LaborTimeEntrySource;
+  computedHours?: number;     // derived: (endedAt - startedAt) in hours, or manualHours
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateLaborTimeEntryInput {
+  technicianTaskId?: string;
+  workOrderId: string;
+  technicianId: string;
+  startedAt: string;
+  endedAt?: string;
+  manualHours?: number;
+  description?: string;
+  source?: LaborTimeEntrySource;
+}
+
+export type LaborTimeEntryEventName =
+  | 'labor_time.entry_created'
+  | 'labor_time.entry_updated'
+  | 'labor_time.entry_deleted';

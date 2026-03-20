@@ -14,6 +14,7 @@ import {
   publishWithOutbox
 } from '../../events/index.js';
 import type { ObservabilityContext, ObservabilityHooks } from '../../observability/hooks.js';
+import type { TimeEntryService } from './timeEntry.service.js';
 
 export interface CommandContext extends Pick<ObservabilityContext, 'correlationId' | 'actorId'> {
   module: string;
@@ -24,6 +25,7 @@ export interface TechnicianTaskServiceDeps {
   publisher: EventPublisher;
   outbox: OutboxWriter;
   observability: ObservabilityHooks;
+  timeEntry?: TimeEntryService;
 }
 
 export interface CreateTechnicianTaskInput {
@@ -91,6 +93,21 @@ export class TechnicianTaskService {
             ? 'technician_task.completed'
             : 'technician_task.assigned';
     await this.record(taskId, { before: existing.state, after: updated.state }, eventName, context);
+
+    if (nextState === TechnicianTaskState.IN_PROGRESS && existing.technicianId) {
+      await this.deps.timeEntry?.autoStartEntry({
+        technicianTaskId: taskId,
+        workOrderId: existing.workOrderId,
+        technicianId: existing.technicianId,
+        correlationId: context.correlationId,
+      });
+    } else if (nextState === TechnicianTaskState.DONE) {
+      await this.deps.timeEntry?.autoEndEntry({
+        technicianTaskId: taskId,
+        correlationId: context.correlationId,
+      });
+    }
+
     return updated;
   }
 

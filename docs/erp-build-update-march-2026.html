@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Golf &amp; Garage Manufacturing OS — Build Update · March 2026</title>
+  <style>
+
+    :root {
+      --orange:    #e37125;
+      --orange-lt: #f08843;
+      --orange-dk: #b85c1b;
+      --charcoal:  #353535;
+      --cream:     #f9f8d1;
+      --teal:      #1e505c;
+      --teal-lt:   #2a6e7e;
+      --teal-dk:   #14363f;
+      --gray:      #d1d3d4;
+      --dark:      #1c1a18;
+      --dark-warm: #232018;
+      --mid:       #2e2b27;
+      --font-brand:   -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      --font-body:    -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width:100%; height:100%; font-family:var(--font-body); background:var(--dark); overflow:hidden; user-select:none; }
+
+    #deck { width:100vw; height:100vh; position:relative; }
+
+    .slide {
+      position:absolute; inset:0;
+      display:flex; flex-direction:column; justify-content:center; align-items:center;
+      padding:52px 76px;
+      opacity:0; transform:translateX(60px);
+      transition:opacity 0.42s ease, transform 0.42s ease;
+      pointer-events:none; overflow:hidden;
+    }
+    .slide.active { opacity:1; transform:translateX(0); pointer-events:all; }
+    .slide.exit   { opacity:0; transform:translateX(-60px); }
+
+    .bg-title   { background:var(--dark-warm); background-image: radial-gradient(ellipse 70% 50% at 50% 100%, rgba(227,113,37,.13) 0%,transparent 70%), radial-gradient(ellipse 40% 40% at 80% 20%, rgba(30,80,92,.14) 0%,transparent 60%); }
+    .bg-dark    { background:var(--dark-warm); }
+    .bg-charcoal{ background:var(--charcoal); }
+    .bg-teal    { background:linear-gradient(150deg,var(--teal-dk) 0%,var(--dark-warm) 100%); }
+    .bg-orange  { background:linear-gradient(150deg,#311600 0%,var(--dark-warm) 100%); }
+
+    .slide-accent::after {
+      content:''; position:absolute; left:0; top:15%; bottom:15%; width:4px;
+      background:linear-gradient(to bottom, transparent, var(--orange), transparent);
+      border-radius:0 2px 2px 0; z-index:2;
+    }
+
+    .slide::before {
+      content:''; position:absolute; inset:0; pointer-events:none; z-index:0;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    }
+    .slide > * { position:relative; z-index:1; }
+
+    .logo    { height:36px; width:auto; display:block; margin-bottom:24px; }
+    .logo-lg { height:54px; width:auto; display:block; margin-bottom:28px; }
+
+    .eyebrow {
+      font-family:var(--font-display); font-size:.7rem; letter-spacing:.22em;
+      text-transform:uppercase; color:var(--orange); margin-bottom:12px;
+    }
+    h1 {
+      font-family:var(--font-brand); font-size:clamp(2.4rem,5vw,4.6rem);
+      color:var(--cream); line-height:1.08; text-align:center;
+      max-width:940px; letter-spacing:.02em;
+    }
+    h1 .accent { color:var(--orange); }
+    h1 .teal   { color:#4db8cc; }
+    h2 {
+      font-family:var(--font-brand); font-size:clamp(1.6rem,2.8vw,2.6rem);
+      color:var(--cream); line-height:1.1; letter-spacing:.02em;
+    }
+    h2 .accent { color:var(--orange); }
+    h2 .teal   { color:#4db8cc; }
+    .subtitle { font-size:1.02rem; color:rgba(249,248,209,.68); margin-top:18px; text-align:center; max-width:680px; line-height:1.7; }
+    p  { font-size:.97rem; color:rgba(249,248,209,.74); line-height:1.7; }
+    li { font-size:.9rem;  color:rgba(249,248,209,.76); line-height:1.65; }
+
+    .divider { width:60px; height:3px; margin:14px 0; background:linear-gradient(90deg,var(--orange),var(--teal-lt)); border-radius:99px; }
+
+    .section-header { display:flex; flex-direction:column; align-self:flex-start; margin-bottom:24px; width:100%; max-width:1080px; gap:5px; }
+
+    .content   { width:100%; max-width:1080px; display:flex; flex-direction:column; gap:16px; }
+    .two-col   { display:grid; grid-template-columns:1fr 1fr; gap:22px; width:100%; max-width:1080px; }
+    .three-col { display:grid; grid-template-columns:1fr 1fr 1fr; gap:18px; width:100%; max-width:1080px; }
+
+    .card { background:rgba(249,248,209,.05); border:1px solid rgba(249,248,209,.1); border-radius:10px; padding:20px 24px; }
+    .card-title { font-family:var(--font-display); font-size:.68rem; letter-spacing:.15em; text-transform:uppercase; color:var(--orange); margin-bottom:12px; display:flex; align-items:center; gap:10px; }
+    .card ul { list-style:none; padding:0; }
+    .card ul li { padding:4px 0; font-size:.88rem; color:rgba(249,248,209,.74); border-bottom:1px solid rgba(249,248,209,.05); }
+    .card ul li:last-child { border-bottom:none; }
+    .card ul li::before { content:"\\2192 "; color:var(--orange); }
+
+    .stat-box  { background:rgba(227,113,37,.1); border:1px solid rgba(227,113,37,.28); border-radius:10px; padding:20px 16px; text-align:center; }
+    .stat-num  { font-family:var(--font-display); font-size:clamp(1.9rem,3.8vw,3.2rem); color:var(--orange-lt); line-height:1; letter-spacing:.04em; }
+    .stat-label{ font-family:var(--font-display); font-size:.66rem; letter-spacing:.13em; text-transform:uppercase; color:rgba(249,248,209,.48); margin-top:7px; }
+
+    .progress-label { display:flex; justify-content:space-between; font-family:var(--font-display); font-size:.68rem; letter-spacing:.1em; text-transform:uppercase; color:rgba(249,248,209,.46); margin-bottom:4px; }
+    .progress-label .pct { color:var(--orange); }
+    .progress-wrap { width:100%; background:rgba(249,248,209,.07); border-radius:99px; height:17px; overflow:hidden; margin-bottom:12px; }
+    .progress-fill { height:100%; border-radius:99px; display:flex; align-items:center; padding-left:9px; font-family:var(--font-display); font-size:.63rem; letter-spacing:.07em; }
+    .fill-orange { background:linear-gradient(90deg,var(--orange-dk),var(--orange-lt)); color:#fff; }
+    .fill-teal   { background:linear-gradient(90deg,var(--teal),var(--teal-lt)); color:#fff; }
+    .fill-cream  { background:linear-gradient(90deg,#8a8840,#ccc96a); color:var(--dark); }
+
+    .pill { display:inline-block; padding:2px 8px; border-radius:99px; font-family:var(--font-display); font-size:.61rem; letter-spacing:.1em; text-transform:uppercase; }
+    .pill-done    { background:rgba(30,80,92,.35);  color:#6ecad8; border:1px solid var(--teal-lt); }
+    .pill-partial { background:rgba(227,113,37,.2); color:var(--orange-lt); border:1px solid var(--orange-dk); }
+    .pill-gap     { background:rgba(180,60,40,.2);  color:#e87060; border:1px solid #b43c28; }
+    .pill-p0      { background:rgba(192,50,40,.22); color:#e87060; border:1px solid #b43c28; }
+    .pill-p1      { background:rgba(227,113,37,.2); color:var(--orange-lt); border:1px solid var(--orange-dk); }
+    .pill-p2      { background:rgba(30,80,92,.35);  color:#6ecad8; border:1px solid var(--teal-lt); }
+
+    .timeline { display:flex; flex-direction:column; position:relative; padding-left:34px; }
+    .timeline::before { content:''; position:absolute; left:10px; top:8px; bottom:8px; width:2px; background:linear-gradient(to bottom,var(--orange),var(--teal-lt),rgba(255,255,255,.1)); }
+    .tl-item { position:relative; padding:11px 14px 11px 0; border-bottom:1px solid rgba(249,248,209,.05); }
+    .tl-item:last-child { border-bottom:none; }
+    .tl-dot   { position:absolute; left:-27px; top:16px; width:11px; height:11px; border-radius:50%; border:2px solid currentColor; background:var(--dark-warm); }
+    .tl-dot.done   { color:var(--orange); background:#2a1300; }
+    .tl-dot.next   { color:#6ecad8; background:var(--teal-dk); }
+    .tl-dot.future { color:rgba(249,248,209,.18); }
+    .tl-date  { font-family:var(--font-display); font-size:.64rem; letter-spacing:.12em; text-transform:uppercase; color:var(--orange); margin-bottom:2px; }
+    .tl-title { font-size:.93rem; font-weight:600; color:var(--cream); margin-bottom:2px; }
+    .tl-desc  { font-size:.8rem; color:rgba(249,248,209,.48); line-height:1.5; }
+
+    .prio-table { width:100%; border-collapse:collapse; }
+    .prio-table th { text-align:left; padding:7px 12px; font-family:var(--font-display); font-size:.64rem; letter-spacing:.14em; text-transform:uppercase; color:var(--orange); border-bottom:1px solid rgba(249,248,209,.1); }
+    .prio-table td { padding:8px 12px; font-size:.86rem; color:rgba(249,248,209,.76); border-bottom:1px solid rgba(249,248,209,.05); vertical-align:top; }
+    .prio-table tr:last-child td { border-bottom:none; }
+    .prio-table tr:hover td { background:rgba(249,248,209,.03); }
+    .prio-table code { font-size:.75em; color:#6ecad8; background:rgba(30,80,92,.3); padding:1px 5px; border-radius:4px; }
+
+    .meta-strip { display:flex; gap:28px; margin-top:32px; }
+    .meta-item  { font-family:var(--font-display); font-size:.68rem; letter-spacing:.12em; text-transform:uppercase; color:rgba(249,248,209,.38); }
+    .meta-item span { color:var(--orange-lt); }
+
+    .h-rule  { width:100%; height:1px; background:linear-gradient(90deg,var(--orange),transparent); margin:10px 0; opacity:.36; }
+    .big-num { font-family:var(--font-display); font-size:clamp(2.2rem,4.5vw,4rem); color:var(--orange-lt); line-height:1; letter-spacing:.04em; }
+
+    #nav { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:12px; z-index:200; background:rgba(28,26,24,.84); backdrop-filter:blur(12px); border:1px solid rgba(227,113,37,.22); border-radius:99px; padding:7px 18px; }
+    .nav-btn { background:none; border:none; cursor:pointer; color:rgba(249,248,209,.46); font-size:1.05rem; padding:4px 7px; border-radius:6px; transition:color .2s,background .2s; }
+    .nav-btn:hover { color:var(--orange-lt); background:rgba(227,113,37,.1); }
+    #slide-counter { font-family:var(--font-display); font-size:.72rem; letter-spacing:.12em; color:rgba(249,248,209,.38); min-width:50px; text-align:center; }
+    #dots { display:flex; gap:5px; align-items:center; }
+    .dot { width:6px; height:6px; border-radius:99px; background:rgba(249,248,209,.18); border:none; cursor:pointer; transition:background .2s,width .25s; padding:0; }
+    .dot.active { background:var(--orange); width:18px; }
+    #hint { position:fixed; top:18px; right:26px; font-family:var(--font-display); font-size:.62rem; letter-spacing:.12em; text-transform:uppercase; color:rgba(249,248,209,.16); }
+  </style>
+</head>
+<body>
+<div id="deck">
+
+  <!-- SLIDE 1: TITLE -->
+  <section class="slide bg-title active" id="s1">
+    <img src="../../Brand%20Package/01-Circle%20Logos/GG_circle_bronco_full_color/GG_circle_bronco_full_color-01.png" style="position:absolute;top:26px;right:34px;height:78px;opacity:.12;" alt="" />
+    <img class="logo-lg" src="../../Brand%20Package/02-Horizontal%20Logos/GG_horizontal_white/GG_horizontal_white-01.png" alt="Golf &amp; Garage" />
+    <div class="eyebrow">Manufacturing OS Build Update &middot; March 2026</div>
+    <h1>Custom Manufacturing OS &mdash;<br/><span class="accent">Where We Are &amp;</span><br/><span class="teal">The Road to Launch</span></h1>
+    <div class="divider"></div>
+    <p class="subtitle">A progress briefing for Finn covering platform architecture, build status across all 8 modules, ShopMonkey migration readiness, and a realistic week-by-week timeline to production.</p>
+    <div class="meta-strip">
+      <div class="meta-item">Date <span>March 12, 2026</span></div>
+      <div class="meta-item">Overall Progress <span>67%</span></div>
+      <div class="meta-item">Est. Launch <span>Mid-May 2026</span></div>
+    </div>
+  </section>
+
+  <!-- SLIDE 2: WHY -->
+  <section class="slide bg-teal slide-accent" id="s2">
+    <div class="section-header">
+      <div class="eyebrow">The Problem</div>
+      <h2>Why We&rsquo;re <span class="accent">Moving Off ShopMonkey</span></h2>
+    </div>
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Limitations of ShopMonkey</div>
+        <ul>
+          <li>No custom SOP or workflow enforcement</li>
+          <li>No OJT / tech training integration</li>
+          <li>No build-slot planning or capacity visibility</li>
+          <li>Limited, fragile QuickBooks sync</li>
+          <li>No AI-assisted operations</li>
+          <li>Locked into a vendor roadmap we don&rsquo;t own</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-title">What the New Manufacturing OS Delivers</div>
+        <ul>
+          <li>Full work-order &amp; ticket lifecycle ownership</li>
+          <li>SOP library wired to job completion gates</li>
+          <li>Deterministic build-slot planning engine</li>
+          <li>Rock-solid QuickBooks sync (invoices, bills, GL)</li>
+          <li>Amazon Bedrock AI assistant built in from day one</li>
+          <li>100% owned AWS infrastructure &mdash; no vendor lock-in</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- SLIDE 3: ARCHITECTURE -->
+  <section class="slide bg-dark slide-accent" id="s3">
+    <div class="section-header">
+      <div class="eyebrow">How It&rsquo;s Built</div>
+      <h2>System <span class="accent">Architecture</span></h2>
+    </div>
+    <div class="two-col">
+      <div>
+        <div class="card" style="margin-bottom:15px;">
+          <div class="card-title">Front End</div>
+          <ul>
+            <li>Employee Web App (React / Next.js)</li>
+            <li>Floor Technician App (separate Next.js app)</li>
+            <li>Cognito authentication with role-based access</li>
+          </ul>
+        </div>
+        <div class="card">
+          <div class="card-title">AWS Backend</div>
+          <ul>
+            <li>Lambda API &mdash; TypeScript, all 8 contexts scaffolded</li>
+            <li>Aurora PostgreSQL Serverless v2</li>
+            <li>EventBridge async event routing between modules</li>
+            <li>Step Functions for migration &amp; planning workflows</li>
+          </ul>
+        </div>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:15px;">
+          <div class="card-title">8 Operational Modules</div>
+          <ul>
+            <li>Identity &amp; Access &middot; Work Orders &amp; Tickets</li>
+            <li>Inventory &amp; Parts Reservations</li>
+            <li>SOP Library &amp; OJT Tracking</li>
+            <li>Build Slot Planning Engine</li>
+            <li>QuickBooks Accounting Integration</li>
+            <li>ShopMonkey Migration Pipeline</li>
+            <li>AI Orchestration (Bedrock RAG + Copilot)</li>
+          </ul>
+        </div>
+        <div class="card">
+          <div class="card-title">Platform Foundations</div>
+          <ul>
+            <li>Full audit log on every mutation with actor + correlation ID</li>
+            <li>Outbox pattern for reliable async event delivery</li>
+            <li>Terraform-managed AWS infrastructure</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SLIDE 4: PROGRESS -->
+  <section class="slide bg-charcoal slide-accent" id="s4">
+    <div class="section-header">
+      <div class="eyebrow">Build Status</div>
+      <h2>Progress <span class="accent">Snapshot</span></h2>
+    </div>
+    <div class="content">
+      <div class="three-col" style="margin-bottom:4px;">
+        <div class="stat-box"><div class="stat-num">67%</div><div class="stat-label">Overall Complete</div></div>
+        <div class="stat-box"><div class="stat-num">13</div><div class="stat-label">Plan Items Shipped</div></div>
+        <div class="stat-box"><div class="stat-num">13</div><div class="stat-label">DB Migrations Landed</div></div>
+      </div>
+      <div>
+        <div class="progress-label"><span>Overall Platform</span><span class="pct">67%</span></div>
+        <div class="progress-wrap"><div class="progress-fill fill-orange" style="width:67%;">67%</div></div>
+        <div class="progress-label"><span>Architecture &amp; Design Docs</span><span class="pct">100%</span></div>
+        <div class="progress-wrap"><div class="progress-fill fill-orange" style="width:100%;">Complete</div></div>
+        <div class="progress-label"><span>Database Schema &amp; Migrations</span><span class="pct">~90%</span></div>
+        <div class="progress-wrap"><div class="progress-fill fill-orange" style="width:90%;">~90%</div></div>
+        <div class="progress-label"><span>API Contexts (all 8 modules)</span><span class="pct">~75%</span></div>
+        <div class="progress-wrap"><div class="progress-fill fill-teal" style="width:75%;">~75%</div></div>
+        <div class="progress-label"><span>Employee Web App</span><span class="pct">~55%</span></div>
+        <div class="progress-wrap"><div class="progress-fill fill-teal" style="width:55%;">~55%</div></div>
+        <div class="progress-label"><span>ShopMonkey Migration Pipeline</span><span class="pct">~80%</span></div>
+        <div class="progress-wrap"><div class="progress-fill fill-cream" style="width:80%;">~80%</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SLIDE 5: DONE -->
+  <section class="slide bg-dark slide-accent" id="s5">
+    <div class="section-header">
+      <div class="eyebrow">Completed Work</div>
+      <h2>What&rsquo;s <span class="accent">Done</span></h2>
+    </div>
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Core Foundation <span class="pill pill-done">Done</span></div>
+        <ul>
+          <li>Full architecture design suite &mdash; 15+ principal docs</li>
+          <li>TypeScript monorepo (apps: api, web, floor-tech, workers)</li>
+          <li>Domain, event, and auth contract packages</li>
+          <li>PostgreSQL schema: all core tables migrated</li>
+          <li>Work orders, tickets, inventory, customers, accounting</li>
+          <li>SOP step execution, QC gates, rework loops</li>
+          <li>OJT expansion &amp; labor time entries schemas</li>
+          <li>Audit log pipeline &amp; event outbox design</li>
+        </ul>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:15px;">
+          <div class="card-title">All 8 API Contexts Scaffolded <span class="pill pill-done">Done</span></div>
+          <ul>
+            <li>Identity / Auth &middot; Tickets / Work Orders</li>
+            <li>Inventory &middot; SOP / OJT</li>
+            <li>Build Planning &middot; Accounting (QuickBooks)</li>
+            <li>AI Orchestration &middot; Migration Intake</li>
+          </ul>
+        </div>
+        <div class="card">
+          <div class="card-title">ShopMonkey Pipeline <span class="pill pill-done">Done</span></div>
+          <ul>
+            <li>Full export fetched &amp; validated</li>
+            <li>Parsers, transformers, sanitizers complete</li>
+            <li>Staging schema in PostgreSQL ready to receive records</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SLIDE 6: REMAINING -->
+  <section class="slide bg-orange slide-accent" id="s6">
+    <div class="section-header">
+      <div class="eyebrow">Open Work</div>
+      <h2>What&rsquo;s <span class="accent">Still Needed</span></h2>
+    </div>
+    <div class="content">
+      <p>9 items partially built. 4 gaps not yet started. All are scoped and sequenced &mdash; none block each other.</p>
+      <div class="two-col">
+        <div class="card">
+          <div class="card-title">Partial &mdash; Needs Completion <span class="pill pill-partial">In Progress</span></div>
+          <ul>
+            <li>Auth session bootstrap end-to-end</li>
+            <li>Assigned work &amp; ticket queue screens</li>
+            <li>SOP runner, QC check, time-logging UI</li>
+            <li>Build slot planner UI / API wire-up</li>
+            <li>Inventory picks screen</li>
+            <li>Receiving &amp; PO progression</li>
+            <li>Customer &amp; dealer ops screens</li>
+          </ul>
+        </div>
+        <div class="card">
+          <div class="card-title">Gap &mdash; Not Yet Started <span class="pill pill-gap">Gap</span></div>
+          <ul>
+            <li>Dashboard &amp; workspace summary screen</li>
+            <li>Missing read contracts: <code>/auth/me</code>, <code>/customers</code>, <code>/inventory/lots</code>, <code>/planning/work-orders</code></li>
+            <li>API contract / integration tests for ticket &amp; task mutations</li>
+            <li>Workspace / reporting / blocked-alert read models</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SLIDE 7: PRIORITY QUEUE -->
+  <section class="slide bg-charcoal slide-accent" id="s7">
+    <div class="section-header">
+      <div class="eyebrow">Execution Order</div>
+      <h2>Priority <span class="accent">Work Queue</span></h2>
+    </div>
+    <div class="content">
+      <div class="card">
+        <table class="prio-table">
+          <thead>
+            <tr><th>Priority</th><th>Item</th><th>Why It Matters</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><span class="pill pill-p0">P0</span></td><td>Missing core read API contracts</td><td>Web clients blocked without <code>/auth/me</code>, <code>/customers</code>, inventory &amp; planning routes</td></tr>
+            <tr><td><span class="pill pill-p0">P0</span></td><td>API contract &amp; integration tests</td><td>Ticket &amp; task mutations have zero test coverage &mdash; unacceptable before go-live</td></tr>
+            <tr><td><span class="pill pill-p1">P1</span></td><td>Auth session bootstrap end-to-end</td><td>Login &rarr; dashboard &rarr; role-gated nav must work for all roles</td></tr>
+            <tr><td><span class="pill pill-p1">P1</span></td><td>SOP/OJT wired to work orders</td><td>SOP completion gates must enforce before work-order close</td></tr>
+            <tr><td><span class="pill pill-p1">P1</span></td><td>Workspace / reporting read models</td><td>Manager dashboard needs freshness metadata &amp; stale-state semantics</td></tr>
+            <tr><td><span class="pill pill-p2">P2</span></td><td>Accounting monitor &amp; admin APIs</td><td>QuickBooks list/filter/escalation and audit-health surfaces</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- SLIDE 8: MIGRATION -->
+  <section class="slide bg-teal slide-accent" id="s8">
+    <div class="section-header">
+      <div class="eyebrow">Data Migration</div>
+      <h2>ShopMonkey <span class="accent">Migration Status</span></h2>
+    </div>
+    <div class="two-col">
+      <div>
+        <div class="card" style="margin-bottom:15px;">
+          <div class="card-title">Completed <span class="pill pill-done">Done</span></div>
+          <ul>
+            <li>Full ShopMonkey data export fetched &amp; validated</li>
+            <li>All entity parsers &amp; transformers written</li>
+            <li>Sanitization &amp; deduplication logic built</li>
+            <li>PostgreSQL staging schema in place</li>
+            <li>Seeder, loader &amp; batch infrastructure complete</li>
+            <li>Validation rules &amp; reject queue implemented</li>
+          </ul>
+        </div>
+        <div class="card">
+          <div class="card-title">Migration Strategy</div>
+          <ul>
+            <li>Master / open records imported first</li>
+            <li>New activity on Manufacturing OS immediately after cutover</li>
+            <li>Historical backfill in controlled batches post-launch</li>
+            <li>Immutable cutover audit evidence for compliance</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Still To Do <span class="pill pill-partial">In Progress</span></div>
+        <ul>
+          <li>Dry-run staging import with real export data</li>
+          <li>Validation report sign-off (accepted / rejected counts)</li>
+          <li>Canonical transform to production schemas</li>
+          <li>Stakeholder approval before cutover window</li>
+          <li>Live cutover &mdash; freeze legacy writes, replay open orders</li>
+          <li>Historical backfill batches (post-launch)</li>
+          <li>Reconciliation report &amp; post-mortem</li>
+        </ul>
+        <div class="h-rule"></div>
+        <div class="progress-label"><span>Migration Pipeline Readiness</span><span class="pct">~80%</span></div>
+        <div class="progress-wrap"><div class="progress-fill fill-teal" style="width:80%;">~80%</div></div>
+        <p style="font-size:.8rem;color:rgba(249,248,209,.46);line-height:1.5;margin-top:6px;">The pipeline is nearly production-ready. Remaining steps are operational dry-run &amp; sign-off, not engineering gaps.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SLIDE 9: TIMELINE -->
+  <section class="slide bg-dark slide-accent" id="s9">
+    <div class="section-header">
+      <div class="eyebrow">Execution Plan</div>
+      <h2>Timeline to <span class="accent">Production</span></h2>
+    </div>
+    <div class="two-col">
+      <div class="timeline">
+        <div class="tl-item">
+          <div class="tl-dot done"></div>
+          <div class="tl-date">Today &middot; March 12</div>
+          <div class="tl-title">Foundation Complete</div>
+          <div class="tl-desc">Architecture, schema, all 8 API contexts scaffolded, migration pipeline ~80% ready. Platform at 67%.</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot next"></div>
+          <div class="tl-date">Weeks 1&ndash;2 &middot; Mar 13 &ndash; Mar 28</div>
+          <div class="tl-title">P0 Sprint &mdash; Core API Contracts</div>
+          <div class="tl-desc">Close all missing read routes, auth session end-to-end, contract test coverage for all mutations.</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot next"></div>
+          <div class="tl-date">Weeks 3&ndash;4 &middot; Mar 29 &ndash; Apr 11</div>
+          <div class="tl-title">P1 Sprint &mdash; Screens &amp; Workflows</div>
+          <div class="tl-desc">Dashboard, ticket queue, SOP runner, build planner, inventory picks all wired end-to-end.</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot future"></div>
+          <div class="tl-date">Weeks 5&ndash;6 &middot; Apr 12 &ndash; Apr 25</div>
+          <div class="tl-title">P2 + QA Hardening</div>
+          <div class="tl-desc">Accounting monitor, role nav polish, integration tests, load testing &amp; edge-case QA.</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot future"></div>
+          <div class="tl-date">Weeks 7&ndash;8 &middot; Apr 26 &ndash; May 9</div>
+          <div class="tl-title">Migration Dry Run &amp; Staging</div>
+          <div class="tl-desc">ShopMonkey staging import, validation report sign-off, AWS infra final provisioning.</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot future"></div>
+          <div class="tl-date">Week 9 &middot; May 10 &ndash; May 16</div>
+          <div class="tl-title">Cutover &amp; Go Live</div>
+          <div class="tl-desc">Freeze ShopMonkey writes, import open orders &amp; customers, go live. Historical backfill runs post-launch.</div>
+        </div>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:16px;border-color:rgba(227,113,37,.3);">
+          <div class="card-title">Estimated Ship Date</div>
+          <div class="big-num" style="margin:10px 0;">Mid-May 2026</div>
+          <p style="font-size:.84rem;color:rgba(249,248,209,.5);line-height:1.6;">~9 weeks from today at current pace. Trimming P2 scope pulls this earlier.</p>
+        </div>
+        <div class="card">
+          <div class="card-title">Key Risks to Watch</div>
+          <ul>
+            <li>ShopMonkey data quality surprises in dry run</li>
+            <li>QuickBooks API instability during sync testing</li>
+            <li>AWS infra provisioning delays (Terraform apply)</li>
+            <li>P2 scope creep before launch gate</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SLIDE 10: LAUNCH DAY -->
+  <section class="slide bg-charcoal slide-accent" id="s10">
+    <div class="section-header">
+      <div class="eyebrow">What We&rsquo;re Shipping</div>
+      <h2>Day-One <span class="accent">Capabilities</span></h2>
+    </div>
+    <div class="content">
+      <p>When we go live, the team has a fully integrated operational platform running on infrastructure Golf &amp; Garage owns outright.</p>
+      <div class="two-col">
+        <div class="card">
+          <div class="card-title">Live on Day One</div>
+          <ul>
+            <li>Techs log in, see assigned work queue immediately</li>
+            <li>Managers see real-time build slot capacity</li>
+            <li>Tickets created, updated &amp; closed with full audit trail</li>
+            <li>SOP steps enforced as gates before work-order close</li>
+            <li>Parts reservations auto-track inventory to jobs</li>
+            <li>QuickBooks synced in real-time &mdash; no manual re-entry</li>
+            <li>All ShopMonkey customers &amp; open orders imported</li>
+          </ul>
+        </div>
+        <div class="card">
+          <div class="card-title">Phase 2 &mdash; Post-Launch Roadmap</div>
+          <ul>
+            <li>AI Build Planning Copilot (Bedrock-powered suggestions)</li>
+            <li>Advanced what-if slot simulation</li>
+            <li>Self-service BI reports &amp; analytics</li>
+            <li>Historical ShopMonkey backfill completed</li>
+            <li>Row-level security policy hardening</li>
+            <li>Additional accounting automation workflows</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SLIDE 11: FLOOR TECH UI - QUEUE -->
+  <section class="slide bg-dark slide-accent" id="s11">
+    <div class="section-header">
+      <div class="eyebrow">Early Feedback</div>
+      <h2>Floor Technician App &mdash; <span class="accent">My Queue</span></h2>
+    </div>
+    <div class="content">
+      <p style="margin-bottom:18px;font-size:.95rem;color:rgba(249,248,209,.68);">Real-time work order dashboard showing assigned jobs with material readiness, sync status, and quick access to job details and time tracking.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+        <div style="background:rgba(227,113,37,.07);border:1px solid rgba(227,113,37,.18);border-radius:12px;padding:20px;font-family:monospace;font-size:.85rem;color:rgba(249,248,209,.72);line-height:1.8;overflow:hidden;">
+          <div style="color:var(--orange);margin-bottom:10px;">📱 My Queue Screen</div>
+          <div style="opacity:.6;margin-bottom:12px;">┌─ Offline Status Banner</div>
+          <div style="margin-bottom:12px;">├─ Queue Items List</div>
+          <div style="margin-left:20px;opacity:.7;margin-bottom:8px;">│ ├─ Order #2847 (Ready)</div>
+          <div style="margin-left:20px;opacity:.7;margin-bottom:8px;">│ ├─ Order #2846 (Waiting)</div>
+          <div style="margin-left:20px;opacity:.7;margin-bottom:8px;">│ └─ Order #2844 (In Progress)</div>
+          <div style="margin-bottom:12px;">├─ Material Status Badges</div>
+          <div style="opacity:.6;">└─ Pull to Sync</div>
+        </div>
+        <div style="background:rgba(30,80,92,.07);border:1px solid rgba(30,80,92,.18);border-radius:12px;padding:20px;">
+          <div style="color:#6ecad8;margin-bottom:10px;font-weight:600;">✓ Key Features</div>
+          <ul style="list-style:none;padding:0;">
+            <li style="margin-bottom:8px;font-size:.9rem;color:rgba(249,248,209,.7;">→ Real-time job assignments</li>
+            <li style="margin-bottom:8px;font-size:.9rem;color:rgba(249,248,209,.7;">→ Material readiness indicators</li>
+            <li style="margin-bottom:8px;font-size:.9rem;color:rgba(249,248,209,.7;">→ Sync status tracking</li>
+            <li style="margin-bottom:8px;font-size:.9rem;color:rgba(249,248,209,.7;">→ Offline-first fallback</li>
+            <li style="margin-bottom:8px;font-size:.9rem;color:rgba(249,248,209,.7;">→ Single-tap job preview</li>
+            <li style="font-size:.9rem;color:rgba(249,248,209,.7;">→ Native-like performance</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SLIDE 12: FLOOR TECH UI - JOB DETAIL -->
+  <section class="slide bg-charcoal slide-accent" id="s12">
+    <div class="section-header">
+      <div class="eyebrow">Technician Workflow</div>
+      <h2>Job Detail &amp; <span class="accent">Time Logging</span></h2>
+    </div>
+    <div class="content">
+      <p style="margin-bottom:18px;font-size:.95rem;color:rgba(249,248,209,.68);">When a tech opens a job, they see SOP steps, material requirements, QC gates, and can log time &amp; mark steps complete in a streamlined, mobile-optimized interface.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+        <div style="background:rgba(30,80,92,.07);border:1px solid rgba(30,80,92,.18);border-radius:12px;padding:20px;">
+          <div style="color:#6ecad8;margin-bottom:10px;font-weight:600;">📋 Job Detail View</div>
+          <ul style="list-style:none;padding:0;font-size:.88rem;color:rgba(249,248,209,.68);">
+            <li style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid rgba(249,248,209,.05;">WO #2847 · Golf Simulator</li>
+            <li style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid rgba(249,248,209,.05;">Materials: 8/8 Ready</li>
+            <li style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid rgba(249,248,209,.05;">SOP Steps: 6 required</li>
+            <li style="color:rgba(249,248,209,.5);">QC gate before close</li>
+          </ul>
+        </div>
+        <div style="background:rgba(227,113,37,.07);border:1px solid rgba(227,113,37,.18);border-radius:12px;padding:20px;">
+          <div style="color:var(--orange);margin-bottom:10px;font-weight:600;">⏱️ Time &amp; Progress</div>
+          <ul style="list-style:none;padding:0;font-size:.88rem;color:rgba(249,248,209,.68);">
+            <li style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid rgba(249,248,209,.05;">Elapsed: 47 min</li>
+            <li style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid rgba(249,248,209,.05;">Pause / Resume timer</li>
+            <li style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid rgba(249,248,209,.05;">Step: Assembly (In Progress)</li>
+            <li style="color:rgba(249,248,209,.5);">Next: QC Inspection</li>
+          </ul>
+        </div>
+      </div>
+      <div style="margin-top:20px;padding:16px;background:rgba(249,248,209,.03);border-left:3px solid var(--orange);border-radius:6px;">
+        <p style="font-size:.88rem;color:rgba(249,248,209,.66);margin:0;">Technicians can work offline with automatic sync. All time entries and step completions queue locally and sync when connectivity returns.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SLIDE 13: CLOSE -->
+  <section class="slide bg-title" id="s13">
+    <img src="../../Brand%20Package/01-Circle%20Logos/GG_circle_bronco_full_color/GG_circle_bronco_full_color-01.png" style="position:absolute;top:26px;right:34px;height:78px;opacity:.12;" alt="" />
+    <img class="logo-lg" src="../../Brand%20Package/02-Horizontal%20Logos/GG_horizontal_white/GG_horizontal_white-01.png" alt="Golf &amp; Garage" />
+    <div class="eyebrow">Summary</div>
+    <h1><span class="accent">67% Complete.</span><br/><span class="teal">~9 Weeks to Launch.</span></h1>
+    <div class="divider"></div>
+    <p class="subtitle">The foundation is solid &mdash; architecture done, database built, all 8 modules scaffolded, and the ShopMonkey migration pipeline nearly ready. The remaining work is wiring screens, closing read contracts, and running migration validation. We&rsquo;re on track for a mid-May production launch.</p>
+    <div class="meta-strip">
+      <div class="meta-item">Next Milestone <span>P0 API Sprint</span></div>
+      <div class="meta-item">Target Launch <span>Mid-May 2026</span></div>
+      <div class="meta-item">Questions? <span>Let&rsquo;s Talk</span></div>
+    </div>
+  </section>
+
+</div>
+
+<div id="nav">
+  <button class="nav-btn" id="prev-btn" aria-label="Previous">&#8592;</button>
+  <div id="dots"></div>
+  <span id="slide-counter">1 / 13</span>
+  <button class="nav-btn" id="next-btn" aria-label="Next">&#8594;</button>
+</div>
+<div id="hint">&#8592; &#8594; Arrow keys</div>
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const total = slides.length;
+  let current = 0;
+  const counter = document.getElementById('slide-counter');
+  const dotsWrap = document.getElementById('dots');
+
+  slides.forEach((_, i) => {
+    const d = document.createElement('button');
+    d.className = 'dot' + (i === 0 ? ' active' : '');
+    d.setAttribute('aria-label', 'Slide ' + (i + 1));
+    d.addEventListener('click', () => goTo(i));
+    dotsWrap.appendChild(d);
+  });
+
+  function goTo(index) {
+    if (index < 0 || index >= total) return;
+    const prev = current;
+    slides[prev].classList.remove('active');
+    slides[prev].classList.add('exit');
+    setTimeout(() => slides[prev].classList.remove('exit'), 460);
+    current = index;
+    slides[current].classList.add('active');
+    counter.textContent = (current + 1) + ' / ' + total;
+    Array.from(dotsWrap.children).forEach((d, i) => d.classList.toggle('active', i === current));
+  }
+
+  document.getElementById('next-btn').addEventListener('click', () => goTo(current + 1));
+  document.getElementById('prev-btn').addEventListener('click', () => goTo(current - 1));
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goTo(current + 1);
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   goTo(current - 1);
+  });
+  let touchX = null;
+  document.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, {passive:true});
+  document.addEventListener('touchend', e => {
+    if (touchX === null) return;
+    const dx = e.changedTouches[0].clientX - touchX;
+    if (Math.abs(dx) > 50) dx < 0 ? goTo(current + 1) : goTo(current - 1);
+    touchX = null;
+  }, {passive:true});
+</script>
+</body>
+</html>

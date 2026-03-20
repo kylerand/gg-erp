@@ -2,19 +2,21 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { PageHeader, EmptyState, LoadingSkeleton, StatusBadge } from '@gg-erp/ui';
-import { listWorkOrders, type WorkOrder } from '@/lib/api-client';
+import { listWoOrders, type WoOrder } from '@/lib/api-client';
 
 export default function OpenBlockedPage() {
-  const [items, setItems] = useState<WorkOrder[]>([]);
+  const [items, setItems] = useState<WoOrder[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'ALL' | 'BLOCKED' | 'PLANNED'>('ALL');
+  const [filter, setFilter] = useState<'ALL' | 'BLOCKED' | 'IN_PROGRESS'>('ALL');
 
   useEffect(() => {
-    listWorkOrders({ limit: 50 }).then(r => { setItems(r.items); setLoading(false); });
+    listWoOrders({ limit: 200 }).then(r => { setItems(r.items); setLoading(false); });
   }, []);
 
   const filtered = items.filter(w =>
-    filter === 'ALL' ? ['BLOCKED', 'PLANNED', 'RELEASED'].includes(w.state) : w.state === filter
+    filter === 'ALL'
+      ? ['BLOCKED', 'READY', 'IN_PROGRESS', 'SCHEDULED'].includes(w.status)
+      : w.status === filter
   );
 
   if (loading) return <div><PageHeader title="Open / Blocked" /><LoadingSkeleton rows={5} cols={4} /></div>;
@@ -24,10 +26,10 @@ export default function OpenBlockedPage() {
       <PageHeader title="Open / Blocked" description="Triage stalled and waiting work" />
 
       <div className="flex gap-2 mb-6">
-        {(['ALL', 'BLOCKED', 'PLANNED'] as const).map(f => (
+        {(['ALL', 'BLOCKED', 'IN_PROGRESS'] as const).map(f => (
           <button key={f} onClick={() => setFilter(f)}
             className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${filter === f ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-300 text-gray-600 hover:border-gray-400'}`}>
-            {f === 'ALL' ? 'All Open' : f}
+            {f === 'ALL' ? 'All Open' : f.replace('_', ' ')}
           </button>
         ))}
       </div>
@@ -38,14 +40,14 @@ export default function OpenBlockedPage() {
         <div className="space-y-2">
           {filtered.map(wo => (
             <div key={wo.id} className="bg-white rounded-lg border border-gray-200 p-4 flex items-start gap-4">
-              {wo.state === 'BLOCKED' && <span className="text-red-500 text-lg mt-0.5" aria-label="Blocked">⚠️</span>}
+              {wo.status === 'BLOCKED' && <span className="text-red-500 text-lg mt-0.5" aria-label="Blocked">⚠️</span>}
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="font-mono text-xs text-gray-500">{wo.workOrderNumber}</span>
-                  <StatusBadge status={wo.state} />
+                  <StatusBadge status={wo.status} />
                 </div>
-                <p className="text-sm font-medium text-gray-900">{wo.description ?? wo.vehicleId}</p>
-                <p className="text-xs text-gray-400 mt-0.5">Vehicle: {wo.vehicleId}</p>
+                <p className="text-sm font-medium text-gray-900">{wo.title}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{wo.customerReference ?? wo.assetReference ?? '—'}</p>
               </div>
               <div className="flex gap-2">
                 <button onClick={() => toast.success(`Acknowledged ${wo.workOrderNumber}`)}

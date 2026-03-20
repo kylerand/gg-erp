@@ -15,6 +15,7 @@ export interface CartVehicle {
   customerId: string;
   state: CartVehicleState;
   modelCode: string;
+  modelYear: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -22,7 +23,7 @@ export interface CartVehicle {
 export const CartVehicleDesign: EntityDesign<CartVehicleState> = {
   entity: 'CartVehicle',
   purpose: 'Represents a specific vehicle unit flowing through build lifecycle.',
-  keyFields: ['id', 'vin', 'serialNumber', 'customerId', 'state', 'modelCode', 'updatedAt'],
+  keyFields: ['id', 'vin', 'serialNumber', 'customerId', 'state', 'modelCode', 'modelYear', 'updatedAt'],
   requiredIndexes: [
     { name: 'cart_vehicles_vin_uk', fields: ['vin'], unique: true },
     { name: 'cart_vehicles_serial_uk', fields: ['serialNumber'], unique: true },
@@ -403,3 +404,60 @@ export const LaborCapacityDesign: EntityDesign<LaborCapacityState> = {
     { method: 'PATCH', path: '/planning/labor-capacity/:id', summary: 'Update labor allocation/state' }
   ]
 };
+
+// ─── SOP Step Execution ───────────────────────────────────────────────────────
+
+export type RoutingSopStepExecutionState =
+  | 'PENDING'
+  | 'IN_PROGRESS'
+  | 'COMPLETE'
+  | 'FAILED';
+
+export interface RoutingSopStepExecution {
+  id: string;
+  routingStepId: string;
+  workOrderId: string;
+  technicianTaskId?: string;
+  state: RoutingSopStepExecutionState;
+  completedBy?: string;      // employeeId
+  completedAt?: string;
+  failedReason?: string;
+  evidenceAttachmentIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StepEvidenceAttachment {
+  id: string;
+  routingStepId: string;
+  fileAttachmentId: string;
+  uploadedBy: string;        // employeeId
+  createdAt: string;
+}
+
+// ─── SOP Step Execution Events ────────────────────────────────────────────────
+
+export type RoutingSopStepExecutionEventName =
+  | 'routing_step.started'
+  | 'routing_step.completed'
+  | 'routing_step.failed'
+  | 'routing_step.evidence_attached';
+
+export interface RoutingSopStepStartedEvent {
+  type: 'RoutingSopStepStarted';
+  eventName: 'routing_step.started';
+  correlationId: string;
+  routingStepId: string;
+  workOrderId: string;
+  technicianId: string;
+}
+
+export interface RoutingSopStepCompletedEvent {
+  type: 'RoutingSopStepCompleted';
+  eventName: 'routing_step.completed';
+  correlationId: string;
+  routingStepId: string;
+  workOrderId: string;
+  technicianId: string;
+  evidenceAttachmentIds: string[];
+}

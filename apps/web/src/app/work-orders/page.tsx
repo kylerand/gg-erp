@@ -1,11 +1,11 @@
 import Link from 'next/link';
-import { listWorkOrders } from '@/lib/api-client';
+import { listWoOrders } from '@/lib/api-client';
 import { PageHeader, StatusBadge } from '@gg-erp/ui';
 
 export default async function WorkOrdersPage() {
-  const { items, total } = await listWorkOrders({ limit: 5 });
-  const blocked = items.filter(w => w.state === 'BLOCKED').length;
-  const inProgress = items.filter(w => w.state === 'IN_PROGRESS').length;
+  const { items, total } = await listWoOrders({ limit: 10 });
+  const blocked = items.filter(w => w.status === 'BLOCKED').length;
+  const inProgress = items.filter(w => w.status === 'IN_PROGRESS').length;
 
   return (
     <div>
@@ -48,18 +48,18 @@ export default async function WorkOrdersPage() {
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">WO #</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Vehicle</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">Title</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">Customer</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Description</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {items.map(wo => (
                   <tr key={wo.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-mono font-medium text-gray-900">{wo.workOrderNumber}</td>
-                    <td className="px-4 py-3 text-gray-600">{wo.vehicleId}</td>
-                    <td className="px-4 py-3"><StatusBadge status={wo.state} /></td>
-                    <td className="px-4 py-3 text-gray-500 truncate max-w-xs">{wo.description ?? '—'}</td>
+                    <td className="px-4 py-3 text-gray-700 truncate max-w-xs">{wo.title}</td>
+                    <td className="px-4 py-3 text-gray-500 truncate max-w-xs">{wo.customerReference ?? '—'}</td>
+                    <td className="px-4 py-3"><StatusBadge status={wo.status} /></td>
                   </tr>
                 ))}
               </tbody>

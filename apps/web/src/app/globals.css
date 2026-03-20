@@ -3,57 +3,95 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: 'Obrega';
+  src: url('/brand/Obrega.ttf') format('truetype');
+  font-display: swap;
+}
+
 @layer base {
   :root {
-    /* cart-configurator admin light theme */
-    --background: 210 20% 98%;        /* #f9fafb */
-    --foreground: 220 13% 18%;        /* #111827 */
+    --background: 38 53% 94%;
+    --foreground: 20 7% 13%;
     --card: 0 0% 100%;
-    --card-foreground: 220 13% 18%;
+    --card-foreground: 20 7% 13%;
     --popover: 0 0% 100%;
-    --popover-foreground: 220 13% 18%;
-    --primary: 221 83% 53%;           /* #2563eb — cart-configurator admin blue */
+    --popover-foreground: 20 7% 13%;
+    --primary: 24 77% 52%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 16% 93%;         /* #e5e7eb */
-    --secondary-foreground: 220 13% 18%;
-    --muted: 210 16% 93%;
-    --muted-foreground: 215 13% 44%;  /* #6b7280 */
-    --accent: 210 16% 93%;
-    --accent-foreground: 220 13% 18%;
+    --secondary: 48 69% 96%;
+    --secondary-foreground: 20 7% 13%;
+    --muted: 37 33% 90%;
+    --muted-foreground: 18 8% 38%;
+    --accent: 48 69% 96%;
+    --accent-foreground: 20 7% 13%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 214 13% 89%;            /* #d1d5db */
-    --input: 214 13% 89%;
-    --ring: 221 83% 53%;
-    --radius: 0.5rem;
-    --brand-orange: #D2691E;          /* Bronco Orange — GG identity */
+    --border: 22 20% 82%;
+    --input: 22 20% 82%;
+    --ring: 24 77% 52%;
+    --radius: 1rem;
+    --brand-orange: #E37125;
+    --brand-orange-dark: #C95F18;
+    --brand-charcoal: #353535;
+    --brand-cream: #F9F8D1;
+    --brand-sand: #F7F0E6;
+    --brand-line: #D9CCBE;
   }
   .dark {
-    --background: 222 47% 7%;         /* #0f172a */
-    --foreground: 214 32% 95%;        /* #f1f5f9 */
-    --card: 222 47% 11%;              /* #1e293b */
+    --background: 24 12% 10%;
+    --foreground: 48 69% 96%;
+    --card: 22 10% 14%;
     --card-foreground: 214 32% 95%;
-    --popover: 222 47% 11%;
+    --popover: 22 10% 14%;
     --popover-foreground: 214 32% 95%;
-    --primary: 217 91% 60%;           /* #3b82f6 */
+    --primary: 24 77% 52%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 217 33% 17%;         /* #334155 */
+    --secondary: 30 10% 22%;
     --secondary-foreground: 214 32% 95%;
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 68%;  /* #cbd5e1 */
-    --accent: 217 33% 17%;
+    --muted: 30 10% 22%;
+    --muted-foreground: 38 18% 73%;
+    --accent: 30 10% 22%;
     --accent-foreground: 214 32% 95%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
-    --ring: 217 91% 60%;
-    --brand-orange: #D2691E;
+    --border: 30 10% 22%;
+    --input: 30 10% 22%;
+    --ring: 24 77% 52%;
+    --brand-orange: #E37125;
+    --brand-orange-dark: #C95F18;
+    --brand-charcoal: #F3EFEA;
+    --brand-cream: #353535;
+    --brand-sand: #231F1D;
+    --brand-line: #534B45;
   }
   * {
     @apply border-border;
   }
+  html {
+    scroll-behavior: smooth;
+  }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
+    background-image:
+      radial-gradient(circle at top left, rgba(227, 113, 37, 0.08), transparent 24%),
+      linear-gradient(180deg, rgba(249, 248, 209, 0.55), rgba(247, 240, 230, 0));
+  }
+  h1,
+  h2,
+  h3,
+  [data-brand-heading='true'] {
+    font-family: 'Obrega', Georgia, serif;
+    letter-spacing: 0.01em;
+  }
+}
+
+@layer components {
+  .brand-panel {
+    @apply rounded-[1.5rem] border border-border/80 bg-white/90 shadow-brand backdrop-blur;
+  }
+
+  .brand-pill {
+    @apply inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em];
   }
 }

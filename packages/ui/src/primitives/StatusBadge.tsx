@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-const VARIANT_CLASSES: Record<string, string> = {
+export const VARIANT_CLASSES: Record<string, string> = {
   PLANNED: 'bg-blue-100 text-blue-800 border-blue-200',
   RELEASED: 'bg-purple-100 text-purple-800 border-purple-200',
   IN_PROGRESS: 'bg-yellow-100 text-yellow-800 border-yellow-200',
@@ -13,21 +13,31 @@ const VARIANT_CLASSES: Record<string, string> = {
   ACTIVE: 'bg-green-100 text-green-800 border-green-200',
   INACTIVE: 'bg-gray-100 text-gray-600 border-gray-200',
   LEAD: 'bg-blue-100 text-blue-800 border-blue-200',
+  READY: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+  DONE: 'bg-green-100 text-green-800 border-green-200',
+  PASS: 'bg-green-100 text-green-800 border-green-200',
+  FAIL: 'bg-red-100 text-red-800 border-red-200',
+  NA: 'bg-gray-100 text-gray-600 border-gray-200',
 };
 
-const LABEL_MAP: Record<string, string> = {
-  IN_PROGRESS: 'In Progress',
-  PLANNED: 'Planned',
-  RELEASED: 'Released',
-  BLOCKED: 'Blocked',
-  COMPLETED: 'Completed',
-  CANCELLED: 'Cancelled',
-  PENDING: 'Pending',
-  SYNCED: 'Synced',
-  FAILED: 'Failed',
-  ACTIVE: 'Active',
-  INACTIVE: 'Inactive',
-  LEAD: 'Lead',
+export const LABEL_MAP: Record<string, string> = {
+  READY: '▶ Ready',
+  IN_PROGRESS: '↻ In Progress',
+  BLOCKED: '⛔ Blocked',
+  DONE: '✓ Done',
+  COMPLETED: '✓ Completed',
+  CANCELLED: '✕ Cancelled',
+  PLANNED: '◦ Planned',
+  RELEASED: '→ Released',
+  PENDING: '◌ Pending',
+  SYNCED: '✓ Synced',
+  FAILED: '✕ Failed',
+  ACTIVE: '● Active',
+  INACTIVE: '○ Inactive',
+  LEAD: '◇ Lead',
+  PASS: '✓ Pass',
+  FAIL: '✕ Fail',
+  NA: '— N/A',
 };
 
 export function StatusBadge({ status, children }: { status: string; children?: ReactNode }) {

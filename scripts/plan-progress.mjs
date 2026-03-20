@@ -15,6 +15,20 @@ const STATUS_ICONS = {
   gap: '❌',
 };
 
+const EXPLICIT_TABLE_STATUSES = new Map([
+  ['done', 'covered'],
+  ['covered', 'covered'],
+  ['complete', 'covered'],
+  ['completed', 'covered'],
+  ['in progress', 'partial'],
+  ['in review', 'partial'],
+  ['partial', 'partial'],
+  ['blocked', 'gap'],
+  ['not started', 'gap'],
+  ['gap', 'gap'],
+  ['pending', 'gap'],
+]);
+
 function normalizeDecisionStatus(value) {
   return value.trim().toLowerCase().replace(/[^\w\s-]/g, '');
 }
@@ -30,6 +44,26 @@ function statusFromTableRow(line) {
 
   if (line.includes(STATUS_ICONS.covered)) {
     return 'covered';
+  }
+
+  return null;
+}
+
+function normalizeTableCellStatus(value) {
+  return value
+    .replace(/[✅⚠️❌]/gu, '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/gu, ' ');
+}
+
+function statusFromTableCells(cells) {
+  for (const cellValue of cells) {
+    const normalizedValue = normalizeTableCellStatus(cellValue);
+    const mappedStatus = EXPLICIT_TABLE_STATUSES.get(normalizedValue);
+    if (mappedStatus) {
+      return mappedStatus;
+    }
   }
 
   return null;
@@ -191,7 +225,12 @@ function analyzeMarkdownPlan(content) {
       continue;
     }
 
-    const rowStatus = statusFromTableRow(trimmedLine);
+    const cells = trimmedLine
+      .split('|')
+      .slice(1, -1)
+      .map((cellValue) => cellValue.trim());
+
+    const rowStatus = statusFromTableRow(trimmedLine) ?? statusFromTableCells(cells);
     if (!rowStatus) {
       continue;
     }
@@ -202,16 +241,13 @@ function analyzeMarkdownPlan(content) {
       continue;
     }
 
-    const cells = trimmedLine
-      .split('|')
-      .slice(1, -1)
-      .map((cellValue) => cellValue.trim());
-
     const label = cells[0] ?? '(unnamed item)';
     const detail =
       cells.find(
         (cellValue) =>
-          cellValue.includes(STATUS_ICONS.gap) || cellValue.includes(STATUS_ICONS.partial),
+          cellValue.includes(STATUS_ICONS.gap) ||
+          cellValue.includes(STATUS_ICONS.partial) ||
+          EXPLICIT_TABLE_STATUSES.has(normalizeTableCellStatus(cellValue)),
       ) ?? '';
 
     analysis.openItems.push({

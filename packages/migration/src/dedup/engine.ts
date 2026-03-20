@@ -9,7 +9,7 @@ export interface DedupCandidate {
 }
 
 export function findCustomerDuplicates(
-  records: Array<{ id: string; email: string; firstName?: string; lastName?: string; phone?: string }>,
+  records: Array<{ id: string; email?: string; firstName?: string; lastName?: string; phone?: string }>,
 ): DedupCandidate[] {
   const candidates: DedupCandidate[] = [];
   const byEmail = new Map<string, string[]>();

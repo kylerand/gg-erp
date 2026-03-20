@@ -157,14 +157,15 @@ export function RoleDashboard() {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">
+      <div className="mb-8 brand-panel p-6">
+        <div className="brand-pill border-[#F6D1B7] bg-[#FFF3E8] text-[#8A4A18]">Today at a glance</div>
+        <h1 className="mt-4 text-4xl text-[#211F1E]" data-brand-heading="true">
           Good {getTimeOfDay()}, {user?.name ?? 'there'} 👋
         </h1>
-        <p className="text-sm text-gray-500 mt-1 capitalize">
+        <p className="text-sm text-[#6E625A] mt-2 capitalize">
           {effectiveRole} · {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
         </p>
-        <Link href={landing} className="inline-block mt-3 text-sm text-yellow-700 hover:text-yellow-900 font-medium hover:underline">
+        <Link href={landing} className="inline-block mt-4 text-sm text-[#B1581B] hover:text-[#8A4A18] font-semibold hover:underline">
           → Go to my workspace
         </Link>
       </div>
@@ -175,7 +176,7 @@ export function RoleDashboard() {
             <span className="text-red-500">▲</span>
             <span className="text-xs font-semibold text-red-600 uppercase tracking-wide">P1 — Requires immediate attention</span>
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {p1Cards.map(card => <DashCard key={card.id} card={card} />)}
           </div>
         </section>
@@ -187,7 +188,7 @@ export function RoleDashboard() {
             <span className="text-yellow-500">◆</span>
             <span className="text-xs font-semibold text-yellow-700 uppercase tracking-wide">P2 — Action needed soon</span>
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {p2Cards.map(card => <DashCard key={card.id} card={card} />)}
           </div>
         </section>
@@ -199,7 +200,7 @@ export function RoleDashboard() {
             <span className="text-blue-400">●</span>
             <span className="text-xs font-semibold text-blue-600 uppercase tracking-wide">P3 — Informational</span>
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {p3Cards.map(card => <DashCard key={card.id} card={card} />)}
           </div>
         </section>
@@ -213,16 +214,16 @@ function DashCard({ card }: { card: DashboardCard }) {
   return (
     <Link
       href={card.href}
-      className={`block p-4 rounded-lg border-2 hover:shadow-md transition-all ${cfg.classes}`}
+      className={`block p-5 rounded-[1.4rem] border-2 hover:shadow-brand transition-all ${cfg.classes}`}
       aria-label={`${card.title}: ${card.value}. ${card.description}. Priority: ${cfg.label}`}
     >
       <div className="flex items-start justify-between mb-2">
         <span className="text-xl">{card.icon}</span>
         <span className="text-xs font-semibold opacity-60" aria-hidden>{cfg.shape}</span>
       </div>
-      <div className="text-2xl font-bold text-gray-900 mb-0.5">{card.value}</div>
-      <div className="text-xs font-semibold text-gray-700">{card.title}</div>
-      <div className="text-xs text-gray-500 mt-0.5">{card.description}</div>
+      <div className="text-3xl font-bold text-gray-900 mb-1">{card.value}</div>
+      <div className="text-sm font-semibold text-gray-800">{card.title}</div>
+      <div className="text-xs text-gray-600 mt-1">{card.description}</div>
     </Link>
   );
 }

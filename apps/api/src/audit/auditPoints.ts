@@ -21,6 +21,8 @@ export const AUDIT_POINTS = {
   purchaseOrderStateChange: 'purchase_order.state_change',
   workOrderCreate: 'work_order.create',
   workOrderStateChange: 'work_order.state_change',
+  cartVehicleRegister: 'cart_vehicle.register',
+  cartVehicleStateChange: 'cart_vehicle.state_change',
   buildSlotAssign: 'build_slot.assign',
   laborCapacityUpdate: 'labor_capacity.update',
   technicianTaskStateChange: 'technician_task.state_change',

@@ -19,6 +19,8 @@ locals {
   lambda_functions = ["work-orders-create", "work-orders-list", "workers"]
 }
 
+data "aws_region" "current" {}
+
 resource "aws_cloudwatch_log_group" "lambda" {
   for_each          = toset(local.lambda_functions)
   name              = "/aws/lambda/${var.name_prefix}-${each.value}"
@@ -43,6 +45,7 @@ resource "aws_cloudwatch_dashboard" "main" {
         height = 6
         properties = {
           title  = "Lambda Errors"
+          region = data.aws_region.current.name
           period = 300
           stat   = "Sum"
           metrics = [
@@ -59,6 +62,7 @@ resource "aws_cloudwatch_dashboard" "main" {
         height = 6
         properties = {
           title  = "Lambda Duration P99"
+          region = data.aws_region.current.name
           period = 300
           stat   = "p99"
           metrics = [

@@ -10,6 +10,42 @@ import {
 } from '../../contexts/accounting/quickbooks.client.js';
 import { createTokenManager } from '../../contexts/accounting/quickbooks.tokenManager.js';
 import * as integrationAccountService from '../../contexts/accounting/integrationAccount.service.js';
+import {
+  InvoiceSyncService,
+  invoiceSyncQueries,
+  type InvoiceSyncServiceDeps,
+} from '../../contexts/accounting/invoiceSync.service.js';
+import {
+  CustomerSyncService,
+  customerSyncQueries,
+  type CustomerSyncServiceDeps,
+} from '../../contexts/accounting/customerSync.service.js';
+import {
+  PaymentSyncService,
+  paymentSyncQueries,
+  prismaPaymentSyncResolvers,
+  type PaymentSyncServiceDeps,
+} from '../../contexts/accounting/paymentSync.service.js';
+import {
+  ReconciliationService,
+  reconciliationQueries,
+  reconciliationSyncQueries,
+  type ReconciliationServiceDeps,
+} from '../../contexts/accounting/reconciliation.service.js';
+import {
+  FailureQueueService,
+  failureQueueQueries,
+  type SyncRecordType,
+} from '../../contexts/accounting/failureQueue.service.js';
+import { InMemoryAuditSink } from '../../audit/recorder.js';
+import {
+  InMemoryEventPublisher,
+  InMemoryOutbox,
+} from '../../events/index.js';
+import { ConsoleObservabilityHooks } from '../../observability/index.js';
+import { EntityMappingService } from '../../contexts/accounting/entityMapping.service.js';
+import { InvoiceSyncState } from '../../../../../packages/domain/src/model/index.js';
+import { CustomerSyncState } from '../../../../../packages/domain/src/model/index.js';
 
 const prisma = new PrismaClient();
 const tokenManager = createTokenManager();
@@ -300,12 +336,14 @@ export const updateAccountStatusHandler = wrapHandler(async (ctx) => {
   if (!id) return jsonResponse(400, { message: 'Account ID is required.' });
 
   const body = parseBody<UpdateStatusBody>(ctx.event);
-  if (!body.ok) return jsonResponse(400, { message: body.error });
+  if (!body.ok) {
+    return jsonResponse(400, { message: body.error });
+  }
 
   const { status } = body.value;
   if (!status || !VALID_STATUSES.has(status)) {
     return jsonResponse(422, {
-      message: `Invalid status. Must be one of: ${[...VALID_STATUSES].join(', ')}`,
+      message: `Invalid status. Must be one of: ${Array.from(VALID_STATUSES).join(', ')}`,
     });
   }
 
@@ -322,5 +360,492 @@ export const updateAccountStatusHandler = wrapHandler(async (ctx) => {
     id: updated.id,
     accountStatus: updated.accountStatus,
     updatedAt: updated.updatedAt.toISOString(),
+  });
+}, { requireAuth: false });
+
+// ─── Service-backed invoice sync helpers ──────────────────────────────────────
+
+function createInvoiceSyncService(): InvoiceSyncService {
+  const deps: InvoiceSyncServiceDeps = {
+    audit: new InMemoryAuditSink(),
+    publisher: new InMemoryEventPublisher(),
+    outbox: new InMemoryOutbox(),
+    observability: ConsoleObservabilityHooks,
+    queries: invoiceSyncQueries,
+  };
+  return new InvoiceSyncService(deps);
+}
+
+function createCustomerSyncService(): CustomerSyncService {
+  const deps: CustomerSyncServiceDeps = {
+    audit: new InMemoryAuditSink(),
+    publisher: new InMemoryEventPublisher(),
+    outbox: new InMemoryOutbox(),
+    observability: ConsoleObservabilityHooks,
+    entityMapping: new EntityMappingService({ prisma }),
+    queries: customerSyncQueries,
+  };
+  return new CustomerSyncService(deps);
+}
+
+export function createPaymentSyncService(): PaymentSyncService {
+  const deps: PaymentSyncServiceDeps = {
+    audit: new InMemoryAuditSink(),
+    publisher: new InMemoryEventPublisher(),
+    outbox: new InMemoryOutbox(),
+    observability: ConsoleObservabilityHooks,
+    queries: paymentSyncQueries,
+    resolvers: prismaPaymentSyncResolvers,
+  };
+  return new PaymentSyncService(deps);
+}
+
+const VALID_INVOICE_SYNC_STATES = new Set<string>(Object.values(InvoiceSyncState));
+const VALID_CUSTOMER_SYNC_STATES = new Set<string>(Object.values(CustomerSyncState));
+
+// ─── Mockable list-query objects ──────────────────────────────────────────────
+
+interface InvoiceSyncListItem {
+  id: string;
+  invoiceNumber: string;
+  workOrderId: string;
+  provider: string;
+  state: string;
+  attemptCount: number;
+  lastErrorCode: string | null;
+  lastErrorMessage: string | null;
+  externalReference: string | null;
+  createdAt: Date;
+  syncedAt: Date | null;
+}
+
+interface CustomerSyncListItem {
+  id: string;
+  customerId: string;
+  provider: string;
+  state: string;
+  attemptCount: number;
+  lastErrorCode: string | null;
+  lastErrorMessage: string | null;
+  externalReference: string | null;
+  createdAt: Date;
+  syncedAt: Date | null;
+}
+
+export const invoiceSyncListQueries = {
+  async findMany(
+    where: Record<string, string>,
+    orderBy: Record<string, string>,
+    take: number,
+    skip: number,
+  ): Promise<InvoiceSyncListItem[]> {
+    return prisma.invoiceSyncRecord.findMany({ where, orderBy, take, skip });
+  },
+  async count(where: Record<string, string>): Promise<number> {
+    return prisma.invoiceSyncRecord.count({ where });
+  },
+};
+
+export const customerSyncListQueries = {
+  async findMany(
+    where: Record<string, string>,
+    orderBy: Record<string, string>,
+    take: number,
+    skip: number,
+  ): Promise<CustomerSyncListItem[]> {
+    return prisma.customerSyncRecord.findMany({ where, orderBy, take, skip });
+  },
+  async count(where: Record<string, string>): Promise<number> {
+    return prisma.customerSyncRecord.count({ where });
+  },
+};
+
+// ─── List invoice syncs (service-backed) ──────────────────────────────────────
+
+export const listInvoiceSyncsHandler = wrapHandler(async (ctx) => {
+  const qs = ctx.event.queryStringParameters ?? {};
+  const stateParam = qs.state;
+  const workOrderId = qs.workOrderId;
+  const limit = Math.min(parseInt(qs.limit ?? '100', 10), 200);
+  const offset = parseInt(qs.offset ?? '0', 10);
+
+  if (stateParam && !VALID_INVOICE_SYNC_STATES.has(stateParam)) {
+    return jsonResponse(400, {
+      message: `Invalid state filter. Must be one of: ${Array.from(VALID_INVOICE_SYNC_STATES).join(', ')}`,
+    });
+  }
+
+  const where = {
+    ...(stateParam
+      ? { state: stateParam as 'PENDING' | 'IN_PROGRESS' | 'SYNCED' | 'FAILED' | 'CANCELLED' }
+      : {}),
+    ...(workOrderId ? { workOrderId } : {}),
+  };
+
+  const [items, total] = await Promise.all([
+    invoiceSyncListQueries.findMany(where, { createdAt: 'desc' }, limit, offset),
+    invoiceSyncListQueries.count(where),
+  ]);
+
+  return jsonResponse(200, {
+    items: items.map((r) => ({
+      id: r.id,
+      invoiceNumber: r.invoiceNumber,
+      workOrderId: r.workOrderId,
+      provider: r.provider,
+      state: r.state,
+      attemptCount: r.attemptCount,
+      lastErrorCode: r.lastErrorCode,
+      lastErrorMessage: r.lastErrorMessage,
+      externalReference: r.externalReference,
+      createdAt: r.createdAt.toISOString(),
+      syncedAt: r.syncedAt?.toISOString() ?? null,
+    })),
+    total,
+    limit,
+    offset,
+  });
+}, { requireAuth: false });
+
+// ─── Trigger invoice sync (service-backed) ────────────────────────────────────
+
+interface TriggerInvoiceSyncBody {
+  workOrderId: string;
+  invoiceNumber: string;
+}
+
+export const triggerInvoiceSyncHandler = wrapHandler(async (ctx) => {
+  const body = parseBody<TriggerInvoiceSyncBody>(ctx.event);
+  if (!body.ok) return jsonResponse(400, { message: body.error });
+
+  const { workOrderId, invoiceNumber } = body.value;
+  if (!workOrderId || !invoiceNumber) {
+    return jsonResponse(422, { message: 'workOrderId and invoiceNumber are required.' });
+  }
+
+  const service = createInvoiceSyncService();
+  const context = {
+    correlationId: ctx.correlationId,
+    actorId: ctx.actorUserId ?? 'system',
+    module: 'accounting',
+  };
+
+  try {
+    const record = await service.createRecord(
+      { invoiceNumber, workOrderId, provider: 'QUICKBOOKS' },
+      context,
+    );
+    return jsonResponse(202, {
+      id: record.id,
+      state: record.state,
+      message: 'Invoice sync queued.',
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('already exists')) {
+      return jsonResponse(409, { message: err.message });
+    }
+    throw err;
+  }
+}, { requireAuth: false });
+
+// ─── Retry invoice sync (service-backed) ──────────────────────────────────────
+
+export const retryInvoiceSyncHandler = wrapHandler(async (ctx) => {
+  const id = ctx.event.pathParameters?.id;
+  if (!id) return jsonResponse(400, { message: 'Sync record ID is required.' });
+
+  const service = createInvoiceSyncService();
+  const context = {
+    correlationId: ctx.correlationId,
+    actorId: ctx.actorUserId ?? 'system',
+    module: 'accounting',
+  };
+
+  const record = await service.getRecord(id);
+  if (!record) return jsonResponse(404, { message: `Sync record not found: ${id}` });
+
+  if (record.state !== InvoiceSyncState.FAILED && record.state !== InvoiceSyncState.CANCELLED) {
+    return jsonResponse(409, { message: `Cannot retry a record in ${record.state} state.` });
+  }
+
+  const updated = await service.startSync(id, context);
+  return jsonResponse(200, {
+    id: updated.id,
+    state: updated.state,
+    message: 'Sync record queued for retry.',
+  });
+}, { requireAuth: false });
+
+// ─── List customer syncs ──────────────────────────────────────────────────────
+
+export const listCustomerSyncsHandler = wrapHandler(async (ctx) => {
+  const qs = ctx.event.queryStringParameters ?? {};
+  const stateParam = qs.state;
+  const customerId = qs.customerId;
+  const limit = Math.min(parseInt(qs.limit ?? '100', 10), 200);
+  const offset = parseInt(qs.offset ?? '0', 10);
+
+  if (stateParam && !VALID_CUSTOMER_SYNC_STATES.has(stateParam)) {
+    return jsonResponse(400, {
+      message: `Invalid state filter. Must be one of: ${Array.from(VALID_CUSTOMER_SYNC_STATES).join(', ')}`,
+    });
+  }
+
+  const where = {
+    ...(stateParam
+      ? { state: stateParam as 'PENDING' | 'IN_PROGRESS' | 'SYNCED' | 'FAILED' | 'SKIPPED' }
+      : {}),
+    ...(customerId ? { customerId } : {}),
+  };
+
+  const [items, total] = await Promise.all([
+    customerSyncListQueries.findMany(where, { createdAt: 'desc' }, limit, offset),
+    customerSyncListQueries.count(where),
+  ]);
+
+  return jsonResponse(200, {
+    items: items.map((r) => ({
+      id: r.id,
+      customerId: r.customerId,
+      provider: r.provider,
+      state: r.state,
+      attemptCount: r.attemptCount,
+      lastErrorCode: r.lastErrorCode,
+      lastErrorMessage: r.lastErrorMessage,
+      externalReference: r.externalReference,
+      createdAt: r.createdAt.toISOString(),
+      syncedAt: r.syncedAt?.toISOString() ?? null,
+    })),
+    total,
+    limit,
+    offset,
+  });
+}, { requireAuth: false });
+
+// ─── Trigger customer sync ───────────────────────────────────────────────────
+
+interface TriggerCustomerSyncBody {
+  customerId: string;
+  displayName: string;
+  email?: string;
+  integrationAccountId: string;
+}
+
+export const triggerCustomerSyncHandler = wrapHandler(async (ctx) => {
+  const body = parseBody<TriggerCustomerSyncBody>(ctx.event);
+  if (!body.ok) return jsonResponse(400, { message: body.error });
+
+  const { customerId, displayName, integrationAccountId } = body.value;
+  if (!customerId || !displayName || !integrationAccountId) {
+    return jsonResponse(422, {
+      message: 'customerId, displayName, and integrationAccountId are required.',
+    });
+  }
+
+  const service = createCustomerSyncService();
+  const context = {
+    correlationId: ctx.correlationId,
+    actorId: ctx.actorUserId ?? 'system',
+    module: 'accounting',
+  };
+
+  const record = await service.queueSync(
+    {
+      customerId,
+      displayName,
+      email: body.value.email,
+      integrationAccountId,
+    },
+    context,
+  );
+
+  return jsonResponse(202, {
+    id: record.id,
+    state: record.state,
+    message: 'Customer sync queued.',
+  });
+}, { requireAuth: false });
+
+// ─── Reconciliation & Failure Queue service factories ─────────────────────────
+
+function createReconciliationService(): ReconciliationService {
+  const deps: ReconciliationServiceDeps = {
+    audit: new InMemoryAuditSink(),
+    publisher: new InMemoryEventPublisher(),
+    outbox: new InMemoryOutbox(),
+    observability: ConsoleObservabilityHooks,
+    queries: reconciliationQueries,
+    syncQueries: reconciliationSyncQueries,
+  };
+  return new ReconciliationService(deps);
+}
+
+function createFailureQueueService(): FailureQueueService {
+  return new FailureQueueService({ queries: failureQueueQueries });
+}
+
+const VALID_FAILURE_TYPES = new Set<string>(['invoice', 'customer', 'payment']);
+
+// ─── List reconciliation runs ────────────────────────────────────────────────
+
+export const listReconciliationRunsHandler = wrapHandler(async (ctx) => {
+  const limit = Math.min(
+    Number(ctx.event.queryStringParameters?.limit ?? 50),
+    200,
+  );
+  const offset = Number(ctx.event.queryStringParameters?.offset ?? 0);
+
+  const service = createReconciliationService();
+  const runs = await service.listRuns(limit, offset);
+
+  return jsonResponse(200, { items: runs, limit, offset });
+}, { requireAuth: false });
+
+// ─── Trigger reconciliation ──────────────────────────────────────────────────
+
+export const triggerReconciliationHandler = wrapHandler(async (ctx) => {
+  const service = createReconciliationService();
+  const context = {
+    correlationId: ctx.correlationId,
+    actorId: ctx.actorUserId ?? 'system',
+    module: 'accounting',
+  };
+
+  const run = await service.runReconciliation(context);
+
+  return jsonResponse(202, {
+    runId: run.id,
+    status: run.status,
+    totalRecords: run.totalRecords,
+    matchedCount: run.matchedCount,
+    mismatchCount: run.mismatchCount,
+    errorCount: run.errorCount,
+    message: 'Reconciliation completed.',
+  });
+}, { requireAuth: false });
+
+// ─── Get reconciliation run ─────────────────────────────────────────────────
+
+export const getReconciliationRunHandler = wrapHandler(async (ctx) => {
+  const runId = ctx.event.pathParameters?.id;
+  if (!runId) {
+    return jsonResponse(400, { message: 'Run ID is required.' });
+  }
+
+  const service = createReconciliationService();
+  const summary = await service.getRunSummary(runId);
+  if (!summary) {
+    return jsonResponse(404, { message: `Reconciliation run not found: ${runId}` });
+  }
+
+  return jsonResponse(200, summary);
+}, { requireAuth: false });
+
+// ─── List mismatches ─────────────────────────────────────────────────────────
+
+export const listMismatchesHandler = wrapHandler(async (ctx) => {
+  const runId = ctx.event.queryStringParameters?.runId;
+
+  const service = createReconciliationService();
+  const mismatches = await service.listMismatches(runId ?? undefined);
+
+  return jsonResponse(200, { items: mismatches, count: mismatches.length });
+}, { requireAuth: false });
+
+// ─── Resolve reconciliation record ──────────────────────────────────────────
+
+interface ResolveReconciliationBody {
+  notes: string;
+}
+
+export const resolveReconciliationHandler = wrapHandler(async (ctx) => {
+  const recordId = ctx.event.pathParameters?.id;
+  if (!recordId) {
+    return jsonResponse(400, { message: 'Record ID is required.' });
+  }
+
+  const body = parseBody<ResolveReconciliationBody>(ctx.event);
+  if (!body.ok) return jsonResponse(400, { message: body.error });
+
+  if (!body.value.notes) {
+    return jsonResponse(422, { message: 'notes field is required.' });
+  }
+
+  const service = createReconciliationService();
+  const context = {
+    correlationId: ctx.correlationId,
+    actorId: ctx.actorUserId ?? 'system',
+    module: 'accounting',
+  };
+
+  try {
+    const resolved = await service.resolveRecord(
+      recordId,
+      { resolvedBy: context.actorId, notes: body.value.notes },
+      context,
+    );
+    return jsonResponse(200, resolved);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    if (message.includes('not found')) {
+      return jsonResponse(404, { message });
+    }
+    if (message.includes('Can only resolve MISMATCH')) {
+      return jsonResponse(409, { message });
+    }
+    return jsonResponse(500, { message });
+  }
+}, { requireAuth: false });
+
+// ─── Get failure summary ─────────────────────────────────────────────────────
+
+export const getFailureSummaryHandler = wrapHandler(async (_ctx) => {
+  const service = createFailureQueueService();
+  const summary = await service.getFailureSummary();
+
+  return jsonResponse(200, summary);
+}, { requireAuth: false });
+
+// ─── Retry failed records ────────────────────────────────────────────────────
+
+interface RetryFailedBody {
+  type?: string;
+  recordId?: string;
+}
+
+export const retryFailedHandler = wrapHandler(async (ctx) => {
+  const body = parseBody<RetryFailedBody>(ctx.event);
+  if (!body.ok) return jsonResponse(400, { message: body.error });
+
+  if (body.value.type && !VALID_FAILURE_TYPES.has(body.value.type)) {
+    return jsonResponse(422, {
+      message: `Invalid type. Must be one of: ${[...VALID_FAILURE_TYPES].join(', ')}`,
+    });
+  }
+
+  const service = createFailureQueueService();
+  const context = {
+    correlationId: ctx.correlationId,
+    actorId: ctx.actorUserId ?? 'system',
+    module: 'accounting',
+  };
+
+  const type = body.value.type as SyncRecordType | undefined;
+
+  if (body.value.recordId && body.value.type) {
+    const result = await service.retryRecord(
+      body.value.type as SyncRecordType,
+      body.value.recordId,
+      context,
+    );
+    return jsonResponse(200, result);
+  }
+
+  const results = await service.retryAll(type, context);
+  return jsonResponse(200, {
+    retried: results.length,
+    succeeded: results.filter((r) => r.success).length,
+    failed: results.filter((r) => !r.success).length,
+    results,
   });
 }, { requireAuth: false });

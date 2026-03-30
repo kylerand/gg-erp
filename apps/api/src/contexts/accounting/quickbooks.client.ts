@@ -200,4 +200,51 @@ export class QuickBooksClient {
     );
     return { companyName: data.CompanyInfo.CompanyName, realmId: data.CompanyInfo.Id };
   }
+
+  /** Fetch a payment by QB payment ID. */
+  async getPayment(paymentId: string): Promise<QbPaymentDetails> {
+    const data = await this.request<{ Payment: QbPaymentRaw }>(
+      'GET', `/payment/${paymentId}`,
+    );
+    const p = data.Payment;
+
+    let linkedInvoiceId: string | undefined;
+    for (const line of p.Line ?? []) {
+      const invoiceLink = line.LinkedTxn?.find(
+        (t: { TxnType: string }) => t.TxnType === 'Invoice',
+      );
+      if (invoiceLink) {
+        linkedInvoiceId = invoiceLink.TxnId;
+        break;
+      }
+    }
+
+    return {
+      qbPaymentId: p.Id,
+      totalAmountCents: Math.round(p.TotalAmt * 100),
+      paymentMethod: p.PaymentMethodRef?.name,
+      txnDate: p.TxnDate,
+      linkedInvoiceId,
+    };
+  }
+}
+
+// ─── QB Payment types ─────────────────────────────────────────────────────────
+
+interface QbPaymentRaw {
+  Id: string;
+  TotalAmt: number;
+  PaymentMethodRef?: { value: string; name: string };
+  TxnDate: string;
+  Line?: Array<{
+    LinkedTxn?: Array<{ TxnId: string; TxnType: string }>;
+  }>;
+}
+
+export interface QbPaymentDetails {
+  qbPaymentId: string;
+  totalAmountCents: number;
+  paymentMethod?: string;
+  txnDate: string;
+  linkedInvoiceId?: string;
 }

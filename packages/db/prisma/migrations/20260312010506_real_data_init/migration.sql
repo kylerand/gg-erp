@@ -5,10 +5,10 @@ ALTER TABLE "tickets"."step_evidence_attachments" DROP CONSTRAINT "step_evidence
 ALTER TABLE "tickets"."step_evidence_attachments" DROP CONSTRAINT "step_evidence_attachments_routing_step_id_fkey";
 
 -- CreateIndex
-CREATE INDEX "labor_entries_task_idx" ON "tickets"."labor_time_entries"("technician_task_id");
+CREATE INDEX IF NOT EXISTS "labor_entries_task_idx" ON "tickets"."labor_time_entries"("technician_task_id");
 
 -- CreateIndex
-CREATE INDEX "qc_gates_task_idx" ON "work_orders"."work_order_qc_gates"("task_id");
+CREATE INDEX IF NOT EXISTS "qc_gates_task_idx" ON "work_orders"."work_order_qc_gates"("task_id");
 
 -- AddForeignKey
 ALTER TABLE "tickets"."step_evidence_attachments" ADD CONSTRAINT "step_evidence_attachments_routing_step_id_fkey" FOREIGN KEY ("routing_step_id") REFERENCES "planning"."routing_sop_steps"("id") ON DELETE CASCADE ON UPDATE CASCADE;

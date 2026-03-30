@@ -16,8 +16,7 @@ CREATE INDEX IF NOT EXISTS qc_gates_work_order_idx
   ON work_orders.work_order_qc_gates (work_order_id);
 
 CREATE INDEX IF NOT EXISTS qc_gates_task_idx
-  ON work_orders.work_order_qc_gates (task_id)
-  WHERE task_id IS NOT NULL;
+  ON work_orders.work_order_qc_gates (task_id);
 
 -- Extend work_orders with rework loop tracking
 ALTER TABLE planning.work_orders

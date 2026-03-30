@@ -26,8 +26,12 @@ import { TechnicianTaskService } from './contexts/tickets/technicianTask.service
 import { TicketReworkService } from './contexts/tickets/ticketRework.service.js';
 import { createTicketRoutes } from './contexts/tickets/ticket.routes.js';
 import { createAttachmentRoutes } from './contexts/tickets/attachment.routes.js';
-import { InvoiceSyncService } from './contexts/accounting/invoiceSync.service.js';
+import { InvoiceSyncService, invoiceSyncQueries } from './contexts/accounting/invoiceSync.service.js';
 import { createInvoiceSyncRoutes } from './contexts/accounting/invoiceSync.routes.js';
+import { CustomerSyncService, customerSyncQueries } from './contexts/accounting/customerSync.service.js';
+import { createCustomerSyncRoutes } from './contexts/accounting/customerSync.routes.js';
+import { EntityMappingService } from './contexts/accounting/entityMapping.service.js';
+import { PrismaClient } from '@prisma/client';
 import {
   authorizePermission as createPermissionGuard,
   composeAuthorizationGuards,
@@ -63,6 +67,7 @@ export interface ApiRuntime {
     tickets: ReturnType<typeof createTicketRoutes>;
     attachments: ReturnType<typeof createAttachmentRoutes>;
     invoiceSync: ReturnType<typeof createInvoiceSyncRoutes>;
+    customerSync: ReturnType<typeof createCustomerSyncRoutes>;
     ai: ReturnType<typeof createAiRoutes>;
   };
   authz: {
@@ -125,11 +130,23 @@ export function createApiRuntime(): ApiRuntime {
     observability
   });
 
+  const prisma = new PrismaClient();
+  const entityMappingService = new EntityMappingService({ prisma });
+
   const invoiceSyncService = new InvoiceSyncService({
     audit,
     publisher,
     outbox,
-    observability
+    observability,
+    queries: invoiceSyncQueries,
+  });
+  const customerSyncService = new CustomerSyncService({
+    audit,
+    publisher,
+    outbox,
+    observability,
+    entityMapping: entityMappingService,
+    queries: customerSyncQueries,
   });
   const aiProvider = new BaselineAiProvider();
   const aiService = new AiService({
@@ -227,6 +244,7 @@ export function createApiRuntime(): ApiRuntime {
         observability
       }),
       invoiceSync: createInvoiceSyncRoutes(invoiceSyncService),
+      customerSync: createCustomerSyncRoutes(customerSyncService),
       ai: createAiRoutes(aiService)
     },
     authz: {

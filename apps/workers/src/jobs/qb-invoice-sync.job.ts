@@ -48,7 +48,7 @@ export async function handleWorkOrderCompletedForQb(
     return { workOrderId, invoiceSyncRecordId: existing.id, status: 'skipped' };
   }
 
-  const workOrder = await prisma.workOrder.findUnique({ where: { id: workOrderId } });
+  const workOrder = await prisma.woOrder.findUnique({ where: { id: workOrderId } });
   if (!workOrder) {
     throw new Error(`Work order not found: ${workOrderId}`);
   }

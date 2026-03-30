@@ -31,8 +31,12 @@ export const AUDIT_POINTS = {
   invoiceSyncStart: 'accounting.invoice_sync_start',
   invoiceSyncRetry: 'accounting.invoice_sync_retry',
   invoiceSyncFail: 'accounting.invoice_sync_fail',
+  paymentSyncStart: 'accounting.payment_sync_start',
+  paymentSyncComplete: 'accounting.payment_sync_complete',
+  paymentSyncFail: 'accounting.payment_sync_fail',
   migrationBatchStart: 'migration.batch_start',
   migrationBatchFail: 'migration.batch_fail',
   aiRequest: 'ai.request',
-  outboxPersist: 'outbox.persist'
+  reconciliationRun: 'accounting.reconciliation_run',
+  outboxPersist: 'outbox.persist',
 } as const;

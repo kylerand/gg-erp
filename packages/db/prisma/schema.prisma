@@ -1497,6 +1497,133 @@ model InvoiceSyncRecord {
   @@schema("accounting")
 }
 
+enum CustomerSyncState {
+  PENDING
+  IN_PROGRESS
+  SYNCED
+  FAILED
+  SKIPPED
+
+  @@schema("accounting")
+}
+
+model CustomerSyncRecord {
+  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId        String            @map("customer_id") @db.Uuid
+  provider          String            @default("QUICKBOOKS")
+  state             CustomerSyncState @default(PENDING)
+  attemptCount      Int               @default(0) @map("attempt_count")
+  lastErrorCode     String?           @map("last_error_code")
+  lastErrorMessage  String?           @map("last_error_message")
+  externalReference String?           @map("external_reference")
+  syncedAt          DateTime?         @map("synced_at") @db.Timestamptz(6)
+  correlationId     String            @map("correlation_id")
+  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime          @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version           Int               @default(0)
+
+  @@unique([customerId, provider])
+  @@index([state])
+  @@map("customer_sync_records")
+  @@schema("accounting")
+}
+
+// ============================================================
+// integrations schema — payment sync & reconciliation
+// ============================================================
+
+enum PaymentSyncState {
+  PENDING
+  IN_PROGRESS
+  SYNCED
+  FAILED
+  RECONCILED
+  MISMATCH
+
+  @@schema("integrations")
+}
+
+enum SyncDirection {
+  INBOUND
+  OUTBOUND
+
+  @@schema("integrations")
+}
+
+enum ReconciliationStatus {
+  PENDING
+  MATCHED
+  MISMATCH
+  RESOLVED
+  SKIPPED
+
+  @@schema("integrations")
+}
+
+model PaymentSyncRecord {
+  id            String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoiceSyncId String?          @map("invoice_sync_id") @db.Uuid
+  workOrderId   String           @map("work_order_id") @db.Uuid
+  customerId    String           @map("customer_id") @db.Uuid
+  qbPaymentId   String?          @map("qb_payment_id")
+  qbInvoiceId   String?          @map("qb_invoice_id")
+  amountCents   Int              @map("amount_cents")
+  paymentMethod String?          @map("payment_method")
+  paymentDate   DateTime?        @map("payment_date") @db.Date
+  state         PaymentSyncState @default(PENDING) @map("state")
+  direction     SyncDirection    @default(INBOUND) @map("direction")
+  errorMessage  String?          @map("error_message")
+  attemptCount  Int              @default(0) @map("attempt_count")
+  lastAttemptAt DateTime?        @map("last_attempt_at") @db.Timestamptz(6)
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime         @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([workOrderId])
+  @@index([state])
+  @@index([qbPaymentId])
+  @@map("payment_sync_records")
+  @@schema("integrations")
+}
+
+model ReconciliationRun {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  startedAt     DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  completedAt   DateTime? @map("completed_at") @db.Timestamptz(6)
+  status        String    @default("RUNNING") @map("status")
+  totalRecords  Int       @default(0) @map("total_records")
+  matchedCount  Int       @default(0) @map("matched_count")
+  mismatchCount Int       @default(0) @map("mismatch_count")
+  errorCount    Int       @default(0) @map("error_count")
+  triggeredBy   String?   @map("triggered_by")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("reconciliation_runs")
+  @@schema("integrations")
+}
+
+model ReconciliationRecord {
+  id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reconciliationType String               @map("reconciliation_type")
+  erpRecordId        String               @map("erp_record_id")
+  qbRecordId         String?              @map("qb_record_id")
+  status             ReconciliationStatus @default(PENDING) @map("status")
+  erpAmountCents     Int?                 @map("erp_amount_cents")
+  qbAmountCents      Int?                 @map("qb_amount_cents")
+  discrepancy        String?              @map("discrepancy")
+  resolvedAt         DateTime?            @map("resolved_at") @db.Timestamptz(6)
+  resolvedBy         String?              @map("resolved_by")
+  notes              String?
+  runId              String               @map("run_id") @db.Uuid
+  createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime             @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([runId])
+  @@index([status])
+  @@index([reconciliationType, erpRecordId])
+  @@map("reconciliation_records")
+  @@schema("integrations")
+}
+
 // ============================================================
 // planning schema — technician floor additions
 // ============================================================

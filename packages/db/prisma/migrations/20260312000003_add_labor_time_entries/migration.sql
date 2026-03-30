@@ -22,5 +22,4 @@ CREATE INDEX IF NOT EXISTS labor_entries_wo_tech_idx
   ON tickets.labor_time_entries (work_order_id, technician_id);
 
 CREATE INDEX IF NOT EXISTS labor_entries_task_idx
-  ON tickets.labor_time_entries (technician_task_id)
-  WHERE technician_task_id IS NOT NULL;
+  ON tickets.labor_time_entries (technician_task_id);

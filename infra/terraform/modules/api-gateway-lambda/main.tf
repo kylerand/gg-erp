@@ -48,6 +48,18 @@ variable "migration_lambda_zip_path" {
   default     = "apps/api/dist/migration-lambda.zip"
 }
 
+variable "identity_lambda_zip_path" {
+  description = "Path to the zipped identity Lambda artifact."
+  type        = string
+  default     = "apps/api/dist/identity-lambda.zip"
+}
+
+variable "identity_lambda_zip_path" {
+  description = "Path to the zipped identity Lambda artifact."
+  type        = string
+  default     = "apps/api/dist/identity-lambda.zip"
+}
+
 variable "qb_client_id" {
   description = "QuickBooks app client ID for OAuth2"
   type        = string
@@ -277,6 +289,19 @@ resource "aws_iam_role_policy_attachment" "erp_lambda_basic" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+# ─── Identity Lambda Functions ────────────────────────────────────────────────
+
+resource "aws_lambda_function" "identity_me" {
+  function_name = "${var.name_prefix}-identity-me"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "me.handler"
+  filename      = var.identity_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
 # ─── Customers Lambda Functions ───────────────────────────────────────────────
 
 locals {
@@ -293,7 +318,20 @@ locals {
   })
 }
 
-resource "aws_lambda_function" "customers_list" {
+# ─── Identity Lambda Functions ─────────────────────────────────────────────────
+
+resource "aws_lambda_function" "identity_me" {
+  function_name = "${var.name_prefix}-identity-me"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "me.handler"
+  filename      = var.identity_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
+# ─── Customers Lambda Functions
   function_name = "${var.name_prefix}-customers-list"
   role          = aws_iam_role.erp_lambda.arn
   runtime       = "nodejs20.x"
@@ -383,6 +421,17 @@ resource "aws_lambda_function" "inventory_list_vendors" {
   environment { variables = local.lambda_common_env }
 }
 
+resource "aws_lambda_function" "inventory_list_lots" {
+  function_name = "${var.name_prefix}-inventory-list-lots"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-lots.handler"
+  filename      = var.inventory_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+}
+
 # ─── Tickets Lambda Functions ─────────────────────────────────────────────────
 
 resource "aws_lambda_function" "tickets_list_tasks" {
@@ -449,6 +498,40 @@ resource "aws_lambda_function" "tickets_list_sync" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+}
+
+# ─── API GW Integrations + Routes — Identity ──────────────────────────────────
+
+resource "aws_apigatewayv2_integration" "identity_me" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.identity_me.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "identity_me" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /auth/me"
+  target    = "integrations/${aws_apigatewayv2_integration.identity_me.id}"
+  authorizer_id = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+# ─── API GW Integrations + Routes — Identity ──────────────────────────────────
+
+resource "aws_apigatewayv2_integration" "identity_me" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.identity_me.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "identity_me" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /auth/me"
+  target    = "integrations/${aws_apigatewayv2_integration.identity_me.id}"
+  authorizer_id = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
 # ─── API GW Integrations + Routes — Customers ─────────────────────────────────
@@ -571,6 +654,21 @@ resource "aws_apigatewayv2_route" "inventory_list_vendors" {
   api_id    = aws_apigatewayv2_api.erp.id
   route_key = "GET /inventory/vendors"
   target    = "integrations/${aws_apigatewayv2_integration.inventory_list_vendors.id}"
+  authorizer_id = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "inventory_list_lots" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.inventory_list_lots.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "inventory_list_lots" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /inventory/lots"
+  target    = "integrations/${aws_apigatewayv2_integration.inventory_list_lots.id}"
   authorizer_id = local.authorizer_id
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
@@ -1050,6 +1148,17 @@ resource "aws_lambda_function" "accounting_trigger_sync" {
   environment { variables = local.lambda_accounting_env }
 }
 
+resource "aws_lambda_function" "accounting_webhook" {
+  function_name = "${var.name_prefix}-accounting-webhook"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "webhook.handler"
+  filename      = var.accounting_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_accounting_env }
+}
+
 resource "aws_apigatewayv2_integration" "accounting_oauth_connect" {
   api_id                 = aws_apigatewayv2_api.erp.id
   integration_type       = "AWS_PROXY"
@@ -1136,6 +1245,20 @@ resource "aws_apigatewayv2_route" "accounting_trigger_sync" {
   target             = "integrations/${aws_apigatewayv2_integration.accounting_trigger_sync.id}"
   authorizer_id      = local.authorizer_id
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "accounting_webhook" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.accounting_webhook.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "accounting_webhook" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /accounting/webhook"
+  authorization_type = "NONE"
+  target             = "integrations/${aws_apigatewayv2_integration.accounting_webhook.id}"
 }
 
 # ============================================================
@@ -1245,6 +1368,7 @@ resource "aws_apigatewayv2_route" "migration_cancel_batch" {
 
 locals {
   erp_lambdas = {
+    identity_me           = aws_lambda_function.identity_me
     customers_list        = aws_lambda_function.customers_list
     customers_create      = aws_lambda_function.customers_create
     customers_get         = aws_lambda_function.customers_get
@@ -1253,6 +1377,7 @@ locals {
     inventory_create_part = aws_lambda_function.inventory_create_part
     inventory_get_part    = aws_lambda_function.inventory_get_part
     inventory_list_vendors = aws_lambda_function.inventory_list_vendors
+    inventory_list_lots   = aws_lambda_function.inventory_list_lots
     tickets_list_tasks    = aws_lambda_function.tickets_list_tasks
     tickets_create_task   = aws_lambda_function.tickets_create_task
     tickets_transition    = aws_lambda_function.tickets_transition_task
@@ -1276,6 +1401,7 @@ locals {
     accounting_list_sync         = aws_lambda_function.accounting_list_sync
     accounting_retry_sync        = aws_lambda_function.accounting_retry_sync
     accounting_trigger_sync      = aws_lambda_function.accounting_trigger_sync
+    accounting_webhook           = aws_lambda_function.accounting_webhook
     migration_trigger_batch      = aws_lambda_function.migration_trigger_batch
     migration_list_batches       = aws_lambda_function.migration_list_batches
     migration_get_batch          = aws_lambda_function.migration_get_batch

@@ -77,6 +77,7 @@ import {
   listRoutingStepsHandler,
   transitionRoutingStepStateHandler,
 } from './lambda/routing-steps/handlers.js';
+import { getMeHandler } from './lambda/identity/handlers.js';
 
 const env = loadApiEnv();
 const PORT = env.apiPort;
@@ -157,8 +158,12 @@ async function route(
   const routingStepMatch = pathname.match(/^\/tickets\/routing-steps\/([^/]+)/);
   const woQueueMatch = pathname.match(/^\/tickets\/wo-queue\/([^/]+)/);
 
+  // ── Auth ───────────────────────────────────────────────────────────────────
+  if (pathname === '/auth/me' && method === 'GET') {
+    result = await getMeHandler(event);
+
   // ── Planning ──────────────────────────────────────────────────────────────
-  if (pathname === '/planning/work-orders' && method === 'POST') {
+  } else if (pathname === '/planning/work-orders' && method === 'POST') {
     result = await createWorkOrderHandler(event);
   } else if (pathname === '/planning/work-orders' && method === 'GET') {
     result = await listWorkOrdersHandler(event);
@@ -312,6 +317,7 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`\n🚀 GG ERP API (local dev) running at http://localhost:${PORT}`);
+  console.log(`   Auth        GET /auth/me`);
   console.log(`   Customers   GET|POST /identity/customers, GET|POST /:id/transition`);
   console.log(`   Inventory   GET|POST /inventory/parts, GET /inventory/vendors`);
   console.log(`   Tickets     /tickets/work-orders/:id/tasks|rework|qc-gates|time-entries`);

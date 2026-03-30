@@ -60,6 +60,12 @@ variable "migration_lambda_zip_path" {
   default     = "../../../../apps/api/dist/migration-lambda.zip"
 }
 
+variable "identity_lambda_zip_path" {
+  description = "Path to the packaged identity Lambda zip artifact."
+  type        = string
+  default     = "../../../../apps/api/dist/identity-lambda.zip"
+}
+
 # QuickBooks OAuth
 
 variable "qb_client_id" {

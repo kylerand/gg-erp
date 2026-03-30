@@ -1,5 +1,15 @@
 variable "name_prefix" { type = string }
 
+variable "private_subnet_ids" {
+  type        = list(string)
+  description = "Private subnet IDs for Lambda VPC configuration"
+}
+
+variable "lambda_security_group_id" {
+  type        = string
+  description = "Security group ID for Lambda functions in VPC"
+}
+
 variable "work_orders_lambda_zip_path" {
   description = "Path to the zipped work-orders Lambda artifact."
   type        = string
@@ -46,12 +56,6 @@ variable "migration_lambda_zip_path" {
   description = "Path to the zipped migration admin Lambda artifact."
   type        = string
   default     = "apps/api/dist/migration-lambda.zip"
-}
-
-variable "identity_lambda_zip_path" {
-  description = "Path to the zipped identity Lambda artifact."
-  type        = string
-  default     = "apps/api/dist/identity-lambda.zip"
 }
 
 variable "identity_lambda_zip_path" {
@@ -133,6 +137,11 @@ resource "aws_iam_role_policy_attachment" "work_orders_lambda_basic_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+resource "aws_iam_role_policy_attachment" "work_orders_lambda_vpc" {
+  role       = aws_iam_role.work_orders_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
 resource "aws_lambda_function" "work_orders_create" {
   function_name = "${var.name_prefix}-work-orders-create"
   role          = aws_iam_role.work_orders_lambda.arn
@@ -147,7 +156,13 @@ resource "aws_lambda_function" "work_orders_create" {
       NODE_ENV                    = "production"
       PRISMA_QUERY_ENGINE_LIBRARY = "/var/task/libquery_engine-rhel-openssl-3.0.x.so.node"
       DATABASE_URL                = var.database_url
+      DB_DATABASE_URL             = var.database_url
     }
+  }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
   }
 }
 
@@ -165,7 +180,13 @@ resource "aws_lambda_function" "work_orders_list" {
       NODE_ENV                    = "production"
       PRISMA_QUERY_ENGINE_LIBRARY = "/var/task/libquery_engine-rhel-openssl-3.0.x.so.node"
       DATABASE_URL                = var.database_url
+      DB_DATABASE_URL             = var.database_url
     }
+  }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
   }
 }
 
@@ -183,7 +204,13 @@ resource "aws_lambda_function" "work_orders_transition" {
       NODE_ENV                    = "production"
       PRISMA_QUERY_ENGINE_LIBRARY = "/var/task/libquery_engine-rhel-openssl-3.0.x.so.node"
       DATABASE_URL                = var.database_url
+      DB_DATABASE_URL             = var.database_url
     }
+  }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
   }
 }
 
@@ -289,26 +316,19 @@ resource "aws_iam_role_policy_attachment" "erp_lambda_basic" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-# ─── Identity Lambda Functions ────────────────────────────────────────────────
-
-resource "aws_lambda_function" "identity_me" {
-  function_name = "${var.name_prefix}-identity-me"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "me.handler"
-  filename      = var.identity_lambda_zip_path
-  timeout       = 15
-  memory_size   = 256
-  environment { variables = local.lambda_common_env }
+resource "aws_iam_role_policy_attachment" "erp_lambda_vpc" {
+  role       = aws_iam_role.erp_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-# ─── Customers Lambda Functions ───────────────────────────────────────────────
+# ─── Shared Lambda configuration ───────────────────────────────────────────────
 
 locals {
   lambda_common_env = {
     NODE_ENV                    = "production"
     PRISMA_QUERY_ENGINE_LIBRARY = "/var/task/libquery_engine-rhel-openssl-3.0.x.so.node"
     DATABASE_URL                = var.database_url
+    DB_DATABASE_URL             = var.database_url
   }
   lambda_accounting_env = merge(local.lambda_common_env, {
     QB_CLIENT_ID     = var.qb_client_id
@@ -329,9 +349,16 @@ resource "aws_lambda_function" "identity_me" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
-# ─── Customers Lambda Functions
+# ─── Customers Lambda Functions ─────────────────────────────────────────────────
+
+resource "aws_lambda_function" "customers_list" {
   function_name = "${var.name_prefix}-customers-list"
   role          = aws_iam_role.erp_lambda.arn
   runtime       = "nodejs20.x"
@@ -340,6 +367,11 @@ resource "aws_lambda_function" "identity_me" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "customers_create" {
@@ -351,6 +383,11 @@ resource "aws_lambda_function" "customers_create" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "customers_get" {
@@ -362,6 +399,11 @@ resource "aws_lambda_function" "customers_get" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "customers_transition" {
@@ -373,6 +415,11 @@ resource "aws_lambda_function" "customers_transition" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 # ─── Inventory Lambda Functions ───────────────────────────────────────────────
@@ -386,6 +433,11 @@ resource "aws_lambda_function" "inventory_list_parts" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "inventory_create_part" {
@@ -397,6 +449,11 @@ resource "aws_lambda_function" "inventory_create_part" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "inventory_get_part" {
@@ -408,6 +465,11 @@ resource "aws_lambda_function" "inventory_get_part" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "inventory_list_vendors" {
@@ -419,6 +481,11 @@ resource "aws_lambda_function" "inventory_list_vendors" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "inventory_list_lots" {
@@ -430,6 +497,11 @@ resource "aws_lambda_function" "inventory_list_lots" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 # ─── Tickets Lambda Functions ─────────────────────────────────────────────────
@@ -443,6 +515,11 @@ resource "aws_lambda_function" "tickets_list_tasks" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "tickets_create_task" {
@@ -454,6 +531,11 @@ resource "aws_lambda_function" "tickets_create_task" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "tickets_transition_task" {
@@ -465,6 +547,11 @@ resource "aws_lambda_function" "tickets_transition_task" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "tickets_list_rework" {
@@ -476,6 +563,11 @@ resource "aws_lambda_function" "tickets_list_rework" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "tickets_create_rework" {
@@ -487,6 +579,11 @@ resource "aws_lambda_function" "tickets_create_rework" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "tickets_list_sync" {
@@ -498,23 +595,11 @@ resource "aws_lambda_function" "tickets_list_sync" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
-}
 
-# ─── API GW Integrations + Routes — Identity ──────────────────────────────────
-
-resource "aws_apigatewayv2_integration" "identity_me" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.identity_me.invoke_arn
-  payload_format_version = "2.0"
-}
-resource "aws_apigatewayv2_route" "identity_me" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "GET /auth/me"
-  target    = "integrations/${aws_apigatewayv2_integration.identity_me.id}"
-  authorizer_id = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 # ─── API GW Integrations + Routes — Identity ──────────────────────────────────
@@ -782,6 +867,11 @@ resource "aws_lambda_function" "attachments_presign_upload" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_attachments_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "attachments_confirm_upload" {
@@ -793,6 +883,11 @@ resource "aws_lambda_function" "attachments_confirm_upload" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_attachments_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "attachments_list" {
@@ -804,6 +899,11 @@ resource "aws_lambda_function" "attachments_list" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_attachments_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "attachments_presign_download" {
@@ -815,6 +915,11 @@ resource "aws_lambda_function" "attachments_presign_download" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_attachments_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 # S3 read/write policy for attachment Lambdas
@@ -907,6 +1012,11 @@ resource "aws_lambda_function" "sop_list" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "sop_get" {
@@ -918,6 +1028,11 @@ resource "aws_lambda_function" "sop_get" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "sop_create" {
@@ -929,6 +1044,11 @@ resource "aws_lambda_function" "sop_create" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "sop_publish_version" {
@@ -940,6 +1060,11 @@ resource "aws_lambda_function" "sop_publish_version" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "sop_list_modules" {
@@ -951,6 +1076,11 @@ resource "aws_lambda_function" "sop_list_modules" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "sop_list_assignments" {
@@ -962,6 +1092,11 @@ resource "aws_lambda_function" "sop_list_assignments" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "sop_complete_assignment" {
@@ -973,6 +1108,11 @@ resource "aws_lambda_function" "sop_complete_assignment" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_apigatewayv2_integration" "sop_list" {
@@ -1091,6 +1231,11 @@ resource "aws_lambda_function" "accounting_oauth_connect" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_accounting_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "accounting_oauth_callback" {
@@ -1102,6 +1247,11 @@ resource "aws_lambda_function" "accounting_oauth_callback" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_accounting_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "accounting_status" {
@@ -1113,6 +1263,11 @@ resource "aws_lambda_function" "accounting_status" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_accounting_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "accounting_list_sync" {
@@ -1124,6 +1279,11 @@ resource "aws_lambda_function" "accounting_list_sync" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_accounting_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "accounting_retry_sync" {
@@ -1135,6 +1295,11 @@ resource "aws_lambda_function" "accounting_retry_sync" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_accounting_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "accounting_trigger_sync" {
@@ -1146,6 +1311,11 @@ resource "aws_lambda_function" "accounting_trigger_sync" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_accounting_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_lambda_function" "accounting_webhook" {
@@ -1157,6 +1327,11 @@ resource "aws_lambda_function" "accounting_webhook" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_accounting_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_apigatewayv2_integration" "accounting_oauth_connect" {
@@ -1274,6 +1449,11 @@ resource "aws_lambda_function" "migration_trigger_batch" {
   timeout       = 30
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 resource "aws_lambda_function" "migration_list_batches" {
   function_name = "${var.name_prefix}-migration-list-batches"
@@ -1284,6 +1464,11 @@ resource "aws_lambda_function" "migration_list_batches" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 resource "aws_lambda_function" "migration_get_batch" {
   function_name = "${var.name_prefix}-migration-get-batch"
@@ -1294,6 +1479,11 @@ resource "aws_lambda_function" "migration_get_batch" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 resource "aws_lambda_function" "migration_cancel_batch" {
   function_name = "${var.name_prefix}-migration-cancel-batch"
@@ -1304,6 +1494,11 @@ resource "aws_lambda_function" "migration_cancel_batch" {
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
 }
 
 resource "aws_apigatewayv2_integration" "migration_trigger_batch" {

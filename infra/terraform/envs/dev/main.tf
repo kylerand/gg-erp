@@ -84,6 +84,7 @@ module "api_gateway_lambda" {
   sop_lambda_zip_path         = var.sop_lambda_zip_path
   accounting_lambda_zip_path  = var.accounting_lambda_zip_path
   migration_lambda_zip_path   = var.migration_lambda_zip_path
+  identity_lambda_zip_path    = var.identity_lambda_zip_path
   cognito_user_pool_endpoint  = module.cognito.issuer_url
   cognito_audience            = [module.cognito.app_client_ids["web"]]
   database_url                = module.aurora_postgres.database_url
@@ -91,17 +92,21 @@ module "api_gateway_lambda" {
   qb_client_id                = var.qb_client_id
   qb_client_secret            = var.qb_client_secret
   qb_redirect_uri             = var.qb_redirect_uri
-  frontend_url                = module.amplify_hosting.web_url
+  frontend_url                = "https://main.placeholder.amplifyapp.com" # TODO: restore module.amplify_hosting.web_url when github_access_token is set
+  private_subnet_ids          = module.vpc.private_subnet_ids
+  lambda_security_group_id    = module.vpc.lambda_security_group_id
 }
 
-module "amplify_hosting" {
-  source               = "../../modules/amplify-hosting"
-  name_prefix          = var.name_prefix
-  repository_url       = var.repository_url
-  github_access_token  = var.github_access_token
-  branch               = "main"
-  api_base_url         = module.api_gateway_lambda.api_base_url
-  cognito_user_pool_id = module.cognito.user_pool_id
-  cognito_client_id    = module.cognito.app_client_ids["web"]
-  aws_region           = var.aws_region
-}
+# Amplify hosting is disabled until a GitHub personal access token is provided.
+# Uncomment and set var.github_access_token to deploy frontend apps.
+# module "amplify_hosting" {
+#   source               = "../../modules/amplify-hosting"
+#   name_prefix          = var.name_prefix
+#   repository_url       = var.repository_url
+#   github_access_token  = var.github_access_token
+#   branch               = "main"
+#   api_base_url         = module.api_gateway_lambda.api_base_url
+#   cognito_user_pool_id = module.cognito.user_pool_id
+#   cognito_client_id    = module.cognito.app_client_ids["web"]
+#   aws_region           = var.aws_region
+# }

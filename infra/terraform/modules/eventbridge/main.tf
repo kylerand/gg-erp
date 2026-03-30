@@ -57,6 +57,133 @@ resource "aws_sqs_queue_policy" "dlq" {
   })
 }
 
+variable "qb_invoice_sync_lambda_arn" {
+  type        = string
+  default     = ""
+  description = "ARN of the QB invoice sync Lambda for work_order.completed events"
+}
+
+variable "qb_customer_sync_lambda_arn" {
+  type        = string
+  default     = ""
+  description = "ARN of the QB customer sync Lambda for customer.created / customer.updated events"
+}
+
+variable "outbox_publisher_lambda_arn" {
+  type        = string
+  default     = ""
+  description = "ARN of the outbox publisher Lambda invoked on a 1-minute schedule"
+}
+
+# ─── EventBridge Rules — QB Invoice Sync (work_order.completed) ───────────────
+
+resource "aws_cloudwatch_event_rule" "work_order_completed" {
+  count         = var.qb_invoice_sync_lambda_arn != "" ? 1 : 0
+  name          = "${var.name_prefix}-work-order-completed"
+  event_bus_name = aws_cloudwatch_event_bus.main.name
+  description   = "Routes work_order.completed events to the QB invoice sync Lambda"
+
+  event_pattern = jsonencode({
+    source      = ["gg-erp"]
+    detail-type = ["work_order.completed"]
+  })
+
+  tags = {
+    Name = "${var.name_prefix}-work-order-completed"
+  }
+}
+
+resource "aws_cloudwatch_event_target" "qb_invoice_sync" {
+  count          = var.qb_invoice_sync_lambda_arn != "" ? 1 : 0
+  rule           = aws_cloudwatch_event_rule.work_order_completed[0].name
+  event_bus_name = aws_cloudwatch_event_bus.main.name
+  arn            = var.qb_invoice_sync_lambda_arn
+  target_id      = "${var.name_prefix}-qb-invoice-sync"
+
+  dead_letter_config {
+    arn = aws_sqs_queue.dlq.arn
+  }
+}
+
+resource "aws_lambda_permission" "allow_eventbridge_qb_invoice_sync" {
+  count         = var.qb_invoice_sync_lambda_arn != "" ? 1 : 0
+  statement_id  = "AllowEventBridgeInvokeQbInvoiceSync"
+  action        = "lambda:InvokeFunction"
+  function_name = var.qb_invoice_sync_lambda_arn
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.work_order_completed[0].arn
+}
+
+# ─── EventBridge Rules — QB Customer Sync (customer.created / customer.updated)
+
+resource "aws_cloudwatch_event_rule" "customer_changed" {
+  count         = var.qb_customer_sync_lambda_arn != "" ? 1 : 0
+  name          = "${var.name_prefix}-customer-changed"
+  event_bus_name = aws_cloudwatch_event_bus.main.name
+  description   = "Routes customer.created and customer.updated events to the QB customer sync Lambda"
+
+  event_pattern = jsonencode({
+    source      = ["gg-erp"]
+    detail-type = ["customer.created", "customer.updated"]
+  })
+
+  tags = {
+    Name = "${var.name_prefix}-customer-changed"
+  }
+}
+
+resource "aws_cloudwatch_event_target" "qb_customer_sync" {
+  count          = var.qb_customer_sync_lambda_arn != "" ? 1 : 0
+  rule           = aws_cloudwatch_event_rule.customer_changed[0].name
+  event_bus_name = aws_cloudwatch_event_bus.main.name
+  arn            = var.qb_customer_sync_lambda_arn
+  target_id      = "${var.name_prefix}-qb-customer-sync"
+
+  dead_letter_config {
+    arn = aws_sqs_queue.dlq.arn
+  }
+}
+
+resource "aws_lambda_permission" "allow_eventbridge_qb_customer_sync" {
+  count         = var.qb_customer_sync_lambda_arn != "" ? 1 : 0
+  statement_id  = "AllowEventBridgeInvokeQbCustomerSync"
+  action        = "lambda:InvokeFunction"
+  function_name = var.qb_customer_sync_lambda_arn
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.customer_changed[0].arn
+}
+
+# ─── EventBridge Schedule — Outbox Publisher (rate 1 minute) ──────────────────
+
+resource "aws_cloudwatch_event_rule" "outbox_publisher_schedule" {
+  count               = var.outbox_publisher_lambda_arn != "" ? 1 : 0
+  name                = "${var.name_prefix}-outbox-publisher-schedule"
+  schedule_expression = "rate(1 minute)"
+  description         = "Triggers the outbox publisher Lambda every minute to flush pending events"
+
+  tags = {
+    Name = "${var.name_prefix}-outbox-publisher-schedule"
+  }
+}
+
+resource "aws_cloudwatch_event_target" "outbox_publisher" {
+  count     = var.outbox_publisher_lambda_arn != "" ? 1 : 0
+  rule      = aws_cloudwatch_event_rule.outbox_publisher_schedule[0].name
+  arn       = var.outbox_publisher_lambda_arn
+  target_id = "${var.name_prefix}-outbox-publisher"
+}
+
+resource "aws_lambda_permission" "allow_eventbridge_outbox_publisher" {
+  count         = var.outbox_publisher_lambda_arn != "" ? 1 : 0
+  statement_id  = "AllowEventBridgeInvokeOutboxPublisher"
+  action        = "lambda:InvokeFunction"
+  function_name = var.outbox_publisher_lambda_arn
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.outbox_publisher_schedule[0].arn
+}
+
+# ─── Outputs ──────────────────────────────────────────────────────────────────
+
 output "event_bus_name" {
   value = aws_cloudwatch_event_bus.main.name
 }

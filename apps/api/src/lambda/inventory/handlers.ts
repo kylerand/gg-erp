@@ -30,6 +30,90 @@ export const inventoryLotQueries = {
       ORDER BY lots.received_at DESC, lots.created_at DESC
     `;
   },
+
+  async listLots(filters?: {
+    partNumber?: string;
+    warehouseId?: string;
+    status?: string;
+    page?: number;
+    pageSize?: number;
+  }) {
+    const page = Math.max(filters?.page ?? 1, 1);
+    const pageSize = Math.min(Math.max(filters?.pageSize ?? 50, 1), 200);
+
+    const where = {
+      ...(filters?.partNumber
+        ? { part: { sku: { contains: filters.partNumber, mode: 'insensitive' as const } } }
+        : {}),
+      ...(filters?.warehouseId ? { stockLocationId: filters.warehouseId } : {}),
+      ...(filters?.status
+        ? { lotState: filters.status as 'AVAILABLE' | 'QUARANTINED' | 'CONSUMED' | 'CLOSED' }
+        : {}),
+    };
+
+    const prisma = getInventoryPrisma();
+
+    const [items, total] = await Promise.all([
+      prisma.stockLot.findMany({
+        where,
+        include: {
+          part: { select: { sku: true, name: true } },
+          stockLocation: { select: { locationName: true } },
+        },
+        orderBy: { receivedAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.stockLot.count({ where }),
+    ]);
+
+    return { items, total, page, pageSize };
+  },
+};
+
+export const inventoryPurchaseOrderQueries = {
+  async listPurchaseOrders(filters?: {
+    status?: string;
+    supplierId?: string;
+    page?: number;
+    pageSize?: number;
+  }) {
+    const page = Math.max(filters?.page ?? 1, 1);
+    const pageSize = Math.min(Math.max(filters?.pageSize ?? 50, 1), 200);
+
+    const where = {
+      ...(filters?.status
+        ? {
+            purchaseOrderState: filters.status as
+              | 'DRAFT'
+              | 'APPROVED'
+              | 'SENT'
+              | 'PARTIALLY_RECEIVED'
+              | 'RECEIVED'
+              | 'CANCELLED',
+          }
+        : {}),
+      ...(filters?.supplierId ? { vendorId: filters.supplierId } : {}),
+    };
+
+    const prisma = getInventoryPrisma();
+
+    const [items, total] = await Promise.all([
+      prisma.purchaseOrder.findMany({
+        where,
+        include: {
+          vendor: { select: { vendorName: true, vendorCode: true } },
+          lines: true,
+        },
+        orderBy: { orderedAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.purchaseOrder.count({ where }),
+    ]);
+
+    return { items, total, page, pageSize };
+  },
 };
 
 // ─── List Parts ───────────────────────────────────────────────────────────────
@@ -76,10 +160,47 @@ export const listPartsHandler = wrapHandler(async (ctx) => {
 
 // ─── List Inventory Lots ─────────────────────────────────────────────────────
 
-export const listLotsHandler = wrapHandler(async () => {
-  const items = await inventoryLotQueries.listAvailableLots();
+export const listLotsHandler = wrapHandler(async (ctx) => {
+  const qs = ctx.event.queryStringParameters ?? {};
+  const page = parseInt(qs.page ?? '1', 10);
+  const pageSize = parseInt(qs.pageSize ?? '50', 10);
 
-  return jsonResponse(200, items.map(toLotSummaryResponse));
+  const result = await inventoryLotQueries.listLots({
+    partNumber: qs.partNumber,
+    warehouseId: qs.warehouseId,
+    status: qs.status,
+    page,
+    pageSize,
+  });
+
+  return jsonResponse(200, {
+    items: result.items.map(toLotDetailResponse),
+    total: result.total,
+    page: result.page,
+    pageSize: result.pageSize,
+  });
+}, { requireAuth: false });
+
+// ─── List Purchase Orders ────────────────────────────────────────────────────
+
+export const listPurchaseOrdersHandler = wrapHandler(async (ctx) => {
+  const qs = ctx.event.queryStringParameters ?? {};
+  const page = parseInt(qs.page ?? '1', 10);
+  const pageSize = parseInt(qs.pageSize ?? '50', 10);
+
+  const result = await inventoryPurchaseOrderQueries.listPurchaseOrders({
+    status: qs.status,
+    supplierId: qs.supplierId,
+    page,
+    pageSize,
+  });
+
+  return jsonResponse(200, {
+    items: result.items.map(toPurchaseOrderResponse),
+    total: result.total,
+    page: result.page,
+    pageSize: result.pageSize,
+  });
 }, { requireAuth: false });
 
 // ─── Get Part ─────────────────────────────────────────────────────────────────
@@ -203,16 +324,81 @@ function toVendorResponse(r: {
   };
 }
 
-function toLotSummaryResponse(r: {
+function toLotDetailResponse(r: {
   id: string;
   lotNumber: string | null;
-  quantityOnHand: number | string;
-  quantityReserved: number | string;
+  serialNumber: string | null;
+  lotState: string;
+  receivedAt: Date;
+  expiresAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  part: { sku: string; name: string };
+  stockLocation: { locationName: string };
 }) {
   return {
     id: r.id,
     lotNumber: r.lotNumber ?? r.id,
-    quantityOnHand: Number(r.quantityOnHand),
-    quantityReserved: Number(r.quantityReserved),
+    serialNumber: r.serialNumber ?? undefined,
+    lotState: r.lotState,
+    partSku: r.part.sku,
+    partName: r.part.name,
+    locationName: r.stockLocation.locationName,
+    receivedAt: r.receivedAt.toISOString(),
+    expiresAt: r.expiresAt?.toISOString(),
+    createdAt: r.createdAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
+  };
+}
+
+function toPurchaseOrderResponse(r: {
+  id: string;
+  poNumber: string;
+  vendorId: string;
+  purchaseOrderState: string;
+  orderedAt: Date;
+  expectedAt: Date | null;
+  sentAt: Date | null;
+  closedAt: Date | null;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  vendor: { vendorName: string; vendorCode: string };
+  lines: Array<{
+    id: string;
+    lineNumber: number;
+    partId: string;
+    orderedQuantity: unknown;
+    receivedQuantity: unknown;
+    rejectedQuantity: unknown;
+    unitCost: unknown;
+    lineState: string;
+  }>;
+}) {
+  return {
+    id: r.id,
+    poNumber: r.poNumber,
+    vendorId: r.vendorId,
+    vendorName: r.vendor.vendorName,
+    vendorCode: r.vendor.vendorCode,
+    purchaseOrderState: r.purchaseOrderState,
+    orderedAt: r.orderedAt.toISOString(),
+    expectedAt: r.expectedAt?.toISOString(),
+    sentAt: r.sentAt?.toISOString(),
+    closedAt: r.closedAt?.toISOString(),
+    notes: r.notes ?? undefined,
+    lineCount: r.lines.length,
+    lines: r.lines.map((l) => ({
+      id: l.id,
+      lineNumber: l.lineNumber,
+      partId: l.partId,
+      orderedQuantity: Number(l.orderedQuantity),
+      receivedQuantity: Number(l.receivedQuantity),
+      rejectedQuantity: Number(l.rejectedQuantity),
+      unitCost: Number(l.unitCost),
+      lineState: l.lineState,
+    })),
+    createdAt: r.createdAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
   };
 }

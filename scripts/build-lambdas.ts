@@ -24,6 +24,9 @@ interface LambdaEntry {
 }
 
 const lambdas: LambdaEntry[] = [
+  // identity
+  { context: 'identity', handler: 'me',             entry: 'apps/api/src/lambda/identity/me.handler.ts' },
+
   // work-orders
   { context: 'work-orders', handler: 'create',     entry: 'apps/api/src/lambda/work-orders/create.handler.ts' },
   { context: 'work-orders', handler: 'list',        entry: 'apps/api/src/lambda/work-orders/list.handler.ts' },
@@ -40,7 +43,8 @@ const lambdas: LambdaEntry[] = [
   { context: 'inventory', handler: 'get-part',      entry: 'apps/api/src/lambda/inventory/get-part.handler.ts' },
   { context: 'inventory', handler: 'list-lots',     entry: 'apps/api/src/lambda/inventory/list-lots.handler.ts' },
   { context: 'inventory', handler: 'list-parts',    entry: 'apps/api/src/lambda/inventory/list-parts.handler.ts' },
-  { context: 'inventory', handler: 'list-vendors',  entry: 'apps/api/src/lambda/inventory/list-vendors.handler.ts' },
+  { context: 'inventory', handler: 'list-vendors',          entry: 'apps/api/src/lambda/inventory/list-vendors.handler.ts' },
+  { context: 'inventory', handler: 'list-purchase-orders', entry: 'apps/api/src/lambda/inventory/list-purchase-orders.handler.ts' },
 
   // tickets
   { context: 'tickets', handler: 'create-rework',    entry: 'apps/api/src/lambda/tickets/create-rework.handler.ts' },
@@ -48,7 +52,17 @@ const lambdas: LambdaEntry[] = [
   { context: 'tickets', handler: 'list-rework',      entry: 'apps/api/src/lambda/tickets/list-rework.handler.ts' },
   { context: 'tickets', handler: 'list-sync',        entry: 'apps/api/src/lambda/tickets/list-sync.handler.ts' },
   { context: 'tickets', handler: 'list-tasks',        entry: 'apps/api/src/lambda/tickets/list-tasks.handler.ts' },
-  { context: 'tickets', handler: 'transition-task',  entry: 'apps/api/src/lambda/tickets/transition-task.handler.ts' },
+  { context: 'tickets', handler: 'transition-task',    entry: 'apps/api/src/lambda/tickets/transition-task.handler.ts' },
+  { context: 'tickets', handler: 'list-time-entries',  entry: 'apps/api/src/lambda/tickets/list-time-entries.handler.ts' },
+  { context: 'tickets', handler: 'create-time-entry',  entry: 'apps/api/src/lambda/tickets/create-time-entry.handler.ts' },
+  { context: 'tickets', handler: 'update-time-entry',  entry: 'apps/api/src/lambda/tickets/update-time-entry.handler.ts' },
+  { context: 'tickets', handler: 'delete-time-entry',  entry: 'apps/api/src/lambda/tickets/delete-time-entry.handler.ts' },
+
+  // time-entries (dedicated bounded context)
+  { context: 'time-entries', handler: 'list',   entry: 'apps/api/src/lambda/time-entries/list.handler.ts' },
+  { context: 'time-entries', handler: 'create', entry: 'apps/api/src/lambda/time-entries/create.handler.ts' },
+  { context: 'time-entries', handler: 'update', entry: 'apps/api/src/lambda/time-entries/update.handler.ts' },
+  { context: 'time-entries', handler: 'delete', entry: 'apps/api/src/lambda/time-entries/delete.handler.ts' },
 
   // attachments
   { context: 'attachments', handler: 'confirm-upload',    entry: 'apps/api/src/lambda/attachments/confirm-upload.handler.ts' },
@@ -72,6 +86,14 @@ const lambdas: LambdaEntry[] = [
   { context: 'accounting', handler: 'retry-sync',        entry: 'apps/api/src/lambda/accounting/retry-sync.handler.ts' },
   { context: 'accounting', handler: 'status',            entry: 'apps/api/src/lambda/accounting/status.handler.ts' },
   { context: 'accounting', handler: 'trigger-sync',      entry: 'apps/api/src/lambda/accounting/trigger-sync.handler.ts' },
+  { context: 'accounting', handler: 'webhook',            entry: 'apps/api/src/lambda/accounting/webhook.handler.ts' },
+  { context: 'accounting', handler: 'list-accounts',       entry: 'apps/api/src/lambda/accounting/list-accounts.handler.ts' },
+  { context: 'accounting', handler: 'update-account-status', entry: 'apps/api/src/lambda/accounting/update-account-status.handler.ts' },
+  { context: 'accounting', handler: 'list-invoice-syncs',     entry: 'apps/api/src/lambda/accounting/list-invoice-syncs.handler.ts' },
+  { context: 'accounting', handler: 'trigger-invoice-sync',   entry: 'apps/api/src/lambda/accounting/trigger-invoice-sync.handler.ts' },
+  { context: 'accounting', handler: 'retry-invoice-sync',     entry: 'apps/api/src/lambda/accounting/retry-invoice-sync.handler.ts' },
+  { context: 'accounting', handler: 'list-customer-syncs',    entry: 'apps/api/src/lambda/accounting/list-customer-syncs.handler.ts' },
+  { context: 'accounting', handler: 'trigger-customer-sync',  entry: 'apps/api/src/lambda/accounting/trigger-customer-sync.handler.ts' },
 
   // migration
   { context: 'migration', handler: 'cancel-batch',    entry: 'apps/api/src/lambda/migration/cancel-batch.handler.ts' },

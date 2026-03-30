@@ -1,14 +1,18 @@
 import { PrismaClient } from '@prisma/client';
+import type { IntegrationAccountStatus, IntegrationProvider } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
-import { wrapHandler, parseBody, jsonResponse } from '../../shared/lambda/index.js';
+import { wrapHandler, parseBody, jsonResponse, type LambdaResult } from '../../shared/lambda/index.js';
 import {
   buildAuthorizationUrl,
   exchangeCodeForTokens,
   QuickBooksClient,
   type QbTokens,
 } from '../../contexts/accounting/quickbooks.client.js';
+import { createTokenManager } from '../../contexts/accounting/quickbooks.tokenManager.js';
+import * as integrationAccountService from '../../contexts/accounting/integrationAccount.service.js';
 
 const prisma = new PrismaClient();
+const tokenManager = createTokenManager();
 
 // ─── OAuth: redirect to QB ────────────────────────────────────────────────────
 
@@ -24,28 +28,35 @@ export const oauthConnectHandler = wrapHandler(async (_ctx) => {
 
 // ─── OAuth: callback from QB ──────────────────────────────────────────────────
 
-export const oauthCallbackHandler = wrapHandler(async (ctx) => {
-  const qs = ctx.event.queryStringParameters ?? {};
-  const { code, realmId, error } = qs;
-
-  if (error) {
-    return jsonResponse(400, { message: `QB OAuth error: ${error}` });
-  }
-  if (!code || !realmId) {
-    return jsonResponse(400, { message: 'Missing code or realmId from QB callback.' });
-  }
-
+/** Core callback logic — extracted for testability. */
+export async function processOAuthCallback(
+  params: { code: string; realmId: string; frontendUrl?: string },
+  deps: {
+    exchangeCode: (code: string, realmId: string) => Promise<QbTokens>;
+    storeTokens: (tokens: QbTokens) => Promise<void>;
+    upsertIntegrationAccount: (realmId: string) => Promise<void>;
+  },
+): Promise<LambdaResult> {
   let tokens: QbTokens;
   try {
-    tokens = await exchangeCodeForTokens(code, realmId);
+    tokens = await deps.exchangeCode(params.code, params.realmId);
   } catch (err) {
-    return jsonResponse(502, { message: err instanceof Error ? err.message : 'Token exchange failed' });
+    return jsonResponse(502, {
+      message: err instanceof Error ? err.message : 'Token exchange failed',
+    });
   }
 
-  // Store tokens in Secrets Manager (or env for now — prod should use SecretsManager PutSecretValue)
-  // For MVP, return the tokens to the caller to store manually since there's no credential table yet.
-  const redirectUrl = process.env.FRONTEND_URL
-    ? `${process.env.FRONTEND_URL}/accounting/sync?connected=true&realmId=${tokens.realmId}`
+  try {
+    await deps.storeTokens(tokens);
+    await deps.upsertIntegrationAccount(params.realmId);
+  } catch (err) {
+    return jsonResponse(500, {
+      message: err instanceof Error ? err.message : 'Failed to persist QB connection.',
+    });
+  }
+
+  const redirectUrl = params.frontendUrl
+    ? `${params.frontendUrl}/accounting/sync?connected=true&realmId=${tokens.realmId}`
     : `/accounting/sync?connected=true&realmId=${tokens.realmId}`;
 
   return {
@@ -57,21 +68,67 @@ export const oauthCallbackHandler = wrapHandler(async (ctx) => {
       expiresAt: new Date(tokens.expiresAt).toISOString(),
     }),
   };
+}
+
+async function upsertQbIntegrationAccount(db: PrismaClient, realmId: string): Promise<void> {
+  const existing = await db.integrationAccount.findFirst({
+    where: { provider: 'QUICKBOOKS', accountKey: realmId, deletedAt: null },
+  });
+
+  const now = new Date();
+  const config = { realmId, connectedAt: now.toISOString() };
+
+  if (existing) {
+    await db.integrationAccount.update({
+      where: { id: existing.id },
+      data: { accountStatus: 'ACTIVE', configuration: config, updatedAt: now },
+    });
+  } else {
+    await db.integrationAccount.create({
+      data: {
+        provider: 'QUICKBOOKS',
+        accountKey: realmId,
+        displayName: `QuickBooks (${realmId})`,
+        accountStatus: 'ACTIVE',
+        configuration: config,
+      },
+    });
+  }
+}
+
+export const oauthCallbackHandler = wrapHandler(async (ctx) => {
+  const qs = ctx.event.queryStringParameters ?? {};
+  const { code, realmId, error } = qs;
+
+  if (error) {
+    return jsonResponse(400, { message: `QB OAuth error: ${error}` });
+  }
+  if (!code || !realmId) {
+    return jsonResponse(400, { message: 'Missing code or realmId from QB callback.' });
+  }
+
+  return processOAuthCallback(
+    { code, realmId, frontendUrl: process.env.FRONTEND_URL },
+    {
+      exchangeCode: exchangeCodeForTokens,
+      storeTokens: (tokens) => tokenManager.storeTokens(tokens),
+      upsertIntegrationAccount: (realm) => upsertQbIntegrationAccount(prisma, realm),
+    },
+  );
 }, { requireAuth: false });
 
 // ─── Get QB connection status ─────────────────────────────────────────────────
 
-export const qbStatusHandler = wrapHandler(async (_ctx) => {
-  const accessToken = process.env.QB_ACCESS_TOKEN;
-  const realmId = process.env.QB_REALM_ID;
-
-  if (!accessToken || !realmId) {
-    return jsonResponse(200, { connected: false, message: 'QuickBooks not connected.' });
-  }
-
+/** Core status logic — extracted for testability. */
+export async function processQbStatus(
+  deps: {
+    getValidTokens: () => Promise<QbTokens>;
+    getCompanyInfo: (tokens: QbTokens) => Promise<{ companyName: string; realmId: string }>;
+  },
+): Promise<LambdaResult> {
   try {
-    const client = new QuickBooksClient({ accessToken, refreshToken: '', realmId, expiresAt: 0 });
-    const info = await client.getCompanyInfo();
+    const tokens = await deps.getValidTokens();
+    const info = await deps.getCompanyInfo(tokens);
     return jsonResponse(200, { connected: true, companyName: info.companyName, realmId: info.realmId });
   } catch (err) {
     return jsonResponse(200, {
@@ -79,6 +136,13 @@ export const qbStatusHandler = wrapHandler(async (_ctx) => {
       message: err instanceof Error ? err.message : 'QB connection check failed',
     });
   }
+}
+
+export const qbStatusHandler = wrapHandler(async (_ctx) => {
+  return processQbStatus({
+    getValidTokens: () => tokenManager.getValidTokens(),
+    getCompanyInfo: (tokens) => new QuickBooksClient(tokens).getCompanyInfo(),
+  });
 }, { requireAuth: false });
 
 // ─── List invoice sync records ────────────────────────────────────────────────
@@ -189,5 +253,74 @@ export const triggerSyncHandler = wrapHandler(async (ctx) => {
     id: record.id,
     state: record.state,
     message: 'Invoice sync queued.',
+  });
+}, { requireAuth: false });
+
+// ─── List integration accounts ────────────────────────────────────────────────
+
+const VALID_PROVIDERS = new Set<string>(['QUICKBOOKS', 'SHOPMONKEY', 'GENERIC']);
+
+export const listAccountsHandler = wrapHandler(async (ctx) => {
+  const qs = ctx.event.queryStringParameters ?? {};
+  const providerParam = qs.provider?.toUpperCase();
+
+  if (providerParam && !VALID_PROVIDERS.has(providerParam)) {
+    return jsonResponse(400, { message: `Invalid provider: ${qs.provider}` });
+  }
+
+  const provider = providerParam as IntegrationProvider | undefined;
+  const accounts = await integrationAccountService.listAccounts(provider);
+
+  return jsonResponse(200, {
+    items: accounts.map((a) => ({
+      id: a.id,
+      provider: a.provider,
+      accountKey: a.accountKey,
+      displayName: a.displayName,
+      accountStatus: a.accountStatus,
+      configuration: a.configuration,
+      lastSyncedAt: a.lastSyncedAt?.toISOString() ?? null,
+      createdAt: a.createdAt.toISOString(),
+      updatedAt: a.updatedAt.toISOString(),
+    })),
+    total: accounts.length,
+  });
+}, { requireAuth: false });
+
+// ─── Update integration account status ────────────────────────────────────────
+
+const VALID_STATUSES = new Set<string>(['ACTIVE', 'PAUSED', 'ERROR', 'DISCONNECTED']);
+
+interface UpdateStatusBody {
+  status: string;
+}
+
+export const updateAccountStatusHandler = wrapHandler(async (ctx) => {
+  const id = ctx.event.pathParameters?.id;
+  if (!id) return jsonResponse(400, { message: 'Account ID is required.' });
+
+  const body = parseBody<UpdateStatusBody>(ctx.event);
+  if (!body.ok) return jsonResponse(400, { message: body.error });
+
+  const { status } = body.value;
+  if (!status || !VALID_STATUSES.has(status)) {
+    return jsonResponse(422, {
+      message: `Invalid status. Must be one of: ${[...VALID_STATUSES].join(', ')}`,
+    });
+  }
+
+  const updated = await integrationAccountService.updateAccountStatus(
+    id,
+    status as IntegrationAccountStatus,
+  );
+
+  if (!updated) {
+    return jsonResponse(404, { message: `Integration account not found: ${id}` });
+  }
+
+  return jsonResponse(200, {
+    id: updated.id,
+    accountStatus: updated.accountStatus,
+    updatedAt: updated.updatedAt.toISOString(),
   });
 }, { requireAuth: false });

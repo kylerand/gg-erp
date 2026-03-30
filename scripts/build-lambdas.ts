@@ -58,12 +58,6 @@ const lambdas: LambdaEntry[] = [
   { context: 'tickets', handler: 'update-time-entry',  entry: 'apps/api/src/lambda/tickets/update-time-entry.handler.ts' },
   { context: 'tickets', handler: 'delete-time-entry',  entry: 'apps/api/src/lambda/tickets/delete-time-entry.handler.ts' },
 
-  // time-entries (dedicated bounded context)
-  { context: 'time-entries', handler: 'list',   entry: 'apps/api/src/lambda/time-entries/list.handler.ts' },
-  { context: 'time-entries', handler: 'create', entry: 'apps/api/src/lambda/time-entries/create.handler.ts' },
-  { context: 'time-entries', handler: 'update', entry: 'apps/api/src/lambda/time-entries/update.handler.ts' },
-  { context: 'time-entries', handler: 'delete', entry: 'apps/api/src/lambda/time-entries/delete.handler.ts' },
-
   // attachments
   { context: 'attachments', handler: 'confirm-upload',    entry: 'apps/api/src/lambda/attachments/confirm-upload.handler.ts' },
   { context: 'attachments', handler: 'list',              entry: 'apps/api/src/lambda/attachments/list.handler.ts' },
@@ -94,12 +88,27 @@ const lambdas: LambdaEntry[] = [
   { context: 'accounting', handler: 'retry-invoice-sync',     entry: 'apps/api/src/lambda/accounting/retry-invoice-sync.handler.ts' },
   { context: 'accounting', handler: 'list-customer-syncs',    entry: 'apps/api/src/lambda/accounting/list-customer-syncs.handler.ts' },
   { context: 'accounting', handler: 'trigger-customer-sync',  entry: 'apps/api/src/lambda/accounting/trigger-customer-sync.handler.ts' },
+  { context: 'accounting', handler: 'list-reconciliation-runs',  entry: 'apps/api/src/lambda/accounting/list-reconciliation-runs.handler.ts' },
+  { context: 'accounting', handler: 'trigger-reconciliation',    entry: 'apps/api/src/lambda/accounting/trigger-reconciliation.handler.ts' },
+  { context: 'accounting', handler: 'get-reconciliation-run',    entry: 'apps/api/src/lambda/accounting/get-reconciliation-run.handler.ts' },
+  { context: 'accounting', handler: 'list-mismatches',           entry: 'apps/api/src/lambda/accounting/list-mismatches.handler.ts' },
+  { context: 'accounting', handler: 'resolve-reconciliation',    entry: 'apps/api/src/lambda/accounting/resolve-reconciliation.handler.ts' },
+  { context: 'accounting', handler: 'get-failure-summary',       entry: 'apps/api/src/lambda/accounting/get-failure-summary.handler.ts' },
+  { context: 'accounting', handler: 'retry-failed',              entry: 'apps/api/src/lambda/accounting/retry-failed.handler.ts' },
+
+  // workers
+  { context: 'workers', handler: 'payment-sync',      entry: 'apps/workers/src/payment-sync.handler.ts' },
+  { context: 'workers', handler: 'reconciliation',    entry: 'apps/workers/src/reconciliation.handler.ts' },
 
   // migration
   { context: 'migration', handler: 'cancel-batch',    entry: 'apps/api/src/lambda/migration/cancel-batch.handler.ts' },
   { context: 'migration', handler: 'get-batch',        entry: 'apps/api/src/lambda/migration/get-batch.handler.ts' },
   { context: 'migration', handler: 'list-batches',    entry: 'apps/api/src/lambda/migration/list-batches.handler.ts' },
   { context: 'migration', handler: 'trigger-batch',    entry: 'apps/api/src/lambda/migration/trigger-batch.handler.ts' },
+
+  // scheduling (planner board)
+  { context: 'scheduling', handler: 'list-slots',            entry: 'apps/api/src/lambda/scheduling/list-slots.handler.ts' },
+  { context: 'scheduling', handler: 'list-labor-capacity',   entry: 'apps/api/src/lambda/scheduling/list-labor-capacity.handler.ts' },
 ];
 
 // Tracks which context dirs have already had the Prisma engine copied.

@@ -1,1 +1,1 @@
-export { mapWorkOrderStatus, mapEmployeeRole } from './status.map.js';
+export { mapWorkOrderStatus, mapWoStatus, mapEmployeeRole } from './status.map.js';

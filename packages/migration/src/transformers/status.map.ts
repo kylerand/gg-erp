@@ -1,4 +1,4 @@
-// ShopMonkey work order status → ERP WorkOrderStatus
+// ShopMonkey work order status → ERP WorkOrderStatus (planning schema)
 const STATUS_MAP: Record<string, string> = {
   'Open': 'PLANNED',
   'Estimate': 'PLANNED',
@@ -14,6 +14,24 @@ const STATUS_MAP: Record<string, string> = {
 
 export function mapWorkOrderStatus(shopMonkeyStatus: string): string {
   return STATUS_MAP[shopMonkeyStatus] ?? 'PLANNED';
+}
+
+// ShopMonkey work order status → ERP WoStatus (work_orders schema)
+const WO_STATUS_MAP: Record<string, string> = {
+  'Open': 'READY',
+  'Estimate': 'DRAFT',
+  'In Progress': 'IN_PROGRESS',
+  'Pending Parts': 'BLOCKED',
+  'Pending Customer': 'BLOCKED',
+  'Complete': 'COMPLETED',
+  'Invoiced': 'COMPLETED',
+  'Paid': 'COMPLETED',
+  'Cancelled': 'CANCELLED',
+  'Void': 'CANCELLED',
+};
+
+export function mapWoStatus(shopMonkeyStatus: string): string {
+  return WO_STATUS_MAP[shopMonkeyStatus] ?? 'DRAFT';
 }
 
 // ShopMonkey employee role → ERP role

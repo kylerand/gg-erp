@@ -17,6 +17,10 @@ import { join, resolve } from 'path';
 import { existsSync } from 'fs';
 import { validateCsvContract } from '../packages/migration/src/validation/index.js';
 import { parseCustomersCsv, parseAssetsCsv, parseEmployeesCsv, parseWorkOrdersCsv } from '../packages/migration/src/parsers/index.js';
+import { runWaveA } from '../packages/migration/src/loaders/wave-a.loader.js';
+import { runWaveB } from '../packages/migration/src/loaders/wave-b.loader.js';
+import { runWaveD } from '../packages/migration/src/loaders/wave-d.loader.js';
+import { runWaveE } from '../packages/migration/src/loaders/wave-e.loader.js';
 
 const CSV_CONTRACTS: Record<string, string[]> = {
   'customers.csv':             ['id', 'firstName', 'lastName'],
@@ -149,12 +153,65 @@ Examples:
       if (!dir) { console.error('Usage: import <directory>'); process.exit(1); }
       const wave = getArg(args, '--wave');
       const dryRun = args.includes('--dry-run');
-      if (dryRun) {
-        await cmdDryRun(dir);
-      } else {
-        console.log(`Import requires DATABASE_URL. Set it and use the loader API directly.`);
-        console.log(`Wave: ${wave ?? 'ALL (B, D, E)'}`);
-        console.log(`\nSee packages/migration/src/loaders/ for programmatic usage.`);
+
+      const dbUrl = process.env.DATABASE_URL ?? process.env.DB_DATABASE_URL;
+      if (!dbUrl) {
+        console.error('DATABASE_URL or DB_DATABASE_URL env var is required for import.');
+        process.exit(1);
+      }
+
+      const { PrismaClient } = await import('@prisma/client');
+      const prisma = new PrismaClient({ datasourceUrl: dbUrl });
+
+      try {
+        const absDir = resolve(dir);
+        const exportJsonFiles = (await import('fs')).readdirSync(resolve('.')).filter(
+          (f: string) => f.startsWith('shopmonkey-export') && f.endsWith('.json'),
+        );
+        const exportJsonPath = exportJsonFiles[0] ? resolve('.', exportJsonFiles[0]) : undefined;
+
+        const wavesToRun = wave ? [wave.toUpperCase()] : ['A', 'B', 'D', 'E'];
+        console.log(`\nRunning waves: ${wavesToRun.join(', ')} ${dryRun ? '(DRY RUN)' : ''}\n`);
+
+        for (const w of wavesToRun) {
+          switch (w) {
+            case 'A': {
+              console.log('Wave A — Seed (location, integration account, system user)...');
+              const result = await runWaveA(prisma, dryRun);
+              console.log(`  inserted: ${result.inserted}, skipped: ${result.skipped}, errors: ${result.errors}`);
+              break;
+            }
+            case 'B': {
+              if (!exportJsonPath) { console.log('  ⚠️  No shopmonkey-export JSON found, skipping Wave B'); break; }
+              console.log('Wave B — Employees...');
+              const result = await runWaveB(prisma, exportJsonPath, dryRun);
+              console.log(`  inserted: ${result.inserted}, skipped: ${result.skipped}, errors: ${result.errors}`);
+              break;
+            }
+            case 'D': {
+              if (!exportJsonPath) { console.log('  ⚠️  No shopmonkey-export JSON found, skipping Wave D'); break; }
+              console.log('Wave D — Customers & Vehicles...');
+              const result = await runWaveD(prisma, exportJsonPath, undefined, dryRun);
+              console.log(`  customers — inserted: ${result.customers.inserted}, skipped: ${result.customers.skipped}, errors: ${result.customers.errors}`);
+              console.log(`  vehicles  — inserted: ${result.vehicles.inserted}, skipped: ${result.vehicles.skipped}, errors: ${result.vehicles.errors}`);
+              break;
+            }
+            case 'E': {
+              const woPath = join(absDir, 'work_orders.csv');
+              if (!existsSync(woPath)) { console.log('  ⚠️  work_orders.csv not found, skipping Wave E'); break; }
+              console.log('Wave E — Work Orders...');
+              const result = await runWaveE(prisma, woPath, dryRun);
+              console.log(`  inserted: ${result.inserted}, skipped: ${result.skipped}, errors: ${result.errors}`);
+              break;
+            }
+            default:
+              console.log(`  Unknown wave: ${w}`);
+          }
+        }
+
+        console.log('\n✅ Import complete.\n');
+      } finally {
+        await prisma.$disconnect();
       }
       break;
     }

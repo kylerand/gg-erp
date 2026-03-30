@@ -3,22 +3,22 @@ import { after, test } from 'node:test';
 import {
   createTimeEntryHandler,
   deleteTimeEntryHandler,
-  disconnectTimeEntryDependencies,
+  disconnectTicketHandlerDependencies,
   listTimeEntriesHandler,
-  setTimeEntryServiceForTests,
+  setTicketHandlerTimeEntryServiceForTests,
   updateTimeEntryHandler,
-} from '../lambda/time-entries/handlers.js';
+} from '../lambda/tickets/handlers.js';
 
 after(async () => {
-  setTimeEntryServiceForTests(undefined);
-  await disconnectTimeEntryDependencies();
+  setTicketHandlerTimeEntryServiceForTests(undefined);
+  await disconnectTicketHandlerDependencies();
 });
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 
 test('listTimeEntriesHandler returns entries from the service', async () => {
-  setTimeEntryServiceForTests({
-    async listTimeEntries() {
+  setTicketHandlerTimeEntryServiceForTests({
+    async listEntries() {
       return [
         {
           id: 'entry-1',
@@ -36,13 +36,13 @@ test('listTimeEntriesHandler returns entries from the service', async () => {
         },
       ];
     },
-    async createTimeEntry() {
+    async createEntry() {
       throw new Error('should not be called');
     },
-    async updateTimeEntry() {
+    async updateEntry() {
       throw new Error('should not be called');
     },
-    async deleteTimeEntry() {
+    async deleteEntry() {
       throw new Error('should not be called');
     },
   });
@@ -50,7 +50,7 @@ test('listTimeEntriesHandler returns entries from the service', async () => {
   try {
     const response = await listTimeEntriesHandler({
       httpMethod: 'GET',
-      queryStringParameters: { workOrderId: 'wo-1', userId: 'user-1' },
+      queryStringParameters: { workOrderId: 'wo-1', technicianId: 'user-1' },
     });
 
     assert.equal(response.statusCode, 200);
@@ -58,31 +58,37 @@ test('listTimeEntriesHandler returns entries from the service', async () => {
       entries: Array<{
         id: string;
         workOrderId: string;
-        userId: string;
-        startTime: string;
-        endTime: string;
-        notes: string;
+        technicianId: string;
         computedHours: number;
       }>;
     };
 
     assert.equal(payload.entries.length, 1);
     assert.equal(payload.entries[0].id, 'entry-1');
-    assert.equal(payload.entries[0].userId, 'user-1');
-    assert.equal(payload.entries[0].startTime, '2026-03-20T08:00:00.000Z');
-    assert.equal(payload.entries[0].endTime, '2026-03-20T10:00:00.000Z');
-    assert.equal(payload.entries[0].notes, 'Morning shift');
+    assert.equal(payload.entries[0].technicianId, 'user-1');
     assert.equal(payload.entries[0].computedHours, 2);
   } finally {
-    setTimeEntryServiceForTests(undefined);
+    setTicketHandlerTimeEntryServiceForTests(undefined);
   }
+});
+
+test('listTimeEntriesHandler returns 400 when workOrderId is missing', async () => {
+  const response = await listTimeEntriesHandler({
+    httpMethod: 'GET',
+    queryStringParameters: {},
+  });
+  assert.equal(response.statusCode, 400);
+  assert.equal(
+    (JSON.parse(response.body) as { message: string }).message,
+    'workOrderId is required.',
+  );
 });
 
 // ─── Create ───────────────────────────────────────────────────────────────────
 
 test('createTimeEntryHandler returns 422 when required fields are missing', async () => {
   const missingWorkOrder = await createTimeEntryHandler({
-    body: JSON.stringify({ userId: 'user-1', startTime: '2026-03-20T12:00:00.000Z' }),
+    body: JSON.stringify({ technicianId: 'tech-1', startedAt: '2026-03-20T12:00:00.000Z' }),
   });
   assert.equal(missingWorkOrder.statusCode, 422);
   assert.equal(
@@ -90,22 +96,22 @@ test('createTimeEntryHandler returns 422 when required fields are missing', asyn
     'workOrderId is required.',
   );
 
-  const missingUser = await createTimeEntryHandler({
-    body: JSON.stringify({ workOrderId: 'wo-1', startTime: '2026-03-20T12:00:00.000Z' }),
+  const missingTechnician = await createTimeEntryHandler({
+    body: JSON.stringify({ workOrderId: 'wo-1', startedAt: '2026-03-20T12:00:00.000Z' }),
   });
-  assert.equal(missingUser.statusCode, 422);
+  assert.equal(missingTechnician.statusCode, 422);
   assert.equal(
-    (JSON.parse(missingUser.body) as { message: string }).message,
-    'userId is required.',
+    (JSON.parse(missingTechnician.body) as { message: string }).message,
+    'technicianId is required.',
   );
 
-  const missingStartTime = await createTimeEntryHandler({
-    body: JSON.stringify({ workOrderId: 'wo-1', userId: 'user-1' }),
+  const missingStartedAt = await createTimeEntryHandler({
+    body: JSON.stringify({ workOrderId: 'wo-1', technicianId: 'tech-1' }),
   });
-  assert.equal(missingStartTime.statusCode, 422);
+  assert.equal(missingStartedAt.statusCode, 422);
   assert.equal(
-    (JSON.parse(missingStartTime.body) as { message: string }).message,
-    'startTime is required.',
+    (JSON.parse(missingStartedAt.body) as { message: string }).message,
+    'startedAt is required.',
   );
 });
 
@@ -121,31 +127,31 @@ test('createTimeEntryHandler returns 400 for invalid JSON', async () => {
 test('createTimeEntryHandler returns 201 with mapped response', async () => {
   let capturedCorrelationId: string | undefined;
 
-  setTimeEntryServiceForTests({
-    async listTimeEntries() {
+  setTicketHandlerTimeEntryServiceForTests({
+    async listEntries() {
       return [];
     },
-    async createTimeEntry(input) {
+    async createEntry(input) {
       capturedCorrelationId = input.correlationId;
       return {
         id: 'entry-new',
         workOrderId: input.workOrderId,
-        technicianId: input.userId,
-        technicianTaskId: null,
-        startedAt: new Date(input.startTime),
+        technicianId: input.technicianId,
+        technicianTaskId: input.technicianTaskId ?? null,
+        startedAt: new Date(input.startedAt),
         endedAt: null,
         manualHours: null,
-        description: input.notes ?? null,
-        source: 'MANUAL',
+        description: input.description ?? null,
+        source: input.source ?? 'MANUAL',
         createdAt: new Date('2026-03-20T12:00:00.000Z'),
         updatedAt: new Date('2026-03-20T12:00:00.000Z'),
         computedHours: 0,
       };
     },
-    async updateTimeEntry() {
+    async updateEntry() {
       throw new Error('should not be called');
     },
-    async deleteTimeEntry() {
+    async deleteEntry() {
       throw new Error('should not be called');
     },
   });
@@ -154,9 +160,9 @@ test('createTimeEntryHandler returns 201 with mapped response', async () => {
     const response = await createTimeEntryHandler({
       body: JSON.stringify({
         workOrderId: 'wo-1',
-        userId: 'user-1',
-        startTime: '2026-03-20T12:00:00.000Z',
-        notes: 'Started repair',
+        technicianId: 'tech-1',
+        startedAt: '2026-03-20T12:00:00.000Z',
+        description: 'Started repair',
       }),
       headers: { 'x-correlation-id': 'corr-te-create' },
     });
@@ -166,19 +172,18 @@ test('createTimeEntryHandler returns 201 with mapped response', async () => {
       entry: {
         id: string;
         workOrderId: string;
-        userId: string;
-        startTime: string;
-        notes: string;
+        technicianId: string;
+        description: string;
         computedHours: number;
       };
     };
     assert.equal(payload.entry.id, 'entry-new');
     assert.equal(payload.entry.workOrderId, 'wo-1');
-    assert.equal(payload.entry.userId, 'user-1');
-    assert.equal(payload.entry.notes, 'Started repair');
+    assert.equal(payload.entry.technicianId, 'tech-1');
+    assert.equal(payload.entry.description, 'Started repair');
     assert.equal(capturedCorrelationId, 'corr-te-create');
   } finally {
-    setTimeEntryServiceForTests(undefined);
+    setTicketHandlerTimeEntryServiceForTests(undefined);
   }
 });
 
@@ -186,7 +191,7 @@ test('createTimeEntryHandler returns 201 with mapped response', async () => {
 
 test('updateTimeEntryHandler returns 400 when ID is missing', async () => {
   const response = await updateTimeEntryHandler({
-    body: JSON.stringify({ notes: 'Updated' }),
+    body: JSON.stringify({ description: 'Updated' }),
     pathParameters: {},
   });
   assert.equal(response.statusCode, 400);
@@ -197,50 +202,61 @@ test('updateTimeEntryHandler returns 400 when ID is missing', async () => {
 });
 
 test('updateTimeEntryHandler returns 200 with updated entry', async () => {
-  setTimeEntryServiceForTests({
-    async listTimeEntries() {
+  setTicketHandlerTimeEntryServiceForTests({
+    async listEntries() {
       return [];
     },
-    async createTimeEntry() {
+    async createEntry() {
       throw new Error('should not be called');
     },
-    async updateTimeEntry(_id, _data) {
+    async updateEntry(_id, patch) {
       return {
         id: 'entry-1',
         workOrderId: 'wo-1',
         technicianId: 'user-1',
         technicianTaskId: null,
         startedAt: new Date('2026-03-20T08:00:00.000Z'),
-        endedAt: new Date('2026-03-20T14:00:00.000Z'),
-        manualHours: null,
-        description: 'Original note',
+        endedAt: patch.endedAt ? new Date(patch.endedAt) : null,
+        manualHours: patch.manualHours ?? null,
+        description: patch.description ?? 'Original note',
         source: 'MANUAL',
         createdAt: new Date('2026-03-20T08:00:00.000Z'),
         updatedAt: new Date('2026-03-20T14:00:00.000Z'),
         computedHours: 6,
       };
     },
-    async deleteTimeEntry() {
+    async deleteEntry() {
       throw new Error('should not be called');
     },
   });
 
   try {
     const response = await updateTimeEntryHandler({
-      body: JSON.stringify({ endTime: '2026-03-20T14:00:00.000Z' }),
+      body: JSON.stringify({ endedAt: '2026-03-20T14:00:00.000Z' }),
       pathParameters: { id: 'entry-1' },
     });
 
     assert.equal(response.statusCode, 200);
     const payload = JSON.parse(response.body) as {
-      entry: { id: string; endTime: string; computedHours: number };
+      entry: { id: string; computedHours: number };
     };
     assert.equal(payload.entry.id, 'entry-1');
-    assert.equal(payload.entry.endTime, '2026-03-20T14:00:00.000Z');
     assert.equal(payload.entry.computedHours, 6);
   } finally {
-    setTimeEntryServiceForTests(undefined);
+    setTicketHandlerTimeEntryServiceForTests(undefined);
   }
+});
+
+test('updateTimeEntryHandler returns 400 for invalid JSON body', async () => {
+  const response = await updateTimeEntryHandler({
+    pathParameters: { id: 'entry-1' },
+    body: '{bad-json',
+  });
+  assert.equal(response.statusCode, 400);
+  assert.equal(
+    (JSON.parse(response.body) as { message: string }).message,
+    'Request body must be valid JSON.',
+  );
 });
 
 // ─── Delete ───────────────────────────────────────────────────────────────────
@@ -257,17 +273,17 @@ test('deleteTimeEntryHandler returns 400 when ID is missing', async () => {
 test('deleteTimeEntryHandler returns 204 on success', async () => {
   let deletedId: string | undefined;
 
-  setTimeEntryServiceForTests({
-    async listTimeEntries() {
+  setTicketHandlerTimeEntryServiceForTests({
+    async listEntries() {
       return [];
     },
-    async createTimeEntry() {
+    async createEntry() {
       throw new Error('should not be called');
     },
-    async updateTimeEntry() {
+    async updateEntry() {
       throw new Error('should not be called');
     },
-    async deleteTimeEntry(id) {
+    async deleteEntry(id) {
       deletedId = id;
     },
   });
@@ -280,6 +296,6 @@ test('deleteTimeEntryHandler returns 204 on success', async () => {
     assert.equal(response.statusCode, 204);
     assert.equal(deletedId, 'entry-to-delete');
   } finally {
-    setTimeEntryServiceForTests(undefined);
+    setTicketHandlerTimeEntryServiceForTests(undefined);
   }
 });

@@ -22,6 +22,8 @@ import type { ObservabilityContext, ObservabilityHooks } from '../../observabili
 import { toWorkOrderCreatedEvent } from './workOrder.contracts.js';
 import type {
   ListWorkOrdersInput as ListWorkOrdersRepositoryInput,
+  ListBuildSlotsInput as ListBuildSlotsRepositoryInput,
+  ListLaborCapacityInput as ListLaborCapacityRepositoryInput,
   WorkOrderRepository,
 } from './workOrder.repository.js';
 
@@ -60,6 +62,24 @@ export interface CreateLaborCapacityInput {
 
 export interface ListWorkOrdersInput {
   state?: WorkOrderState;
+  limit?: number;
+  offset?: number;
+}
+
+export interface ListBuildSlotsInput {
+  startDate?: string;
+  endDate?: string;
+  state?: BuildSlotState;
+  workstationCode?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface ListLaborCapacityInput {
+  startDate?: string;
+  endDate?: string;
+  teamCode?: string;
+  state?: LaborCapacityState;
   limit?: number;
   offset?: number;
 }
@@ -307,6 +327,16 @@ export class WorkOrderService {
     return updated;
   }
 
+  async listBuildSlots(input: ListBuildSlotsInput = {}): Promise<BuildSlot[]> {
+    const query = normalizeBuildSlotsInput(input);
+    return this.deps.repository.listBuildSlots(query);
+  }
+
+  async listLaborCapacity(input: ListLaborCapacityInput = {}): Promise<LaborCapacity[]> {
+    const query = normalizeLaborCapacityInput(input);
+    return this.deps.repository.listLaborCapacity(query);
+  }
+
   private async requireWorkOrder(workOrderId: string): Promise<WorkOrder> {
     const workOrder = await this.deps.repository.findWorkOrderById(workOrderId);
     if (!workOrder) {
@@ -397,6 +427,60 @@ function normalizeListInput(input: ListWorkOrdersInput): ListWorkOrdersRepositor
   }
 
   return {
+    state: input.state,
+    limit: normalizedLimit,
+    offset: normalizedOffset,
+  };
+}
+
+function normalizeBuildSlotsInput(input: ListBuildSlotsInput): ListBuildSlotsRepositoryInput {
+  const normalizedLimit = input.limit ?? 50;
+  const normalizedOffset = input.offset ?? 0;
+
+  if (!Number.isInteger(normalizedLimit) || normalizedLimit <= 0) {
+    throw new InvariantViolationError('limit must be a positive integer');
+  }
+  if (!Number.isInteger(normalizedOffset) || normalizedOffset < 0) {
+    throw new InvariantViolationError('offset must be a non-negative integer');
+  }
+  if (input.startDate && Number.isNaN(Date.parse(input.startDate))) {
+    throw new InvariantViolationError('startDate must be a valid ISO-8601 date');
+  }
+  if (input.endDate && Number.isNaN(Date.parse(input.endDate))) {
+    throw new InvariantViolationError('endDate must be a valid ISO-8601 date');
+  }
+
+  return {
+    startDate: input.startDate,
+    endDate: input.endDate,
+    state: input.state,
+    workstationCode: input.workstationCode,
+    limit: normalizedLimit,
+    offset: normalizedOffset,
+  };
+}
+
+function normalizeLaborCapacityInput(input: ListLaborCapacityInput): ListLaborCapacityRepositoryInput {
+  const normalizedLimit = input.limit ?? 50;
+  const normalizedOffset = input.offset ?? 0;
+
+  if (!Number.isInteger(normalizedLimit) || normalizedLimit <= 0) {
+    throw new InvariantViolationError('limit must be a positive integer');
+  }
+  if (!Number.isInteger(normalizedOffset) || normalizedOffset < 0) {
+    throw new InvariantViolationError('offset must be a non-negative integer');
+  }
+  if (input.startDate && Number.isNaN(Date.parse(input.startDate))) {
+    throw new InvariantViolationError('startDate must be a valid ISO-8601 date');
+  }
+  if (input.endDate && Number.isNaN(Date.parse(input.endDate))) {
+    throw new InvariantViolationError('endDate must be a valid ISO-8601 date');
+  }
+
+  return {
+    startDate: input.startDate,
+    endDate: input.endDate,
+    teamCode: input.teamCode,
     state: input.state,
     limit: normalizedLimit,
     offset: normalizedOffset,

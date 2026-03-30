@@ -3,8 +3,31 @@ import assert from 'node:assert/strict';
 import { InMemoryAuditSink } from '../audit/recorder.js';
 import { type EventEnvelope, InMemoryEventPublisher, InMemoryOutbox } from '../events/index.js';
 import { ConsoleObservabilityHooks } from '../observability/index.js';
-import { InvoiceSyncService } from '../contexts/accounting/invoiceSync.service.js';
-import { InvoiceSyncState } from '../../../../packages/domain/src/model/accounting.js';
+import {
+  InvoiceSyncService,
+  type InvoiceSyncQueries,
+} from '../contexts/accounting/invoiceSync.service.js';
+import {
+  InvoiceSyncState,
+  type InvoiceSyncRecord,
+} from '../../../../packages/domain/src/model/accounting.js';
+
+function createMockInvoiceSyncQueries(): InvoiceSyncQueries {
+  const records = new Map<string, InvoiceSyncRecord>();
+  return {
+    async findById(id: string) {
+      const r = records.get(id);
+      return r ? { ...r } : undefined;
+    },
+    async findByInvoiceNumber(invoiceNumber: string) {
+      const r = [...records.values()].find((rec) => rec.invoiceNumber === invoiceNumber);
+      return r ? { ...r } : undefined;
+    },
+    async save(record: InvoiceSyncRecord, _correlationId: string) {
+      records.set(record.id, { ...record });
+    },
+  };
+}
 
 test('invoice sync enforces transition rules and supports retry from FAILED', async () => {
   const audit = new InMemoryAuditSink();
@@ -14,7 +37,8 @@ test('invoice sync enforces transition rules and supports retry from FAILED', as
     audit,
     publisher,
     outbox,
-    observability: ConsoleObservabilityHooks
+    observability: ConsoleObservabilityHooks,
+    queries: createMockInvoiceSyncQueries(),
   });
 
   const context = {
@@ -76,7 +100,8 @@ test('invoice sync marks outbox record as FAILED when publish throws', async () 
       }
     },
     outbox,
-    observability: ConsoleObservabilityHooks
+    observability: ConsoleObservabilityHooks,
+    queries: createMockInvoiceSyncQueries(),
   });
 
   await assert.rejects(

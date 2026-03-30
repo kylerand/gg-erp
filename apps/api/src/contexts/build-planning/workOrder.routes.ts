@@ -3,8 +3,10 @@ import type {
   CreateBuildSlotInput,
   CreateLaborCapacityInput,
   CreateWorkOrderInput,
+  ListBuildSlotsInput,
+  ListLaborCapacityInput,
   ListWorkOrdersInput,
-  WorkOrderService
+  WorkOrderService,
 } from './workOrder.service.js';
 
 export interface WorkOrderRoutes {
@@ -31,6 +33,7 @@ export interface WorkOrderRoutes {
     correlationId: string,
     actorId?: string
   ): ReturnType<WorkOrderService['allocateBuildSlotHours']>;
+  listBuildSlots(input?: ListBuildSlotsInput): ReturnType<WorkOrderService['listBuildSlots']>;
   createLaborCapacity(
     input: CreateLaborCapacityInput,
     correlationId: string,
@@ -42,6 +45,7 @@ export interface WorkOrderRoutes {
     correlationId: string,
     actorId?: string
   ): ReturnType<WorkOrderService['allocateLaborHours']>;
+  listLaborCapacity(input?: ListLaborCapacityInput): ReturnType<WorkOrderService['listLaborCapacity']>;
 }
 
 export function createWorkOrderRoutes(service: WorkOrderService): WorkOrderRoutes {
@@ -82,6 +86,12 @@ export function createWorkOrderRoutes(service: WorkOrderService): WorkOrderRoute
         actorId,
         module: 'build-planning'
       });
+    },
+    listBuildSlots(input = {}) {
+      return service.listBuildSlots(input);
+    },
+    listLaborCapacity(input = {}) {
+      return service.listLaborCapacity(input);
     }
   };
 }

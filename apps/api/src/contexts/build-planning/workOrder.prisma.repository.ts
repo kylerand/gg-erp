@@ -5,7 +5,7 @@ import {
   type LaborCapacity,
   type WorkOrder,
 } from '../../../../../packages/domain/src/model/buildPlanning.js';
-import type { ListWorkOrdersInput, WorkOrderRepository } from './workOrder.repository.js';
+import type { ListWorkOrdersInput, ListBuildSlotsInput, ListLaborCapacityInput, WorkOrderRepository } from './workOrder.repository.js';
 
 const domainStateByPrismaState: Record<WorkOrderStatus, WorkOrderState> = {
   PLANNED: WorkOrderState.PLANNED,
@@ -103,12 +103,46 @@ export class PrismaWorkOrderRepository implements WorkOrderRepository {
     return this.buildSlots.get(id);
   }
 
+  async listBuildSlots(input: ListBuildSlotsInput = {}): Promise<BuildSlot[]> {
+    const limit = input.limit ?? 50;
+    const offset = input.offset ?? 0;
+
+    const filtered = [...this.buildSlots.values()]
+      .filter((slot) => {
+        if (input.state && slot.state !== input.state) return false;
+        if (input.workstationCode && slot.workstationCode !== input.workstationCode) return false;
+        if (input.startDate && slot.slotDate < input.startDate) return false;
+        if (input.endDate && slot.slotDate > input.endDate) return false;
+        return true;
+      })
+      .sort((left, right) => left.slotDate.localeCompare(right.slotDate));
+
+    return filtered.slice(offset, offset + limit);
+  }
+
   async saveBuildSlot(slot: BuildSlot): Promise<void> {
     this.buildSlots.set(slot.id, slot);
   }
 
   async findLaborCapacityById(id: string): Promise<LaborCapacity | undefined> {
     return this.laborCapacity.get(id);
+  }
+
+  async listLaborCapacity(input: ListLaborCapacityInput = {}): Promise<LaborCapacity[]> {
+    const limit = input.limit ?? 50;
+    const offset = input.offset ?? 0;
+
+    const filtered = [...this.laborCapacity.values()]
+      .filter((cap) => {
+        if (input.state && cap.state !== input.state) return false;
+        if (input.teamCode && cap.teamCode !== input.teamCode) return false;
+        if (input.startDate && cap.capacityDate < input.startDate) return false;
+        if (input.endDate && cap.capacityDate > input.endDate) return false;
+        return true;
+      })
+      .sort((left, right) => left.capacityDate.localeCompare(right.capacityDate));
+
+    return filtered.slice(offset, offset + limit);
   }
 
   async saveLaborCapacity(capacity: LaborCapacity): Promise<void> {

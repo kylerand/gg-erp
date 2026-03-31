@@ -86,7 +86,7 @@ variable "qb_client_secret" {
 variable "qb_redirect_uri" {
   description = "QuickBooks OAuth redirect URI"
   type        = string
-  default     = ""
+  default     = "https://xvkc7v8hue.execute-api.us-east-2.amazonaws.com/accounting/oauth/callback"
 }
 
 # Frontend (Amplify Hosting)

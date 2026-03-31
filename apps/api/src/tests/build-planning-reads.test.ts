@@ -5,9 +5,6 @@ import { InMemoryEventPublisher, InMemoryOutbox } from '../events/index.js';
 import { ConsoleObservabilityHooks } from '../observability/index.js';
 import {
   BuildSlotState,
-  LaborCapacityState,
-  type BuildSlot,
-  type LaborCapacity,
 } from '../../../../packages/domain/src/model/buildPlanning.js';
 import {
   InMemoryWorkOrderRepository,

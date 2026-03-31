@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { InMemoryAuditSink } from '../audit/recorder.js';
-import { type EventEnvelope, InMemoryEventPublisher, InMemoryOutbox } from '../events/index.js';
+import { InMemoryEventPublisher, InMemoryOutbox } from '../events/index.js';
 import { ConsoleObservabilityHooks } from '../observability/index.js';
 import {
   InvoiceSyncService,

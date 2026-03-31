@@ -117,7 +117,6 @@ test('processOutbox — respects batch size limit', async () => {
   const bus = buildMockBus();
   const { prisma } = buildMockPrisma(rows);
 
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   const findManyMock = prisma!.eventOutbox.findMany as unknown as ReturnType<typeof mock.fn>;
 
   await processOutbox(bus, { prisma, batchSize: 3 });

@@ -92,6 +92,7 @@ module "api_gateway_lambda" {
   qb_client_id                = var.qb_client_id
   qb_client_secret            = var.qb_client_secret
   qb_redirect_uri             = var.qb_redirect_uri
+  qb_webhook_verifier_token   = var.qb_webhook_verifier_token
   frontend_url                = length(module.amplify_hosting) > 0 ? module.amplify_hosting[0].web_url : "https://localhost:3000"
   private_subnet_ids          = module.vpc.private_subnet_ids
   lambda_security_group_id    = module.vpc.lambda_security_group_id

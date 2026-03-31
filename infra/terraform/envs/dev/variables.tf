@@ -89,6 +89,13 @@ variable "qb_redirect_uri" {
   default     = "https://xvkc7v8hue.execute-api.us-east-2.amazonaws.com/accounting/oauth/callback"
 }
 
+variable "qb_webhook_verifier_token" {
+  description = "QuickBooks webhook verifier token for HMAC signature validation"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 # Frontend (Amplify Hosting)
 
 variable "repository_url" {

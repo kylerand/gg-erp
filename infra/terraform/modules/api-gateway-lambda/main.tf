@@ -115,6 +115,13 @@ variable "document_bucket_name" {
   default     = ""
 }
 
+variable "qb_webhook_verifier_token" {
+  description = "QuickBooks webhook verifier token for HMAC signature validation"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 resource "aws_iam_role" "work_orders_lambda" {
   name = "${var.name_prefix}-work-orders-lambda-role"
 
@@ -331,10 +338,11 @@ locals {
     DB_DATABASE_URL             = var.database_url
   }
   lambda_accounting_env = merge(local.lambda_common_env, {
-    QB_CLIENT_ID     = var.qb_client_id
-    QB_CLIENT_SECRET = var.qb_client_secret
-    QB_REDIRECT_URI  = var.qb_redirect_uri
-    FRONTEND_URL     = var.frontend_url
+    QB_CLIENT_ID               = var.qb_client_id
+    QB_CLIENT_SECRET           = var.qb_client_secret
+    QB_REDIRECT_URI            = var.qb_redirect_uri
+    QB_WEBHOOK_VERIFIER_TOKEN  = var.qb_webhook_verifier_token
+    FRONTEND_URL               = var.frontend_url
   })
 }
 
@@ -934,6 +942,28 @@ resource "aws_iam_role_policy" "erp_lambda_s3_documents" {
         Effect = "Allow"
         Action = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
         Resource = "arn:aws:s3:::${var.document_bucket_name}/*"
+      }
+    ]
+  })
+}
+
+# Secrets Manager access for QB token management
+resource "aws_iam_role_policy" "erp_lambda_secrets_manager" {
+  name = "${var.name_prefix}-erp-lambda-secrets-manager"
+  role = aws_iam_role.erp_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:PutSecretValue",
+          "secretsmanager:CreateSecret",
+          "secretsmanager:UpdateSecret"
+        ]
+        Resource = "arn:aws:secretsmanager:*:*:secret:/gg-erp/*/qb/*"
       }
     ]
   })

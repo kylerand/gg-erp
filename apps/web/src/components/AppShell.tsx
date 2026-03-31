@@ -15,12 +15,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // Client-side auth guard: redirect to /auth if not signed in
   useEffect(() => {
-    console.log('[AppShell] auth state:', { loading, hasUser: !!user, isAuthRoute, pathname });
     if (!loading && !user && !isAuthRoute) {
-      console.log('[AppShell] redirecting to /auth — no user');
       router.replace('/auth');
     }
-  }, [loading, user, isAuthRoute, router, pathname]);
+  }, [loading, user, isAuthRoute, router]);
 
   if (isAuthRoute) {
     return <>{children}</>;

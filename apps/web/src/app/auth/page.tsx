@@ -35,8 +35,7 @@ export default function AuthPage() {
     setLoading(true);
     setError(null);
     try {
-      const result = await doSignIn(email, password);
-      console.log('[auth page] signIn result:', JSON.stringify(result));
+      await doSignIn(email, password);
       // Hard navigate to force RoleProvider to re-initialize with new session
       window.location.href = '/';
     } catch (err) {

@@ -90,7 +90,7 @@ resource "aws_amplify_app" "web" {
                 - cd ../.. && npm ci
             build:
               commands:
-                - cd ../.. && npm run --workspace=apps/web build
+                - npx next build
           artifacts:
             baseDirectory: .next
             files:
@@ -146,7 +146,7 @@ resource "aws_amplify_app" "floor_tech" {
                 - cd ../.. && npm ci
             build:
               commands:
-                - cd ../.. && npm run --workspace=apps/floor-tech build
+                - npx next build
           artifacts:
             baseDirectory: .next
             files:

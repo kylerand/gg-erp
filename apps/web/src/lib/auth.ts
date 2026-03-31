@@ -1,4 +1,3 @@
-import { Amplify } from 'aws-amplify';
 import { signIn, signOut, getCurrentUser, fetchAuthSession } from 'aws-amplify/auth';
 
 export type UserRole = 'technician' | 'manager' | 'parts' | 'trainer' | 'accounting' | 'admin';
@@ -11,18 +10,6 @@ export interface AuthUser {
 }
 
 const isMockMode = process.env.NEXT_PUBLIC_AUTH_MODE === 'mock';
-
-if (!isMockMode && typeof window !== 'undefined') {
-  Amplify.configure({
-    Auth: {
-      Cognito: {
-        userPoolId: process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID ?? '',
-        userPoolClientId: process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID ?? '',
-        loginWith: { email: true },
-      },
-    },
-  });
-}
 
 function extractRole(groups: string[]): UserRole {
   if (groups.includes('admin')) return 'admin';

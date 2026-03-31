@@ -15,7 +15,7 @@ export interface ReconciliationWorkerEvent {
   triggeredBy?: string;
 }
 
-export interface ReconciliationWorkerResult {
+export interface ReconciliationWorkerResult extends Record<string, unknown> {
   runId: string;
   status: string;
   totalRecords: number;

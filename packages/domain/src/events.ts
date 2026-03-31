@@ -87,6 +87,9 @@ export const ERP_DOMAIN_EVENTS = [
   'file_attachment.uploaded',
   'file_attachment.available',
   'file_attachment.quarantined',
+  'reconciliation.completed',
+  'reconciliation.failed',
+  'reconciliation.record_resolved',
   'audit.event.recorded',
   'outbox.event.persisted'
 ] as const;

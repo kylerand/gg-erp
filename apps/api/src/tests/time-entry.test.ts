@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
+import { Prisma } from '@prisma/client';
 import {
   createTimeEntryHandler,
   deleteTimeEntryHandler,
@@ -209,7 +210,7 @@ test('updateTimeEntryHandler returns 200 with updated entry', async () => {
     async createEntry() {
       throw new Error('should not be called');
     },
-    async updateEntry(_id, patch) {
+    async updateEntry(_id, patch, _correlationId) {
       return {
         id: 'entry-1',
         workOrderId: 'wo-1',
@@ -217,7 +218,7 @@ test('updateTimeEntryHandler returns 200 with updated entry', async () => {
         technicianTaskId: null,
         startedAt: new Date('2026-03-20T08:00:00.000Z'),
         endedAt: patch.endedAt ? new Date(patch.endedAt) : null,
-        manualHours: patch.manualHours ?? null,
+        manualHours: patch.manualHours != null ? new Prisma.Decimal(patch.manualHours) : null,
         description: patch.description ?? 'Original note',
         source: 'MANUAL',
         createdAt: new Date('2026-03-20T08:00:00.000Z'),

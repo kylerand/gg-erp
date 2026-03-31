@@ -1,9 +1,16 @@
 {
   "extends": "./tsconfig.base.json",
   "include": [
-    "apps/**/*.ts",
-    "apps/**/*.tsx",
+    "apps/api/**/*.ts",
+    "apps/workers/**/*.ts",
     "packages/**/*.ts",
-    "packages/**/*.tsx"
+    "packages/**/*.tsx",
+    "scripts/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "apps/web",
+    "apps/floor-tech"
   ]
 }

@@ -7,7 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mock } from 'node:test';
-import type { LambdaEvent } from '../../shared/lambda/handler-wrapper.js';
+import type { LambdaEvent } from '../shared/lambda/handler-wrapper.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

@@ -225,9 +225,10 @@ async function main() {
 
     try {
       await prisma.stepProgress.upsert({
-        where: { moduleProgressId_stepId: { moduleProgressId: modProg.id, stepId: sp.step_id } },
+        where: { employeeId_moduleId_stepId: { employeeId: sp.trainee_id, moduleId, stepId: sp.step_id } },
         create: {
-          moduleProgressId: modProg.id,
+          employeeId: sp.trainee_id,
+          moduleId,
           stepId: sp.step_id,
           status: sp.status,
           videoWatched: sp.video_watched,
@@ -260,7 +261,8 @@ async function main() {
     try {
       await prisma.quizAttempt.create({
         data: {
-          moduleProgressId: modProg.id,
+          employeeId: qa.trainee_id,
+          moduleId,
           score: qa.score,
           totalQuestions: qa.total_questions,
           passed: qa.passed,
@@ -349,7 +351,7 @@ async function main() {
       await prisma.ojtAnswer.create({
         data: {
           questionId: newQuestionId,
-          employeeId: a.admin_id,
+          adminId: a.admin_id,
           answer: a.answer,
           createdAt: new Date(a.created_at),
         },

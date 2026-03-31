@@ -18,7 +18,7 @@ export interface PaymentSyncWorkerEvent {
   batchSize?: number;
 }
 
-export interface PaymentSyncWorkerResult {
+export interface PaymentSyncWorkerResult extends Record<string, unknown> {
   processed: number;
   succeeded: number;
   failed: number;

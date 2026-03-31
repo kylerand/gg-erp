@@ -11,7 +11,7 @@
  *   output-dir   → ./data
  */
 
-import { createWriteStream, readdirSync } from 'fs';
+import { createWriteStream, readdirSync, readFileSync } from 'fs';
 import { resolve, join } from 'path';
 import { mkdirSync } from 'fs';
 
@@ -167,8 +167,8 @@ async function main(): Promise<void> {
   mkdirSync(outputDir, { recursive: true });
 
   console.log(`\n📦 Loading: ${exportPath}`);
-  const raw = await import(resolve(exportPath), { assert: { type: 'json' } });
-  const data = raw.default ?? raw;
+  const raw = JSON.parse(readFileSync(resolve(exportPath), 'utf-8'));
+  const data = raw;
 
   console.log(`\n🔄 Extracting to: ${outputDir}\n`);
 

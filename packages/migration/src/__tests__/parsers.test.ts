@@ -38,15 +38,15 @@ describe('Customer CSV parser', () => {
     expect(records[0].email).toBe('jane@example.com');
   });
 
-  it('returns error for missing email', async () => {
+  it('accepts row with missing email (walk-in customer)', async () => {
     const path = writeTempCsv('customers-noemail.csv',
       'id,firstName,lastName,email\n' +
       'c1,Bob,Jones,\n'
     );
     const { errors, records } = await parseCustomersCsv(path);
-    expect(errors).toHaveLength(1);
-    expect(records).toHaveLength(0);
-    expect(errors[0].field).toBe('email');
+    expect(errors).toHaveLength(0);
+    expect(records).toHaveLength(1);
+    expect(records[0].email).toBe('');
   });
 
   it('throws on missing required columns', async () => {

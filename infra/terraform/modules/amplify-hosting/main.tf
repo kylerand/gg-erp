@@ -81,22 +81,24 @@ resource "aws_amplify_app" "web" {
 
   build_spec = <<-YAML
     version: 1
-    frontend:
-      phases:
-        preBuild:
-          commands:
-            - (cd ../.. && npm ci)
-        build:
-          commands:
-            - npx next build
-      artifacts:
-        baseDirectory: .next
-        files:
-          - '**/*'
-      cache:
-        paths:
-          - ../../node_modules/**/*
-          - .next/cache/**/*
+    applications:
+      - appRoot: apps/web
+        frontend:
+          phases:
+            preBuild:
+              commands:
+                - (cd ../.. && npm ci)
+            build:
+              commands:
+                - npx next build
+          artifacts:
+            baseDirectory: .next
+            files:
+              - '**/*'
+          cache:
+            paths:
+              - ../../node_modules/**/*
+              - .next/cache/**/*
   YAML
 
   platform = "WEB_COMPUTE"
@@ -135,22 +137,24 @@ resource "aws_amplify_app" "floor_tech" {
 
   build_spec = <<-YAML
     version: 1
-    frontend:
-      phases:
-        preBuild:
-          commands:
-            - (cd ../.. && npm ci)
-        build:
-          commands:
-            - npx next build
-      artifacts:
-        baseDirectory: .next
-        files:
-          - '**/*'
-      cache:
-        paths:
-          - ../../node_modules/**/*
-          - .next/cache/**/*
+    applications:
+      - appRoot: apps/floor-tech
+        frontend:
+          phases:
+            preBuild:
+              commands:
+                - (cd ../.. && npm ci)
+            build:
+              commands:
+                - npx next build
+          artifacts:
+            baseDirectory: .next
+            files:
+              - '**/*'
+          cache:
+            paths:
+              - ../../node_modules/**/*
+              - .next/cache/**/*
   YAML
 
   platform = "WEB_COMPUTE"

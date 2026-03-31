@@ -6,32 +6,33 @@ interface RoleContextValue {
   user: AuthUser | null;
   role: UserRole | null;
   loading: boolean;
+  refresh: () => Promise<void>;
 }
 
-const RoleContext = createContext<RoleContextValue>({ user: null, role: null, loading: true });
+const RoleContext = createContext<RoleContextValue>({ user: null, role: null, loading: true, refresh: async () => {} });
 
 export function RoleProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        // Lazy import to avoid SSR issues with aws-amplify
-        const { getAuthUser } = await import('./auth');
-        const u = await getAuthUser();
-        setUser(u);
-      } catch {
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
+  async function loadUser() {
+    try {
+      const { getAuthUser } = await import('./auth');
+      const u = await getAuthUser();
+      setUser(u);
+    } catch {
+      setUser(null);
+    } finally {
+      setLoading(false);
     }
-    void load();
+  }
+
+  useEffect(() => {
+    void loadUser();
   }, []);
 
   return (
-    <RoleContext.Provider value={{ user, role: user?.role ?? null, loading }}>
+    <RoleContext.Provider value={{ user, role: user?.role ?? null, loading, refresh: loadUser }}>
       {children}
     </RoleContext.Provider>
   );

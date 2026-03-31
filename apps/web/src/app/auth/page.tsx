@@ -36,7 +36,8 @@ export default function AuthPage() {
     setError(null);
     try {
       await doSignIn(email, password);
-      router.push('/');
+      // Hard navigate to force RoleProvider to re-initialize with new session
+      window.location.href = '/';
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Sign in failed';
       // If a stale session exists, clear it and retry
@@ -44,7 +45,7 @@ export default function AuthPage() {
         try {
           await doSignOut();
           await doSignIn(email, password);
-          router.push('/');
+          window.location.href = '/';
           return;
         } catch (retryErr) {
           setError(retryErr instanceof Error ? retryErr.message : 'Sign in failed');

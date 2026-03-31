@@ -42,10 +42,14 @@ export async function getAuthUser(): Promise<AuthUser | null> {
   }
   try {
     const user = await getCurrentUser();
+    console.log('[auth] getCurrentUser:', user.userId, user.signInDetails?.loginId);
     const session = await fetchAuthSession();
+    console.log('[auth] session tokens present:', !!session.tokens);
     const groups = (session.tokens?.idToken?.payload?.['cognito:groups'] as string[]) ?? [];
+    console.log('[auth] groups:', groups);
     return { userId: user.userId, email: user.signInDetails?.loginId ?? '', role: extractRole(groups) };
-  } catch {
+  } catch (err) {
+    console.warn('[auth] getCurrentUser failed:', err);
     return null;
   }
 }

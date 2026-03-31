@@ -19,8 +19,10 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     try {
       const { getAuthUser } = await import('./auth');
       const u = await getAuthUser();
+      console.log('[RoleProvider] getAuthUser result:', u);
       setUser(u);
-    } catch {
+    } catch (err) {
+      console.error('[RoleProvider] getAuthUser error:', err);
       setUser(null);
     } finally {
       setLoading(false);

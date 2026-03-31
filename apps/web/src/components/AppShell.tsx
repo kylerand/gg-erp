@@ -15,20 +15,23 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // Client-side auth guard: redirect to /auth if not signed in
   useEffect(() => {
+    console.log('[AppShell] auth state:', { loading, hasUser: !!user, isAuthRoute, pathname });
     if (!loading && !user && !isAuthRoute) {
+      console.log('[AppShell] redirecting to /auth — no user');
       router.replace('/auth');
     }
-  }, [loading, user, isAuthRoute, router]);
+  }, [loading, user, isAuthRoute, router, pathname]);
 
   if (isAuthRoute) {
     return <>{children}</>;
   }
 
-  // Show nothing while checking auth to avoid flash of content
+  // Show loading state while checking auth
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="h-8 w-8 border-4 border-[#E37125] border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#211F1E]">
+        <div className="h-10 w-10 border-4 border-[#E37125] border-t-transparent rounded-full animate-spin" />
+        <p className="mt-4 text-white/60 text-sm">Checking authentication…</p>
       </div>
     );
   }

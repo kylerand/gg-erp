@@ -1,12 +1,12 @@
 variable "github_org" {
   type        = string
-  default     = "golfin-garage"
+  default     = "kylerand"
   description = "GitHub organization name"
 }
 
 variable "github_repo" {
   type        = string
-  default     = "erp"
+  default     = "gg-erp"
   description = "GitHub repository name"
 }
 
@@ -32,7 +32,10 @@ resource "aws_iam_role" "github_actions" {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
         }
         StringLike = {
-          "token.actions.githubusercontent.com:sub" = "repo:${var.github_org}/${var.github_repo}:ref:refs/heads/main"
+          "token.actions.githubusercontent.com:sub" = [
+            "repo:${var.github_org}/${var.github_repo}:ref:refs/heads/main",
+            "repo:${var.github_org}/${var.github_repo}:environment:*"
+          ]
         }
       }
     }]
@@ -60,35 +63,46 @@ resource "aws_iam_role_policy" "github_actions_terraform" {
         ]
       },
       {
-        Sid    = "LambdaDeploy"
+        Sid    = "InfraManagement"
         Effect = "Allow"
         Action = [
-          "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration",
-          "lambda:GetFunction", "lambda:CreateFunction", "lambda:DeleteFunction",
-          "lambda:PublishVersion", "lambda:AddPermission"
+          "lambda:*",
+          "apigateway:*",
+          "cognito-idp:*",
+          "rds:*",
+          "ec2:*",
+          "events:*",
+          "states:*",
+          "amplify:*",
+          "logs:*",
+          "cloudwatch:*",
+          "xray:*",
+          "iam:GetRole", "iam:GetRolePolicy", "iam:CreateRole", "iam:DeleteRole",
+          "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy", "iam:PassRole", "iam:ListRolePolicies",
+          "iam:ListAttachedRolePolicies", "iam:TagRole", "iam:UntagRole",
+          "iam:GetPolicy", "iam:ListPolicyVersions",
+          "iam:CreateServiceLinkedRole"
         ]
-        Resource = "arn:aws:lambda:*:*:function:${var.name_prefix}-*"
+        Resource = "*"
       },
       {
         Sid    = "S3Artifacts"
         Effect = "Allow"
-        Action = ["s3:PutObject", "s3:GetObject", "s3:ListBucket"]
+        Action = ["s3:*"]
         Resource = [
-          "arn:aws:s3:::${var.name_prefix}-lambda-artifacts",
-          "arn:aws:s3:::${var.name_prefix}-lambda-artifacts/*"
+          "arn:aws:s3:::${var.name_prefix}-*",
+          "arn:aws:s3:::${var.name_prefix}-*/*"
         ]
       },
       {
-        Sid    = "SecretsRead"
+        Sid    = "SecretsAndSSM"
         Effect = "Allow"
-        Action = ["secretsmanager:GetSecretValue"]
-        Resource = "arn:aws:secretsmanager:*:*:secret:/${var.name_prefix}/*"
-      },
-      {
-        Sid    = "SSMRead"
-        Effect = "Allow"
-        Action = ["ssm:GetParameter", "ssm:GetParameters"]
-        Resource = "arn:aws:ssm:*:*:parameter/${var.name_prefix}/*"
+        Action = [
+          "secretsmanager:*",
+          "ssm:*"
+        ]
+        Resource = "*"
       }
     ]
   })

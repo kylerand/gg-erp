@@ -55,7 +55,7 @@ jobs:
   deploy:
     needs: pre_deploy_gates
     runs-on: ubuntu-latest
-    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
+    environment: dev
 
     permissions:
       id-token: write   # Required for OIDC authentication

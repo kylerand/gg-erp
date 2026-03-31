@@ -40,12 +40,35 @@ variable "aws_region" {
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
+# IAM Service Role for Amplify SSR (WEB_COMPUTE)
+# ──────────────────────────────────────────────────────────────────────────────
+
+resource "aws_iam_role" "amplify" {
+  name = "${var.name_prefix}-amplify-service-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "amplify.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "amplify_admin" {
+  role       = aws_iam_role.amplify.name
+  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess-Amplify"
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Web App (Employee Dashboard)
 # ──────────────────────────────────────────────────────────────────────────────
 
 resource "aws_amplify_app" "web" {
-  name       = "${var.name_prefix}-web"
-  repository = var.repository_url
+  name         = "${var.name_prefix}-web"
+  repository   = var.repository_url
+  iam_service_role_arn = aws_iam_role.amplify.arn
 
   dynamic "auto_branch_creation_config" {
     for_each = var.github_access_token != "" ? [1] : []
@@ -106,8 +129,9 @@ resource "aws_amplify_branch" "web_main" {
 # ──────────────────────────────────────────────────────────────────────────────
 
 resource "aws_amplify_app" "floor_tech" {
-  name       = "${var.name_prefix}-floor-tech"
-  repository = var.repository_url
+  name         = "${var.name_prefix}-floor-tech"
+  repository   = var.repository_url
+  iam_service_role_arn = aws_iam_role.amplify.arn
 
   access_token = var.github_access_token != "" ? var.github_access_token : null
 

@@ -133,15 +133,15 @@ jobs:
         env:
           TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-2' }}
           TF_VAR_name_prefix: ${{ steps.env.outputs.name_prefix }}
-          TF_VAR_work_orders_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/work-orders-lambda.zip"
-          TF_VAR_customers_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/customers-lambda.zip"
-          TF_VAR_inventory_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/inventory-lambda.zip"
-          TF_VAR_tickets_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/tickets-lambda.zip"
-          TF_VAR_attachments_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/attachments-lambda.zip"
-          TF_VAR_sop_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/sop-lambda.zip"
-          TF_VAR_accounting_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/accounting-lambda.zip"
-          TF_VAR_migration_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/migration-lambda.zip"
-          TF_VAR_identity_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/identity-lambda.zip"
+          TF_VAR_work_orders_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/work-orders-lambda.zip"
+          TF_VAR_customers_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/customers-lambda.zip"
+          TF_VAR_inventory_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/inventory-lambda.zip"
+          TF_VAR_tickets_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/tickets-lambda.zip"
+          TF_VAR_attachments_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/attachments-lambda.zip"
+          TF_VAR_sop_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/sop-lambda.zip"
+          TF_VAR_accounting_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/accounting-lambda.zip"
+          TF_VAR_migration_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/migration-lambda.zip"
+          TF_VAR_identity_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/identity-lambda.zip"
           TF_VAR_qb_client_id: ${{ secrets.QB_CLIENT_ID }}
           TF_VAR_qb_client_secret: ${{ secrets.QB_CLIENT_SECRET }}
           TF_VAR_qb_redirect_uri: ${{ vars.QB_REDIRECT_URI || '' }}
@@ -154,15 +154,15 @@ jobs:
         env:
           TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-2' }}
           TF_VAR_name_prefix: ${{ steps.env.outputs.name_prefix }}
-          TF_VAR_work_orders_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/work-orders-lambda.zip"
-          TF_VAR_customers_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/customers-lambda.zip"
-          TF_VAR_inventory_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/inventory-lambda.zip"
-          TF_VAR_tickets_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/tickets-lambda.zip"
-          TF_VAR_attachments_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/attachments-lambda.zip"
-          TF_VAR_sop_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/sop-lambda.zip"
-          TF_VAR_accounting_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/accounting-lambda.zip"
-          TF_VAR_migration_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/migration-lambda.zip"
-          TF_VAR_identity_lambda_zip_path: "s3://${{ steps.env.outputs.name_prefix }}-lambda-artifacts/lambdas/identity-lambda.zip"
+          TF_VAR_work_orders_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/work-orders-lambda.zip"
+          TF_VAR_customers_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/customers-lambda.zip"
+          TF_VAR_inventory_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/inventory-lambda.zip"
+          TF_VAR_tickets_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/tickets-lambda.zip"
+          TF_VAR_attachments_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/attachments-lambda.zip"
+          TF_VAR_sop_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/sop-lambda.zip"
+          TF_VAR_accounting_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/accounting-lambda.zip"
+          TF_VAR_migration_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/migration-lambda.zip"
+          TF_VAR_identity_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/identity-lambda.zip"
           TF_VAR_qb_client_id: ${{ secrets.QB_CLIENT_ID }}
           TF_VAR_qb_client_secret: ${{ secrets.QB_CLIENT_SECRET }}
           TF_VAR_qb_redirect_uri: ${{ vars.QB_REDIRECT_URI || '' }}

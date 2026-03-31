@@ -11,19 +11,12 @@ export function middleware(request: NextRequest) {
 
   const authMode = process.env.NEXT_PUBLIC_AUTH_MODE;
   if (authMode === 'mock') {
-    // In mock mode, auth is handled client-side (localStorage)
-    // Allow all requests through; individual pages can check role
     return NextResponse.next();
   }
 
-  // In real mode, check for Cognito session cookie
-  const hasSession = request.cookies.has('CognitoIdentityServiceProvider') ||
-    request.cookies.has('amplify-signin-with-hostedUI');
-
-  if (!hasSession) {
-    return NextResponse.redirect(new URL('/auth', request.url));
-  }
-
+  // Amplify v6 stores auth tokens in localStorage (client-side only).
+  // Server-side middleware cannot access them, so auth guards run
+  // client-side in AppShell. Let all requests through here.
   return NextResponse.next();
 }
 

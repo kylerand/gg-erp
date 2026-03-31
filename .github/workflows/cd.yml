@@ -129,18 +129,7 @@ jobs:
 
       - name: Terraform Plan
         working-directory: infra/terraform/envs/${{ steps.env.outputs.tf_env }}
-        id: plan
-        run: |
-          set +e
-          terraform plan -out=tfplan -detailed-exitcode
-          EXIT_CODE=$?
-          echo "exitcode=$EXIT_CODE" >> $GITHUB_OUTPUT
-          if [ $EXIT_CODE -eq 1 ]; then
-            echo "❌ Terraform plan failed"
-            exit 1
-          fi
-          # Exit 0 = no changes, Exit 2 = changes detected (both OK)
-          exit 0
+        run: terraform plan -out=tfplan
         env:
           TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-2' }}
           TF_VAR_name_prefix: ${{ steps.env.outputs.name_prefix }}
@@ -160,7 +149,6 @@ jobs:
           TF_VAR_repository_url: "https://github.com/${{ github.repository }}"
 
       - name: Terraform Apply
-        if: steps.plan.outputs.exitcode == '2'
         working-directory: infra/terraform/envs/${{ steps.env.outputs.tf_env }}
         run: terraform apply -auto-approve tfplan
         env:

@@ -50,6 +50,16 @@ export async function doSignOut() {
   await signOut();
 }
 
+export async function getAccessToken(): Promise<string | null> {
+  if (isMockMode) return 'mock-token';
+  try {
+    const session = await fetchAuthSession();
+    return session.tokens?.idToken?.toString() ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function setMockRole(role: UserRole) {
   localStorage.setItem('gg_erp_mock_role', role);
 }

@@ -1,6 +1,7 @@
 'use client';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { AuthUser, UserRole } from './auth';
+import { setAuthToken } from './api-client';
 
 interface RoleContextValue {
   user: AuthUser | null;
@@ -17,9 +18,13 @@ export function RoleProvider({ children }: { children: ReactNode }) {
 
   async function loadUser() {
     try {
-      const { getAuthUser } = await import('./auth');
+      const { getAuthUser, getAccessToken } = await import('./auth');
       const u = await getAuthUser();
       setUser(u);
+      if (u) {
+        const token = await getAccessToken();
+        setAuthToken(token);
+      }
     } catch {
       setUser(null);
     } finally {

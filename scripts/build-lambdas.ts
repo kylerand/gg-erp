@@ -26,6 +26,10 @@ interface LambdaEntry {
 const lambdas: LambdaEntry[] = [
   // identity
   { context: 'identity', handler: 'me',             entry: 'apps/api/src/lambda/identity/me.handler.ts' },
+  { context: 'identity', handler: 'admin-list-users',   entry: 'apps/api/src/lambda/identity/admin-list-users.entry.ts' },
+  { context: 'identity', handler: 'admin-create-user',  entry: 'apps/api/src/lambda/identity/admin-create-user.entry.ts' },
+  { context: 'identity', handler: 'admin-update-user',  entry: 'apps/api/src/lambda/identity/admin-update-user.entry.ts' },
+  { context: 'identity', handler: 'admin-delete-user',  entry: 'apps/api/src/lambda/identity/admin-delete-user.entry.ts' },
 
   // work-orders
   { context: 'work-orders', handler: 'create',     entry: 'apps/api/src/lambda/work-orders/create.handler.ts' },

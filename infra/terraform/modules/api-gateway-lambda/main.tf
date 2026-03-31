@@ -96,6 +96,18 @@ variable "cognito_user_pool_endpoint" {
   default     = ""
 }
 
+variable "cognito_user_pool_id" {
+  description = "Cognito user pool ID for admin operations"
+  type        = string
+  default     = ""
+}
+
+variable "cognito_user_pool_arn" {
+  description = "Cognito user pool ARN for IAM policies"
+  type        = string
+  default     = ""
+}
+
 variable "cognito_audience" {
   description = "Cognito app client ID(s) to validate in the JWT audience claim"
   type        = list(string)
@@ -343,6 +355,9 @@ locals {
     QB_REDIRECT_URI            = var.qb_redirect_uri
     QB_WEBHOOK_VERIFIER_TOKEN  = var.qb_webhook_verifier_token
     FRONTEND_URL               = var.frontend_url
+  })
+  lambda_admin_env = merge(local.lambda_common_env, {
+    COGNITO_USER_POOL_ID = var.cognito_user_pool_id
   })
 }
 
@@ -624,6 +639,148 @@ resource "aws_apigatewayv2_route" "identity_me" {
   route_key = "GET /auth/me"
   target    = "integrations/${aws_apigatewayv2_integration.identity_me.id}"
   authorizer_id = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+# ─── Admin User Management Lambda Functions ────────────────────────────────────
+
+resource "aws_lambda_function" "admin_list_users" {
+  function_name = "${var.name_prefix}-admin-list-users"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "admin-list-users.handler"
+  filename      = var.identity_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_admin_env }
+}
+
+resource "aws_lambda_function" "admin_create_user" {
+  function_name = "${var.name_prefix}-admin-create-user"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "admin-create-user.handler"
+  filename      = var.identity_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_admin_env }
+}
+
+resource "aws_lambda_function" "admin_update_user" {
+  function_name = "${var.name_prefix}-admin-update-user"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "admin-update-user.handler"
+  filename      = var.identity_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_admin_env }
+}
+
+resource "aws_lambda_function" "admin_delete_user" {
+  function_name = "${var.name_prefix}-admin-delete-user"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "admin-delete-user.handler"
+  filename      = var.identity_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_admin_env }
+}
+
+# ─── API GW — Admin User Management Permissions ───────────────────────────────
+
+resource "aws_lambda_permission" "admin_list_users" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.admin_list_users.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "admin_create_user" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.admin_create_user.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "admin_update_user" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.admin_update_user.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "admin_delete_user" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.admin_delete_user.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+# ─── API GW Integrations + Routes — Admin User Management ─────────────────────
+
+resource "aws_apigatewayv2_integration" "admin_list_users" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.admin_list_users.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "admin_list_users" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /admin/users"
+  target    = "integrations/${aws_apigatewayv2_integration.admin_list_users.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "admin_create_user" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.admin_create_user.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "admin_create_user" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "POST /admin/users"
+  target    = "integrations/${aws_apigatewayv2_integration.admin_create_user.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "admin_update_user" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.admin_update_user.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "admin_update_user" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "PATCH /admin/users/{username}"
+  target    = "integrations/${aws_apigatewayv2_integration.admin_update_user.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "admin_delete_user" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.admin_delete_user.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "admin_delete_user" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "DELETE /admin/users/{username}"
+  target    = "integrations/${aws_apigatewayv2_integration.admin_delete_user.id}"
+  authorizer_id      = local.authorizer_id
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
@@ -964,6 +1121,37 @@ resource "aws_iam_role_policy" "erp_lambda_secrets_manager" {
           "secretsmanager:UpdateSecret"
         ]
         Resource = "arn:aws:secretsmanager:*:*:secret:/gg-erp/*/qb/*"
+      }
+    ]
+  })
+}
+
+# Cognito admin operations for user management
+resource "aws_iam_role_policy" "erp_lambda_cognito_admin" {
+  count = var.cognito_user_pool_arn != "" ? 1 : 0
+  name  = "${var.name_prefix}-erp-lambda-cognito-admin"
+  role  = aws_iam_role.erp_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "cognito-idp:ListUsers",
+          "cognito-idp:AdminCreateUser",
+          "cognito-idp:AdminGetUser",
+          "cognito-idp:AdminUpdateUserAttributes",
+          "cognito-idp:AdminEnableUser",
+          "cognito-idp:AdminDisableUser",
+          "cognito-idp:AdminDeleteUser",
+          "cognito-idp:AdminAddUserToGroup",
+          "cognito-idp:AdminRemoveUserFromGroup",
+          "cognito-idp:AdminListGroupsForUser",
+          "cognito-idp:AdminSetUserPassword",
+          "cognito-idp:ListGroups"
+        ]
+        Resource = var.cognito_user_pool_arn
       }
     ]
   })

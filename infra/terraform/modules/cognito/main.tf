@@ -45,3 +45,26 @@ resource "aws_cognito_user_pool_domain" "this" {
   domain       = local.domain_prefix
   user_pool_id = aws_cognito_user_pool.this.id
 }
+
+# ─── User Pool Groups (one per APP_ROLE) ─────────────────────────────────────
+
+locals {
+  cognito_groups = {
+    admin              = "Full platform access and user management"
+    shop_manager       = "Broad operational access, dispatch, reporting"
+    technician         = "Work order execution and training"
+    parts_manager      = "Inventory and parts order management"
+    sales              = "Customer and sales quote management"
+    accounting         = "Accounting sync and reconciliation"
+    trainer_ojt_lead   = "Training assignments and SOP management"
+    read_only_executive = "Read-only cross-domain visibility"
+  }
+}
+
+resource "aws_cognito_user_pool_group" "roles" {
+  for_each = local.cognito_groups
+
+  name         = each.key
+  description  = each.value
+  user_pool_id = aws_cognito_user_pool.this.id
+}

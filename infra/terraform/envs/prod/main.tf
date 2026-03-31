@@ -86,6 +86,8 @@ module "api_gateway_lambda" {
   migration_lambda_zip_path   = var.migration_lambda_zip_path
   identity_lambda_zip_path    = var.identity_lambda_zip_path
   cognito_user_pool_endpoint  = module.cognito.issuer_url
+  cognito_user_pool_id        = module.cognito.user_pool_id
+  cognito_user_pool_arn       = module.cognito.user_pool_arn
   cognito_audience            = [module.cognito.app_client_ids["web"]]
   database_url                = module.aurora_postgres.database_url
   document_bucket_name        = module.s3.document_bucket_name

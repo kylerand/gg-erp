@@ -3,6 +3,11 @@ output "user_pool_id" {
   value       = aws_cognito_user_pool.this.id
 }
 
+output "user_pool_arn" {
+  description = "Cognito user pool ARN"
+  value       = aws_cognito_user_pool.this.arn
+}
+
 output "app_client_ids" {
   description = "Cognito app client IDs keyed by app_client_names entry"
   value = {

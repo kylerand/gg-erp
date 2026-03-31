@@ -136,8 +136,11 @@ resource "aws_amplify_app" "floor_tech" {
   platform = "WEB_COMPUTE"
 
   environment_variables = {
-    NEXT_PUBLIC_API_BASE_URL   = var.api_base_url
-    AMPLIFY_MONOREPO_APP_ROOT = "apps/floor-tech"
+    NEXT_PUBLIC_API_BASE_URL         = var.api_base_url
+    NEXT_PUBLIC_COGNITO_USER_POOL_ID = var.cognito_user_pool_id
+    NEXT_PUBLIC_COGNITO_CLIENT_ID    = var.cognito_client_id
+    NEXT_PUBLIC_AUTH_MODE            = "cognito"
+    AMPLIFY_MONOREPO_APP_ROOT        = "apps/floor-tech"
   }
 }
 

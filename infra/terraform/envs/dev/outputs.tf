@@ -12,10 +12,10 @@ output "event_bus_name" {
 
 output "web_url" {
   description = "Employee web dashboard URL"
-  value       = "https://main.placeholder.amplifyapp.com" # TODO: restore module.amplify_hosting.web_url
+  value       = length(module.amplify_hosting) > 0 ? module.amplify_hosting[0].web_url : "not deployed"
 }
 
 output "floor_tech_url" {
   description = "Floor tech mobile interface URL"
-  value       = "https://main.placeholder.amplifyapp.com" # TODO: restore module.amplify_hosting.floor_tech_url
+  value       = length(module.amplify_hosting) > 0 ? module.amplify_hosting[0].floor_tech_url : "not deployed"
 }

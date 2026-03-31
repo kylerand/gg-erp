@@ -92,21 +92,20 @@ module "api_gateway_lambda" {
   qb_client_id                = var.qb_client_id
   qb_client_secret            = var.qb_client_secret
   qb_redirect_uri             = var.qb_redirect_uri
-  frontend_url                = "https://main.placeholder.amplifyapp.com" # TODO: restore module.amplify_hosting.web_url when github_access_token is set
+  frontend_url                = length(module.amplify_hosting) > 0 ? module.amplify_hosting[0].web_url : "https://localhost:3000"
   private_subnet_ids          = module.vpc.private_subnet_ids
   lambda_security_group_id    = module.vpc.lambda_security_group_id
 }
 
-# Amplify hosting is disabled until a GitHub personal access token is provided.
-# Uncomment and set var.github_access_token to deploy frontend apps.
-# module "amplify_hosting" {
-#   source               = "../../modules/amplify-hosting"
-#   name_prefix          = var.name_prefix
-#   repository_url       = var.repository_url
-#   github_access_token  = var.github_access_token
-#   branch               = "main"
-#   api_base_url         = module.api_gateway_lambda.api_base_url
-#   cognito_user_pool_id = module.cognito.user_pool_id
-#   cognito_client_id    = module.cognito.app_client_ids["web"]
-#   aws_region           = var.aws_region
-# }
+module "amplify_hosting" {
+  count                = var.github_access_token != "" ? 1 : 0
+  source               = "../../modules/amplify-hosting"
+  name_prefix          = var.name_prefix
+  repository_url       = var.repository_url
+  github_access_token  = var.github_access_token
+  branch               = "main"
+  api_base_url         = module.api_gateway_lambda.api_base_url
+  cognito_user_pool_id = module.cognito.user_pool_id
+  cognito_client_id    = module.cognito.app_client_ids["web"]
+  aws_region           = var.aws_region
+}

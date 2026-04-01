@@ -72,15 +72,6 @@ export function wrapHandler(handler: RouteHandler, options: WrapOptions = {}): (
     const actorUserId = resolveActorUserId(event);
     const actorRoles = resolveActorRoles(event);
 
-    // Debug: log authorizer context for troubleshooting
-    console.log(JSON.stringify({
-      level: 'debug',
-      correlationId,
-      authorizer: event.requestContext?.authorizer,
-      actorUserId,
-      actorRoles,
-    }));
-
     if (options.requireAuth && !actorUserId) {
       return jsonResponse(401, { message: 'Authentication required.', correlationId });
     }

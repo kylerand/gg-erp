@@ -61,7 +61,7 @@ locals {
   }
 }
 
-resource "aws_cognito_user_pool_group" "roles" {
+resource "aws_cognito_user_group" "roles" {
   for_each = local.cognito_groups
 
   name         = each.key

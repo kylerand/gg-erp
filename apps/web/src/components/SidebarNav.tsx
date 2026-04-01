@@ -12,6 +12,7 @@ import {
   BarChart3,
   Settings2,
   LogOut,
+  MessageCircle,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -83,6 +84,15 @@ const NAV_SECTIONS: NavSection[] = [
     children: [
       { label: 'Sync Monitor', href: '/accounting/sync' },
       { label: 'Reconciliation', href: '/accounting/reconciliation' },
+    ],
+  },
+  {
+    label: 'Messages',
+    href: '/messages',
+    icon: MessageCircle,
+    children: [
+      { label: 'Team Channels', href: '/messages?type=TEAM' },
+      { label: 'Customer Threads', href: '/messages?type=CUSTOMER' },
     ],
   },
   {

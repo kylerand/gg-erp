@@ -64,6 +64,12 @@ variable "identity_lambda_zip_path" {
   default     = "apps/api/dist/identity-lambda.zip"
 }
 
+variable "communication_lambda_zip_path" {
+  description = "Path to the zipped communication Lambda artifact."
+  type        = string
+  default     = "apps/api/dist/communication-lambda.zip"
+}
+
 variable "qb_client_id" {
   description = "QuickBooks app client ID for OAuth2"
   type        = string
@@ -1767,6 +1773,428 @@ resource "aws_iam_role_policy" "erp_lambda_s3_migration" {
   })
 }
 
+# ── Communication context ────────────────────────────────────────────────────
+
+resource "aws_lambda_function" "communication_list_channels" {
+  function_name = "${var.name_prefix}-communication-list-channels"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-channels.handler"
+  filename      = var.communication_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "communication_create_channel" {
+  function_name = "${var.name_prefix}-communication-create-channel"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "create-channel.handler"
+  filename      = var.communication_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "communication_list_messages" {
+  function_name = "${var.name_prefix}-communication-list-messages"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-messages.handler"
+  filename      = var.communication_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "communication_list_replies" {
+  function_name = "${var.name_prefix}-communication-list-replies"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-replies.handler"
+  filename      = var.communication_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "communication_send_message" {
+  function_name = "${var.name_prefix}-communication-send-message"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "send-message.handler"
+  filename      = var.communication_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "communication_edit_message" {
+  function_name = "${var.name_prefix}-communication-edit-message"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "edit-message.handler"
+  filename      = var.communication_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "communication_delete_message" {
+  function_name = "${var.name_prefix}-communication-delete-message"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "delete-message.handler"
+  filename      = var.communication_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "communication_add_reaction" {
+  function_name = "${var.name_prefix}-communication-add-reaction"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "add-reaction.handler"
+  filename      = var.communication_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "communication_remove_reaction" {
+  function_name = "${var.name_prefix}-communication-remove-reaction"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "remove-reaction.handler"
+  filename      = var.communication_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "communication_list_todos" {
+  function_name = "${var.name_prefix}-communication-list-todos"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-todos.handler"
+  filename      = var.communication_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "communication_create_todo" {
+  function_name = "${var.name_prefix}-communication-create-todo"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "create-todo.handler"
+  filename      = var.communication_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "communication_update_todo" {
+  function_name = "${var.name_prefix}-communication-update-todo"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "update-todo.handler"
+  filename      = var.communication_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "communication_list_notifications" {
+  function_name = "${var.name_prefix}-communication-list-notifications"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-notifications.handler"
+  filename      = var.communication_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "communication_mark_notifications_read" {
+  function_name = "${var.name_prefix}-communication-mark-notifications-read"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "mark-notifications-read.handler"
+  filename      = var.communication_lambda_zip_path
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "communication_list_channels" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.communication_list_channels.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "communication_list_channels" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /communication/channels"
+  target             = "integrations/${aws_apigatewayv2_integration.communication_list_channels.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "communication_create_channel" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.communication_create_channel.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "communication_create_channel" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /communication/channels"
+  target             = "integrations/${aws_apigatewayv2_integration.communication_create_channel.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "communication_list_messages" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.communication_list_messages.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "communication_list_messages" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /communication/channels/{channelId}/messages"
+  target             = "integrations/${aws_apigatewayv2_integration.communication_list_messages.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "communication_list_replies" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.communication_list_replies.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "communication_list_replies" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /communication/messages/{messageId}/replies"
+  target             = "integrations/${aws_apigatewayv2_integration.communication_list_replies.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "communication_send_message" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.communication_send_message.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "communication_send_message" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /communication/channels/{channelId}/messages"
+  target             = "integrations/${aws_apigatewayv2_integration.communication_send_message.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "communication_edit_message" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.communication_edit_message.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "communication_edit_message" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /communication/messages/{messageId}"
+  target             = "integrations/${aws_apigatewayv2_integration.communication_edit_message.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "communication_delete_message" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.communication_delete_message.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "communication_delete_message" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "DELETE /communication/messages/{messageId}"
+  target             = "integrations/${aws_apigatewayv2_integration.communication_delete_message.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "communication_add_reaction" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.communication_add_reaction.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "communication_add_reaction" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /communication/messages/{messageId}/reactions"
+  target             = "integrations/${aws_apigatewayv2_integration.communication_add_reaction.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "communication_remove_reaction" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.communication_remove_reaction.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "communication_remove_reaction" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "DELETE /communication/messages/{messageId}/reactions/{emoji}"
+  target             = "integrations/${aws_apigatewayv2_integration.communication_remove_reaction.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "communication_list_todos" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.communication_list_todos.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "communication_list_todos" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /communication/channels/{channelId}/todos"
+  target             = "integrations/${aws_apigatewayv2_integration.communication_list_todos.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "communication_create_todo" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.communication_create_todo.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "communication_create_todo" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /communication/channels/{channelId}/todos"
+  target             = "integrations/${aws_apigatewayv2_integration.communication_create_todo.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "communication_update_todo" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.communication_update_todo.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "communication_update_todo" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /communication/todos/{todoId}"
+  target             = "integrations/${aws_apigatewayv2_integration.communication_update_todo.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "communication_list_notifications" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.communication_list_notifications.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "communication_list_notifications" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /communication/notifications"
+  target             = "integrations/${aws_apigatewayv2_integration.communication_list_notifications.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "communication_mark_notifications_read" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.communication_mark_notifications_read.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "communication_mark_notifications_read" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /communication/notifications/read"
+  target             = "integrations/${aws_apigatewayv2_integration.communication_mark_notifications_read.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
 resource "aws_apigatewayv2_integration" "migration_trigger_batch" {
   api_id                 = aws_apigatewayv2_api.erp.id
   integration_type       = "AWS_PROXY"
@@ -1867,6 +2295,20 @@ locals {
     migration_list_batches       = aws_lambda_function.migration_list_batches
     migration_get_batch          = aws_lambda_function.migration_get_batch
     migration_cancel_batch       = aws_lambda_function.migration_cancel_batch
+    communication_list_channels          = aws_lambda_function.communication_list_channels
+    communication_create_channel         = aws_lambda_function.communication_create_channel
+    communication_list_messages          = aws_lambda_function.communication_list_messages
+    communication_list_replies           = aws_lambda_function.communication_list_replies
+    communication_send_message           = aws_lambda_function.communication_send_message
+    communication_edit_message           = aws_lambda_function.communication_edit_message
+    communication_delete_message         = aws_lambda_function.communication_delete_message
+    communication_add_reaction           = aws_lambda_function.communication_add_reaction
+    communication_remove_reaction        = aws_lambda_function.communication_remove_reaction
+    communication_list_todos             = aws_lambda_function.communication_list_todos
+    communication_create_todo            = aws_lambda_function.communication_create_todo
+    communication_update_todo            = aws_lambda_function.communication_update_todo
+    communication_list_notifications     = aws_lambda_function.communication_list_notifications
+    communication_mark_notifications_read = aws_lambda_function.communication_mark_notifications_read
   }
 }
 

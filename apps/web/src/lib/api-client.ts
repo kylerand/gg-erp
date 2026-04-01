@@ -804,3 +804,149 @@ export async function getInspectionTemplate(id: string): Promise<InspectionTempl
   const data = await apiFetch<{ template: InspectionTemplate }>(`/sop/inspection-templates/${id}`);
   return data.template;
 }
+
+// ─── Communication (Channels, Messages, Todos, Notifications) ────────────────
+
+export interface Channel {
+  id: string;
+  name: string;
+  type: 'TEAM' | 'WORK_ORDER' | 'CUSTOMER' | 'DIRECT';
+  description: string | null;
+  entityId: string | null;
+  memberCount: number;
+  messageCount: number;
+  todoCount: number;
+  unreadCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChannelMessage {
+  id: string;
+  channelId: string;
+  authorId: string;
+  content: string;
+  parentId: string | null;
+  replyCount?: number;
+  attachments: { id: string; fileAttachmentId: string }[];
+  reactions: { emoji: string; count: number; userIds: string[] }[];
+  editedAt?: string;
+  createdAt: string;
+}
+
+export interface ChannelTodo {
+  id: string;
+  channelId: string;
+  title: string;
+  status: 'OPEN' | 'DONE';
+  assigneeId: string | null;
+  dueDate: string | null;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface AppNotification {
+  id: string;
+  type: string;
+  referenceType: string | null;
+  referenceId: string | null;
+  title: string;
+  body: string | null;
+  read: boolean;
+  createdAt: string;
+}
+
+export async function listChannels(params?: { type?: string }): Promise<{ items: Channel[] }> {
+  const qs = new URLSearchParams();
+  if (params?.type) qs.set('type', params.type);
+  return apiFetch(`/communication/channels${qs.size ? `?${qs}` : ''}`, undefined, { items: [] });
+}
+
+export async function createChannel(input: {
+  name: string;
+  type: Channel['type'];
+  description?: string;
+  entityId?: string;
+  memberUserIds?: string[];
+}): Promise<Channel> {
+  return apiFetch('/communication/channels', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function listMessages(channelId: string, params?: { limit?: number; before?: string }): Promise<{ items: ChannelMessage[]; hasMore: boolean }> {
+  const qs = new URLSearchParams();
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.before) qs.set('before', params.before);
+  return apiFetch(`/communication/channels/${channelId}/messages${qs.size ? `?${qs}` : ''}`, undefined, { items: [], hasMore: false });
+}
+
+export async function listReplies(messageId: string): Promise<{ items: ChannelMessage[] }> {
+  return apiFetch(`/communication/messages/${messageId}/replies`, undefined, { items: [] });
+}
+
+export async function sendMessage(channelId: string, input: { content: string; parentId?: string }): Promise<ChannelMessage> {
+  return apiFetch(`/communication/channels/${channelId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function editMessage(messageId: string, content: string): Promise<{ id: string; content: string; editedAt: string }> {
+  return apiFetch(`/communication/messages/${messageId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ content }),
+  });
+}
+
+export async function deleteMessage(messageId: string): Promise<{ deleted: boolean }> {
+  return apiFetch(`/communication/messages/${messageId}`, { method: 'DELETE' });
+}
+
+export async function addReaction(messageId: string, emoji: string): Promise<void> {
+  await apiFetch(`/communication/messages/${messageId}/reactions`, {
+    method: 'POST',
+    body: JSON.stringify({ emoji }),
+  });
+}
+
+export async function removeReaction(messageId: string, emoji: string): Promise<void> {
+  await apiFetch(`/communication/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function listChannelTodos(channelId: string, params?: { status?: string }): Promise<{ items: ChannelTodo[] }> {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  return apiFetch(`/communication/channels/${channelId}/todos${qs.size ? `?${qs}` : ''}`, undefined, { items: [] });
+}
+
+export async function createChannelTodo(channelId: string, input: { title: string; assigneeId?: string; dueDate?: string }): Promise<ChannelTodo> {
+  return apiFetch(`/communication/channels/${channelId}/todos`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateChannelTodo(todoId: string, input: { title?: string; status?: 'OPEN' | 'DONE'; assigneeId?: string | null; dueDate?: string | null }): Promise<ChannelTodo> {
+  return apiFetch(`/communication/todos/${todoId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function listNotifications(params?: { limit?: number; unreadOnly?: boolean }): Promise<{ items: AppNotification[]; unreadCount: number }> {
+  const qs = new URLSearchParams();
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.unreadOnly) qs.set('unreadOnly', 'true');
+  return apiFetch(`/communication/notifications${qs.size ? `?${qs}` : ''}`, undefined, { items: [], unreadCount: 0 });
+}
+
+export async function markNotificationsRead(ids?: string[]): Promise<void> {
+  await apiFetch('/communication/notifications/read', {
+    method: 'PATCH',
+    body: JSON.stringify(ids ? { ids } : {}),
+  });
+}

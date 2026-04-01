@@ -111,6 +111,22 @@ const lambdas: LambdaEntry[] = [
   { context: 'migration', handler: 'trigger-batch',    entry: 'apps/api/src/lambda/migration/trigger-batch.handler.ts' },
   { context: 'migration', handler: 'run-migration',    entry: 'apps/api/src/lambda/migration/run-migration.entry.ts' },
 
+  // communication (messaging, channels, todos, notifications)
+  { context: 'communication', handler: 'list-channels',           entry: 'apps/api/src/lambda/communication/list-channels.handler.ts' },
+  { context: 'communication', handler: 'create-channel',          entry: 'apps/api/src/lambda/communication/create-channel.handler.ts' },
+  { context: 'communication', handler: 'list-messages',           entry: 'apps/api/src/lambda/communication/list-messages.handler.ts' },
+  { context: 'communication', handler: 'list-replies',            entry: 'apps/api/src/lambda/communication/list-replies.handler.ts' },
+  { context: 'communication', handler: 'send-message',            entry: 'apps/api/src/lambda/communication/send-message.handler.ts' },
+  { context: 'communication', handler: 'edit-message',            entry: 'apps/api/src/lambda/communication/edit-message.handler.ts' },
+  { context: 'communication', handler: 'delete-message',          entry: 'apps/api/src/lambda/communication/delete-message.handler.ts' },
+  { context: 'communication', handler: 'add-reaction',            entry: 'apps/api/src/lambda/communication/add-reaction.handler.ts' },
+  { context: 'communication', handler: 'remove-reaction',         entry: 'apps/api/src/lambda/communication/remove-reaction.handler.ts' },
+  { context: 'communication', handler: 'list-todos',              entry: 'apps/api/src/lambda/communication/list-todos.handler.ts' },
+  { context: 'communication', handler: 'create-todo',             entry: 'apps/api/src/lambda/communication/create-todo.handler.ts' },
+  { context: 'communication', handler: 'update-todo',             entry: 'apps/api/src/lambda/communication/update-todo.handler.ts' },
+  { context: 'communication', handler: 'list-notifications',      entry: 'apps/api/src/lambda/communication/list-notifications.handler.ts' },
+  { context: 'communication', handler: 'mark-notifications-read', entry: 'apps/api/src/lambda/communication/mark-notifications-read.handler.ts' },
+
   // scheduling (planner board)
   { context: 'scheduling', handler: 'list-slots',            entry: 'apps/api/src/lambda/scheduling/list-slots.handler.ts' },
   { context: 'scheduling', handler: 'list-labor-capacity',   entry: 'apps/api/src/lambda/scheduling/list-labor-capacity.handler.ts' },

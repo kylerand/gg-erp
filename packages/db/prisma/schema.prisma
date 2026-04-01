@@ -7,7 +7,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DB_DATABASE_URL")
-  schemas  = ["planning", "audit", "obs", "migration", "identity", "hr", "inventory", "work_orders", "integrations", "sop_ojt", "customers", "tickets", "accounting"]
+  schemas  = ["planning", "audit", "obs", "migration", "identity", "hr", "inventory", "work_orders", "integrations", "sop_ojt", "customers", "tickets", "accounting", "communication"]
 }
 
 enum WorkOrderStatus {
@@ -1710,4 +1710,152 @@ model WorkOrderQcGate {
   @@index([taskId], map: "qc_gates_task_idx")
   @@map("work_order_qc_gates")
   @@schema("work_orders")
+}
+
+// ---------------------------------------------------------------------------
+// Communication (messaging, channels, to-dos, notifications)
+// ---------------------------------------------------------------------------
+
+enum ChannelType {
+  TEAM
+  WORK_ORDER
+  CUSTOMER
+  DIRECT
+
+  @@schema("communication")
+}
+
+enum ChannelMemberRole {
+  OWNER
+  MEMBER
+
+  @@schema("communication")
+}
+
+enum ChannelTodoStatus {
+  OPEN
+  DONE
+
+  @@schema("communication")
+}
+
+model Channel {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  type        ChannelType
+  description String?
+  entityId    String?     @map("entity_id") @db.Uuid
+  createdBy   String      @map("created_by") @db.Uuid
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime    @default(now()) @map("updated_at") @db.Timestamptz(6)
+  archivedAt  DateTime?   @map("archived_at") @db.Timestamptz(6)
+
+  members  ChannelMember[]
+  messages Message[]
+  todos    ChannelTodo[]
+
+  @@index([type], map: "channels_type_idx")
+  @@index([entityId], map: "channels_entity_idx")
+  @@map("channels")
+  @@schema("communication")
+}
+
+model ChannelMember {
+  id         String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  channelId  String            @map("channel_id") @db.Uuid
+  userId     String            @map("user_id") @db.Uuid
+  role       ChannelMemberRole @default(MEMBER)
+  joinedAt   DateTime          @default(now()) @map("joined_at") @db.Timestamptz(6)
+  lastReadAt DateTime?         @map("last_read_at") @db.Timestamptz(6)
+
+  channel Channel @relation(fields: [channelId], references: [id])
+
+  @@unique([channelId, userId], map: "channel_members_unique")
+  @@index([userId], map: "channel_members_user_idx")
+  @@map("channel_members")
+  @@schema("communication")
+}
+
+model Message {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  channelId String    @map("channel_id") @db.Uuid
+  authorId  String    @map("author_id") @db.Uuid
+  content   String
+  parentId  String?   @map("parent_id") @db.Uuid
+  editedAt  DateTime? @map("edited_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  channel     Channel              @relation(fields: [channelId], references: [id])
+  parent      Message?             @relation("MessageThread", fields: [parentId], references: [id])
+  replies     Message[]            @relation("MessageThread")
+  attachments MessageAttachment[]
+  reactions   MessageReaction[]
+
+  @@index([channelId, createdAt], map: "messages_channel_created_idx")
+  @@index([parentId], map: "messages_parent_idx")
+  @@index([authorId], map: "messages_author_idx")
+  @@map("messages")
+  @@schema("communication")
+}
+
+model MessageAttachment {
+  id               String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  messageId        String @map("message_id") @db.Uuid
+  fileAttachmentId String @map("file_attachment_id") @db.Uuid
+
+  message Message @relation(fields: [messageId], references: [id])
+
+  @@index([messageId], map: "message_attachments_message_idx")
+  @@map("message_attachments")
+  @@schema("communication")
+}
+
+model MessageReaction {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  messageId String   @map("message_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  emoji     String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  message Message @relation(fields: [messageId], references: [id])
+
+  @@unique([messageId, userId, emoji], map: "message_reactions_unique")
+  @@map("message_reactions")
+  @@schema("communication")
+}
+
+model ChannelTodo {
+  id         String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  channelId  String            @map("channel_id") @db.Uuid
+  title      String
+  status     ChannelTodoStatus @default(OPEN)
+  assigneeId String?           @map("assignee_id") @db.Uuid
+  dueDate    DateTime?         @map("due_date") @db.Date
+  createdBy  String            @map("created_by") @db.Uuid
+  createdAt  DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime          @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  channel Channel @relation(fields: [channelId], references: [id])
+
+  @@index([channelId, status], map: "channel_todos_channel_status_idx")
+  @@map("channel_todos")
+  @@schema("communication")
+}
+
+model Notification {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  type          String
+  referenceType String    @map("reference_type")
+  referenceId   String    @map("reference_id") @db.Uuid
+  title         String
+  body          String?
+  readAt        DateTime? @map("read_at") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId, readAt], map: "notifications_user_read_idx")
+  @@index([userId, createdAt], map: "notifications_user_created_idx")
+  @@map("notifications")
+  @@schema("communication")
 }

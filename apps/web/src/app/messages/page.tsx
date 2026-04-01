@@ -44,6 +44,8 @@ import {
   Reply,
   ListTodo,
   X,
+  Paperclip,
+  FileIcon,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -58,6 +60,20 @@ const CHANNEL_TYPE_ICONS: Record<Channel['type'], typeof Hash> = {
 };
 
 const EMOJI_QUICK_PICKS = ['👍', '❤️', '😂', '🎉', '🔥', '👀', '✅', '🙏'];
+
+const FILE_ACCEPT = '.jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx';
+const MAX_FILES = 5;
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function isImageFile(file: File): boolean {
+  return file.type.startsWith('image/');
+}
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
@@ -98,6 +114,10 @@ export default function MessagesPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const composeRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // File attachments
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
   const selectedChannel = channels.find((c) => c.id === selectedChannelId) ?? null;
 
@@ -158,14 +178,47 @@ export default function MessagesPage() {
     return () => clearInterval(interval);
   }, [selectedChannelId, loadMessages]);
 
+  // ─── File Attachments ──────────────────────────────────────────────────────
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+
+    const totalAfterAdd = selectedFiles.length + files.length;
+    if (totalAfterAdd > MAX_FILES) {
+      toast.error(`You can attach up to ${MAX_FILES} files at a time`);
+      e.target.value = '';
+      return;
+    }
+
+    const oversized = files.filter((f) => f.size > MAX_FILE_SIZE_BYTES);
+    if (oversized.length > 0) {
+      toast.error(
+        `${oversized.map((f) => f.name).join(', ')} exceed${oversized.length === 1 ? 's' : ''} the 10 MB limit`,
+      );
+      e.target.value = '';
+      return;
+    }
+
+    setSelectedFiles((prev) => [...prev, ...files]);
+    e.target.value = '';
+  }
+
+  function removeFile(index: number) {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+  }
+
   // ─── Send Message ─────────────────────────────────────────────────────────
 
   async function handleSend() {
-    if (!composeText.trim() || !selectedChannelId) return;
+    if ((!composeText.trim() && selectedFiles.length === 0) || !selectedChannelId) return;
     const text = composeText;
+    const _filesToUpload = [...selectedFiles];
     setComposeText('');
+    setSelectedFiles([]);
     setSending(true);
     try {
+      // TODO: Upload files to S3 and attach to message
       const msg = await sendMessage(selectedChannelId, { content: text });
       setMessages((prev) => [...prev, { ...msg, replyCount: 0, reactions: [] }]);
       // Update channel's unread/message count
@@ -178,6 +231,7 @@ export default function MessagesPage() {
       );
     } catch (err) {
       setComposeText(text);
+      setSelectedFiles(_filesToUpload);
       toast.error(err instanceof Error ? err.message : 'Failed to send');
     } finally {
       setSending(false);
@@ -509,7 +563,62 @@ export default function MessagesPage() {
 
                   {/* Compose bar */}
                   <div className="border-t border-gray-200 px-4 py-3">
+                    {/* File preview strip */}
+                    {selectedFiles.length > 0 && (
+                      <div className="flex gap-2 mb-2 flex-wrap">
+                        {selectedFiles.map((file, idx) => (
+                          <div
+                            key={`${file.name}-${idx}`}
+                            className="relative group flex items-center gap-2 bg-gray-100 rounded-lg p-1.5 pr-3 border border-gray-200"
+                          >
+                            <button
+                              onClick={() => removeFile(idx)}
+                              className="absolute -top-1.5 -right-1.5 bg-gray-700 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                              aria-label={`Remove ${file.name}`}
+                            >
+                              <X size={12} />
+                            </button>
+                            {isImageFile(file) ? (
+                              /* eslint-disable-next-line @next/next/no-img-element */
+                              <img
+                                src={URL.createObjectURL(file)}
+                                alt={file.name}
+                                className="w-12 h-12 rounded object-cover"
+                              />
+                            ) : (
+                              <div className="w-12 h-12 rounded bg-gray-200 flex items-center justify-center">
+                                <FileIcon size={20} className="text-gray-500" />
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-gray-700 truncate max-w-[120px]">
+                                {file.name}
+                              </p>
+                              <p className="text-xs text-gray-400">{formatFileSize(file.size)}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      accept={FILE_ACCEPT}
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
                     <div className="flex gap-2 items-end">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="h-10 w-10 p-0 flex-shrink-0 text-gray-500 hover:text-gray-700"
+                        aria-label="Attach files"
+                      >
+                        <Paperclip size={18} />
+                      </Button>
                       <Textarea
                         ref={composeRef}
                         value={composeText}
@@ -526,7 +635,7 @@ export default function MessagesPage() {
                       />
                       <Button
                         onClick={() => void handleSend()}
-                        disabled={!composeText.trim() || sending}
+                        disabled={(!composeText.trim() && selectedFiles.length === 0) || sending}
                         className="bg-yellow-400 hover:bg-yellow-300 text-gray-900 h-10 w-10 p-0 flex-shrink-0"
                       >
                         <Send size={16} />
@@ -540,12 +649,19 @@ export default function MessagesPage() {
                   </div>
                 </div>
 
-                {/* Todos panel */}
-                {showTodos && (
-                  <div className="w-72 border-l border-gray-200 flex flex-col bg-gray-50">
+                {/* Todos panel — always rendered, animated via width transition */}
+                <div
+                  className="flex-shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out"
+                  style={{ width: showTodos ? 300 : 0 }}
+                >
+                  <div className="w-[300px] h-full flex flex-col bg-white border-l border-gray-200 shadow-[-2px_0_8px_rgba(0,0,0,0.06)]">
+                    {/* Header */}
                     <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200">
-                      <h3 className="font-medium text-sm text-gray-700">Channel Todos</h3>
-                      <button onClick={() => setShowTodos(false)} className="text-gray-400 hover:text-gray-600">
+                      <h3 className="font-medium text-sm text-gray-900">Channel Todos</h3>
+                      <button
+                        onClick={() => setShowTodos(false)}
+                        className="text-gray-400 hover:text-gray-600 rounded p-0.5 hover:bg-gray-100 transition-colors"
+                      >
                         <X size={14} />
                       </button>
                     </div>
@@ -572,43 +688,64 @@ export default function MessagesPage() {
                       </Button>
                     </div>
 
-                    {/* Todo list */}
+                    {/* Todo list — open items first, then completed */}
                     <div className="flex-1 overflow-y-auto p-2 space-y-1">
                       {todosLoading ? (
                         <LoadingSkeleton rows={3} cols={1} />
                       ) : todos.length === 0 ? (
                         <div className="text-center text-xs text-gray-400 py-4">No todos yet</div>
                       ) : (
-                        todos.map((todo) => (
-                          <button
-                            key={todo.id}
-                            onClick={() => void handleToggleTodo(todo)}
-                            className="flex items-start gap-2 w-full text-left px-2 py-2 rounded-lg hover:bg-white transition-colors"
-                          >
-                            <span
-                              className={`flex h-5 w-5 items-center justify-center rounded border flex-shrink-0 mt-0.5 ${
-                                todo.status === 'DONE'
-                                  ? 'bg-green-500 border-green-500 text-white'
-                                  : 'border-gray-300'
-                              }`}
+                        [...todos]
+                          .sort((a, b) => {
+                            if (a.status === b.status) return 0;
+                            return a.status === 'OPEN' ? -1 : 1;
+                          })
+                          .map((todo) => (
+                            <button
+                              key={todo.id}
+                              onClick={() => void handleToggleTodo(todo)}
+                              className="flex items-start gap-2 w-full text-left px-2 py-2 rounded-lg hover:bg-gray-50 transition-colors group"
                             >
-                              {todo.status === 'DONE' && <Check size={12} />}
-                            </span>
-                            <span
-                              className={`text-sm ${
-                                todo.status === 'DONE'
-                                  ? 'line-through text-gray-400'
-                                  : 'text-gray-700'
-                              }`}
-                            >
-                              {todo.title}
-                            </span>
-                          </button>
-                        ))
+                              <span
+                                className={`flex h-5 w-5 items-center justify-center rounded border flex-shrink-0 mt-0.5 transition-colors ${
+                                  todo.status === 'DONE'
+                                    ? 'bg-green-500 border-green-500 text-white'
+                                    : 'border-gray-300 group-hover:border-gray-400'
+                                }`}
+                              >
+                                {todo.status === 'DONE' && <Check size={12} />}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <span
+                                  className={`text-sm block ${
+                                    todo.status === 'DONE'
+                                      ? 'line-through text-gray-400'
+                                      : 'text-gray-700'
+                                  }`}
+                                >
+                                  {todo.title}
+                                </span>
+                                {(todo.assigneeId || todo.dueDate) && (
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    {todo.assigneeId && (
+                                      <span className="text-[10px] text-gray-400 font-mono">
+                                        {todo.assigneeId.slice(0, 8)}
+                                      </span>
+                                    )}
+                                    {todo.dueDate && (
+                                      <span className="text-[10px] text-gray-400">
+                                        {new Date(todo.dueDate).toLocaleDateString()}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </button>
+                          ))
                       )}
                     </div>
                   </div>
-                )}
+                </div>
               </div>
             </>
           ) : (

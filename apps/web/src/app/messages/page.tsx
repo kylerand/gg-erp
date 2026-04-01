@@ -38,7 +38,6 @@ import {
   Send,
   Plus,
   Check,
-  CheckCheck,
   Smile,
   Pencil,
   Trash2,

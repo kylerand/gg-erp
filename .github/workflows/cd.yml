@@ -127,6 +127,42 @@ jobs:
           TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-2' }}
           TF_VAR_name_prefix: ${{ steps.env.outputs.name_prefix }}
 
+      - name: Import existing Cognito user groups
+        working-directory: infra/terraform/envs/${{ steps.env.outputs.tf_env }}
+        run: |
+          USER_POOL_NAME="${TF_VAR_name_prefix}-user-pool"
+
+          # Paginate through all user pools (each page returns at most 60)
+          USER_POOL_ID=""
+          NEXT_TOKEN=""
+          while true; do
+            PAGE=$(aws cognito-idp list-user-pools --max-results 60 \
+              ${NEXT_TOKEN:+--next-token "$NEXT_TOKEN"} 2>/dev/null || echo "{}")
+            USER_POOL_ID=$(echo "$PAGE" | jq -r --arg name "$USER_POOL_NAME" \
+              '.UserPools[] | select(.Name==$name) | .Id' 2>/dev/null || echo "")
+            if [ -n "$USER_POOL_ID" ]; then break; fi
+            NEXT_TOKEN=$(echo "$PAGE" | jq -r '.NextToken // empty' 2>/dev/null || echo "")
+            if [ -z "$NEXT_TOKEN" ]; then break; fi
+          done
+
+          if [ -z "$USER_POOL_ID" ]; then
+            echo "User pool '$USER_POOL_NAME' not found — skipping Cognito group import"
+            exit 0
+          fi
+          echo "Found user pool: $USER_POOL_ID"
+
+          # Import every group that currently exists in AWS into Terraform state.
+          # Groups absent from the Terraform config will produce a benign import error (suppressed).
+          EXISTING_GROUPS=$(aws cognito-idp list-groups --user-pool-id "$USER_POOL_ID" \
+            --query 'Groups[].GroupName' --output text 2>/dev/null || echo "")
+          for group in $EXISTING_GROUPS; do
+            terraform import "module.cognito.aws_cognito_user_group.roles[\"$group\"]" "${USER_POOL_ID}/${group}" \
+              && echo "✓ Imported $group" || echo "↷ Skipped $group (not in config or already tracked in state)"
+          done
+        env:
+          TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-2' }}
+          TF_VAR_name_prefix: ${{ steps.env.outputs.name_prefix }}
+
       - name: Terraform Plan
         working-directory: infra/terraform/envs/${{ steps.env.outputs.tf_env }}
         run: terraform plan -out=tfplan

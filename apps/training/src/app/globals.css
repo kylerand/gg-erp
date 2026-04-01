@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: 'Obrega';
+  src: url('/brand/Obrega.ttf') format('truetype');
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    --background: 36 60% 95%;
+    --foreground: 20 7% 13%;
+    --card: 0 0% 100%;
+    --card-foreground: 20 7% 13%;
+    --primary: 24 77% 52%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 48 69% 96%;
+    --secondary-foreground: 20 7% 13%;
+    --muted: 34 38% 90%;
+    --muted-foreground: 18 8% 38%;
+    --border: 22 24% 82%;
+    --input: 22 24% 82%;
+    --ring: 24 77% 52%;
+    --radius: 1.25rem;
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --danger: 0 84% 60%;
+    --danger-foreground: 0 0% 100%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body {
+    @apply min-h-screen bg-background text-foreground font-sans;
+  }
+
+  body {
+    background-image:
+      radial-gradient(circle at top, rgba(227, 113, 37, 0.10), transparent 26%),
+      linear-gradient(180deg, rgba(249, 248, 209, 0.55), rgba(247, 240, 230, 0));
+  }
+
+  h1,
+  h2,
+  h3,
+  [data-brand-heading='true'] {
+    font-family: 'Obrega', Georgia, serif;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-border/80 bg-white shadow-sm;
+  }
+}

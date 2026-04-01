@@ -90,7 +90,7 @@ export default function MyQueuePage() {
       {!loading && error && (
         <div className="tech-card p-5 border border-red-200 bg-red-50">
           <p className="text-sm font-semibold text-red-700">Could not load queue: {error}</p>
-          <p className="mt-1 text-xs text-red-600">Check that the API server is running on port 3001.</p>
+          <p className="mt-1 text-xs text-red-600">Please try refreshing the page or contact support.</p>
         </div>
       )}
 

@@ -61,6 +61,9 @@ const lambdas: LambdaEntry[] = [
   { context: 'tickets', handler: 'create-time-entry',  entry: 'apps/api/src/lambda/tickets/create-time-entry.handler.ts' },
   { context: 'tickets', handler: 'update-time-entry',  entry: 'apps/api/src/lambda/tickets/update-time-entry.handler.ts' },
   { context: 'tickets', handler: 'delete-time-entry',  entry: 'apps/api/src/lambda/tickets/delete-time-entry.handler.ts' },
+  { context: 'tickets', handler: 'list-wo-queue',      entry: 'apps/api/src/lambda/tickets/list-wo-queue.handler.ts' },
+  { context: 'tickets', handler: 'get-wo-detail',      entry: 'apps/api/src/lambda/tickets/get-wo-detail.handler.ts' },
+  { context: 'tickets', handler: 'list-all-time-entries', entry: 'apps/api/src/lambda/tickets/list-all-time-entries.handler.ts' },
 
   // attachments
   { context: 'attachments', handler: 'confirm-upload',    entry: 'apps/api/src/lambda/attachments/confirm-upload.handler.ts' },

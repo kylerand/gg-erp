@@ -25,12 +25,13 @@ import {
   type ModuleProgressData,
   type OjtNote,
 } from '@/lib/api-client';
-
-const DEMO_EMPLOYEE_ID = '00000000-0000-0000-0000-000000000001';
+import { useRole } from '@/lib/role-context';
 
 export default function StepPage() {
   const params = useParams<{ moduleId: string; stepId: string }>();
   const { moduleId, stepId } = params;
+  const { user } = useRole();
+  const employeeId = user?.userId ?? '';
 
   const [module, setModule] = useState<TrainingModule | null>(null);
   const [progress, setProgress] = useState<ModuleProgressData | null>(null);
@@ -51,9 +52,9 @@ export default function StepPage() {
       try {
         const [mod, prog, notesList, bookmarksList] = await Promise.all([
           getTrainingModule(moduleId),
-          getModuleProgress(moduleId, DEMO_EMPLOYEE_ID),
-          listNotes(DEMO_EMPLOYEE_ID, moduleId),
-          listBookmarks(DEMO_EMPLOYEE_ID, moduleId),
+          getModuleProgress(moduleId, employeeId),
+          listNotes(employeeId, moduleId),
+          listBookmarks(employeeId, moduleId),
         ]);
         if (!cancelled) {
           setModule(mod);
@@ -76,7 +77,7 @@ export default function StepPage() {
 
   function handleVideoProgress(pct: number) {
     updateStepProgress(moduleId, {
-      employeeId: DEMO_EMPLOYEE_ID,
+      employeeId: employeeId,
       stepId,
       videoProgress: pct,
     }).catch(() => {});
@@ -84,7 +85,7 @@ export default function StepPage() {
 
   function handleVideoComplete() {
     updateStepProgress(moduleId, {
-      employeeId: DEMO_EMPLOYEE_ID,
+      employeeId: employeeId,
       stepId,
       videoWatched: true,
       videoProgress: 100,
@@ -93,17 +94,17 @@ export default function StepPage() {
 
   async function handleMarkComplete() {
     await updateStepProgress(moduleId, {
-      employeeId: DEMO_EMPLOYEE_ID,
+      employeeId: employeeId,
       stepId,
       status: 'completed',
       completed: true,
     });
-    const updated = await getModuleProgress(moduleId, DEMO_EMPLOYEE_ID);
+    const updated = await getModuleProgress(moduleId, employeeId);
     setProgress(updated);
   }
 
   async function handleBookmarkToggle() {
-    const next = await toggleBookmark(DEMO_EMPLOYEE_ID, module!.id, stepId);
+    const next = await toggleBookmark(employeeId, module!.id, stepId);
     setBookmarked(next);
   }
 
@@ -194,7 +195,7 @@ export default function StepPage() {
 
         {/* Notes */}
         <NotesPanel
-          employeeId={DEMO_EMPLOYEE_ID}
+          employeeId={employeeId}
           moduleId={module.id}
           stepId={stepId}
           initialNotes={notes}

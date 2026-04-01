@@ -5,9 +5,7 @@ import { PageHeader } from '@gg-erp/ui';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { listMyAssignments, completeAssignment, type TrainingAssignment } from '@/lib/api-client';
-
-// Placeholder — in production, get from Cognito session. Using a fixed dev ID here.
-const CURRENT_EMPLOYEE_ID = 'current-user';
+import { useRole } from '@/lib/role-context';
 
 type DisplayStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETE' | 'OVERDUE' | 'FAILED';
 
@@ -28,14 +26,17 @@ function toDisplayStatus(a: TrainingAssignment): DisplayStatus {
 }
 
 export default function MyOJTPage() {
+  const { user } = useRole();
+  const employeeId = user?.userId ?? '';
   const [assignments, setAssignments] = useState<TrainingAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [completing, setCompleting] = useState<string | null>(null);
 
   async function load() {
+    if (!employeeId) return;
     setLoading(true);
     try {
-      const res = await listMyAssignments(CURRENT_EMPLOYEE_ID);
+      const res = await listMyAssignments(employeeId);
       setAssignments(res.items);
     } catch {
       toast.error('Failed to load training assignments');
@@ -44,7 +45,7 @@ export default function MyOJTPage() {
     }
   }
 
-  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [employeeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleComplete(id: string) {
     setCompleting(id);

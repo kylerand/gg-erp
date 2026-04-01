@@ -11,11 +11,12 @@ import {
   type OjtKnowledgeCheck,
   type QuizSubmitResult,
 } from '@/lib/api-client';
-
-const DEMO_EMPLOYEE_ID = '00000000-0000-0000-0000-000000000001';
+import { useRole } from '@/lib/role-context';
 
 export default function QuizPage() {
   const { moduleId } = useParams<{ moduleId: string }>();
+  const { user } = useRole();
+  const employeeId = user?.userId ?? '';
 
   const [module, setModule] = useState<TrainingModule | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,7 +57,7 @@ export default function QuizPage() {
     if (answers.length < questions.length) return;
     setSubmitting(true);
     try {
-      const res = await submitQuiz(moduleId, DEMO_EMPLOYEE_ID, answers);
+      const res = await submitQuiz(moduleId, employeeId, answers);
       setResult(res);
       setSubmitted(true);
     } catch (err) {

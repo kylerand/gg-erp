@@ -236,6 +236,13 @@ resource "aws_lambda_function" "work_orders_transition" {
 resource "aws_apigatewayv2_api" "erp" {
   name          = "${var.name_prefix}-http-api"
   protocol_type = "HTTP"
+
+  cors_configuration {
+    allow_origins = ["*"]
+    allow_methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+    allow_headers = ["content-type", "authorization", "x-correlation-id", "x-actor-id", "idempotency-key"]
+    max_age       = 86400
+  }
 }
 
 resource "aws_apigatewayv2_integration" "work_orders_create" {
@@ -1850,7 +1857,7 @@ resource "aws_lambda_permission" "allow_api_gateway_list" {
 }
 
 output "api_base_url" {
-  value = aws_apigatewayv2_stage.default.invoke_url
+  value = trimsuffix(aws_apigatewayv2_stage.default.invoke_url, "/")
 }
 
 output "work_orders_create_lambda_name" {

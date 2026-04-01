@@ -8,6 +8,7 @@ export interface LambdaEvent {
   httpMethod?: string;
   requestContext?: {
     requestId?: string;
+    http?: { method?: string };
     authorizer?: {
       claims?: Record<string, string>;
       jwt?: { claims?: Record<string, string> };
@@ -58,8 +59,9 @@ export function wrapHandler(handler: RouteHandler, options: WrapOptions = {}): (
     const correlationId = resolveCorrelationId(event);
     const requestId = event.requestContext?.requestId ?? randomUUID();
 
-    // OPTIONS preflight
-    if (event.httpMethod === 'OPTIONS') {
+    // OPTIONS preflight (v1: httpMethod, v2: requestContext.http.method)
+    const method = event.httpMethod ?? event.requestContext?.http?.method;
+    if (method === 'OPTIONS') {
       return {
         statusCode: 204,
         headers: { ...DEFAULT_CORS_HEADERS, 'content-type': 'application/json' },

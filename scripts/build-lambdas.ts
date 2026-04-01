@@ -109,6 +109,7 @@ const lambdas: LambdaEntry[] = [
   { context: 'migration', handler: 'get-batch',        entry: 'apps/api/src/lambda/migration/get-batch.handler.ts' },
   { context: 'migration', handler: 'list-batches',    entry: 'apps/api/src/lambda/migration/list-batches.handler.ts' },
   { context: 'migration', handler: 'trigger-batch',    entry: 'apps/api/src/lambda/migration/trigger-batch.handler.ts' },
+  { context: 'migration', handler: 'run-migration',    entry: 'apps/api/src/lambda/migration/run-migration.entry.ts' },
 
   // scheduling (planner board)
   { context: 'scheduling', handler: 'list-slots',            entry: 'apps/api/src/lambda/scheduling/list-slots.handler.ts' },

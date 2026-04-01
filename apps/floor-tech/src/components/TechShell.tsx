@@ -3,8 +3,10 @@
 import type { ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { ClipboardList, Clock3, RefreshCcw, TimerReset } from 'lucide-react';
+import { useAuth } from '@/lib/auth-provider';
+import { doSignOut } from '@/lib/auth';
 
 const NAV_ITEMS = [
   { href: '/work-orders/my-queue', label: 'Queue', icon: ClipboardList },
@@ -15,10 +17,35 @@ const NAV_ITEMS = [
 
 export function TechShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, loading } = useAuth();
   const isAuthRoute = pathname === '/auth';
 
   if (isAuthRoute) {
     return <>{children}</>;
+  }
+
+  // Show loading state while checking authentication
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#FFF8EF]">
+        <div className="text-center">
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-[#E37125] border-t-transparent" />
+          <p className="mt-4 text-sm font-semibold text-[#6E625A]">Loading…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Redirect to auth if not authenticated
+  if (!user) {
+    router.replace('/auth');
+    return null;
+  }
+
+  async function handleSignOut() {
+    await doSignOut();
+    router.replace('/auth');
   }
 
   return (
@@ -28,11 +55,16 @@ export function TechShell({ children }: { children: ReactNode }) {
           <Image src="/brand/golfingarage-icon.svg" alt="Golfin Garage" width={42} height={42} className="h-11 w-11" priority />
           <div className="min-w-0 flex-1">
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A4A18]">Floor Tech</div>
-            <div className="truncate text-base font-semibold text-[#211F1E]">Touch-first work execution</div>
+            <div className="truncate text-base font-semibold text-[#211F1E]">
+              {user.name ?? user.email}
+            </div>
           </div>
-          <Link href="/auth" className="rounded-2xl border border-[#D9CCBE] bg-white px-3 py-2 text-xs font-semibold text-[#4F4641]">
-            Switch User
-          </Link>
+          <button
+            onClick={handleSignOut}
+            className="rounded-2xl border border-[#D9CCBE] bg-white px-3 py-2 text-xs font-semibold text-[#4F4641]"
+          >
+            Sign Out
+          </button>
         </div>
       </header>
 

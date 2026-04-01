@@ -80,8 +80,8 @@ export default function MessagesPage() {
   const [sending, setSending] = useState(false);
 
   // Threading
-  const [threadParentId, setThreadParentId] = useState<string | null>(null);
-  const [threadReplies, setThreadReplies] = useState<ChannelMessage[]>([]);
+  const [_threadParentId, setThreadParentId] = useState<string | null>(null);
+  const [_threadReplies, setThreadReplies] = useState<ChannelMessage[]>([]);
 
   // Editing
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -762,6 +762,13 @@ function MessageBubble({
           title="React"
         >
           <Smile size={14} />
+        </button>
+        <button
+          onClick={onReply}
+          className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600"
+          title="Reply"
+        >
+          <Reply size={14} />
         </button>
         {isOwn && (
           <>

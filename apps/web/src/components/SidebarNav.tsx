@@ -175,13 +175,17 @@ export function SidebarNav() {
 
       {/* Footer */}
       <div className="px-5 py-4 border-t border-white/10">
-        <Link
-          href="/auth"
-          className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70 hover:text-white hover:bg-white/8 transition-colors"
+        <button
+          onClick={async () => {
+            const { doSignOut } = await import('@/lib/auth');
+            await doSignOut();
+            window.location.href = '/auth';
+          }}
+          className="flex w-full items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70 hover:text-white hover:bg-white/8 transition-colors"
         >
           <LogOut size={14} />
           <span>Sign out</span>
-        </Link>
+        </button>
       </div>
     </aside>
   );

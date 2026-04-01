@@ -47,7 +47,7 @@ export async function doSignOut() {
     localStorage.removeItem('gg_erp_mock_role');
     return;
   }
-  await signOut();
+  await signOut({ global: true });
 }
 
 export async function getAccessToken(): Promise<string | null> {

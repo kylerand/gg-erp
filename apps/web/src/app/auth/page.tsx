@@ -1,8 +1,8 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { doSignIn, doSignOut, getAuthUser, setMockRole, type UserRole } from '@/lib/auth';
+import { doSignIn, doSignOut, setMockRole, type UserRole } from '@/lib/auth';
 
 const IS_MOCK = process.env.NEXT_PUBLIC_AUTH_MODE === 'mock';
 
@@ -22,13 +22,6 @@ export default function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  // If already signed in, redirect to dashboard
-  useEffect(() => {
-    getAuthUser().then((user) => {
-      if (user) router.replace('/');
-    });
-  }, [router]);
 
   async function handleRealSignIn(e: React.FormEvent) {
     e.preventDefault();

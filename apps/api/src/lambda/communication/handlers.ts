@@ -106,7 +106,6 @@ export const createChannelHandler = wrapHandler(async (ctx) => {
   const allMemberIds = new Set([creatorId, ...memberUserIds]);
   const memberData = [...allMemberIds].map((uid) => ({
     id: randomUUID(),
-    channelId,
     userId: uid,
     role: uid === creatorId ? 'OWNER' as const : 'MEMBER' as const,
     joinedAt: now,

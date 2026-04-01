@@ -180,16 +180,21 @@ function resolveActorRoles(event: LambdaEvent): string[] {
   const roleAttr = claims['cognito:groups'] || claims['custom:role'];
   if (!roleAttr) return [];
 
-  // Groups can be a JSON array string like '["admin","technician"]'
-  if (roleAttr.startsWith('[')) {
+  // API GW v2 JWT authorizer serializes arrays as "[val1 val2]" (no quotes, space-separated)
+  // e.g. cognito:groups becomes "[admin]" or "[admin technician]"
+  if (roleAttr.startsWith('[') && roleAttr.endsWith(']')) {
+    const inner = roleAttr.slice(1, -1).trim();
+    if (!inner) return [];
+    // Try JSON parse first (valid JSON like '["admin"]')
     try {
       return JSON.parse(roleAttr) as string[];
     } catch {
-      return [];
+      // Fall back to space-separated (API GW v2 format like '[admin technician]')
+      return inner.split(/[\s,]+/).filter(Boolean);
     }
   }
 
-  // Or comma-separated like 'admin,technician'
+  // Plain comma-separated like 'admin,technician'
   return roleAttr.split(',').map((r) => r.trim()).filter(Boolean);
 }
 

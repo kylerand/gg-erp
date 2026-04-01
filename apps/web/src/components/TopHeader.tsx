@@ -1,7 +1,9 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import Image from 'next/image';
-import { Bell, Search, WifiOff, Smartphone } from 'lucide-react';
+import { Search, WifiOff, Smartphone } from 'lucide-react';
+import { NotificationBell } from './NotificationBell';
+import { getAuthUser, type AuthUser } from '../lib/auth';
 
 function useOfflineQueue(refreshKey: number): number {
   const [count, setCount] = useState(0);
@@ -26,10 +28,26 @@ function useOfflineQueue(refreshKey: number): number {
   return count;
 }
 
+function getInitials(nameOrEmail: string): string {
+  const parts = nameOrEmail.includes('@')
+    ? nameOrEmail.split('@')[0].split(/[._-]/)
+    : nameOrEmail.trim().split(/\s+/);
+  return parts
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0].toUpperCase())
+    .join('');
+}
+
 export function TopHeader() {
   const [isOnline, setIsOnline] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const queuedCount = useOfflineQueue(refreshKey);
+
+  useEffect(() => {
+    getAuthUser().then(setUser).catch(() => setUser(null));
+  }, []);
 
   useEffect(() => {
     setIsOnline(navigator.onLine);
@@ -88,19 +106,13 @@ export function TopHeader() {
       {/* Actions */}
       <div className="flex items-center gap-2">
         <a
-          href="http://localhost:3002"
+          href={process.env.NEXT_PUBLIC_FLOOR_TECH_URL ?? 'http://localhost:3002'}
           className="hidden lg:flex items-center gap-2 rounded-2xl border border-[#D9CCBE] bg-white px-3 py-2 text-xs font-semibold text-[#4F4641] hover:border-[#E37125] hover:text-[#211F1E] transition-colors"
         >
           <Smartphone size={14} />
           <span>Floor Tech App</span>
         </a>
-        <button
-          type="button"
-          className="relative p-2.5 rounded-2xl text-[#85776F] hover:text-[#211F1E] hover:bg-white transition-colors border border-transparent hover:border-[#D9CCBE]"
-          aria-label="Notifications"
-        >
-          <Bell size={18} />
-        </button>
+        <NotificationBell />
 
         {/* Avatar */}
         <div className="flex items-center gap-3 rounded-2xl border border-[#D9CCBE] bg-white px-2 py-2 pl-2.5 shadow-sm">
@@ -108,11 +120,15 @@ export function TopHeader() {
             className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0 cursor-pointer bg-[var(--brand-orange)]"
             aria-label="User menu"
           >
-            KR
+            {user ? getInitials(user.name ?? user.email) : '??'}
           </div>
           <div className="hidden sm:block pr-2">
-            <div className="text-sm font-semibold text-[#211F1E] leading-none">Kyler Rand</div>
-            <div className="text-xs text-[#85776F] mt-1">Ops Admin</div>
+            <div className="text-sm font-semibold text-[#211F1E] leading-none">
+              {user?.name ?? user?.email ?? 'Loading...'}
+            </div>
+            <div className="text-xs text-[#85776F] mt-1 capitalize">
+              {user?.role ?? '—'}
+            </div>
           </div>
         </div>
       </div>

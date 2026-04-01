@@ -31,7 +31,17 @@ export async function getAuthUser(): Promise<AuthUser | null> {
     const user = await getCurrentUser();
     const session = await fetchAuthSession();
     const groups = (session.tokens?.idToken?.payload?.['cognito:groups'] as string[]) ?? [];
-    return { userId: user.userId, email: user.signInDetails?.loginId ?? '', role: extractRole(groups) };
+    const payload = session.tokens?.idToken?.payload ?? {};
+    const name = (payload['name'] as string)
+      ?? (payload['given_name'] as string)
+      ?? (payload['email'] as string)
+      ?? '';
+    return {
+      userId: user.userId,
+      email: user.signInDetails?.loginId ?? (payload['email'] as string) ?? '',
+      role: extractRole(groups),
+      name: name || undefined,
+    };
   } catch {
     return null;
   }

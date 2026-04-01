@@ -72,6 +72,15 @@ export function wrapHandler(handler: RouteHandler, options: WrapOptions = {}): (
     const actorUserId = resolveActorUserId(event);
     const actorRoles = resolveActorRoles(event);
 
+    // Debug: log authorizer context for troubleshooting
+    console.log(JSON.stringify({
+      level: 'debug',
+      correlationId,
+      authorizer: event.requestContext?.authorizer,
+      actorUserId,
+      actorRoles,
+    }));
+
     if (options.requireAuth && !actorUserId) {
       return jsonResponse(401, { message: 'Authentication required.', correlationId });
     }
@@ -167,11 +176,11 @@ function resolveActorRoles(event: LambdaEvent): string[] {
 
   if (!claims) return [];
 
-  // Cognito custom:role attribute
-  const roleAttr = claims['custom:role'] ?? claims['cognito:groups'];
+  // Try cognito:groups first (most reliable for group-based RBAC), then custom:role
+  const roleAttr = claims['cognito:groups'] || claims['custom:role'];
   if (!roleAttr) return [];
 
-  // Groups can be comma-separated or a JSON array string
+  // Groups can be a JSON array string like '["admin","technician"]'
   if (roleAttr.startsWith('[')) {
     try {
       return JSON.parse(roleAttr) as string[];
@@ -180,6 +189,7 @@ function resolveActorRoles(event: LambdaEvent): string[] {
     }
   }
 
+  // Or comma-separated like 'admin,technician'
   return roleAttr.split(',').map((r) => r.trim()).filter(Boolean);
 }
 

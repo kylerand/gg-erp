@@ -1795,14 +1795,14 @@ resource "aws_lambda_function" "audit_list_events" {
 }
 
 resource "aws_apigatewayv2_integration" "audit_list_events" {
-  api_id                 = aws_apigatewayv2_api.erp_api.id
+  api_id                 = aws_apigatewayv2_api.erp.id
   integration_type       = "AWS_PROXY"
   integration_uri        = aws_lambda_function.audit_list_events.invoke_arn
   payload_format_version = "2.0"
 }
 
 resource "aws_apigatewayv2_route" "audit_list_events" {
-  api_id             = aws_apigatewayv2_api.erp_api.id
+  api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "GET /audit/events"
   target             = "integrations/${aws_apigatewayv2_integration.audit_list_events.id}"
   authorization_type = "NONE"
@@ -1812,7 +1812,7 @@ resource "aws_lambda_permission" "audit_list_events" {
   function_name = aws_lambda_function.audit_list_events.function_name
   action        = "lambda:InvokeFunction"
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.erp_api.execution_arn}/*/*"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
 }
 
 # ── Communication context ────────────────────────────────────────────────────

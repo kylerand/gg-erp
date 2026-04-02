@@ -657,8 +657,7 @@ resource "aws_apigatewayv2_route" "identity_me" {
   api_id    = aws_apigatewayv2_api.erp.id
   route_key = "GET /auth/me"
   target    = "integrations/${aws_apigatewayv2_integration.identity_me.id}"
-  authorizer_id = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 # ─── Admin User Management Lambda Functions ────────────────────────────────────
@@ -754,8 +753,7 @@ resource "aws_apigatewayv2_route" "admin_list_users" {
   api_id    = aws_apigatewayv2_api.erp.id
   route_key = "GET /admin/users"
   target    = "integrations/${aws_apigatewayv2_integration.admin_list_users.id}"
-  authorizer_id      = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "admin_create_user" {
@@ -816,8 +814,7 @@ resource "aws_apigatewayv2_route" "customers_list" {
   api_id    = aws_apigatewayv2_api.erp.id
   route_key = "GET /identity/customers"
   target    = "integrations/${aws_apigatewayv2_integration.customers_list.id}"
-  authorizer_id = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "customers_create" {
@@ -846,8 +843,7 @@ resource "aws_apigatewayv2_route" "customers_get" {
   api_id    = aws_apigatewayv2_api.erp.id
   route_key = "GET /identity/customers/{id}"
   target    = "integrations/${aws_apigatewayv2_integration.customers_get.id}"
-  authorizer_id = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "customers_transition" {
@@ -878,8 +874,7 @@ resource "aws_apigatewayv2_route" "inventory_list_parts" {
   api_id    = aws_apigatewayv2_api.erp.id
   route_key = "GET /inventory/parts"
   target    = "integrations/${aws_apigatewayv2_integration.inventory_list_parts.id}"
-  authorizer_id = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "inventory_create_part" {
@@ -908,8 +903,7 @@ resource "aws_apigatewayv2_route" "inventory_get_part" {
   api_id    = aws_apigatewayv2_api.erp.id
   route_key = "GET /inventory/parts/{id}"
   target    = "integrations/${aws_apigatewayv2_integration.inventory_get_part.id}"
-  authorizer_id = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "inventory_list_vendors" {
@@ -923,8 +917,7 @@ resource "aws_apigatewayv2_route" "inventory_list_vendors" {
   api_id    = aws_apigatewayv2_api.erp.id
   route_key = "GET /inventory/vendors"
   target    = "integrations/${aws_apigatewayv2_integration.inventory_list_vendors.id}"
-  authorizer_id = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "inventory_list_lots" {
@@ -938,8 +931,7 @@ resource "aws_apigatewayv2_route" "inventory_list_lots" {
   api_id    = aws_apigatewayv2_api.erp.id
   route_key = "GET /inventory/lots"
   target    = "integrations/${aws_apigatewayv2_integration.inventory_list_lots.id}"
-  authorizer_id = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 # ─── API GW Integrations + Routes — Tickets ───────────────────────────────────
@@ -955,8 +947,7 @@ resource "aws_apigatewayv2_route" "tickets_list_tasks" {
   api_id    = aws_apigatewayv2_api.erp.id
   route_key = "GET /tickets/tasks"
   target    = "integrations/${aws_apigatewayv2_integration.tickets_list_tasks.id}"
-  authorizer_id = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "tickets_create_task" {
@@ -1000,8 +991,7 @@ resource "aws_apigatewayv2_route" "tickets_list_rework" {
   api_id    = aws_apigatewayv2_api.erp.id
   route_key = "GET /tickets/rework"
   target    = "integrations/${aws_apigatewayv2_integration.tickets_list_rework.id}"
-  authorizer_id = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "tickets_create_rework" {
@@ -1030,8 +1020,7 @@ resource "aws_apigatewayv2_route" "tickets_list_sync" {
   api_id    = aws_apigatewayv2_api.erp.id
   route_key = "GET /tickets/sync"
   target    = "integrations/${aws_apigatewayv2_integration.tickets_list_sync.id}"
-  authorizer_id = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 # ─── Attachments Lambda Functions ────────────────────────────────────────────
@@ -1219,8 +1208,7 @@ resource "aws_apigatewayv2_route" "attachments_list" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "GET /attachments"
   target             = "integrations/${aws_apigatewayv2_integration.attachments_list.id}"
-  authorizer_id      = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "attachments_presign_download" {
@@ -1234,8 +1222,7 @@ resource "aws_apigatewayv2_route" "attachments_presign_download" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "GET /attachments/{id}/download"
   target             = "integrations/${aws_apigatewayv2_integration.attachments_presign_download.id}"
-  authorizer_id      = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 # ─── SOP / OJT Lambdas ────────────────────────────────────────────────────────
@@ -1363,8 +1350,7 @@ resource "aws_apigatewayv2_route" "sop_list" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "GET /sop"
   target             = "integrations/${aws_apigatewayv2_integration.sop_list.id}"
-  authorizer_id      = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "sop_get" {
@@ -1378,8 +1364,7 @@ resource "aws_apigatewayv2_route" "sop_get" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "GET /sop/{id}"
   target             = "integrations/${aws_apigatewayv2_integration.sop_get.id}"
-  authorizer_id      = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "sop_create" {
@@ -1423,8 +1408,7 @@ resource "aws_apigatewayv2_route" "sop_list_modules" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "GET /ojt/modules"
   target             = "integrations/${aws_apigatewayv2_integration.sop_list_modules.id}"
-  authorizer_id      = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "sop_list_assignments" {
@@ -1438,8 +1422,7 @@ resource "aws_apigatewayv2_route" "sop_list_assignments" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "GET /ojt/assignments"
   target             = "integrations/${aws_apigatewayv2_integration.sop_list_assignments.id}"
-  authorizer_id      = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "sop_complete_assignment" {
@@ -1610,8 +1593,7 @@ resource "aws_apigatewayv2_route" "accounting_status" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "GET /accounting/status"
   target             = "integrations/${aws_apigatewayv2_integration.accounting_status.id}"
-  authorizer_id      = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "accounting_list_sync" {
@@ -1625,8 +1607,7 @@ resource "aws_apigatewayv2_route" "accounting_list_sync" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "GET /accounting/invoice-sync"
   target             = "integrations/${aws_apigatewayv2_integration.accounting_list_sync.id}"
-  authorizer_id      = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "accounting_retry_sync" {
@@ -1788,6 +1769,44 @@ resource "aws_iam_role_policy" "erp_lambda_s3_migration" {
       ]
     }]
   })
+}
+
+# ── Audit context ────────────────────────────────────────────────────────────
+
+resource "aws_lambda_function" "audit_list_events" {
+  function_name = "${var.name_prefix}-audit-list-events"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-audit-events.handler"
+  filename      = var.audit_lambda_zip_path
+  timeout       = 30
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "audit_list_events" {
+  api_id                 = aws_apigatewayv2_api.erp_api.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.audit_list_events.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "audit_list_events" {
+  api_id             = aws_apigatewayv2_api.erp_api.id
+  route_key          = "GET /audit/events"
+  target             = "integrations/${aws_apigatewayv2_integration.audit_list_events.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_lambda_permission" "audit_list_events" {
+  function_name = aws_lambda_function.audit_list_events.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp_api.execution_arn}/*/*"
 }
 
 # ── Communication context ────────────────────────────────────────────────────
@@ -2013,8 +2032,7 @@ resource "aws_apigatewayv2_route" "communication_list_channels" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "GET /communication/channels"
   target             = "integrations/${aws_apigatewayv2_integration.communication_list_channels.id}"
-  authorizer_id      = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "communication_create_channel" {
@@ -2043,8 +2061,7 @@ resource "aws_apigatewayv2_route" "communication_list_messages" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "GET /communication/channels/{channelId}/messages"
   target             = "integrations/${aws_apigatewayv2_integration.communication_list_messages.id}"
-  authorizer_id      = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "communication_list_replies" {
@@ -2058,8 +2075,7 @@ resource "aws_apigatewayv2_route" "communication_list_replies" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "GET /communication/messages/{messageId}/replies"
   target             = "integrations/${aws_apigatewayv2_integration.communication_list_replies.id}"
-  authorizer_id      = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "communication_send_message" {
@@ -2148,8 +2164,7 @@ resource "aws_apigatewayv2_route" "communication_list_todos" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "GET /communication/channels/{channelId}/todos"
   target             = "integrations/${aws_apigatewayv2_integration.communication_list_todos.id}"
-  authorizer_id      = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "communication_create_todo" {
@@ -2193,8 +2208,7 @@ resource "aws_apigatewayv2_route" "communication_list_notifications" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "GET /communication/notifications"
   target             = "integrations/${aws_apigatewayv2_integration.communication_list_notifications.id}"
-  authorizer_id      = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "communication_mark_notifications_read" {
@@ -2238,8 +2252,7 @@ resource "aws_apigatewayv2_route" "migration_list_batches" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "GET /migration/batches"
   target             = "integrations/${aws_apigatewayv2_integration.migration_list_batches.id}"
-  authorizer_id      = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "migration_get_batch" {
@@ -2253,8 +2266,7 @@ resource "aws_apigatewayv2_route" "migration_get_batch" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "GET /migration/batches/{id}"
   target             = "integrations/${aws_apigatewayv2_integration.migration_get_batch.id}"
-  authorizer_id      = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "migration_cancel_batch" {

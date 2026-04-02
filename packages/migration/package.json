@@ -6,7 +6,8 @@
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./loaders/*": "./src/loaders/*"
+    "./loaders/*": "./src/loaders/*",
+    "./connectors/*": "./src/connectors/*"
   },
   "scripts": {
     "test": "vitest run",

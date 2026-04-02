@@ -1755,7 +1755,24 @@ resource "aws_lambda_function" "migration_runner" {
   }
 }
 
-# S3 read access for migration artifacts bucket
+# Parts migration — fetches from ShopMonkey API and runs Waves C/F/G
+resource "aws_lambda_function" "migrate_parts" {
+  function_name = "${var.name_prefix}-migrate-parts"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "migrate-parts.handler"
+  filename      = var.migration_lambda_zip_path
+  timeout       = 900
+  memory_size   = 1024
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+# S3 read/write access for migration artifacts bucket
 resource "aws_iam_role_policy" "erp_lambda_s3_migration" {
   count = var.migration_artifacts_bucket_name != "" ? 1 : 0
   name  = "${var.name_prefix}-erp-lambda-s3-migration"
@@ -1764,7 +1781,7 @@ resource "aws_iam_role_policy" "erp_lambda_s3_migration" {
     Version = "2012-10-17"
     Statement = [{
       Effect   = "Allow"
-      Action   = ["s3:GetObject", "s3:ListBucket"]
+      Action   = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"]
       Resource = [
         "arn:aws:s3:::${var.migration_artifacts_bucket_name}",
         "arn:aws:s3:::${var.migration_artifacts_bucket_name}/*"

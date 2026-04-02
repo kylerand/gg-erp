@@ -127,6 +127,7 @@ const lambdas: LambdaEntry[] = [
   { context: 'migration', handler: 'list-batches',    entry: 'apps/api/src/lambda/migration/list-batches.handler.ts' },
   { context: 'migration', handler: 'trigger-batch',    entry: 'apps/api/src/lambda/migration/trigger-batch.handler.ts' },
   { context: 'migration', handler: 'run-migration',    entry: 'apps/api/src/lambda/migration/run-migration.entry.ts' },
+  { context: 'migration', handler: 'migrate-parts',    entry: 'apps/api/src/lambda/migration/migrate-parts.entry.ts' },
 
   // communication (messaging, channels, todos, notifications)
   { context: 'communication', handler: 'list-channels',           entry: 'apps/api/src/lambda/communication/list-channels.handler.ts' },

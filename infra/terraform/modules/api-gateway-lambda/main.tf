@@ -70,6 +70,12 @@ variable "communication_lambda_zip_path" {
   default     = "apps/api/dist/communication-lambda.zip"
 }
 
+variable "audit_lambda_zip_path" {
+  description = "Path to the zipped audit Lambda artifact."
+  type        = string
+  default     = "apps/api/dist/audit-lambda.zip"
+}
+
 variable "qb_client_id" {
   description = "QuickBooks app client ID for OAuth2"
   type        = string

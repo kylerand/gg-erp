@@ -178,6 +178,8 @@ jobs:
           TF_VAR_accounting_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/accounting-lambda.zip"
           TF_VAR_migration_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/migration-lambda.zip"
           TF_VAR_identity_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/identity-lambda.zip"
+          TF_VAR_communication_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/communication-lambda.zip"
+          TF_VAR_audit_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/audit-lambda.zip"
           TF_VAR_qb_client_id: ${{ secrets.QB_CLIENT_ID }}
           TF_VAR_qb_client_secret: ${{ secrets.QB_CLIENT_SECRET }}
           TF_VAR_qb_redirect_uri: ${{ vars.QB_REDIRECT_URI || '' }}
@@ -200,6 +202,8 @@ jobs:
           TF_VAR_accounting_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/accounting-lambda.zip"
           TF_VAR_migration_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/migration-lambda.zip"
           TF_VAR_identity_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/identity-lambda.zip"
+          TF_VAR_communication_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/communication-lambda.zip"
+          TF_VAR_audit_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/audit-lambda.zip"
           TF_VAR_qb_client_id: ${{ secrets.QB_CLIENT_ID }}
           TF_VAR_qb_client_secret: ${{ secrets.QB_CLIENT_SECRET }}
           TF_VAR_qb_redirect_uri: ${{ vars.QB_REDIRECT_URI || '' }}

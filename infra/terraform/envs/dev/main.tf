@@ -86,6 +86,7 @@ module "api_gateway_lambda" {
   migration_lambda_zip_path   = var.migration_lambda_zip_path
   identity_lambda_zip_path    = var.identity_lambda_zip_path
   communication_lambda_zip_path = var.communication_lambda_zip_path
+  audit_lambda_zip_path         = var.audit_lambda_zip_path
   cognito_user_pool_endpoint  = module.cognito.issuer_url
   cognito_user_pool_id        = module.cognito.user_pool_id
   cognito_user_pool_arn       = module.cognito.user_pool_arn

@@ -26,7 +26,7 @@
 import { readFile } from 'node:fs/promises';
 
 const BASE_URL = 'https://api.shopmonkey.cloud/v3';
-const DEFAULT_PAGE_SIZE = 25; // Reduced from 100 — large pages cause socket resets
+const DEFAULT_PAGE_SIZE = 100;
 const RATE_LIMIT_RETRY_MS = 2000;
 const PAGE_DELAY_MS = 300; // Pause between pages to avoid connection saturation
 const MAX_RETRIES = 5;
@@ -949,14 +949,26 @@ async function fetchAllPost<T extends { id: string }>(
   const seenIds = new Set<string>();
   let totalKnown: number | null = null;
 
+  // SM search endpoints are non-deterministic — try different sort fields per pass
+  const SORT_VARIANTS = [
+    { sort: 'createdDate', direction: 'asc' },
+    { sort: 'createdDate', direction: 'desc' },
+    { sort: 'updatedDate', direction: 'asc' },
+    { sort: 'updatedDate', direction: 'desc' },
+    { sort: 'name', direction: 'asc' },
+    { sort: 'name', direction: 'desc' },
+    {},
+  ];
+
   const MAX_PASSES = 30;
-  const MAX_EMPTY_PASSES = 3;
+  const MAX_EMPTY_PASSES = 5;
   let emptyPasses = 0;
 
   for (let pass = 1; pass <= MAX_PASSES; pass++) {
     const countBefore = results.length;
     let offset = 0;
     let consecutiveEmptyPages = 0;
+    const sortVariant = SORT_VARIANTS[(pass - 1) % SORT_VARIANTS.length];
 
     const maxOffset = totalKnown
       ? Math.ceil(totalKnown * 1.5)
@@ -965,6 +977,7 @@ async function fetchAllPost<T extends { id: string }>(
     while (offset < maxOffset) {
       const body = JSON.stringify({
         ...filter,
+        ...sortVariant,
         limit: DEFAULT_PAGE_SIZE,
         offset,
       });

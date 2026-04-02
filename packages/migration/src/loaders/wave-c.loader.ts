@@ -39,12 +39,12 @@ export async function runWaveC(
         continue;
       }
 
-      if (await isAlreadyImported(prisma, 'INVENTORY_PART', part.smId)) {
+      if (await isAlreadyImported(prisma, 'PART', part.smId)) {
         skipped++;
         continue;
       }
 
-      await recordRawRecord(prisma, batchId, 'INVENTORY_PART', part.smId, part);
+      await recordRawRecord(prisma, batchId, 'PART', part.smId, part);
 
       if (!dryRun) {
         const result = await prisma.$queryRaw<Array<{ id: string }>>`
@@ -55,16 +55,18 @@ export async function runWaveC(
           RETURNING id
         `;
 
-        const partId = result[0].id;
-        await recordImportMapping(prisma, 'INVENTORY_PART', part.smId, partId);
+        if (result[0]) {
+          await recordImportMapping(prisma, 'PART', part.smId, result[0].id);
+        }
       }
 
       inserted++;
     } catch (err) {
       errorCount++;
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[wave-c] Error for part ${part.smId} (${part.sku}): ${msg}`);
       await recordError(
-        prisma, batchId, 'LOAD', 'INSERT_FAILED',
-        err instanceof Error ? err.message : String(err),
+        prisma, batchId, 'LOAD', 'INSERT_FAILED', msg,
       );
     }
   }

@@ -1,9 +1,32 @@
+'use client';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { listWoOrders } from '@/lib/api-client';
-import { PageHeader, StatusBadge } from '@gg-erp/ui';
+import { listWoOrders, type WoOrder } from '@/lib/api-client';
+import { PageHeader, StatusBadge, LoadingSkeleton } from '@gg-erp/ui';
+import { Pagination } from '@/components/ui/pagination';
 
-export default async function WorkOrdersPage() {
-  const { items, total } = await listWoOrders({ limit: 10 });
+const PAGE_SIZE = 25;
+
+export default function WorkOrdersPage() {
+  const [items, setItems] = useState<WoOrder[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async (p: number, ps: number) => {
+    setLoading(true);
+    try {
+      const r = await listWoOrders({ limit: ps, offset: (p - 1) * ps });
+      setItems(r.items);
+      setTotal(r.total);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(page, pageSize); }, [page, pageSize, load]);
+
   const blocked = items.filter(w => w.status === 'BLOCKED').length;
   const inProgress = items.filter(w => w.status === 'IN_PROGRESS').length;
 
@@ -40,33 +63,40 @@ export default async function WorkOrdersPage() {
         ))}
       </div>
 
-      {items.length > 0 && (
-        <div className="mt-8">
-          <h2 className="text-sm font-semibold text-gray-700 mb-3">Recent Work Orders</h2>
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">WO #</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Title</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Customer</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {items.map(wo => (
-                  <tr key={wo.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-mono font-medium text-gray-900">{wo.workOrderNumber}</td>
-                    <td className="px-4 py-3 text-gray-700 truncate max-w-xs">{wo.title}</td>
-                    <td className="px-4 py-3 text-gray-500 truncate max-w-xs">{wo.customerReference ?? '—'}</td>
-                    <td className="px-4 py-3"><StatusBadge status={wo.status} /></td>
+      <div className="mt-8">
+        <h2 className="text-sm font-semibold text-gray-700 mb-3">Recent Work Orders</h2>
+        {loading ? (
+          <LoadingSkeleton rows={5} cols={4} />
+        ) : items.length === 0 ? (
+          <p className="text-sm text-gray-400 py-8 text-center">No work orders yet.</p>
+        ) : (
+          <>
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600">WO #</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600">Title</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600">Customer</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {items.map(wo => (
+                    <tr key={wo.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 font-mono font-medium text-gray-900">{wo.workOrderNumber}</td>
+                      <td className="px-4 py-3 text-gray-700 truncate max-w-xs">{wo.title}</td>
+                      <td className="px-4 py-3 text-gray-500 truncate max-w-xs">{wo.customerReference ?? '—'}</td>
+                      <td className="px-4 py-3"><StatusBadge status={wo.status} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={ps => { setPageSize(ps); setPage(1); }} />
+          </>
+        )}
+      </div>
     </div>
   );
 }

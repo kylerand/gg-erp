@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { PageHeader, LoadingSkeleton, EmptyState, StatusBadge } from '@gg-erp/ui';
 import { listCustomers, createCustomer, transitionCustomerState, type Customer } from '@/lib/api-client';
@@ -7,31 +7,40 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Pagination } from '@/components/ui/pagination';
+
+const PAGE_SIZE = 25;
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
 
-  async function load() {
+  const load = useCallback(async (s: string, p: number, ps: number) => {
     setLoading(true);
     try {
-      const { items } = await listCustomers();
+      const { items, total: t } = await listCustomers({ search: s || undefined, limit: ps, offset: (p - 1) * ps });
       setCustomers(items);
+      setTotal(t);
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => void load(search, page, pageSize), 300);
+    return () => clearTimeout(timeout);
+  }, [search, page, pageSize, load]);
+
+  function handleSearch(value: string) {
+    setSearch(value);
+    setPage(1);
   }
-
-  useEffect(() => { void load(); }, []);
-
-  const filtered = customers.filter(c =>
-    search === '' ||
-    c.fullName.toLowerCase().includes(search.toLowerCase()) ||
-    c.email?.toLowerCase().includes(search.toLowerCase())
-  );
 
   async function handleTransition(id: string, toState: Customer['state']) {
     try {
@@ -57,6 +66,7 @@ export default function CustomersPage() {
         phone: (form.get('phone') as string) || undefined,
       });
       setCustomers(prev => [customer, ...prev]);
+      setTotal(prev => prev + 1);
       setShowCreate(false);
       toast.success(`Customer ${customer.fullName} created`);
       (e.target as HTMLFormElement).reset();
@@ -71,7 +81,7 @@ export default function CustomersPage() {
     <div>
       <PageHeader
         title="Customers"
-        description={loading ? '…' : `${customers.length} total`}
+        description={loading ? '…' : `${total} total`}
         action={
           <Button
             className="bg-yellow-400 hover:bg-yellow-300 text-gray-900"
@@ -117,60 +127,63 @@ export default function CustomersPage() {
         <Input
           placeholder="Search name or email…"
           value={search}
-          onChange={e => setSearch(e.target.value)}
+          onChange={e => handleSearch(e.target.value)}
           className="max-w-sm"
         />
       </div>
 
       {loading ? (
         <LoadingSkeleton rows={5} cols={4} />
-      ) : filtered.length === 0 ? (
+      ) : customers.length === 0 ? (
         <EmptyState
           icon="👥"
           title={search ? 'No matches' : 'No customers yet'}
           description={search ? `No customer matches "${search}"` : 'Create your first customer above.'}
         />
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Name</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Email</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Phone</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filtered.map(c => (
-                <tr key={c.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">{c.fullName}</td>
-                  <td className="px-4 py-3 text-gray-500">{c.email ?? '—'}</td>
-                  <td className="px-4 py-3 text-gray-500">{c.phone ?? '—'}</td>
-                  <td className="px-4 py-3"><StatusBadge status={c.state} /></td>
-                  <td className="px-4 py-3">
-                    {c.state === 'LEAD' && (
-                      <Button size="sm" variant="outline" onClick={() => handleTransition(c.id, 'ACTIVE')}>
-                        Activate
-                      </Button>
-                    )}
-                    {c.state === 'ACTIVE' && (
-                      <Button size="sm" variant="outline" onClick={() => handleTransition(c.id, 'INACTIVE')}>
-                        Deactivate
-                      </Button>
-                    )}
-                    {c.state === 'INACTIVE' && (
-                      <Button size="sm" variant="outline" onClick={() => handleTransition(c.id, 'ACTIVE')}>
-                        Re-activate
-                      </Button>
-                    )}
-                  </td>
+        <>
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">Name</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">Email</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">Phone</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {customers.map(c => (
+                  <tr key={c.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-medium text-gray-900">{c.fullName}</td>
+                    <td className="px-4 py-3 text-gray-500">{c.email ?? '—'}</td>
+                    <td className="px-4 py-3 text-gray-500">{c.phone ?? '—'}</td>
+                    <td className="px-4 py-3"><StatusBadge status={c.state} /></td>
+                    <td className="px-4 py-3">
+                      {c.state === 'LEAD' && (
+                        <Button size="sm" variant="outline" onClick={() => handleTransition(c.id, 'ACTIVE')}>
+                          Activate
+                        </Button>
+                      )}
+                      {c.state === 'ACTIVE' && (
+                        <Button size="sm" variant="outline" onClick={() => handleTransition(c.id, 'INACTIVE')}>
+                          Deactivate
+                        </Button>
+                      )}
+                      {c.state === 'INACTIVE' && (
+                        <Button size="sm" variant="outline" onClick={() => handleTransition(c.id, 'ACTIVE')}>
+                          Re-activate
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={ps => { setPageSize(ps); setPage(1); }} />
+        </>
       )}
     </div>
   );

@@ -269,11 +269,12 @@ export const MOCK_CUSTOMERS: Customer[] = [
   { id: 'c-3', fullName: 'New Lead Corp', email: 'lead@example.com', state: 'LEAD', preferredContactMethod: 'PHONE', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
 ];
 
-export async function listCustomers(params?: { state?: string; search?: string; limit?: number }): Promise<{ items: Customer[]; total: number }> {
+export async function listCustomers(params?: { state?: string; search?: string; limit?: number; offset?: number }): Promise<{ items: Customer[]; total: number }> {
   const qs = new URLSearchParams();
   if (params?.state) qs.set('state', params.state);
   if (params?.search) qs.set('search', params.search);
-  qs.set('limit', String(params?.limit ?? 500));
+  qs.set('limit', String(params?.limit ?? 25));
+  if (params?.offset) qs.set('offset', String(params.offset));
   return apiFetch(`/identity/customers${qs.size ? `?${qs}` : ''}`, undefined, { items: MOCK_CUSTOMERS, total: MOCK_CUSTOMERS.length });
 }
 
@@ -315,11 +316,12 @@ export const MOCK_PARTS: Part[] = [
   { id: 'p-4', sku: 'CHARGER-48V-15A', name: '48V 15A Onboard Charger', unitOfMeasure: 'EA', partState: 'ACTIVE', reorderPoint: 2, quantityOnHand: 6, location: 'C-02' },
 ];
 
-export async function listParts(params?: { search?: string; partState?: string; limit?: number }): Promise<{ items: Part[]; total: number }> {
+export async function listParts(params?: { search?: string; partState?: string; limit?: number; offset?: number }): Promise<{ items: Part[]; total: number }> {
   const qs = new URLSearchParams();
   if (params?.search) qs.set('search', params.search);
   if (params?.partState) qs.set('partState', params.partState);
-  if (params?.limit) qs.set('limit', String(params.limit));
+  qs.set('limit', String(params?.limit ?? 25));
+  if (params?.offset) qs.set('offset', String(params.offset));
   return apiFetch(`/inventory/parts${qs.size ? `?${qs}` : ''}`, undefined, { items: MOCK_PARTS, total: MOCK_PARTS.length });
 }
 
@@ -615,10 +617,12 @@ export interface CreateSopInput {
   ownerEmployeeId?: string;
 }
 
-export async function listSops(params?: { status?: string; search?: string }): Promise<{ items: SopDocument[]; total: number }> {
+export async function listSops(params?: { status?: string; search?: string; limit?: number; offset?: number }): Promise<{ items: SopDocument[]; total: number }> {
   const qs = new URLSearchParams();
   if (params?.status) qs.set('status', params.status);
   if (params?.search) qs.set('search', params.search);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
   return apiFetch(`/sop${qs.size ? `?${qs}` : ''}`, undefined, { items: [], total: 0 });
 }
 

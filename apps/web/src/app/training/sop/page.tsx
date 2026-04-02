@@ -1,8 +1,9 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { PageHeader, EmptyState } from '@gg-erp/ui';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Pagination } from '@/components/ui/pagination';
 import { toast } from 'sonner';
 import { listSops, createSop, listInspectionTemplates, type SopDocument, type InspectionTemplate } from '@/lib/api-client';
 
@@ -12,9 +13,12 @@ const STATUS_CLASSES: Record<string, string> = {
   RETIRED:   'bg-gray-100 text-gray-500',
 };
 
+const PAGE_SIZE = 25;
+
 export default function SOPLibraryPage() {
   const [tab, setTab] = useState<'sops' | 'templates'>('sops');
   const [sops, setSops] = useState<SopDocument[]>([]);
+  const [sopTotal, setSopTotal] = useState(0);
   const [templates, setTemplates] = useState<InspectionTemplate[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<InspectionTemplate | null>(null);
   const [loading, setLoading] = useState(true);
@@ -22,28 +26,57 @@ export default function SOPLibraryPage() {
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PUBLISHED' | 'DRAFT' | 'RETIRED'>('PUBLISHED');
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
 
-  async function load() {
+  const loadSops = useCallback(async (s: string, status: string, p: number, ps: number) => {
     setLoading(true);
     try {
-      if (tab === 'sops') {
-        const params: { status?: string; search?: string } = {};
-        if (statusFilter !== 'ALL') params.status = statusFilter;
-        if (search) params.search = search;
-        const res = await listSops(params);
-        setSops(res.items);
-      } else {
-        const res = await listInspectionTemplates();
-        setTemplates(res.items);
-      }
+      const params: { status?: string; search?: string; limit: number; offset: number } = {
+        limit: ps, offset: (p - 1) * ps,
+      };
+      if (status !== 'ALL') params.status = status;
+      if (s) params.search = s;
+      const res = await listSops(params);
+      setSops(res.items);
+      setSopTotal(res.total);
     } catch {
-      toast.error(`Failed to load ${tab === 'sops' ? 'SOPs' : 'inspection templates'}`);
+      toast.error('Failed to load SOPs');
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  const loadTemplates = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await listInspectionTemplates();
+      setTemplates(res.items);
+    } catch {
+      toast.error('Failed to load inspection templates');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab === 'sops') {
+      const timeout = setTimeout(() => void loadSops(search, statusFilter, page, pageSize), 300);
+      return () => clearTimeout(timeout);
+    } else {
+      void loadTemplates();
+    }
+  }, [tab, statusFilter, search, page, pageSize, loadSops, loadTemplates]);
+
+  function handleSearch(value: string) {
+    setSearch(value);
+    setPage(1);
   }
 
-  useEffect(() => { load(); }, [tab, statusFilter, search]); // eslint-disable-line react-hooks/exhaustive-deps
+  function handleStatusFilter(f: 'ALL' | 'PUBLISHED' | 'DRAFT' | 'RETIRED') {
+    setStatusFilter(f);
+    setPage(1);
+  }
 
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -124,14 +157,14 @@ export default function SOPLibraryPage() {
             <Input
               placeholder="Search SOPs…"
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={e => handleSearch(e.target.value)}
               className="max-w-xs"
             />
             <div className="flex gap-2">
               {(['ALL', 'PUBLISHED', 'DRAFT', 'RETIRED'] as const).map(f => (
                 <button
                   key={f}
-                  onClick={() => setStatusFilter(f)}
+                  onClick={() => handleStatusFilter(f)}
                   className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${statusFilter === f ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-300 text-gray-600 hover:border-gray-400'}`}
                 >
                   {f}
@@ -181,6 +214,7 @@ export default function SOPLibraryPage() {
                 </tbody>
               </table>
             </div>
+            <Pagination page={page} pageSize={pageSize} total={sopTotal} onPageChange={setPage} onPageSizeChange={ps => { setPageSize(ps); setPage(1); }} />
           )}
         </>
       )}

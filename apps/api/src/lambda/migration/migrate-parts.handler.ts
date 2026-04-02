@@ -17,7 +17,7 @@
  */
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { PrismaClient } from '@prisma/client';
-import { writeFileSync, readFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import {
   login,
   fetchInventoryParts,
@@ -231,24 +231,45 @@ export async function handle(event: MigratePartsEvent) {
 async function runTracked(
   wave: string,
   label: string,
-  fn: () => Promise<{ batchId: string; inserted: number; skipped: number; errors: number }>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  fn: () => Promise<any>,
 ): Promise<WaveReport> {
   console.log(`🚀 Wave ${wave} — ${label}`);
   const start = Date.now();
   try {
     const result = await fn();
     const durationMs = Date.now() - start;
+
+    // Handle both flat LoadResult and composite (e.g. Wave F: { vendors, purchaseOrders })
+    let inserted = 0;
+    let skipped = 0;
+    let errors = 0;
+    if ('batchId' in result) {
+      inserted = (result as { inserted: number }).inserted;
+      skipped = (result as { skipped: number }).skipped;
+      errors = (result as { errors: number }).errors;
+    } else {
+      for (const sub of Object.values(result)) {
+        if (sub && typeof sub === 'object' && 'inserted' in sub) {
+          const r = sub as { inserted: number; skipped: number; errors: number };
+          inserted += r.inserted;
+          skipped += r.skipped;
+          errors += r.errors;
+        }
+      }
+    }
+
     console.log(
-      `  ✅ ${label}: ${result.inserted} inserted, ${result.skipped} skipped, ${result.errors} errors (${(durationMs / 1000).toFixed(1)}s)`,
+      `  ✅ ${label}: ${inserted} inserted, ${skipped} skipped, ${errors} errors (${(durationMs / 1000).toFixed(1)}s)`,
     );
     return {
       wave,
       label,
-      inserted: result.inserted,
-      skipped: result.skipped,
-      errors: result.errors,
+      inserted,
+      skipped,
+      errors,
       durationMs,
-      status: result.errors > 0 ? 'error' : 'ok',
+      status: errors > 0 ? 'error' : 'ok',
     };
   } catch (err) {
     const durationMs = Date.now() - start;

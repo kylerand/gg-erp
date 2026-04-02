@@ -1,54 +1,65 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { PageHeader, EmptyState } from '@gg-erp/ui';
 import { Input } from '@/components/ui/input';
+import { listAuditEvents, type AuditEventRecord } from '@/lib/api-client';
 
-interface AuditEvent {
-  id: string;
-  actor: string;
-  action: string;
-  resource: string;
-  resourceId: string;
-  timestamp: string;
-  outcome: 'SUCCESS' | 'FAILURE' | 'DENIED';
-  ipAddress?: string;
-}
-
-const MOCK_EVENTS: AuditEvent[] = [
-  { id: 'ae1', actor: 'james@golfingarage.com', action: 'WORK_ORDER_REASSIGN', resource: 'WorkOrder', resourceId: 'WO-002', timestamp: '2026-03-10T09:15:00Z', outcome: 'SUCCESS', ipAddress: '192.168.1.10' },
-  { id: 'ae2', actor: 'lisa@golfingarage.com', action: 'INVOICE_SYNC_RETRY', resource: 'SyncRecord', resourceId: 's-1', timestamp: '2026-03-10T08:45:00Z', outcome: 'SUCCESS' },
-  { id: 'ae3', actor: 'unknown', action: 'ADMIN_ACCESS_ATTEMPT', resource: 'Admin', resourceId: 'user-mgmt', timestamp: '2026-03-09T23:00:00Z', outcome: 'DENIED', ipAddress: '203.0.113.99' },
-  { id: 'ae4', actor: 'marcus@golfingarage.com', action: 'WORK_ORDER_COMPLETE', resource: 'WorkOrder', resourceId: 'WO-001', timestamp: '2026-03-09T17:30:00Z', outcome: 'SUCCESS' },
-];
-
-const OUTCOME_CLASSES: Record<AuditEvent['outcome'], string> = {
+const OUTCOME_CLASSES: Record<string, string> = {
   SUCCESS: 'bg-green-100 text-green-700',
   FAILURE: 'bg-red-100 text-red-700',
-  DENIED:  'bg-orange-100 text-orange-700',
+  DENIED: 'bg-orange-100 text-orange-700',
 };
 
 export default function AuditTrailPage() {
   const [search, setSearch] = useState('');
-  const filtered = MOCK_EVENTS.filter(e =>
-    search === '' ||
-    e.actor.includes(search) ||
-    e.action.toLowerCase().includes(search.toLowerCase()) ||
-    e.resourceId.includes(search)
-  );
+  const [events, setEvents] = useState<AuditEventRecord[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setLoading(true);
+      listAuditEvents({ search: search || undefined, limit: 100 }).then((data) => {
+        setEvents(data.items);
+        setTotal(data.total);
+        setLoading(false);
+      });
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [search]);
+
+  function inferOutcome(event: AuditEventRecord): string {
+    const meta = event.metadata as Record<string, unknown>;
+    if (meta?.outcome) return String(meta.outcome);
+    if (event.action.includes('DENIED') || event.action.includes('deny')) return 'DENIED';
+    if (event.action.includes('FAILURE') || event.action.includes('fail')) return 'FAILURE';
+    return 'SUCCESS';
+  }
+
+  function inferActor(event: AuditEventRecord): string {
+    const meta = event.metadata as Record<string, unknown>;
+    return (meta?.actorEmail as string) ?? event.actorId ?? 'system';
+  }
 
   return (
     <div>
-      <PageHeader title="Audit Trail" description="Privileged change history" />
+      <PageHeader title="Audit Trail" description={`Privileged change history — ${total} events`} />
       <div className="mb-4">
         <Input
-          placeholder="Search by actor, action, or resource…"
+          placeholder="Search by action, entity type, or ID…"
           value={search}
-          onChange={e => setSearch(e.target.value)}
+          onChange={(e) => setSearch(e.target.value)}
           className="max-w-sm"
         />
       </div>
-      {filtered.length === 0 ? (
-        <EmptyState icon="📜" title="No events" description="No audit events match your search." />
+      {loading ? (
+        <div className="text-center py-16 text-gray-400 text-sm">Loading audit events…</div>
+      ) : events.length === 0 ? (
+        <EmptyState
+          icon="📜"
+          title="No audit events"
+          description={search ? 'No events match your search.' : 'No audit events have been recorded yet. Events will appear here as users interact with the system.'}
+        />
       ) : (
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           <table className="w-full text-sm">
@@ -62,17 +73,28 @@ export default function AuditTrailPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filtered.map(e => (
-                <tr key={e.id} className={`hover:bg-gray-50 ${e.outcome === 'DENIED' ? 'bg-orange-50' : ''}`}>
-                  <td className="px-4 py-3 text-xs text-gray-400">{new Date(e.timestamp).toLocaleString()}</td>
-                  <td className="px-4 py-3 text-xs text-gray-700">{e.actor}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-gray-700">{e.action}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{e.resource}/{e.resourceId}</td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${OUTCOME_CLASSES[e.outcome]}`}>{e.outcome}</span>
-                  </td>
-                </tr>
-              ))}
+              {events.map((e) => {
+                const outcome = inferOutcome(e);
+                return (
+                  <tr key={e.id} className={`hover:bg-gray-50 ${outcome === 'DENIED' ? 'bg-orange-50' : ''}`}>
+                    <td className="px-4 py-3 text-xs text-gray-400">
+                      {new Date(e.createdAt).toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-700">{inferActor(e)}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-gray-700">{e.action}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500">
+                      {e.entityType}/{e.entityId.slice(0, 8)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${OUTCOME_CLASSES[outcome] ?? 'bg-gray-100 text-gray-600'}`}
+                      >
+                        {outcome}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

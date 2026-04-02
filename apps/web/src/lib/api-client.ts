@@ -950,3 +950,57 @@ export async function markNotificationsRead(ids?: string[]): Promise<void> {
     body: JSON.stringify(ids ? { ids } : {}),
   });
 }
+
+// ─── Audit ─────────────────────────────────────────────────────────────────────
+
+export interface AuditEventRecord {
+  id: string;
+  actorId: string | null;
+  action: string;
+  entityType: string;
+  entityId: string;
+  correlationId: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+export async function listAuditEvents(params?: {
+  search?: string;
+  action?: string;
+  entityType?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ items: AuditEventRecord[]; total: number }> {
+  const qs = new URLSearchParams();
+  if (params?.search) qs.set('search', params.search);
+  if (params?.action) qs.set('action', params.action);
+  if (params?.entityType) qs.set('entityType', params.entityType);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  return apiFetch(`/audit/events${qs.size ? `?${qs}` : ''}`, undefined, { items: [], total: 0 });
+}
+
+// ─── Build Slots (Scheduling) ──────────────────────────────────────────────────
+
+export interface BuildSlotData {
+  id: string;
+  slotDate: string;
+  workstationCode: string;
+  state: string;
+  capacityHours: number;
+  usedHours: number;
+  remainingHours: number;
+  updatedAt: string;
+}
+
+export async function listBuildSlots(params?: {
+  startDate?: string;
+  endDate?: string;
+  state?: string;
+}): Promise<{ items: BuildSlotData[]; total: number }> {
+  const qs = new URLSearchParams();
+  if (params?.startDate) qs.set('startDate', params.startDate);
+  if (params?.endDate) qs.set('endDate', params.endDate);
+  if (params?.state) qs.set('state', params.state);
+  return apiFetch(`/scheduling/slots${qs.size ? `?${qs}` : ''}`, undefined, { items: [], total: 0 });
+}

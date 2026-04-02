@@ -148,6 +148,9 @@ const lambdas: LambdaEntry[] = [
   // scheduling (planner board)
   { context: 'scheduling', handler: 'list-slots',            entry: 'apps/api/src/lambda/scheduling/list-slots.handler.ts' },
   { context: 'scheduling', handler: 'list-labor-capacity',   entry: 'apps/api/src/lambda/scheduling/list-labor-capacity.handler.ts' },
+
+  // audit
+  { context: 'audit', handler: 'list-audit-events', entry: 'apps/api/src/lambda/audit/list-audit-events.handler.ts' },
 ];
 
 // Tracks which context dirs have already had the Prisma engine copied.

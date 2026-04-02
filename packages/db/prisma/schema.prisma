@@ -1787,9 +1787,9 @@ model Message {
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  channel     Channel              @relation(fields: [channelId], references: [id])
-  parent      Message?             @relation("MessageThread", fields: [parentId], references: [id])
-  replies     Message[]            @relation("MessageThread")
+  channel     Channel             @relation(fields: [channelId], references: [id])
+  parent      Message?            @relation("MessageThread", fields: [parentId], references: [id])
+  replies     Message[]           @relation("MessageThread")
   attachments MessageAttachment[]
   reactions   MessageReaction[]
 

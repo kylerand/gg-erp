@@ -149,11 +149,8 @@ function resolveCorrelationId(event: LambdaEvent): string {
 
 function resolveActorUserId(event: LambdaEvent): string | undefined {
   // From API Gateway JWT authorizer (Cognito)
-  const claims =
-    event.requestContext?.authorizer?.jwt?.claims ??
-    event.requestContext?.authorizer?.claims;
-
-  if (claims?.sub) return claims.sub;
+  const claims = resolveJwtClaims(event);
+  if (claims?.sub) return claims.sub as string;
 
   // Fallback: explicit header (for dev/testing only)
   const actorHeader = event.headers?.['x-actor-id'] ?? event.headers?.['X-Actor-Id'];
@@ -161,15 +158,18 @@ function resolveActorUserId(event: LambdaEvent): string | undefined {
 }
 
 function resolveActorRoles(event: LambdaEvent): string[] {
-  const claims =
-    event.requestContext?.authorizer?.jwt?.claims ??
-    event.requestContext?.authorizer?.claims;
-
+  const claims = resolveJwtClaims(event);
   if (!claims) return [];
 
   // Try cognito:groups first (most reliable for group-based RBAC), then custom:role
   const roleAttr = claims['cognito:groups'] || claims['custom:role'];
   if (!roleAttr) return [];
+
+  if (typeof roleAttr !== 'string') {
+    // Already an array (from decoded JWT)
+    if (Array.isArray(roleAttr)) return roleAttr.map(String);
+    return [];
+  }
 
   // API GW v2 JWT authorizer serializes arrays as "[val1 val2]" (no quotes, space-separated)
   // e.g. cognito:groups becomes "[admin]" or "[admin technician]"
@@ -187,6 +187,32 @@ function resolveActorRoles(event: LambdaEvent): string[] {
 
   // Plain comma-separated like 'admin,technician'
   return roleAttr.split(',').map((r) => r.trim()).filter(Boolean);
+}
+
+/** Extract JWT claims from API Gateway authorizer context or Authorization header. */
+function resolveJwtClaims(event: LambdaEvent): Record<string, unknown> | undefined {
+  // 1. API Gateway JWT authorizer context (preferred when authorizer is configured)
+  const gwClaims =
+    event.requestContext?.authorizer?.jwt?.claims ??
+    event.requestContext?.authorizer?.claims;
+  if (gwClaims?.sub) return gwClaims as Record<string, unknown>;
+
+  // 2. Decode JWT from Authorization header (when routes use authorization_type = NONE)
+  const authHeader = event.headers?.['authorization'] ?? event.headers?.['Authorization'];
+  if (!authHeader) return undefined;
+  const match = /^Bearer\s+(.+)$/i.exec(authHeader);
+  if (!match) return undefined;
+
+  try {
+    const parts = match[1].split('.');
+    if (parts.length !== 3) return undefined;
+    // Base64url-decode the payload (index 1)
+    const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const decoded = Buffer.from(payload, 'base64').toString('utf-8');
+    return JSON.parse(decoded) as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
 }
 
 function addCorsHeaders(result: LambdaResult, corsOrigin?: string): LambdaResult {

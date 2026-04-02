@@ -27,6 +27,25 @@ export async function apiFetch<T>(path: string, init?: ApiFetchInit, fallback?: 
       cache: 'no-store',
     });
     if (res.ok) return res.json() as Promise<T>;
+
+    // On 401, attempt token refresh and retry once
+    if (res.status === 401 && typeof window !== 'undefined') {
+      const freshToken = await tryRefreshToken();
+      if (freshToken) {
+        headers['authorization'] = `Bearer ${freshToken}`;
+        const retry = await fetch(`${API_BASE}${path}`, {
+          ...fetchInit,
+          headers: { ...headers, ...(fetchInit.headers as Record<string, string> | undefined) },
+          cache: 'no-store',
+        });
+        if (retry.ok) return retry.json() as Promise<T>;
+      }
+      // Refresh failed — redirect to login
+      redirectToLogin();
+      if (fallback !== undefined) return fallback;
+      throw new Error('Session expired. Redirecting to login.');
+    }
+
     if (fallback !== undefined) return fallback;
     const errBody = await res.json().catch(() => ({})) as { message?: string };
     throw new Error(errBody.message ?? `API error ${res.status}: ${path}`);
@@ -43,6 +62,26 @@ export async function apiFetch<T>(path: string, init?: ApiFetchInit, fallback?: 
     if (err instanceof Error) throw err;
     throw new Error(`Network error calling ${path}`);
   }
+}
+
+/** Attempt to refresh the Cognito token via Amplify. Returns new token or null. */
+async function tryRefreshToken(): Promise<string | null> {
+  try {
+    const { fetchAuthSession } = await import('aws-amplify/auth');
+    const session = await fetchAuthSession({ forceRefresh: true });
+    const token = session.tokens?.idToken?.toString() ?? null;
+    if (token) setAuthToken(token);
+    return token;
+  } catch {
+    return null;
+  }
+}
+
+let _redirecting = false;
+function redirectToLogin() {
+  if (_redirecting || typeof window === 'undefined') return;
+  _redirecting = true;
+  window.location.href = '/auth';
 }
 
 // ─── Offline Queue ─────────────────────────────────────────────────────────────────────────────

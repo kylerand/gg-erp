@@ -18,6 +18,8 @@ const AuthContext = createContext<AuthContextValue>({
   refresh: async () => {},
 });
 
+const TOKEN_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -30,9 +32,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (u) {
         const token = await getAccessToken();
         setAuthToken(token);
+      } else {
+        setAuthToken(null);
       }
     } catch {
       setUser(null);
+      setAuthToken(null);
     } finally {
       setLoading(false);
     }
@@ -40,6 +45,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void loadUser();
+
+    const interval = setInterval(async () => {
+      try {
+        const { getAccessToken, getAuthUser } = await import('./auth');
+        const u = await getAuthUser();
+        if (u) {
+          const token = await getAccessToken();
+          setAuthToken(token);
+        } else {
+          setUser(null);
+          setAuthToken(null);
+          window.location.href = '/auth';
+        }
+      } catch {
+        setUser(null);
+        setAuthToken(null);
+        window.location.href = '/auth';
+      }
+    }, TOKEN_REFRESH_INTERVAL_MS);
+
+    return () => clearInterval(interval);
   }, []);
 
   return (

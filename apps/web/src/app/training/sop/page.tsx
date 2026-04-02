@@ -178,43 +178,45 @@ export default function SOPLibraryPage() {
           ) : sops.length === 0 ? (
             <EmptyState icon="📖" title="No SOPs found" description="Try adjusting your search or filter, or create a new SOP." />
           ) : (
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Code</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Title</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Category</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Rev</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Updated</th>
-                    <th className="px-4 py-3"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {sops.map(s => (
-                    <tr key={s.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-mono text-xs font-medium text-gray-700">{s.documentCode}</td>
-                      <td className="px-4 py-3 text-gray-900">{s.title}</td>
-                      <td className="px-4 py-3 text-gray-500 text-xs">{s.category ?? '—'}</td>
-                      <td className="px-4 py-3 text-gray-500 text-xs">
-                        {s.currentVersion ? `v${s.currentVersion.versionNumber}` : '—'}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${STATUS_CLASSES[s.documentStatus] ?? 'bg-gray-100 text-gray-500'}`}>
-                          {s.documentStatus}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-400 text-xs">{new Date(s.updatedAt).toLocaleDateString()}</td>
-                      <td className="px-4 py-3">
-                        <Button size="sm" variant="outline" onClick={() => toast.info(`SOP ${s.documentCode} viewer coming soon`)}>View</Button>
-                      </td>
+            <>
+              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-medium text-gray-600">Code</th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-600">Title</th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-600">Category</th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-600">Rev</th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-600">Updated</th>
+                      <th className="px-4 py-3"></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <Pagination page={page} pageSize={pageSize} total={sopTotal} onPageChange={setPage} onPageSizeChange={ps => { setPageSize(ps); setPage(1); }} />
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {sops.map(s => (
+                      <tr key={s.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-mono text-xs font-medium text-gray-700">{s.documentCode}</td>
+                        <td className="px-4 py-3 text-gray-900">{s.title}</td>
+                        <td className="px-4 py-3 text-gray-500 text-xs">{s.category ?? '—'}</td>
+                        <td className="px-4 py-3 text-gray-500 text-xs">
+                          {s.currentVersion ? `v${s.currentVersion.versionNumber}` : '—'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${STATUS_CLASSES[s.documentStatus] ?? 'bg-gray-100 text-gray-500'}`}>
+                            {s.documentStatus}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-400 text-xs">{new Date(s.updatedAt).toLocaleDateString()}</td>
+                        <td className="px-4 py-3">
+                          <Button size="sm" variant="outline" onClick={() => toast.info(`SOP ${s.documentCode} viewer coming soon`)}>View</Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Pagination page={page} pageSize={pageSize} total={sopTotal} onPageChange={setPage} onPageSizeChange={ps => { setPageSize(ps); setPage(1); }} />
+            </>
           )}
         </>
       )}

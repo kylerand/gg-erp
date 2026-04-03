@@ -3,9 +3,10 @@ import { PageHeader } from '@gg-erp/ui';
 import { listParts } from '@/lib/api-client';
 
 export default async function InventoryPage() {
-  const { items: parts } = await listParts();
-  const lowStock = parts.filter(p => (p.quantityOnHand ?? 0) === 0).length;
-  const activeCount = parts.filter(p => p.partState === 'ACTIVE').length;
+  const res = await listParts({ limit: 500, offset: 0 });
+  const totalParts = res.total;
+  const lowStock = res.items.filter(p => (p.quantityOnHand ?? 0) === 0).length;
+  const activeCount = res.items.filter(p => p.partState === 'ACTIVE').length;
 
   return (
     <div>

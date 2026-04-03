@@ -28,10 +28,12 @@ export async function handler(event: MigrationEvent) {
     return { statusCode: 400, body: 'Missing "sql" in event payload' };
   }
 
-  const statements = event.sql
+  // Strip SQL comments, then split on semicolons
+  const cleaned = event.sql.replace(/--[^\n]*/g, '');
+  const statements = cleaned
     .split(';')
     .map((s: string) => s.trim())
-    .filter((s: string) => s.length > 0 && !s.startsWith('--'));
+    .filter((s: string) => s.length > 0);
 
   const results: Array<{ index: number; statement: string; status: string; error?: string }> = [];
 

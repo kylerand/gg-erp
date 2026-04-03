@@ -8,7 +8,7 @@
  * Event:
  *   { "sql": "CREATE SCHEMA IF NOT EXISTS ...", "migrationName": "20260403124419_add_sales_pipeline" }
  */
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 
 let prisma: PrismaClient;
 function getPrisma(): PrismaClient {

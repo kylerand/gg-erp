@@ -4,15 +4,15 @@ import { listParts } from '@/lib/api-client';
 
 export default async function InventoryPage() {
   const res = await listParts({ limit: 500, offset: 0 });
-  const totalParts = res.total;
   const lowStock = res.items.filter(p => (p.quantityOnHand ?? 0) === 0).length;
   const activeCount = res.items.filter(p => p.partState === 'ACTIVE').length;
 
   return (
     <div>
       <PageHeader title="Inventory" description="Parts, reservations, and receiving" />
-      <div className="grid grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-4 gap-4 mb-8">
         {[
+          { label: 'Total Parts', value: res.total, color: 'text-gray-700', href: '/inventory/parts' },
           { label: 'Active Parts', value: activeCount, color: 'text-green-700', href: '/inventory/parts' },
           { label: 'Out of Stock', value: lowStock, color: 'text-red-600', href: '/inventory/parts' },
           { label: 'Reservations', value: '—', color: 'text-yellow-700', href: '/inventory/reservations' },

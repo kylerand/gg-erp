@@ -186,18 +186,20 @@ function copyPrismaEngine(outDir: string): void {
     join(root, 'packages/db/node_modules/.prisma/client'),
   ];
 
+  let copied = false;
   for (const searchPath of searchPaths) {
     if (!existsSync(searchPath)) continue;
     const files = readdirSync(searchPath).filter(f => enginePattern.test(f));
     for (const file of files) {
       copyFileSync(join(searchPath, file), join(outDir, file));
       console.log(`  ↳ Copied Prisma engine to ${outDir.split('/').slice(-1)[0]}/: ${file}`);
-      prismaEngineCopied.add(outDir);
-      return;
+      copied = true;
     }
+    if (copied) break;
   }
-  // Not found is OK during local dev (native binary used instead)
-  console.log('  ↳ Prisma engine binary not found (OK for local dev, required for Lambda deploy)');
+  if (!copied) {
+    console.log('  ↳ Prisma engine binary not found (OK for local dev, required for Lambda deploy)');
+  }
   prismaEngineCopied.add(outDir);
 }
 

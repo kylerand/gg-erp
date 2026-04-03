@@ -1231,3 +1231,49 @@ export async function getSalesDashboard(): Promise<SalesDashboard> {
     topOpportunities: [],
   });
 }
+
+// ── Sales AI Copilot ──────────────────────────────────────────────────────────
+
+export interface AgentChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  toolsUsed: string[];
+  createdAt: string;
+}
+
+export interface AgentChatSession {
+  id: string;
+  opportunityId: string | null;
+  startedAt: string;
+  lastMessageAt: string;
+  lastMessage: string | null;
+}
+
+export interface AgentChatResponse {
+  sessionId: string;
+  message: string;
+  toolsUsed: string[];
+}
+
+export async function sendAgentChat(input: {
+  message: string;
+  sessionId?: string;
+  opportunityId?: string;
+}): Promise<AgentChatResponse> {
+  return apiFetch('/sales/agent/chat', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export async function listAgentSessions(params?: {
+  limit?: number;
+  offset?: number;
+}): Promise<{ items: AgentChatSession[]; total: number }> {
+  const qs = new URLSearchParams();
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  return apiFetch(`/sales/agent/sessions${qs.size ? `?${qs}` : ''}`, undefined, { items: [], total: 0 });
+}
+
+export async function getAgentSession(id: string): Promise<AgentChatSession & { messages: AgentChatMessage[] }> {
+  return apiFetch(`/sales/agent/sessions/${id}`);
+}

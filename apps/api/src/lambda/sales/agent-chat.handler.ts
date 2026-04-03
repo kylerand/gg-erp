@@ -19,7 +19,7 @@ export const handler = wrapHandler(
       return jsonResponse(400, { error: 'Missing "message" in request body' });
     }
 
-    const userId = ctx.userId ?? '00000000-0000-0000-0000-000000000000';
+    const userId = ctx.actorUserId ?? '00000000-0000-0000-0000-000000000000';
 
     const result = await processChat(
       {

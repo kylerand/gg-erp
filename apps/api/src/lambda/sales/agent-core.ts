@@ -11,9 +11,10 @@ import {
   type Message,
   type ToolResultBlock,
   type ToolUseBlock,
+  type ToolConfiguration,
 } from '@aws-sdk/client-bedrock-runtime';
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, type Prisma } from '@prisma/client';
 
 import { TOOL_CONFIG, executeTool } from './agent-tools.js';
 
@@ -137,8 +138,8 @@ export async function processChat(
 
         for (const tc of toolData) {
           assistantContent.push({
-            toolUse: { toolUseId: tc.toolUseId, name: tc.name, input: tc.input },
-          });
+            toolUse: { toolUseId: tc.toolUseId, name: tc.name, input: tc.input as Record<string, unknown> & { length?: never } },
+          } as ContentBlock);
           toolResults.push({
             toolUseId: tc.toolUseId,
             content: [{ text: JSON.stringify(tc.result) }],
@@ -175,7 +176,7 @@ export async function processChat(
       modelId: MODEL_ID,
       system: [{ text: SYSTEM_PROMPT }],
       messages,
-      toolConfig: TOOL_CONFIG,
+      toolConfig: TOOL_CONFIG as unknown as ToolConfiguration,
       inferenceConfig: {
         maxTokens: 4096,
         temperature: 0.3,
@@ -246,7 +247,7 @@ export async function processChat(
       sessionId,
       role: 'assistant',
       content: finalText,
-      toolCalls: allToolCalls.length > 0 ? allToolCalls : undefined,
+      toolCalls: allToolCalls.length > 0 ? (allToolCalls as unknown as Prisma.InputJsonValue) : undefined,
     },
   });
 

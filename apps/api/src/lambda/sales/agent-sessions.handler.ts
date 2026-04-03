@@ -14,7 +14,7 @@ function getDb(): PrismaClient {
 export const handler = wrapHandler(
   async (ctx) => {
     const db = getDb();
-    const userId = ctx.userId ?? '00000000-0000-0000-0000-000000000000';
+    const userId = ctx.actorUserId ?? '00000000-0000-0000-0000-000000000000';
     const limit = Math.min(Number(ctx.event.queryStringParameters?.limit ?? 20), 50);
     const offset = Number(ctx.event.queryStringParameters?.offset ?? 0);
 

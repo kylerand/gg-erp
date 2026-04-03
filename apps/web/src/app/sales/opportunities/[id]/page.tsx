@@ -10,6 +10,9 @@ import {
   type SalesActivity,
 } from '@/lib/api-client';
 import { PageHeader, LoadingSkeleton, StatusBadge } from '@gg-erp/ui';
+import OpportunityInsights from '@/components/sales/OpportunityInsights';
+import FollowUpSuggestions from '@/components/sales/FollowUpSuggestions';
+import EmailDraftModal from '@/components/sales/EmailDraftModal';
 
 const STAGE_COLORS: Record<string, string> = {
   PROSPECT: 'bg-blue-100 text-blue-800',
@@ -29,6 +32,7 @@ export default function OpportunityDetailPage() {
   const [activitySubject, setActivitySubject] = useState('');
   const [activityBody, setActivityBody] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [showEmailDraft, setShowEmailDraft] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -126,6 +130,25 @@ export default function OpportunityDetailPage() {
         ))}
       </div>
 
+      {/* AI Insights — Phase 4 */}
+      <OpportunityInsights
+        opportunityId={params.id}
+        title={opportunity.title}
+        estimatedValue={opportunity.estimatedValue}
+        stage={opportunity.stage}
+        probability={opportunity.probability}
+        customerId={opportunity.customerId}
+      />
+
+      {/* Follow-up Suggestions — Phase 4 */}
+      <FollowUpSuggestions
+        opportunityId={params.id}
+        opportunityTitle={opportunity.title}
+        stage={opportunity.stage}
+        lastActivityDate={opportunity.activities[0]?.createdAt}
+        customerName={opportunity.customerId}
+      />
+
       {/* Quotes */}
       <div className="mb-8">
         <h2 className="text-sm font-semibold text-gray-700 mb-3">Linked Quotes</h2>
@@ -167,12 +190,20 @@ export default function OpportunityDetailPage() {
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-gray-700">Activity Timeline</h2>
-          <button
-            onClick={() => setShowActivityForm(!showActivityForm)}
-            className="text-sm text-yellow-600 hover:text-yellow-700 font-medium"
-          >
-            {showActivityForm ? 'Cancel' : '+ Log Activity'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowEmailDraft(true)}
+              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+            >
+              ✉️ Draft Email
+            </button>
+            <button
+              onClick={() => setShowActivityForm(!showActivityForm)}
+              className="text-sm text-yellow-600 hover:text-yellow-700 font-medium"
+            >
+              {showActivityForm ? 'Cancel' : '+ Log Activity'}
+            </button>
+          </div>
         </div>
 
         {showActivityForm && (
@@ -243,6 +274,15 @@ export default function OpportunityDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Email Draft Modal — Phase 4 */}
+      <EmailDraftModal
+        isOpen={showEmailDraft}
+        onClose={() => setShowEmailDraft(false)}
+        opportunityId={params.id}
+        customerName={opportunity.customerId}
+        context={`Opportunity: ${opportunity.title}, Stage: ${opportunity.stage}, Value: $${(opportunity.estimatedValue ?? 0).toLocaleString()}`}
+      />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createQuote } from '@/lib/api-client';
 import { PageHeader } from '@gg-erp/ui';
+import PricingIntelligence from '@/components/sales/PricingIntelligence';
 
 interface LineItem {
   description: string;
@@ -233,6 +234,20 @@ export default function NewQuotePage() {
           </div>
         </div>
       </div>
+
+      {/* AI Pricing Intelligence */}
+      {lines.some((l) => l.description.trim() && l.unitPrice > 0) && (
+        <div className="mb-6">
+          <PricingIntelligence
+            customerId={customerId || undefined}
+            customerName={customerId || undefined}
+            opportunityId={opportunityId || undefined}
+            items={lines
+              .filter((l) => l.description.trim())
+              .map((l) => ({ name: l.description, quantity: l.quantity, unitPrice: l.unitPrice }))}
+          />
+        </div>
+      )}
 
       {/* Submit */}
       <div className="flex items-center gap-3">

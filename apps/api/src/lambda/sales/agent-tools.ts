@@ -2,7 +2,7 @@
  * Tool definitions and executors for the Sales AI Copilot.
  * Each tool calls the ERP database directly (same VPC) rather than going through API Gateway.
  */
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient, Prisma, type SalesActivityType } from '@prisma/client';
 
 // Re-use singleton across warm Lambda invocations
 let db: PrismaClient | undefined;
@@ -264,8 +264,7 @@ async function searchCustomers(query: string) {
   const customers = await prisma.customer.findMany({
     where: {
       OR: [
-        { firstName: { contains: query, mode: 'insensitive' as Prisma.QueryMode } },
-        { lastName: { contains: query, mode: 'insensitive' as Prisma.QueryMode } },
+        { fullName: { contains: query, mode: 'insensitive' as Prisma.QueryMode } },
         { email: { contains: query, mode: 'insensitive' as Prisma.QueryMode } },
         { phone: { contains: query, mode: 'insensitive' as Prisma.QueryMode } },
         { companyName: { contains: query, mode: 'insensitive' as Prisma.QueryMode } },
@@ -274,13 +273,11 @@ async function searchCustomers(query: string) {
     take: 10,
     select: {
       id: true,
-      firstName: true,
-      lastName: true,
+      fullName: true,
       email: true,
       phone: true,
       companyName: true,
-      customerType: true,
-      lifecycleStatus: true,
+      state: true,
     },
   });
 
@@ -288,30 +285,27 @@ async function searchCustomers(query: string) {
     count: customers.length,
     customers: customers.map((c) => ({
       id: c.id,
-      name: `${c.firstName} ${c.lastName}`.trim(),
+      name: c.fullName,
       email: c.email,
       phone: c.phone,
       company: c.companyName,
-      type: c.customerType,
-      status: c.lifecycleStatus,
+      status: c.state,
     })),
   };
 }
 
 async function getCustomerHistory(customerId: string) {
   const prisma = getDb();
-  const [customer, opportunities, quotes, workOrders] = await Promise.all([
+  const [customer, opportunities, quotes] = await Promise.all([
     prisma.customer.findUnique({
       where: { id: customerId },
       select: {
         id: true,
-        firstName: true,
-        lastName: true,
+        fullName: true,
         email: true,
         phone: true,
         companyName: true,
-        customerType: true,
-        lifecycleStatus: true,
+        state: true,
         createdAt: true,
       },
     }),
@@ -339,17 +333,6 @@ async function getCustomerHistory(customerId: string) {
         createdAt: true,
       },
     }),
-    prisma.workOrder.findMany({
-      where: { customerId },
-      orderBy: { createdAt: 'desc' },
-      take: 10,
-      select: {
-        id: true,
-        workOrderNumber: true,
-        state: true,
-        createdAt: true,
-      },
-    }),
   ]);
 
   if (!customer) return { error: 'Customer not found' };
@@ -360,19 +343,14 @@ async function getCustomerHistory(customerId: string) {
   );
 
   return {
-    customer: {
-      ...customer,
-      name: `${customer.firstName} ${customer.lastName}`.trim(),
-    },
+    customer,
     summary: {
       totalOpportunities: opportunities.length,
       totalQuotes: quotes.length,
-      totalWorkOrders: workOrders.length,
       totalQuoteValue,
     },
     recentOpportunities: opportunities,
     recentQuotes: quotes,
-    recentWorkOrders: workOrders,
   };
 }
 
@@ -381,22 +359,17 @@ async function searchInventory(query: string) {
   const parts = await prisma.part.findMany({
     where: {
       OR: [
-        { partName: { contains: query, mode: 'insensitive' as Prisma.QueryMode } },
+        { name: { contains: query, mode: 'insensitive' as Prisma.QueryMode } },
         { sku: { contains: query, mode: 'insensitive' as Prisma.QueryMode } },
         { description: { contains: query, mode: 'insensitive' as Prisma.QueryMode } },
       ],
     },
     take: 15,
-    select: {
-      id: true,
-      sku: true,
-      partName: true,
-      description: true,
-      quantityOnHand: true,
-      retailPrice: true,
-      costPrice: true,
-      binLocation: true,
-      partState: true,
+    include: {
+      stockLots: {
+        where: { lotState: 'AVAILABLE' },
+        select: { id: true },
+      },
     },
   });
 
@@ -405,12 +378,9 @@ async function searchInventory(query: string) {
     parts: parts.map((p) => ({
       id: p.id,
       sku: p.sku,
-      name: p.partName,
+      name: p.name,
       description: p.description,
-      inStock: p.quantityOnHand ?? 0,
-      retailPrice: p.retailPrice ? Number(p.retailPrice) : null,
-      costPrice: p.costPrice ? Number(p.costPrice) : null,
-      bin: p.binLocation,
+      inStock: p.stockLots.length,
       state: p.partState,
     })),
   };
@@ -420,31 +390,28 @@ async function checkStock(partId: string) {
   const prisma = getDb();
   const part = await prisma.part.findUnique({
     where: { id: partId },
-    select: {
-      id: true,
-      sku: true,
-      partName: true,
-      quantityOnHand: true,
-      reorderPoint: true,
-      reorderQuantity: true,
-      binLocation: true,
-      retailPrice: true,
-      costPrice: true,
-      partState: true,
+    include: {
+      stockLots: {
+        select: { id: true, lotState: true, lotNumber: true },
+      },
     },
   });
 
   if (!part) return { error: 'Part not found' };
 
-  const onHand = part.quantityOnHand ?? 0;
-  const reorderPt = part.reorderPoint ?? 0;
+  const availableLots = part.stockLots.filter((l) => l.lotState === 'AVAILABLE');
+  const reorderPt = Number(part.reorderPoint);
 
   return {
-    ...part,
-    retailPrice: part.retailPrice ? Number(part.retailPrice) : null,
-    costPrice: part.costPrice ? Number(part.costPrice) : null,
-    needsReorder: onHand <= reorderPt,
-    stockStatus: onHand === 0 ? 'OUT_OF_STOCK' : onHand <= reorderPt ? 'LOW' : 'IN_STOCK',
+    id: part.id,
+    sku: part.sku,
+    name: part.name,
+    totalLots: part.stockLots.length,
+    availableLots: availableLots.length,
+    reorderPoint: reorderPt,
+    state: part.partState,
+    needsReorder: availableLots.length <= reorderPt,
+    stockStatus: availableLots.length === 0 ? 'OUT_OF_STOCK' : availableLots.length <= reorderPt ? 'LOW' : 'IN_STOCK',
   };
 }
 
@@ -453,16 +420,6 @@ async function getOpportunity(opportunityId: string) {
   const opp = await prisma.salesOpportunity.findUnique({
     where: { id: opportunityId },
     include: {
-      customer: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-          phone: true,
-          companyName: true,
-        },
-      },
       quotes: {
         orderBy: { createdAt: 'desc' },
         take: 5,
@@ -490,6 +447,12 @@ async function getOpportunity(opportunityId: string) {
 
   if (!opp) return { error: 'Opportunity not found' };
 
+  // Look up customer separately
+  const customer = await prisma.customer.findUnique({
+    where: { id: opp.customerId },
+    select: { id: true, fullName: true, email: true, phone: true, companyName: true },
+  });
+
   return {
     id: opp.id,
     title: opp.title,
@@ -500,10 +463,7 @@ async function getOpportunity(opportunityId: string) {
     expectedCloseDate: opp.expectedCloseDate,
     source: opp.source,
     lostReason: opp.lostReason,
-    customer: {
-      ...opp.customer,
-      name: `${opp.customer.firstName} ${opp.customer.lastName}`.trim(),
-    },
+    customer: customer ?? { id: opp.customerId, fullName: 'Unknown', email: '', phone: null, companyName: null },
     quotes: opp.quotes,
     recentActivities: opp.activities,
     createdAt: opp.createdAt,
@@ -626,10 +586,10 @@ async function logActivity(input: ToolInput, userId: string) {
     data: {
       opportunityId: (input.opportunity_id as string) || null,
       customerId: (input.customer_id as string) || null,
-      activityType: input.type as string,
+      activityType: input.type as SalesActivityType,
       subject: input.subject as string,
       body: (input.body as string) || null,
-      performedByUserId: userId,
+      createdByUserId: userId,
     },
   });
 
@@ -651,17 +611,12 @@ async function suggestPricing(input: ToolInput) {
     where: { id: partId },
     select: {
       id: true,
-      partName: true,
-      retailPrice: true,
-      costPrice: true,
+      name: true,
+      sku: true,
     },
   });
 
   if (!part) return { error: 'Part not found' };
-
-  const retail = part.retailPrice ? Number(part.retailPrice) : 0;
-  const cost = part.costPrice ? Number(part.costPrice) : 0;
-  const margin = retail > 0 ? ((retail - cost) / retail) * 100 : 0;
 
   // Volume discount tiers
   let volumeDiscount = 0;
@@ -681,20 +636,14 @@ async function suggestPricing(input: ToolInput) {
   }
 
   const totalDiscount = Math.min(volumeDiscount + loyaltyDiscount, 25);
-  const suggestedPrice = retail * (1 - totalDiscount / 100);
-  const suggestedMargin = suggestedPrice > 0 ? ((suggestedPrice - cost) / suggestedPrice) * 100 : 0;
 
   return {
-    part: part.partName,
-    listPrice: retail,
-    costPrice: cost,
-    standardMargin: Math.round(margin),
+    part: part.name,
+    sku: part.sku,
     volumeDiscount,
     loyaltyDiscount,
     totalDiscount,
-    suggestedPrice: Math.round(suggestedPrice * 100) / 100,
-    suggestedMargin: Math.round(suggestedMargin),
-    lineTotal: Math.round(suggestedPrice * quantity * 100) / 100,
+    note: 'Pricing data (cost/retail) is not stored on the Part model. Use actual line-item prices from quotes for accurate margin analysis.',
   };
 }
 
@@ -707,7 +656,7 @@ async function draftFollowUpEmail(input: ToolInput) {
 
   const customer = await prisma.customer.findUnique({
     where: { id: customerId },
-    select: { firstName: true, lastName: true, email: true, companyName: true },
+    select: { fullName: true, email: true, companyName: true },
   });
 
   if (!customer) return { error: 'Customer not found' };
@@ -723,9 +672,8 @@ async function draftFollowUpEmail(input: ToolInput) {
     }
   }
 
-  // Return context for the AI to compose the email (the main agent will write it)
   return {
-    customerName: `${customer.firstName} ${customer.lastName}`.trim(),
+    customerName: customer.fullName,
     customerEmail: customer.email,
     company: customer.companyName,
     opportunityContext: oppContext,

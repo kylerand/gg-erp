@@ -1812,6 +1812,23 @@ resource "aws_lambda_function" "migrate_parts" {
   }
 }
 
+resource "aws_lambda_function" "run_schema_migration" {
+  function_name = "${var.name_prefix}-run-schema-migration"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "run-schema-migration.handler"
+  filename      = var.migration_lambda_zip_path
+  source_code_hash = filebase64sha256(var.migration_lambda_zip_path)
+  timeout       = 300
+  memory_size   = 512
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
 # S3 read/write access for migration artifacts bucket
 resource "aws_iam_role_policy" "erp_lambda_s3_migration" {
   count = var.migration_artifacts_bucket_name != "" ? 1 : 0

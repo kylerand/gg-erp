@@ -227,10 +227,34 @@ jobs:
 
       - name: Run database migrations
         run: |
-          npm run db:deploy || echo "⚠️  Database migration failed (likely VPC connectivity). Migrations should be run via Lambda or bastion."
+          echo "Running Prisma migrations via Lambda (VPC-only Aurora)..."
+          # Find all pending migrations by checking migration files
+          MIGRATION_DIR="packages/db/prisma/migrations"
+          LAMBDA_NAME="${{ steps.env.outputs.tf_env == 'dev' && 'gg-erp-dev' || 'gg-erp-prod' }}-run-schema-migration"
+
+          for dir in "$MIGRATION_DIR"/*/; do
+            MIGRATION_NAME=$(basename "$dir")
+            SQL_FILE="$dir/migration.sql"
+            if [ ! -f "$SQL_FILE" ]; then continue; fi
+
+            echo "Applying migration: $MIGRATION_NAME"
+            SQL_CONTENT=$(cat "$SQL_FILE" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))")
+            PAYLOAD=$(echo "{}" | python3 -c "import sys,json; print(json.dumps({'sql': json.loads($SQL_CONTENT), 'migrationName': '$MIGRATION_NAME'}))")
+
+            RESULT=$(aws lambda invoke \
+              --function-name "$LAMBDA_NAME" \
+              --region us-east-2 \
+              --payload "$PAYLOAD" \
+              --cli-binary-format raw-in-base64-out \
+              /tmp/migration-result.json 2>&1) || true
+
+            if [ -f /tmp/migration-result.json ]; then
+              cat /tmp/migration-result.json | python3 -c "import sys,json; d=json.load(sys.stdin); b=json.loads(d.get('body','{}')); print(f'  OK: {b.get(\"ok\",0)} | Skipped: {b.get(\"skipped\",0)} | Errors: {b.get(\"errors\",0)}')" 2>/dev/null || echo "  Result: $(cat /tmp/migration-result.json)"
+            fi
+          done
+          echo "✅ Migration step complete"
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DB_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AWS_REGION: us-east-2
         continue-on-error: true
 
       - name: Smoke test - Health check

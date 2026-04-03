@@ -3173,8 +3173,8 @@ resource "aws_apigatewayv2_route" "sales_agent_chat" {
   api_id    = aws_apigatewayv2_api.erp.id
   route_key = "POST /sales/agent/chat"
   target    = "integrations/${aws_apigatewayv2_integration.sales_agent_chat.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorizer_id      = local.authorizer_id
 }
 
 resource "aws_lambda_permission" "sales_agent_chat" {
@@ -3212,8 +3212,8 @@ resource "aws_apigatewayv2_route" "sales_agent_sessions" {
   api_id    = aws_apigatewayv2_api.erp.id
   route_key = "GET /sales/agent/sessions"
   target    = "integrations/${aws_apigatewayv2_integration.sales_agent_sessions.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorizer_id      = local.authorizer_id
 }
 
 resource "aws_lambda_permission" "sales_agent_sessions" {
@@ -3251,8 +3251,8 @@ resource "aws_apigatewayv2_route" "sales_agent_session_detail" {
   api_id    = aws_apigatewayv2_api.erp.id
   route_key = "GET /sales/agent/sessions/{sessionId}"
   target    = "integrations/${aws_apigatewayv2_integration.sales_agent_session_detail.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorizer_id      = local.authorizer_id
 }
 
 resource "aws_lambda_permission" "sales_agent_session_detail" {

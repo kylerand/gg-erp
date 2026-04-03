@@ -74,6 +74,7 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION || 'us-east-2' }}
+          role-duration-seconds: 7200
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -191,6 +192,13 @@ jobs:
           TF_VAR_qb_webhook_verifier_token: ${{ secrets.QB_WEBHOOK_VERIFIER_TOKEN }}
           TF_VAR_github_access_token: ${{ secrets.AMPLIFY_GITHUB_TOKEN }}
           TF_VAR_repository_url: "https://github.com/${{ github.repository }}"
+
+      - name: Refresh AWS credentials before Apply
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-2' }}
+          role-duration-seconds: 7200
 
       - name: Terraform Apply
         working-directory: infra/terraform/envs/${{ steps.env.outputs.tf_env }}

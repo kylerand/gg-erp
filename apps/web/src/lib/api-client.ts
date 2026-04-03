@@ -1047,3 +1047,187 @@ export async function listBuildSlots(params?: {
   if (params?.state) qs.set('state', params.state);
   return apiFetch(`/scheduling/slots${qs.size ? `?${qs}` : ''}`, undefined, { items: [], total: 0 });
 }
+
+// ---------------------------------------------------------------------------
+// Sales
+// ---------------------------------------------------------------------------
+
+export interface SalesOpportunity {
+  id: string;
+  customerId: string;
+  title: string;
+  description: string | null;
+  stage: string;
+  probability: number;
+  estimatedValue: number | null;
+  expectedCloseDate: string | null;
+  assignedToUserId: string | null;
+  source: string;
+  lostReason: string | null;
+  wonWorkOrderId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Quote {
+  id: string;
+  quoteNumber: string;
+  opportunityId: string | null;
+  customerId: string;
+  status: string;
+  subtotal: number;
+  taxRate: number;
+  taxAmount: number;
+  total: number;
+  validUntil: string | null;
+  notes: string | null;
+  termsAndConditions: string | null;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lines?: QuoteLine[];
+}
+
+export interface QuoteLine {
+  id: string;
+  quoteId: string;
+  partId: string | null;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  discountPercent: number;
+  lineTotal: number;
+  sortOrder: number;
+}
+
+export interface SalesActivity {
+  id: string;
+  opportunityId: string | null;
+  customerId: string | null;
+  activityType: string;
+  subject: string;
+  body: string | null;
+  dueDate: string | null;
+  completedAt: string | null;
+  createdByUserId: string | null;
+  createdAt: string;
+}
+
+export interface PipelineStats {
+  totalOpportunities: number;
+  totalValue: number;
+  weightedForecast: number;
+  avgDealSize: number;
+  winRate: number;
+  byStage: Array<{ stage: string; count: number; value: number }>;
+}
+
+export interface SalesForecastMonth {
+  month: string;
+  weightedValue: number;
+  dealCount: number;
+}
+
+export interface SalesDashboard {
+  pipelineStats: PipelineStats;
+  recentActivities: SalesActivity[];
+  topOpportunities: SalesOpportunity[];
+}
+
+export async function listOpportunities(
+  params?: { stage?: string; customerId?: string; search?: string; limit?: number; offset?: number },
+): Promise<{ items: SalesOpportunity[]; total: number }> {
+  const qs = new URLSearchParams();
+  if (params?.stage) qs.set('stage', params.stage);
+  if (params?.customerId) qs.set('customerId', params.customerId);
+  if (params?.search) qs.set('search', params.search);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  return apiFetch(`/sales/opportunities${qs.size ? `?${qs}` : ''}`, undefined, { items: [], total: 0 });
+}
+
+export async function getOpportunity(id: string): Promise<SalesOpportunity & { quotes: Quote[]; activities: SalesActivity[] }> {
+  return apiFetch(`/sales/opportunities/${id}`);
+}
+
+export async function createOpportunity(input: {
+  customerId: string; title: string; description?: string; stage?: string;
+  estimatedValue?: number; expectedCloseDate?: string; source?: string;
+}): Promise<SalesOpportunity> {
+  return apiFetch('/sales/opportunities', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export async function transitionOpportunityStage(id: string, stage: string, lostReason?: string): Promise<SalesOpportunity> {
+  return apiFetch(`/sales/opportunities/${id}/stage`, { method: 'POST', body: JSON.stringify({ stage, lostReason }) });
+}
+
+export async function listQuotes(
+  params?: { status?: string; customerId?: string; opportunityId?: string; limit?: number; offset?: number },
+): Promise<{ items: Quote[]; total: number }> {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  if (params?.customerId) qs.set('customerId', params.customerId);
+  if (params?.opportunityId) qs.set('opportunityId', params.opportunityId);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  return apiFetch(`/sales/quotes${qs.size ? `?${qs}` : ''}`, undefined, { items: [], total: 0 });
+}
+
+export async function getQuote(id: string): Promise<Quote> {
+  return apiFetch(`/sales/quotes/${id}`);
+}
+
+export async function createQuote(input: {
+  customerId: string; opportunityId?: string; notes?: string; validUntil?: string;
+  lines?: Array<{ partId?: string; description: string; quantity: number; unitPrice: number; discountPercent?: number }>;
+}): Promise<Quote> {
+  return apiFetch('/sales/quotes', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export async function sendQuote(id: string): Promise<Quote> {
+  return apiFetch(`/sales/quotes/${id}/send`, { method: 'POST' });
+}
+
+export async function acceptQuote(id: string): Promise<Quote> {
+  return apiFetch(`/sales/quotes/${id}/accept`, { method: 'POST' });
+}
+
+export async function rejectQuote(id: string, reason?: string): Promise<Quote> {
+  return apiFetch(`/sales/quotes/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) });
+}
+
+export async function listActivities(
+  params?: { opportunityId?: string; customerId?: string; activityType?: string; limit?: number; offset?: number },
+): Promise<{ items: SalesActivity[]; total: number }> {
+  const qs = new URLSearchParams();
+  if (params?.opportunityId) qs.set('opportunityId', params.opportunityId);
+  if (params?.customerId) qs.set('customerId', params.customerId);
+  if (params?.activityType) qs.set('activityType', params.activityType);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  return apiFetch(`/sales/activities${qs.size ? `?${qs}` : ''}`, undefined, { items: [], total: 0 });
+}
+
+export async function createActivity(input: {
+  opportunityId?: string; customerId?: string; activityType: string; subject: string; body?: string; dueDate?: string;
+}): Promise<SalesActivity> {
+  return apiFetch('/sales/activities', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export async function getSalesPipelineStats(): Promise<PipelineStats> {
+  return apiFetch('/sales/pipeline-stats', undefined, {
+    totalOpportunities: 0, totalValue: 0, weightedForecast: 0, avgDealSize: 0, winRate: 0, byStage: [],
+  });
+}
+
+export async function getSalesForecast(): Promise<SalesForecastMonth[]> {
+  return apiFetch('/sales/forecast', undefined, []);
+}
+
+export async function getSalesDashboard(): Promise<SalesDashboard> {
+  return apiFetch('/sales/dashboard', undefined, {
+    pipelineStats: { totalOpportunities: 0, totalValue: 0, weightedForecast: 0, avgDealSize: 0, winRate: 0, byStage: [] },
+    recentActivities: [],
+    topOpportunities: [],
+  });
+}

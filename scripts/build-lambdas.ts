@@ -151,6 +151,26 @@ const lambdas: LambdaEntry[] = [
 
   // audit
   { context: 'audit', handler: 'list-audit-events', entry: 'apps/api/src/lambda/audit/list-audit-events.handler.ts' },
+
+  // sales
+  { context: 'sales', handler: 'list-opportunities',     entry: 'apps/api/src/lambda/sales/list-opportunities.handler.ts' },
+  { context: 'sales', handler: 'get-opportunity',         entry: 'apps/api/src/lambda/sales/get-opportunity.handler.ts' },
+  { context: 'sales', handler: 'create-opportunity',      entry: 'apps/api/src/lambda/sales/create-opportunity.handler.ts' },
+  { context: 'sales', handler: 'update-opportunity',      entry: 'apps/api/src/lambda/sales/update-opportunity.handler.ts' },
+  { context: 'sales', handler: 'transition-opportunity',  entry: 'apps/api/src/lambda/sales/transition-opportunity.handler.ts' },
+  { context: 'sales', handler: 'list-quotes',             entry: 'apps/api/src/lambda/sales/list-quotes.handler.ts' },
+  { context: 'sales', handler: 'get-quote',               entry: 'apps/api/src/lambda/sales/get-quote.handler.ts' },
+  { context: 'sales', handler: 'create-quote',            entry: 'apps/api/src/lambda/sales/create-quote.handler.ts' },
+  { context: 'sales', handler: 'update-quote',            entry: 'apps/api/src/lambda/sales/update-quote.handler.ts' },
+  { context: 'sales', handler: 'update-quote-lines',      entry: 'apps/api/src/lambda/sales/update-quote-lines.handler.ts' },
+  { context: 'sales', handler: 'send-quote',              entry: 'apps/api/src/lambda/sales/send-quote.handler.ts' },
+  { context: 'sales', handler: 'accept-quote',            entry: 'apps/api/src/lambda/sales/accept-quote.handler.ts' },
+  { context: 'sales', handler: 'reject-quote',            entry: 'apps/api/src/lambda/sales/reject-quote.handler.ts' },
+  { context: 'sales', handler: 'list-activities',         entry: 'apps/api/src/lambda/sales/list-activities.handler.ts' },
+  { context: 'sales', handler: 'create-activity',         entry: 'apps/api/src/lambda/sales/create-activity.handler.ts' },
+  { context: 'sales', handler: 'pipeline-stats',          entry: 'apps/api/src/lambda/sales/pipeline-stats.handler.ts' },
+  { context: 'sales', handler: 'forecast',                entry: 'apps/api/src/lambda/sales/forecast.handler.ts' },
+  { context: 'sales', handler: 'dashboard',               entry: 'apps/api/src/lambda/sales/dashboard.handler.ts' },
 ];
 
 // Tracks which context dirs have already had the Prisma engine copied.

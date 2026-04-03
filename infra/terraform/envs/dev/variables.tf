@@ -79,6 +79,12 @@ variable "audit_lambda_zip_path" {
   default     = "../../../../apps/api/dist/audit-lambda.zip"
 }
 
+variable "sales_lambda_zip_path" {
+  description = "Path to the packaged sales Lambda zip artifact."
+  type        = string
+  default     = "../../../../apps/api/dist/sales-lambda.zip"
+}
+
 # QuickBooks OAuth
 
 variable "qb_client_id" {

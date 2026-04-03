@@ -76,6 +76,12 @@ variable "audit_lambda_zip_path" {
   default     = "apps/api/dist/audit-lambda.zip"
 }
 
+variable "sales_lambda_zip_path" {
+  description = "Path to the zipped sales Lambda artifact."
+  type        = string
+  default     = "apps/api/dist/sales-lambda.zip"
+}
+
 variable "qb_client_id" {
   description = "QuickBooks app client ID for OAuth2"
   type        = string
@@ -2372,6 +2378,656 @@ resource "aws_lambda_permission" "allow_api_gateway_list" {
   function_name = aws_lambda_function.work_orders_list.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*/planning/work-orders"
+}
+
+# ── Sales context ─────────────────────────────────────────────────────────────
+
+resource "aws_lambda_function" "sales_list_opportunities" {
+  function_name = "${var.name_prefix}-sales-list-opportunities"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-opportunities.handler"
+  filename      = var.sales_lambda_zip_path
+  timeout       = 30
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "sales_list_opportunities" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.sales_list_opportunities.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "sales_list_opportunities" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /sales/opportunities"
+  target             = "integrations/${aws_apigatewayv2_integration.sales_list_opportunities.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_lambda_permission" "sales_list_opportunities" {
+  function_name = aws_lambda_function.sales_list_opportunities.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+resource "aws_lambda_function" "sales_get_opportunity" {
+  function_name = "${var.name_prefix}-sales-get-opportunity"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "get-opportunity.handler"
+  filename      = var.sales_lambda_zip_path
+  timeout       = 30
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "sales_get_opportunity" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.sales_get_opportunity.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "sales_get_opportunity" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /sales/opportunities/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.sales_get_opportunity.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_lambda_permission" "sales_get_opportunity" {
+  function_name = aws_lambda_function.sales_get_opportunity.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+resource "aws_lambda_function" "sales_create_opportunity" {
+  function_name = "${var.name_prefix}-sales-create-opportunity"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "create-opportunity.handler"
+  filename      = var.sales_lambda_zip_path
+  timeout       = 30
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "sales_create_opportunity" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.sales_create_opportunity.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "sales_create_opportunity" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /sales/opportunities"
+  target             = "integrations/${aws_apigatewayv2_integration.sales_create_opportunity.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_lambda_permission" "sales_create_opportunity" {
+  function_name = aws_lambda_function.sales_create_opportunity.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+resource "aws_lambda_function" "sales_update_opportunity" {
+  function_name = "${var.name_prefix}-sales-update-opportunity"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "update-opportunity.handler"
+  filename      = var.sales_lambda_zip_path
+  timeout       = 30
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "sales_update_opportunity" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.sales_update_opportunity.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "sales_update_opportunity" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /sales/opportunities/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.sales_update_opportunity.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_lambda_permission" "sales_update_opportunity" {
+  function_name = aws_lambda_function.sales_update_opportunity.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+resource "aws_lambda_function" "sales_transition_opportunity" {
+  function_name = "${var.name_prefix}-sales-transition-opportunity"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "transition-opportunity.handler"
+  filename      = var.sales_lambda_zip_path
+  timeout       = 30
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "sales_transition_opportunity" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.sales_transition_opportunity.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "sales_transition_opportunity" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /sales/opportunities/{id}/stage"
+  target             = "integrations/${aws_apigatewayv2_integration.sales_transition_opportunity.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_lambda_permission" "sales_transition_opportunity" {
+  function_name = aws_lambda_function.sales_transition_opportunity.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+resource "aws_lambda_function" "sales_list_quotes" {
+  function_name = "${var.name_prefix}-sales-list-quotes"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-quotes.handler"
+  filename      = var.sales_lambda_zip_path
+  timeout       = 30
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "sales_list_quotes" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.sales_list_quotes.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "sales_list_quotes" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /sales/quotes"
+  target             = "integrations/${aws_apigatewayv2_integration.sales_list_quotes.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_lambda_permission" "sales_list_quotes" {
+  function_name = aws_lambda_function.sales_list_quotes.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+resource "aws_lambda_function" "sales_get_quote" {
+  function_name = "${var.name_prefix}-sales-get-quote"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "get-quote.handler"
+  filename      = var.sales_lambda_zip_path
+  timeout       = 30
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "sales_get_quote" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.sales_get_quote.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "sales_get_quote" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /sales/quotes/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.sales_get_quote.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_lambda_permission" "sales_get_quote" {
+  function_name = aws_lambda_function.sales_get_quote.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+resource "aws_lambda_function" "sales_create_quote" {
+  function_name = "${var.name_prefix}-sales-create-quote"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "create-quote.handler"
+  filename      = var.sales_lambda_zip_path
+  timeout       = 30
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "sales_create_quote" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.sales_create_quote.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "sales_create_quote" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /sales/quotes"
+  target             = "integrations/${aws_apigatewayv2_integration.sales_create_quote.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_lambda_permission" "sales_create_quote" {
+  function_name = aws_lambda_function.sales_create_quote.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+resource "aws_lambda_function" "sales_update_quote" {
+  function_name = "${var.name_prefix}-sales-update-quote"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "update-quote.handler"
+  filename      = var.sales_lambda_zip_path
+  timeout       = 30
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "sales_update_quote" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.sales_update_quote.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "sales_update_quote" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /sales/quotes/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.sales_update_quote.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_lambda_permission" "sales_update_quote" {
+  function_name = aws_lambda_function.sales_update_quote.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+resource "aws_lambda_function" "sales_update_quote_lines" {
+  function_name = "${var.name_prefix}-sales-update-quote-lines"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "update-quote-lines.handler"
+  filename      = var.sales_lambda_zip_path
+  timeout       = 30
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "sales_update_quote_lines" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.sales_update_quote_lines.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "sales_update_quote_lines" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PUT /sales/quotes/{id}/lines"
+  target             = "integrations/${aws_apigatewayv2_integration.sales_update_quote_lines.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_lambda_permission" "sales_update_quote_lines" {
+  function_name = aws_lambda_function.sales_update_quote_lines.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+resource "aws_lambda_function" "sales_send_quote" {
+  function_name = "${var.name_prefix}-sales-send-quote"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "send-quote.handler"
+  filename      = var.sales_lambda_zip_path
+  timeout       = 30
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "sales_send_quote" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.sales_send_quote.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "sales_send_quote" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /sales/quotes/{id}/send"
+  target             = "integrations/${aws_apigatewayv2_integration.sales_send_quote.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_lambda_permission" "sales_send_quote" {
+  function_name = aws_lambda_function.sales_send_quote.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+resource "aws_lambda_function" "sales_accept_quote" {
+  function_name = "${var.name_prefix}-sales-accept-quote"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "accept-quote.handler"
+  filename      = var.sales_lambda_zip_path
+  timeout       = 30
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "sales_accept_quote" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.sales_accept_quote.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "sales_accept_quote" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /sales/quotes/{id}/accept"
+  target             = "integrations/${aws_apigatewayv2_integration.sales_accept_quote.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_lambda_permission" "sales_accept_quote" {
+  function_name = aws_lambda_function.sales_accept_quote.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+resource "aws_lambda_function" "sales_reject_quote" {
+  function_name = "${var.name_prefix}-sales-reject-quote"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "reject-quote.handler"
+  filename      = var.sales_lambda_zip_path
+  timeout       = 30
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "sales_reject_quote" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.sales_reject_quote.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "sales_reject_quote" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /sales/quotes/{id}/reject"
+  target             = "integrations/${aws_apigatewayv2_integration.sales_reject_quote.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_lambda_permission" "sales_reject_quote" {
+  function_name = aws_lambda_function.sales_reject_quote.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+resource "aws_lambda_function" "sales_list_activities" {
+  function_name = "${var.name_prefix}-sales-list-activities"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-activities.handler"
+  filename      = var.sales_lambda_zip_path
+  timeout       = 30
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "sales_list_activities" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.sales_list_activities.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "sales_list_activities" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /sales/activities"
+  target             = "integrations/${aws_apigatewayv2_integration.sales_list_activities.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_lambda_permission" "sales_list_activities" {
+  function_name = aws_lambda_function.sales_list_activities.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+resource "aws_lambda_function" "sales_create_activity" {
+  function_name = "${var.name_prefix}-sales-create-activity"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "create-activity.handler"
+  filename      = var.sales_lambda_zip_path
+  timeout       = 30
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "sales_create_activity" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.sales_create_activity.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "sales_create_activity" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /sales/activities"
+  target             = "integrations/${aws_apigatewayv2_integration.sales_create_activity.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_lambda_permission" "sales_create_activity" {
+  function_name = aws_lambda_function.sales_create_activity.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+resource "aws_lambda_function" "sales_pipeline_stats" {
+  function_name = "${var.name_prefix}-sales-pipeline-stats"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "pipeline-stats.handler"
+  filename      = var.sales_lambda_zip_path
+  timeout       = 30
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "sales_pipeline_stats" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.sales_pipeline_stats.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "sales_pipeline_stats" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /sales/pipeline-stats"
+  target             = "integrations/${aws_apigatewayv2_integration.sales_pipeline_stats.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_lambda_permission" "sales_pipeline_stats" {
+  function_name = aws_lambda_function.sales_pipeline_stats.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+resource "aws_lambda_function" "sales_forecast" {
+  function_name = "${var.name_prefix}-sales-forecast"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "forecast.handler"
+  filename      = var.sales_lambda_zip_path
+  timeout       = 30
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "sales_forecast" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.sales_forecast.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "sales_forecast" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /sales/forecast"
+  target             = "integrations/${aws_apigatewayv2_integration.sales_forecast.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_lambda_permission" "sales_forecast" {
+  function_name = aws_lambda_function.sales_forecast.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+resource "aws_lambda_function" "sales_dashboard" {
+  function_name = "${var.name_prefix}-sales-dashboard"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "dashboard.handler"
+  filename      = var.sales_lambda_zip_path
+  timeout       = 30
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "sales_dashboard" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.sales_dashboard.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "sales_dashboard" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /sales/dashboard"
+  target             = "integrations/${aws_apigatewayv2_integration.sales_dashboard.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_lambda_permission" "sales_dashboard" {
+  function_name = aws_lambda_function.sales_dashboard.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
 }
 
 output "api_base_url" {

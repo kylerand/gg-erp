@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 import {
   Wrench,
+  DollarSign,
   Package,
   Users,
   BookOpen,
@@ -37,6 +38,16 @@ const NAV_SECTIONS: NavSection[] = [
       { label: 'My Queue', href: '/work-orders/my-queue' },
       { label: 'Dispatch Board', href: '/work-orders/dispatch' },
       { label: 'Open / Blocked', href: '/work-orders/open' },
+    ],
+  },
+  {
+    label: 'Sales',
+    href: '/sales',
+    icon: DollarSign,
+    children: [
+      { label: 'Pipeline', href: '/sales/pipeline' },
+      { label: 'Quotes', href: '/sales/quotes' },
+      { label: 'Forecast', href: '/sales/forecast' },
     ],
   },
   {

@@ -160,7 +160,7 @@ jobs:
           EXISTING_GROUPS=$(aws cognito-idp list-groups --user-pool-id "$USER_POOL_ID" \
             --query 'Groups[].GroupName' --output text 2>/dev/null || echo "")
           for group in $EXISTING_GROUPS; do
-            terraform import "module.cognito.aws_cognito_user_group.roles[\"$group\"]" "${USER_POOL_ID}/${group}" \
+            terraform import -lock-timeout=120s "module.cognito.aws_cognito_user_group.roles[\"$group\"]" "${USER_POOL_ID}/${group}" \
               && echo "✓ Imported $group" || echo "↷ Skipped $group (not in config or already tracked in state)"
           done
         env:

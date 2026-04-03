@@ -191,6 +191,7 @@ resource "aws_lambda_function" "work_orders_create" {
   runtime       = "nodejs20.x"
   handler       = "create.handler"
   filename      = var.work_orders_lambda_zip_path
+  source_code_hash = filebase64sha256(var.work_orders_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
 
@@ -215,6 +216,7 @@ resource "aws_lambda_function" "work_orders_list" {
   runtime       = "nodejs20.x"
   handler       = "list.handler"
   filename      = var.work_orders_lambda_zip_path
+  source_code_hash = filebase64sha256(var.work_orders_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
 
@@ -239,6 +241,7 @@ resource "aws_lambda_function" "work_orders_transition" {
   runtime       = "nodejs20.x"
   handler       = "transition.handler"
   filename      = var.work_orders_lambda_zip_path
+  source_code_hash = filebase64sha256(var.work_orders_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
 
@@ -400,6 +403,7 @@ resource "aws_lambda_function" "identity_me" {
   runtime       = "nodejs20.x"
   handler       = "me.handler"
   filename      = var.identity_lambda_zip_path
+  source_code_hash = filebase64sha256(var.identity_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -418,6 +422,7 @@ resource "aws_lambda_function" "customers_list" {
   runtime       = "nodejs20.x"
   handler       = "list.handler"
   filename      = var.customers_lambda_zip_path
+  source_code_hash = filebase64sha256(var.customers_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -434,6 +439,7 @@ resource "aws_lambda_function" "customers_create" {
   runtime       = "nodejs20.x"
   handler       = "create.handler"
   filename      = var.customers_lambda_zip_path
+  source_code_hash = filebase64sha256(var.customers_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -450,6 +456,7 @@ resource "aws_lambda_function" "customers_get" {
   runtime       = "nodejs20.x"
   handler       = "get.handler"
   filename      = var.customers_lambda_zip_path
+  source_code_hash = filebase64sha256(var.customers_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -466,6 +473,7 @@ resource "aws_lambda_function" "customers_transition" {
   runtime       = "nodejs20.x"
   handler       = "transition.handler"
   filename      = var.customers_lambda_zip_path
+  source_code_hash = filebase64sha256(var.customers_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -484,6 +492,7 @@ resource "aws_lambda_function" "inventory_list_parts" {
   runtime       = "nodejs20.x"
   handler       = "list-parts.handler"
   filename      = var.inventory_lambda_zip_path
+  source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -500,6 +509,7 @@ resource "aws_lambda_function" "inventory_create_part" {
   runtime       = "nodejs20.x"
   handler       = "create-part.handler"
   filename      = var.inventory_lambda_zip_path
+  source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -516,6 +526,7 @@ resource "aws_lambda_function" "inventory_get_part" {
   runtime       = "nodejs20.x"
   handler       = "get-part.handler"
   filename      = var.inventory_lambda_zip_path
+  source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -532,6 +543,7 @@ resource "aws_lambda_function" "inventory_list_vendors" {
   runtime       = "nodejs20.x"
   handler       = "list-vendors.handler"
   filename      = var.inventory_lambda_zip_path
+  source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -548,6 +560,7 @@ resource "aws_lambda_function" "inventory_list_lots" {
   runtime       = "nodejs20.x"
   handler       = "list-lots.handler"
   filename      = var.inventory_lambda_zip_path
+  source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -566,6 +579,7 @@ resource "aws_lambda_function" "tickets_list_tasks" {
   runtime       = "nodejs20.x"
   handler       = "list-tasks.handler"
   filename      = var.tickets_lambda_zip_path
+  source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -582,6 +596,7 @@ resource "aws_lambda_function" "tickets_create_task" {
   runtime       = "nodejs20.x"
   handler       = "create-task.handler"
   filename      = var.tickets_lambda_zip_path
+  source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -598,6 +613,7 @@ resource "aws_lambda_function" "tickets_transition_task" {
   runtime       = "nodejs20.x"
   handler       = "transition-task.handler"
   filename      = var.tickets_lambda_zip_path
+  source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -614,6 +630,7 @@ resource "aws_lambda_function" "tickets_list_rework" {
   runtime       = "nodejs20.x"
   handler       = "list-rework.handler"
   filename      = var.tickets_lambda_zip_path
+  source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -630,6 +647,7 @@ resource "aws_lambda_function" "tickets_create_rework" {
   runtime       = "nodejs20.x"
   handler       = "create-rework.handler"
   filename      = var.tickets_lambda_zip_path
+  source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -646,6 +664,7 @@ resource "aws_lambda_function" "tickets_list_sync" {
   runtime       = "nodejs20.x"
   handler       = "list-sync.handler"
   filename      = var.tickets_lambda_zip_path
+  source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -680,6 +699,7 @@ resource "aws_lambda_function" "admin_list_users" {
   runtime       = "nodejs20.x"
   handler       = "admin-list-users.handler"
   filename      = var.identity_lambda_zip_path
+  source_code_hash = filebase64sha256(var.identity_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_admin_env }
@@ -691,6 +711,7 @@ resource "aws_lambda_function" "admin_create_user" {
   runtime       = "nodejs20.x"
   handler       = "admin-create-user.handler"
   filename      = var.identity_lambda_zip_path
+  source_code_hash = filebase64sha256(var.identity_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_admin_env }
@@ -702,6 +723,7 @@ resource "aws_lambda_function" "admin_update_user" {
   runtime       = "nodejs20.x"
   handler       = "admin-update-user.handler"
   filename      = var.identity_lambda_zip_path
+  source_code_hash = filebase64sha256(var.identity_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_admin_env }
@@ -713,6 +735,7 @@ resource "aws_lambda_function" "admin_delete_user" {
   runtime       = "nodejs20.x"
   handler       = "admin-delete-user.handler"
   filename      = var.identity_lambda_zip_path
+  source_code_hash = filebase64sha256(var.identity_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_admin_env }
@@ -1049,6 +1072,7 @@ resource "aws_lambda_function" "attachments_presign_upload" {
   runtime       = "nodejs20.x"
   handler       = "presign-upload.handler"
   filename      = var.attachments_lambda_zip_path
+  source_code_hash = filebase64sha256(var.attachments_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_attachments_env }
@@ -1065,6 +1089,7 @@ resource "aws_lambda_function" "attachments_confirm_upload" {
   runtime       = "nodejs20.x"
   handler       = "confirm-upload.handler"
   filename      = var.attachments_lambda_zip_path
+  source_code_hash = filebase64sha256(var.attachments_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_attachments_env }
@@ -1081,6 +1106,7 @@ resource "aws_lambda_function" "attachments_list" {
   runtime       = "nodejs20.x"
   handler       = "list.handler"
   filename      = var.attachments_lambda_zip_path
+  source_code_hash = filebase64sha256(var.attachments_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_attachments_env }
@@ -1097,6 +1123,7 @@ resource "aws_lambda_function" "attachments_presign_download" {
   runtime       = "nodejs20.x"
   handler       = "presign-download.handler"
   filename      = var.attachments_lambda_zip_path
+  source_code_hash = filebase64sha256(var.attachments_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_attachments_env }
@@ -1245,6 +1272,7 @@ resource "aws_lambda_function" "sop_list" {
   runtime       = "nodejs20.x"
   handler       = "list.handler"
   filename      = var.sop_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -1261,6 +1289,7 @@ resource "aws_lambda_function" "sop_get" {
   runtime       = "nodejs20.x"
   handler       = "get.handler"
   filename      = var.sop_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -1277,6 +1306,7 @@ resource "aws_lambda_function" "sop_create" {
   runtime       = "nodejs20.x"
   handler       = "create.handler"
   filename      = var.sop_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -1293,6 +1323,7 @@ resource "aws_lambda_function" "sop_publish_version" {
   runtime       = "nodejs20.x"
   handler       = "publish-version.handler"
   filename      = var.sop_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -1309,6 +1340,7 @@ resource "aws_lambda_function" "sop_list_modules" {
   runtime       = "nodejs20.x"
   handler       = "list-modules.handler"
   filename      = var.sop_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -1325,6 +1357,7 @@ resource "aws_lambda_function" "sop_list_assignments" {
   runtime       = "nodejs20.x"
   handler       = "list-assignments.handler"
   filename      = var.sop_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -1341,6 +1374,7 @@ resource "aws_lambda_function" "sop_complete_assignment" {
   runtime       = "nodejs20.x"
   handler       = "complete-assignment.handler"
   filename      = var.sop_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -1460,6 +1494,7 @@ resource "aws_lambda_function" "accounting_oauth_connect" {
   runtime       = "nodejs20.x"
   handler       = "oauth-connect.handler"
   filename      = var.accounting_lambda_zip_path
+  source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_accounting_env }
@@ -1476,6 +1511,7 @@ resource "aws_lambda_function" "accounting_oauth_callback" {
   runtime       = "nodejs20.x"
   handler       = "oauth-callback.handler"
   filename      = var.accounting_lambda_zip_path
+  source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_accounting_env }
@@ -1492,6 +1528,7 @@ resource "aws_lambda_function" "accounting_status" {
   runtime       = "nodejs20.x"
   handler       = "status.handler"
   filename      = var.accounting_lambda_zip_path
+  source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_accounting_env }
@@ -1508,6 +1545,7 @@ resource "aws_lambda_function" "accounting_list_sync" {
   runtime       = "nodejs20.x"
   handler       = "list-sync.handler"
   filename      = var.accounting_lambda_zip_path
+  source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_accounting_env }
@@ -1524,6 +1562,7 @@ resource "aws_lambda_function" "accounting_retry_sync" {
   runtime       = "nodejs20.x"
   handler       = "retry-sync.handler"
   filename      = var.accounting_lambda_zip_path
+  source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_accounting_env }
@@ -1540,6 +1579,7 @@ resource "aws_lambda_function" "accounting_trigger_sync" {
   runtime       = "nodejs20.x"
   handler       = "trigger-sync.handler"
   filename      = var.accounting_lambda_zip_path
+  source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_accounting_env }
@@ -1556,6 +1596,7 @@ resource "aws_lambda_function" "accounting_webhook" {
   runtime       = "nodejs20.x"
   handler       = "webhook.handler"
   filename      = var.accounting_lambda_zip_path
+  source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_accounting_env }
@@ -1676,6 +1717,7 @@ resource "aws_lambda_function" "migration_trigger_batch" {
   runtime       = "nodejs20.x"
   handler       = "trigger-batch.handler"
   filename      = var.migration_lambda_zip_path
+  source_code_hash = filebase64sha256(var.migration_lambda_zip_path)
   timeout       = 30
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -1691,6 +1733,7 @@ resource "aws_lambda_function" "migration_list_batches" {
   runtime       = "nodejs20.x"
   handler       = "list-batches.handler"
   filename      = var.migration_lambda_zip_path
+  source_code_hash = filebase64sha256(var.migration_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -1706,6 +1749,7 @@ resource "aws_lambda_function" "migration_get_batch" {
   runtime       = "nodejs20.x"
   handler       = "get-batch.handler"
   filename      = var.migration_lambda_zip_path
+  source_code_hash = filebase64sha256(var.migration_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -1721,6 +1765,7 @@ resource "aws_lambda_function" "migration_cancel_batch" {
   runtime       = "nodejs20.x"
   handler       = "cancel-batch.handler"
   filename      = var.migration_lambda_zip_path
+  source_code_hash = filebase64sha256(var.migration_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -1738,6 +1783,7 @@ resource "aws_lambda_function" "migration_runner" {
   runtime       = "nodejs20.x"
   handler       = "run-migration.handler"
   filename      = var.migration_lambda_zip_path
+  source_code_hash = filebase64sha256(var.migration_lambda_zip_path)
   timeout       = 900
   memory_size   = 1024
   environment { variables = local.lambda_common_env }
@@ -1755,6 +1801,7 @@ resource "aws_lambda_function" "migrate_parts" {
   runtime       = "nodejs20.x"
   handler       = "migrate-parts.handler"
   filename      = var.migration_lambda_zip_path
+  source_code_hash = filebase64sha256(var.migration_lambda_zip_path)
   timeout       = 900
   memory_size   = 1024
   environment { variables = local.lambda_common_env }
@@ -1791,6 +1838,7 @@ resource "aws_lambda_function" "audit_list_events" {
   runtime       = "nodejs20.x"
   handler       = "list-audit-events.handler"
   filename      = var.audit_lambda_zip_path
+  source_code_hash = filebase64sha256(var.audit_lambda_zip_path)
   timeout       = 30
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -1829,6 +1877,7 @@ resource "aws_lambda_function" "communication_list_channels" {
   runtime       = "nodejs20.x"
   handler       = "list-channels.handler"
   filename      = var.communication_lambda_zip_path
+  source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -1844,6 +1893,7 @@ resource "aws_lambda_function" "communication_create_channel" {
   runtime       = "nodejs20.x"
   handler       = "create-channel.handler"
   filename      = var.communication_lambda_zip_path
+  source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -1859,6 +1909,7 @@ resource "aws_lambda_function" "communication_list_messages" {
   runtime       = "nodejs20.x"
   handler       = "list-messages.handler"
   filename      = var.communication_lambda_zip_path
+  source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -1874,6 +1925,7 @@ resource "aws_lambda_function" "communication_list_replies" {
   runtime       = "nodejs20.x"
   handler       = "list-replies.handler"
   filename      = var.communication_lambda_zip_path
+  source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -1889,6 +1941,7 @@ resource "aws_lambda_function" "communication_send_message" {
   runtime       = "nodejs20.x"
   handler       = "send-message.handler"
   filename      = var.communication_lambda_zip_path
+  source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -1904,6 +1957,7 @@ resource "aws_lambda_function" "communication_edit_message" {
   runtime       = "nodejs20.x"
   handler       = "edit-message.handler"
   filename      = var.communication_lambda_zip_path
+  source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -1919,6 +1973,7 @@ resource "aws_lambda_function" "communication_delete_message" {
   runtime       = "nodejs20.x"
   handler       = "delete-message.handler"
   filename      = var.communication_lambda_zip_path
+  source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -1934,6 +1989,7 @@ resource "aws_lambda_function" "communication_add_reaction" {
   runtime       = "nodejs20.x"
   handler       = "add-reaction.handler"
   filename      = var.communication_lambda_zip_path
+  source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -1949,6 +2005,7 @@ resource "aws_lambda_function" "communication_remove_reaction" {
   runtime       = "nodejs20.x"
   handler       = "remove-reaction.handler"
   filename      = var.communication_lambda_zip_path
+  source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -1964,6 +2021,7 @@ resource "aws_lambda_function" "communication_list_todos" {
   runtime       = "nodejs20.x"
   handler       = "list-todos.handler"
   filename      = var.communication_lambda_zip_path
+  source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -1979,6 +2037,7 @@ resource "aws_lambda_function" "communication_create_todo" {
   runtime       = "nodejs20.x"
   handler       = "create-todo.handler"
   filename      = var.communication_lambda_zip_path
+  source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -1994,6 +2053,7 @@ resource "aws_lambda_function" "communication_update_todo" {
   runtime       = "nodejs20.x"
   handler       = "update-todo.handler"
   filename      = var.communication_lambda_zip_path
+  source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -2009,6 +2069,7 @@ resource "aws_lambda_function" "communication_list_notifications" {
   runtime       = "nodejs20.x"
   handler       = "list-notifications.handler"
   filename      = var.communication_lambda_zip_path
+  source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -2024,6 +2085,7 @@ resource "aws_lambda_function" "communication_mark_notifications_read" {
   runtime       = "nodejs20.x"
   handler       = "mark-notifications-read.handler"
   filename      = var.communication_lambda_zip_path
+  source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
   timeout       = 15
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -2388,6 +2450,7 @@ resource "aws_lambda_function" "sales_list_opportunities" {
   runtime       = "nodejs20.x"
   handler       = "list-opportunities.handler"
   filename      = var.sales_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
   timeout       = 30
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -2424,6 +2487,7 @@ resource "aws_lambda_function" "sales_get_opportunity" {
   runtime       = "nodejs20.x"
   handler       = "get-opportunity.handler"
   filename      = var.sales_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
   timeout       = 30
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -2460,6 +2524,7 @@ resource "aws_lambda_function" "sales_create_opportunity" {
   runtime       = "nodejs20.x"
   handler       = "create-opportunity.handler"
   filename      = var.sales_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
   timeout       = 30
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -2496,6 +2561,7 @@ resource "aws_lambda_function" "sales_update_opportunity" {
   runtime       = "nodejs20.x"
   handler       = "update-opportunity.handler"
   filename      = var.sales_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
   timeout       = 30
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -2532,6 +2598,7 @@ resource "aws_lambda_function" "sales_transition_opportunity" {
   runtime       = "nodejs20.x"
   handler       = "transition-opportunity.handler"
   filename      = var.sales_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
   timeout       = 30
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -2568,6 +2635,7 @@ resource "aws_lambda_function" "sales_list_quotes" {
   runtime       = "nodejs20.x"
   handler       = "list-quotes.handler"
   filename      = var.sales_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
   timeout       = 30
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -2604,6 +2672,7 @@ resource "aws_lambda_function" "sales_get_quote" {
   runtime       = "nodejs20.x"
   handler       = "get-quote.handler"
   filename      = var.sales_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
   timeout       = 30
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -2640,6 +2709,7 @@ resource "aws_lambda_function" "sales_create_quote" {
   runtime       = "nodejs20.x"
   handler       = "create-quote.handler"
   filename      = var.sales_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
   timeout       = 30
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -2676,6 +2746,7 @@ resource "aws_lambda_function" "sales_update_quote" {
   runtime       = "nodejs20.x"
   handler       = "update-quote.handler"
   filename      = var.sales_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
   timeout       = 30
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -2712,6 +2783,7 @@ resource "aws_lambda_function" "sales_update_quote_lines" {
   runtime       = "nodejs20.x"
   handler       = "update-quote-lines.handler"
   filename      = var.sales_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
   timeout       = 30
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -2748,6 +2820,7 @@ resource "aws_lambda_function" "sales_send_quote" {
   runtime       = "nodejs20.x"
   handler       = "send-quote.handler"
   filename      = var.sales_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
   timeout       = 30
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -2784,6 +2857,7 @@ resource "aws_lambda_function" "sales_accept_quote" {
   runtime       = "nodejs20.x"
   handler       = "accept-quote.handler"
   filename      = var.sales_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
   timeout       = 30
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -2820,6 +2894,7 @@ resource "aws_lambda_function" "sales_reject_quote" {
   runtime       = "nodejs20.x"
   handler       = "reject-quote.handler"
   filename      = var.sales_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
   timeout       = 30
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -2856,6 +2931,7 @@ resource "aws_lambda_function" "sales_list_activities" {
   runtime       = "nodejs20.x"
   handler       = "list-activities.handler"
   filename      = var.sales_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
   timeout       = 30
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -2892,6 +2968,7 @@ resource "aws_lambda_function" "sales_create_activity" {
   runtime       = "nodejs20.x"
   handler       = "create-activity.handler"
   filename      = var.sales_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
   timeout       = 30
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -2928,6 +3005,7 @@ resource "aws_lambda_function" "sales_pipeline_stats" {
   runtime       = "nodejs20.x"
   handler       = "pipeline-stats.handler"
   filename      = var.sales_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
   timeout       = 30
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -2964,6 +3042,7 @@ resource "aws_lambda_function" "sales_forecast" {
   runtime       = "nodejs20.x"
   handler       = "forecast.handler"
   filename      = var.sales_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
   timeout       = 30
   memory_size   = 256
   environment { variables = local.lambda_common_env }
@@ -3000,6 +3079,7 @@ resource "aws_lambda_function" "sales_dashboard" {
   runtime       = "nodejs20.x"
   handler       = "dashboard.handler"
   filename      = var.sales_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
   timeout       = 30
   memory_size   = 256
   environment { variables = local.lambda_common_env }

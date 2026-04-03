@@ -15,6 +15,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   pre_deploy_gates:
     runs-on: ubuntu-latest
@@ -165,7 +169,7 @@ jobs:
 
       - name: Terraform Plan
         working-directory: infra/terraform/envs/${{ steps.env.outputs.tf_env }}
-        run: terraform plan -out=tfplan
+        run: terraform plan -lock-timeout=120s -out=tfplan
         env:
           TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-2' }}
           TF_VAR_name_prefix: ${{ steps.env.outputs.name_prefix }}
@@ -189,7 +193,7 @@ jobs:
 
       - name: Terraform Apply
         working-directory: infra/terraform/envs/${{ steps.env.outputs.tf_env }}
-        run: terraform apply -auto-approve tfplan
+        run: terraform apply -lock-timeout=120s -auto-approve tfplan
         env:
           TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-2' }}
           TF_VAR_name_prefix: ${{ steps.env.outputs.name_prefix }}

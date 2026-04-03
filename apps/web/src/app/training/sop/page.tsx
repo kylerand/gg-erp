@@ -63,9 +63,9 @@ export default function SOPLibraryPage() {
     if (tab === 'sops') {
       const timeout = setTimeout(() => void loadSops(search, statusFilter, page, pageSize), 300);
       return () => clearTimeout(timeout);
-    } else {
-      void loadTemplates();
     }
+    void loadTemplates();
+    return undefined;
   }, [tab, statusFilter, search, page, pageSize, loadSops, loadTemplates]);
 
   function handleSearch(value: string) {

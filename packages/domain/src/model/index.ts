@@ -7,3 +7,4 @@ export * from './tickets.js';
 export * from './accounting.js';
 export * from './auditEvent.js';
 export * from './apiOperations.js';
+export * from './sales.js';

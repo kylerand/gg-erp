@@ -7,7 +7,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DB_DATABASE_URL")
-  schemas  = ["planning", "audit", "obs", "migration", "identity", "hr", "inventory", "work_orders", "integrations", "sop_ojt", "customers", "tickets", "accounting", "communication"]
+  schemas  = ["planning", "audit", "obs", "migration", "identity", "hr", "inventory", "work_orders", "integrations", "sop_ojt", "customers", "tickets", "accounting", "communication", "sales"]
 }
 
 enum WorkOrderStatus {
@@ -1859,4 +1859,193 @@ model Notification {
   @@index([userId, createdAt], map: "notifications_user_created_idx")
   @@map("notifications")
   @@schema("communication")
+}
+
+// ─── Sales ──────────────────────────────────────────────────────
+
+enum SalesOpportunityStage {
+  PROSPECT
+  QUALIFIED
+  PROPOSAL
+  NEGOTIATION
+  CLOSED_WON
+  CLOSED_LOST
+
+  @@schema("sales")
+}
+
+enum LeadSource {
+  WALK_IN
+  REFERRAL
+  WEBSITE
+  PHONE
+  EVENT
+  OTHER
+
+  @@schema("sales")
+}
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CONVERTED
+
+  @@schema("sales")
+}
+
+enum SalesActivityType {
+  NOTE
+  CALL
+  EMAIL
+  MEETING
+  QUOTE_SENT
+  FOLLOW_UP
+  STAGE_CHANGE
+
+  @@schema("sales")
+}
+
+model SalesOpportunity {
+  id                String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId        String                @map("customer_id") @db.Uuid
+  title             String
+  description       String?
+  stage             SalesOpportunityStage @default(PROSPECT)
+  probability       Int                   @default(10)
+  estimatedValue    Decimal?              @map("estimated_value") @db.Decimal(14, 2)
+  expectedCloseDate DateTime?             @map("expected_close_date") @db.Date
+  assignedToUserId  String?               @map("assigned_to_user_id") @db.Uuid
+  source            LeadSource            @default(OTHER)
+  lostReason        String?               @map("lost_reason")
+  wonWorkOrderId    String?               @map("won_work_order_id") @db.Uuid
+  createdAt         DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime              @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version           Int                   @default(0)
+
+  quotes     Quote[]
+  activities SalesActivity[]
+
+  @@index([customerId], map: "sales_opportunities_customer_idx")
+  @@index([stage], map: "sales_opportunities_stage_idx")
+  @@index([assignedToUserId], map: "sales_opportunities_assignee_idx")
+  @@index([createdAt], map: "sales_opportunities_created_idx")
+  @@map("sales_opportunities")
+  @@schema("sales")
+}
+
+model Quote {
+  id                 String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  quoteNumber        String      @unique @map("quote_number")
+  opportunityId      String?     @map("opportunity_id") @db.Uuid
+  customerId         String      @map("customer_id") @db.Uuid
+  status             QuoteStatus @default(DRAFT)
+  subtotal           Decimal     @default(0) @db.Decimal(14, 2)
+  taxRate            Decimal     @default(0) @map("tax_rate") @db.Decimal(5, 4)
+  taxAmount          Decimal     @default(0) @map("tax_amount") @db.Decimal(14, 2)
+  total              Decimal     @default(0) @db.Decimal(14, 2)
+  validUntil         DateTime?   @map("valid_until") @db.Date
+  notes              String?
+  termsAndConditions String?     @map("terms_and_conditions")
+  createdByUserId    String?     @map("created_by_user_id") @db.Uuid
+  approvedByUserId   String?     @map("approved_by_user_id") @db.Uuid
+  convertedWoId      String?     @map("converted_wo_id") @db.Uuid
+  createdAt          DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime    @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version            Int         @default(0)
+
+  opportunity SalesOpportunity? @relation(fields: [opportunityId], references: [id])
+  lines       QuoteLine[]
+
+  @@index([customerId], map: "quotes_customer_idx")
+  @@index([opportunityId], map: "quotes_opportunity_idx")
+  @@index([status], map: "quotes_status_idx")
+  @@index([createdAt], map: "quotes_created_idx")
+  @@map("quotes")
+  @@schema("sales")
+}
+
+model QuoteLine {
+  id              String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  quoteId         String  @map("quote_id") @db.Uuid
+  partId          String? @map("part_id") @db.Uuid
+  description     String
+  quantity        Decimal @default(1) @db.Decimal(14, 3)
+  unitPrice       Decimal @default(0) @map("unit_price") @db.Decimal(14, 2)
+  discountPercent Decimal @default(0) @map("discount_percent") @db.Decimal(5, 2)
+  lineTotal       Decimal @default(0) @map("line_total") @db.Decimal(14, 2)
+  sortOrder       Int     @default(0) @map("sort_order")
+
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId], map: "quote_lines_quote_idx")
+  @@map("quote_lines")
+  @@schema("sales")
+}
+
+model SalesActivity {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  opportunityId   String?           @map("opportunity_id") @db.Uuid
+  customerId      String?           @map("customer_id") @db.Uuid
+  activityType    SalesActivityType @map("activity_type")
+  subject         String
+  body            String?
+  dueDate         DateTime?         @map("due_date") @db.Timestamptz(6)
+  completedAt     DateTime?         @map("completed_at") @db.Timestamptz(6)
+  createdByUserId String?           @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  opportunity SalesOpportunity? @relation(fields: [opportunityId], references: [id])
+
+  @@index([opportunityId], map: "sales_activities_opportunity_idx")
+  @@index([customerId], map: "sales_activities_customer_idx")
+  @@index([createdAt], map: "sales_activities_created_idx")
+  @@map("sales_activities")
+  @@schema("sales")
+}
+
+model LeadScore {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId   String   @map("customer_id") @db.Uuid
+  score        Int      @default(0)
+  factors      Json     @default("{}") @db.JsonB
+  scoredAt     DateTime @default(now()) @map("scored_at") @db.Timestamptz(6)
+  modelVersion String   @default("v1") @map("model_version")
+
+  @@index([customerId], map: "lead_scores_customer_idx")
+  @@index([scoredAt], map: "lead_scores_scored_idx")
+  @@map("lead_scores")
+  @@schema("sales")
+}
+
+model AgentChatSession {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  opportunityId String?  @map("opportunity_id") @db.Uuid
+  startedAt     DateTime @default(now()) @map("started_at") @db.Timestamptz(6)
+  lastMessageAt DateTime @default(now()) @map("last_message_at") @db.Timestamptz(6)
+
+  messages AgentChatMessage[]
+
+  @@index([userId], map: "agent_chat_sessions_user_idx")
+  @@index([lastMessageAt], map: "agent_chat_sessions_last_msg_idx")
+  @@map("agent_chat_sessions")
+  @@schema("sales")
+}
+
+model AgentChatMessage {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId String   @map("session_id") @db.Uuid
+  role      String
+  content   String
+  toolCalls Json?    @map("tool_calls") @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  session AgentChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt], map: "agent_chat_messages_session_idx")
+  @@map("agent_chat_messages")
+  @@schema("sales")
 }

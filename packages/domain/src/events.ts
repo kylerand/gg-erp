@@ -91,7 +91,20 @@ export const ERP_DOMAIN_EVENTS = [
   'reconciliation.failed',
   'reconciliation.record_resolved',
   'audit.event.recorded',
-  'outbox.event.persisted'
+  'outbox.event.persisted',
+  'opportunity.created',
+  'opportunity.stage_changed',
+  'opportunity.won',
+  'opportunity.lost',
+  'opportunity.assigned',
+  'quote.created',
+  'quote.sent',
+  'quote.accepted',
+  'quote.rejected',
+  'quote.expired',
+  'quote.converted',
+  'sales_activity.logged',
+  'lead_score.updated'
 ] as const;
 
 export type DomainEventName = (typeof ERP_DOMAIN_EVENTS)[number];

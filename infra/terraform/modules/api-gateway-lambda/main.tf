@@ -1847,6 +1847,22 @@ resource "aws_iam_role_policy" "erp_lambda_s3_migration" {
   })
 }
 
+resource "aws_iam_role_policy" "erp_lambda_bedrock" {
+  name = "${var.name_prefix}-erp-lambda-bedrock"
+  role = aws_iam_role.erp_lambda.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ]
+      Resource = "arn:aws:bedrock:*::foundation-model/anthropic.*"
+    }]
+  })
+}
+
 # ── Audit context ────────────────────────────────────────────────────────────
 
 resource "aws_lambda_function" "audit_list_events" {
@@ -3122,6 +3138,125 @@ resource "aws_apigatewayv2_route" "sales_dashboard" {
 
 resource "aws_lambda_permission" "sales_dashboard" {
   function_name = aws_lambda_function.sales_dashboard.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+# ── Sales AI Agent ───────────────────────────────────────────────────────────
+
+resource "aws_lambda_function" "sales_agent_chat" {
+  function_name = "${var.name_prefix}-sales-agent-chat"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "agent-chat.handler"
+  filename      = var.sales_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
+  timeout       = 120
+  memory_size   = 512
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "sales_agent_chat" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.sales_agent_chat.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "sales_agent_chat" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "POST /sales/agent/chat"
+  target    = "integrations/${aws_apigatewayv2_integration.sales_agent_chat.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_lambda_permission" "sales_agent_chat" {
+  function_name = aws_lambda_function.sales_agent_chat.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+resource "aws_lambda_function" "sales_agent_sessions" {
+  function_name = "${var.name_prefix}-sales-agent-sessions"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "agent-sessions.handler"
+  filename      = var.sales_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
+  timeout       = 30
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "sales_agent_sessions" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.sales_agent_sessions.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "sales_agent_sessions" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /sales/agent/sessions"
+  target    = "integrations/${aws_apigatewayv2_integration.sales_agent_sessions.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_lambda_permission" "sales_agent_sessions" {
+  function_name = aws_lambda_function.sales_agent_sessions.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+resource "aws_lambda_function" "sales_agent_session_detail" {
+  function_name = "${var.name_prefix}-sales-agent-session-detail"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "agent-session-detail.handler"
+  filename      = var.sales_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
+  timeout       = 30
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "sales_agent_session_detail" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.sales_agent_session_detail.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "sales_agent_session_detail" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /sales/agent/sessions/{sessionId}"
+  target    = "integrations/${aws_apigatewayv2_integration.sales_agent_session_detail.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_lambda_permission" "sales_agent_session_detail" {
+  function_name = aws_lambda_function.sales_agent_session_detail.function_name
   action        = "lambda:InvokeFunction"
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"

@@ -172,6 +172,9 @@ const lambdas: LambdaEntry[] = [
   { context: 'sales', handler: 'pipeline-stats',          entry: 'apps/api/src/lambda/sales/pipeline-stats.handler.ts' },
   { context: 'sales', handler: 'forecast',                entry: 'apps/api/src/lambda/sales/forecast.handler.ts' },
   { context: 'sales', handler: 'dashboard',               entry: 'apps/api/src/lambda/sales/dashboard.handler.ts' },
+  { context: 'sales', handler: 'agent-chat',              entry: 'apps/api/src/lambda/sales/agent-chat.handler.ts' },
+  { context: 'sales', handler: 'agent-sessions',          entry: 'apps/api/src/lambda/sales/agent-sessions.handler.ts' },
+  { context: 'sales', handler: 'agent-session-detail',    entry: 'apps/api/src/lambda/sales/agent-session-detail.handler.ts' },
 ];
 
 // Tracks which context dirs have already had the Prisma engine copied.

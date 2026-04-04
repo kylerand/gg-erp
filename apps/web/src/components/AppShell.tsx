@@ -1,17 +1,19 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { SidebarNav } from '@/components/SidebarNav';
 import { TopHeader } from '@/components/TopHeader';
 import { useRole } from '@/lib/role-context';
+import GlobalCopilotChat from '@/components/GlobalCopilotChat';
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, loading } = useRole();
   const isAuthRoute = pathname === '/auth';
+  const [copilotOpen, setCopilotOpen] = useState(false);
 
   // Client-side auth guard: redirect to /auth if not signed in
   useEffect(() => {
@@ -45,6 +47,18 @@ export function AppShell({ children }: { children: ReactNode }) {
         <TopHeader />
         <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 lg:px-8">{children}</main>
       </div>
+
+      {/* Global Copilot */}
+      <GlobalCopilotChat isOpen={copilotOpen} onClose={() => setCopilotOpen(false)} />
+      {!copilotOpen && (
+        <button
+          onClick={() => setCopilotOpen(true)}
+          className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-yellow-400 hover:bg-yellow-500 shadow-lg flex items-center justify-center text-2xl transition-transform hover:scale-110"
+          title="Open ERP Copilot"
+        >
+          🤖
+        </button>
+      )}
     </div>
   );
 }

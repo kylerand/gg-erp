@@ -1277,3 +1277,37 @@ export async function listAgentSessions(params?: {
 export async function getAgentSession(id: string): Promise<AgentChatSession & { messages: AgentChatMessage[] }> {
   return apiFetch(`/sales/agent/sessions/${id}`);
 }
+
+// ── Global ERP Copilot ──────────────────────────────────────────────────────
+
+export interface CopilotChatResponse {
+  sessionId: string;
+  message: string;
+  toolsUsed: string[];
+}
+
+export interface CopilotSession {
+  id: string;
+  startedAt: string;
+  lastMessageAt: string;
+  preview: string;
+}
+
+export async function sendCopilotChat(input: {
+  message: string;
+  sessionId?: string;
+  context?: string;
+}): Promise<CopilotChatResponse> {
+  return apiFetch('/copilot/chat', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export async function listCopilotSessions(): Promise<{ sessions: CopilotSession[] }> {
+  return apiFetch('/copilot/sessions', undefined, { sessions: [] });
+}
+
+export async function getCopilotSession(
+  id: string
+): Promise<{ id: string; messages: AgentChatMessage[] }> {
+  return apiFetch(`/copilot/sessions/${id}`);
+}
+

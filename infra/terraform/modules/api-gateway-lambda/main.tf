@@ -76,6 +76,12 @@ variable "audit_lambda_zip_path" {
   default     = "apps/api/dist/audit-lambda.zip"
 }
 
+variable "copilot_lambda_zip_path" {
+  description = "Path to the zipped copilot Lambda artifact."
+  type        = string
+  default     = "apps/api/dist/copilot-lambda.zip"
+}
+
 variable "sales_lambda_zip_path" {
   description = "Path to the zipped sales Lambda artifact."
   type        = string
@@ -3257,6 +3263,127 @@ resource "aws_apigatewayv2_route" "sales_agent_session_detail" {
 
 resource "aws_lambda_permission" "sales_agent_session_detail" {
   function_name = aws_lambda_function.sales_agent_session_detail.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+# =============================================================================
+# Global Copilot Lambdas
+# =============================================================================
+
+resource "aws_lambda_function" "copilot_chat" {
+  function_name = "${var.name_prefix}-copilot-chat"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "chat.handler"
+  filename      = var.copilot_lambda_zip_path
+  source_code_hash = filebase64sha256(var.copilot_lambda_zip_path)
+  timeout       = 120
+  memory_size   = 512
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "copilot_chat" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.copilot_chat.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "copilot_chat" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "POST /copilot/chat"
+  target    = "integrations/${aws_apigatewayv2_integration.copilot_chat.id}"
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorizer_id      = local.authorizer_id
+}
+
+resource "aws_lambda_permission" "copilot_chat" {
+  function_name = aws_lambda_function.copilot_chat.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+resource "aws_lambda_function" "copilot_sessions" {
+  function_name = "${var.name_prefix}-copilot-sessions"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "sessions.handler"
+  filename      = var.copilot_lambda_zip_path
+  source_code_hash = filebase64sha256(var.copilot_lambda_zip_path)
+  timeout       = 30
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "copilot_sessions" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.copilot_sessions.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "copilot_sessions" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /copilot/sessions"
+  target    = "integrations/${aws_apigatewayv2_integration.copilot_sessions.id}"
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorizer_id      = local.authorizer_id
+}
+
+resource "aws_lambda_permission" "copilot_sessions" {
+  function_name = aws_lambda_function.copilot_sessions.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
+resource "aws_lambda_function" "copilot_session_detail" {
+  function_name = "${var.name_prefix}-copilot-session-detail"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "session-detail.handler"
+  filename      = var.copilot_lambda_zip_path
+  source_code_hash = filebase64sha256(var.copilot_lambda_zip_path)
+  timeout       = 30
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "copilot_session_detail" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.copilot_session_detail.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "copilot_session_detail" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /copilot/sessions/{sessionId}"
+  target    = "integrations/${aws_apigatewayv2_integration.copilot_session_detail.id}"
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorizer_id      = local.authorizer_id
+}
+
+resource "aws_lambda_permission" "copilot_session_detail" {
+  function_name = aws_lambda_function.copilot_session_detail.function_name
   action        = "lambda:InvokeFunction"
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"

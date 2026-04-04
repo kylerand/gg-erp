@@ -175,6 +175,11 @@ const lambdas: LambdaEntry[] = [
   { context: 'sales', handler: 'agent-chat',              entry: 'apps/api/src/lambda/sales/agent-chat.handler.ts' },
   { context: 'sales', handler: 'agent-sessions',          entry: 'apps/api/src/lambda/sales/agent-sessions.handler.ts' },
   { context: 'sales', handler: 'agent-session-detail',    entry: 'apps/api/src/lambda/sales/agent-session-detail.handler.ts' },
+
+  // Global copilot
+  { context: 'copilot', handler: 'chat',                  entry: 'apps/api/src/lambda/copilot/chat.handler.ts' },
+  { context: 'copilot', handler: 'sessions',              entry: 'apps/api/src/lambda/copilot/sessions.handler.ts' },
+  { context: 'copilot', handler: 'session-detail',        entry: 'apps/api/src/lambda/copilot/session-detail.handler.ts' },
 ];
 
 // Tracks which context dirs have already had the Prisma engine copied.

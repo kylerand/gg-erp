@@ -22,7 +22,7 @@ import { TOOL_CONFIG, executeTool } from './agent-tools.js';
 // Config
 // ---------------------------------------------------------------------------
 
-const MODEL_ID = process.env.BEDROCK_MODEL_ID || 'anthropic.claude-sonnet-4-20250514-v1:0';
+const MODEL_ID = process.env.BEDROCK_MODEL_ID || 'us.anthropic.claude-sonnet-4-20250514-v1:0';
 const REGION = process.env.AWS_REGION || 'us-east-2';
 const MAX_TURNS = 10; // max tool-use round-trips per request
 

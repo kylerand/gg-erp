@@ -683,7 +683,10 @@ async function runCustomQuery(input: ToolInput) {
   }
 
   try {
-    const model = (db as unknown as Record<string, unknown>)[modelName] as Record<string, Function>;
+    const model = (db as unknown as Record<string, unknown>)[modelName] as {
+      count: (args: { where: Record<string, unknown> }) => Promise<number>;
+      findMany: (args: { where: Record<string, unknown>; take: number; orderBy: Record<string, string> }) => Promise<unknown[]>;
+    };
     if (operation === 'count') {
       const count = await model.count({ where });
       return { model: modelName, count };

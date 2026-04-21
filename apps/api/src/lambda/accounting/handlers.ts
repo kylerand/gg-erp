@@ -37,6 +37,13 @@ import {
   failureQueueQueries,
   type SyncRecordType,
 } from '../../contexts/accounting/failureQueue.service.js';
+import {
+  MappingService,
+  mappingQueries,
+  DimensionMappingType,
+  type UpsertDimensionInput,
+  type UpsertTaxInput,
+} from '../../contexts/accounting/mapping.service.js';
 import { InMemoryAuditSink } from '../../audit/recorder.js';
 import {
   InMemoryEventPublisher,
@@ -848,4 +855,82 @@ export const retryFailedHandler = wrapHandler(async (ctx) => {
     failed: results.filter((r) => !r.success).length,
     results,
   });
+}, { requireAuth: false });
+
+// ─── Mapping service factory ──────────────────────────────────────────────────
+
+function createMappingService(): MappingService {
+  return new MappingService({ queries: mappingQueries });
+}
+
+const VALID_DIMENSION_TYPES = new Set<string>(Object.values(DimensionMappingType));
+
+// ─── List dimension mappings ──────────────────────────────────────────────────
+
+export const listDimensionMappingsHandler = wrapHandler(async (ctx) => {
+  const qs = ctx.event.queryStringParameters ?? {};
+  const integrationAccountId = qs.integrationAccountId;
+  if (!integrationAccountId) {
+    return jsonResponse(400, { message: 'integrationAccountId query parameter is required.' });
+  }
+
+  const service = createMappingService();
+  const items = await service.listDimensionMappings(integrationAccountId, qs.namespace ?? 'default');
+  return jsonResponse(200, { items, total: items.length });
+}, { requireAuth: false });
+
+// ─── Upsert dimension mapping ─────────────────────────────────────────────────
+
+export const upsertDimensionMappingHandler = wrapHandler(async (ctx) => {
+  const body = parseBody<UpsertDimensionInput>(ctx.event);
+  if (!body.ok) return jsonResponse(400, { message: body.error });
+
+  const { integrationAccountId, mappingType, internalCode, externalId } = body.value;
+  if (!integrationAccountId || !mappingType || !internalCode || !externalId) {
+    return jsonResponse(422, {
+      message: 'integrationAccountId, mappingType, internalCode, and externalId are required.',
+    });
+  }
+  if (!VALID_DIMENSION_TYPES.has(mappingType)) {
+    return jsonResponse(422, {
+      message: `Invalid mappingType. Must be one of: ${[...VALID_DIMENSION_TYPES].join(', ')}`,
+    });
+  }
+
+  const service = createMappingService();
+  const result = await service.upsertDimensionMapping(body.value);
+  return jsonResponse(200, result);
+}, { requireAuth: false });
+
+// ─── List tax mappings ────────────────────────────────────────────────────────
+
+export const listTaxMappingsHandler = wrapHandler(async (ctx) => {
+  const qs = ctx.event.queryStringParameters ?? {};
+  const integrationAccountId = qs.integrationAccountId;
+  if (!integrationAccountId) {
+    return jsonResponse(400, { message: 'integrationAccountId query parameter is required.' });
+  }
+
+  const service = createMappingService();
+  const items = await service.listTaxMappings(integrationAccountId, qs.namespace ?? 'default');
+  return jsonResponse(200, { items, total: items.length });
+}, { requireAuth: false });
+
+// ─── Upsert tax mapping ───────────────────────────────────────────────────────
+
+export const upsertTaxMappingHandler = wrapHandler(async (ctx) => {
+  const body = parseBody<UpsertTaxInput>(ctx.event);
+  if (!body.ok) return jsonResponse(400, { message: body.error });
+
+  const { integrationAccountId, taxRegionCode, internalTaxCode, externalTaxCodeId } = body.value;
+  if (!integrationAccountId || !taxRegionCode || !internalTaxCode || !externalTaxCodeId) {
+    return jsonResponse(422, {
+      message:
+        'integrationAccountId, taxRegionCode, internalTaxCode, and externalTaxCodeId are required.',
+    });
+  }
+
+  const service = createMappingService();
+  const result = await service.upsertTaxMapping(body.value);
+  return jsonResponse(200, result);
 }, { requireAuth: false });

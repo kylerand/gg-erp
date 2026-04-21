@@ -50,7 +50,8 @@
     "build:lambdas": "tsx scripts/build-lambdas.ts",
     "package:lambdas": "tsx scripts/package-lambdas.ts",
     "migrate:shopmonkey": "tsx scripts/migrate-from-shopmonkey.ts",
-    "extract:shopmonkey": "tsx scripts/extract-shopmonkey-csvs.ts"
+    "extract:shopmonkey": "tsx scripts/extract-shopmonkey-csvs.ts",
+    "hackathon:check": "bash scripts/hackathon-check.sh"
   },
   "devDependencies": {
     "@aws-sdk/client-cognito-identity-provider": "^3.1021.0",

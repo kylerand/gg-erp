@@ -78,6 +78,29 @@ import {
   transitionRoutingStepStateHandler,
 } from './lambda/routing-steps/handlers.js';
 import { getMeHandler } from './lambda/identity/handlers.js';
+import {
+  oauthConnectHandler,
+  oauthCallbackHandler,
+  qbStatusHandler,
+  listInvoiceSyncsHandler,
+  triggerInvoiceSyncHandler,
+  retryInvoiceSyncHandler,
+  listCustomerSyncsHandler,
+  triggerCustomerSyncHandler,
+  listReconciliationRunsHandler,
+  triggerReconciliationHandler,
+  getReconciliationRunHandler,
+  listMismatchesHandler,
+  resolveReconciliationHandler,
+  listAccountsHandler,
+  updateAccountStatusHandler,
+  getFailureSummaryHandler,
+  retryFailedHandler,
+  listDimensionMappingsHandler,
+  upsertDimensionMappingHandler,
+  listTaxMappingsHandler,
+  upsertTaxMappingHandler,
+} from './lambda/accounting/handlers.js';
 
 const env = loadApiEnv();
 const PORT = env.apiPort;
@@ -157,6 +180,10 @@ async function route(
   const sopItMatch = pathname.match(/^\/sop\/inspection-templates(?:\/([^/]+))?$/);
   const routingStepMatch = pathname.match(/^\/tickets\/routing-steps\/([^/]+)/);
   const woQueueMatch = pathname.match(/^\/tickets\/wo-queue\/([^/]+)/);
+  const qbInvoiceSyncMatch = pathname.match(/^\/accounting\/invoices\/([^/]+)/);
+  const qbIntegrationAccountMatch = pathname.match(/^\/accounting\/integration-accounts\/([^/]+)/);
+  const qbReconciliationRunMatch = pathname.match(/^\/accounting\/reconciliation\/runs\/([^/]+)/);
+  const qbReconciliationRecordMatch = pathname.match(/^\/accounting\/reconciliation\/records\/([^/]+)/);
 
   // ── Auth ───────────────────────────────────────────────────────────────────
   if (pathname === '/auth/me' && method === 'GET') {
@@ -295,6 +322,50 @@ async function route(
   } else if (migrationBatchMatch && pathname.endsWith('/cancel') && method === 'PATCH') {
     result = await cancelBatchHandler({ ...event, pathParameters: { id: migrationBatchMatch[1] } });
 
+  // ── Accounting / QuickBooks ───────────────────────────────────────────────
+  } else if (pathname === '/accounting/quickbooks/connect' && method === 'GET') {
+    result = await oauthConnectHandler(event);
+  } else if (pathname === '/accounting/quickbooks/callback' && method === 'GET') {
+    result = await oauthCallbackHandler(event);
+  } else if (pathname === '/accounting/quickbooks/status' && method === 'GET') {
+    result = await qbStatusHandler(event);
+  } else if (pathname === '/accounting/invoices' && method === 'GET') {
+    result = await listInvoiceSyncsHandler(event);
+  } else if (pathname === '/accounting/invoices' && method === 'POST') {
+    result = await triggerInvoiceSyncHandler(event);
+  } else if (qbInvoiceSyncMatch && pathname.endsWith('/retry') && method === 'POST') {
+    result = await retryInvoiceSyncHandler({ ...event, pathParameters: { id: qbInvoiceSyncMatch[1] } });
+  } else if (pathname === '/accounting/customers' && method === 'GET') {
+    result = await listCustomerSyncsHandler(event);
+  } else if (pathname === '/accounting/customers' && method === 'POST') {
+    result = await triggerCustomerSyncHandler(event);
+  } else if (pathname === '/accounting/reconciliation/runs' && method === 'GET') {
+    result = await listReconciliationRunsHandler(event);
+  } else if (pathname === '/accounting/reconciliation/runs' && method === 'POST') {
+    result = await triggerReconciliationHandler(event);
+  } else if (qbReconciliationRunMatch && method === 'GET') {
+    result = await getReconciliationRunHandler({ ...event, pathParameters: { id: qbReconciliationRunMatch[1] } });
+  } else if (pathname === '/accounting/reconciliation/mismatches' && method === 'GET') {
+    result = await listMismatchesHandler(event);
+  } else if (qbReconciliationRecordMatch && pathname.endsWith('/resolve') && method === 'POST') {
+    result = await resolveReconciliationHandler({ ...event, pathParameters: { id: qbReconciliationRecordMatch[1] } });
+  } else if (pathname === '/accounting/integration-accounts' && method === 'GET') {
+    result = await listAccountsHandler(event);
+  } else if (qbIntegrationAccountMatch && pathname.endsWith('/status') && method === 'PUT') {
+    result = await updateAccountStatusHandler({ ...event, pathParameters: { id: qbIntegrationAccountMatch[1] } });
+  } else if (pathname === '/accounting/failures/summary' && method === 'GET') {
+    result = await getFailureSummaryHandler(event);
+  } else if (pathname === '/accounting/failures/retry' && method === 'POST') {
+    result = await retryFailedHandler(event);
+  } else if (pathname === '/accounting/mappings/dimensions' && method === 'GET') {
+    result = await listDimensionMappingsHandler(event);
+  } else if (pathname === '/accounting/mappings/dimensions' && method === 'PUT') {
+    result = await upsertDimensionMappingHandler(event);
+  } else if (pathname === '/accounting/mappings/tax' && method === 'GET') {
+    result = await listTaxMappingsHandler(event);
+  } else if (pathname === '/accounting/mappings/tax' && method === 'PUT') {
+    result = await upsertTaxMappingHandler(event);
+
   } else {
     res.writeHead(404, { ...CORS_HEADERS, 'content-type': 'application/json' });
     res.end(JSON.stringify({ message: `No route: ${method} ${pathname}` }));
@@ -327,5 +398,11 @@ server.listen(PORT, () => {
   console.log(`   Planning    GET|POST /planning/work-orders`);
   console.log(`   SOP         GET|POST /sop, /sop/modules, /sop/modules/:id`);
   console.log(`   Training    PUT /sop/modules/:id/step-progress, POST /sop/modules/:id/quiz`);
-  console.log(`   Migration   GET|POST /migration/batches, /:id, /:id/cancel\n`);
+  console.log(`   Migration   GET|POST /migration/batches, /:id, /:id/cancel`);
+  console.log(`   QB OAuth    GET /accounting/quickbooks/connect|callback|status`);
+  console.log(`   Invoices    GET|POST /accounting/invoices, POST /:id/retry`);
+  console.log(`   Customers   GET|POST /accounting/customers`);
+  console.log(`   Reconcile   GET|POST /accounting/reconciliation/runs, GET /:id, GET /mismatches`);
+  console.log(`   Accounts    GET /accounting/integration-accounts, PUT /:id/status`);
+  console.log(`   Failures    GET /accounting/failures/summary, POST /accounting/failures/retry\n`);
 });

@@ -1230,9 +1230,11 @@ model IntegrationAccount {
   deletedAt     DateTime?                @map("deleted_at") @db.Timestamptz(6)
   version       Int                      @default(0)
 
-  syncJobs           SyncJob[]
-  externalIdMappings ExternalIdMapping[]
-  webhookInboxEvents WebhookInboxEvent[]
+  syncJobs                   SyncJob[]
+  externalIdMappings         ExternalIdMapping[]
+  webhookInboxEvents         WebhookInboxEvent[]
+  financialDimensionMappings FinancialDimensionMapping[]
+  taxCodeMappings            TaxCodeMapping[]
 
   @@map("integration_accounts")
   @@schema("integrations")
@@ -1312,6 +1314,56 @@ model ExternalIdMapping {
 
   @@unique([integrationAccountId, entityType, entityId, namespace])
   @@map("external_id_mappings")
+  @@schema("integrations")
+}
+
+enum DimensionMappingType {
+  ITEM
+  INCOME_ACCOUNT
+  AR_ACCOUNT
+  PAYMENT_METHOD
+
+  @@schema("integrations")
+}
+
+model FinancialDimensionMapping {
+  id                   String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  integrationAccountId String               @map("integration_account_id") @db.Uuid
+  mappingType          DimensionMappingType @map("mapping_type")
+  internalCode         String               @map("internal_code")
+  externalId           String               @map("external_id")
+  displayName          String?              @map("display_name")
+  namespace            String               @default("default")
+  isActive             Boolean              @default(true) @map("is_active")
+  createdAt            DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime             @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version              Int                  @default(0)
+
+  integrationAccount IntegrationAccount @relation(fields: [integrationAccountId], references: [id])
+
+  @@unique([integrationAccountId, mappingType, internalCode, namespace])
+  @@map("financial_dimension_mappings")
+  @@schema("integrations")
+}
+
+model TaxCodeMapping {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  integrationAccountId String   @map("integration_account_id") @db.Uuid
+  taxRegionCode        String   @map("tax_region_code")
+  internalTaxCode      String   @map("internal_tax_code")
+  externalTaxCodeId    String   @map("external_tax_code_id")
+  externalRateName     String?  @map("external_rate_name")
+  namespace            String   @default("default")
+  isActive             Boolean  @default(true) @map("is_active")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version              Int      @default(0)
+
+  integrationAccount IntegrationAccount @relation(fields: [integrationAccountId], references: [id])
+
+  @@unique([integrationAccountId, taxRegionCode, internalTaxCode, namespace])
+  @@index([integrationAccountId, isActive])
+  @@map("tax_code_mappings")
   @@schema("integrations")
 }
 

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 export default function SyncMonitorPage() {
   const [records, setRecords] = useState<InvoiceSyncRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'ALL' | 'FAILED' | 'PENDING' | 'SYNCED'>('ALL');
   const [qbConnected, setQbConnected] = useState<boolean | null>(null);
   const [qbCompany, setQbCompany] = useState<string | undefined>();
@@ -18,7 +19,12 @@ export default function SyncMonitorPage() {
     Promise.allSettled([
       listInvoiceSyncRecords().then(r => setRecords(r.items)),
       getQbStatus().then(s => { setQbConnected(s.connected); setQbCompany(s.companyName); }),
-    ]).finally(() => setLoading(false));
+    ]).then(([syncResult, statusResult]) => {
+      const errs = [syncResult, statusResult]
+        .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+        .map(r => r.reason instanceof Error ? r.reason.message : String(r.reason));
+      if (errs.length) setLoadError(errs[0]);
+    }).finally(() => setLoading(false));
   }, []);
 
   async function retry(id: string) {
@@ -56,6 +62,11 @@ export default function SyncMonitorPage() {
           ) : null
         }
       />
+      {loadError && (
+        <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <p className="text-sm font-semibold text-yellow-800">⚠ Could not load sync data: {loadError}</p>
+        </div>
+      )}
       {failedCount > 0 && (
         <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center justify-between">
           <p className="text-sm font-semibold text-red-700">❌ {failedCount} sync failure{failedCount > 1 ? 's' : ''} require attention</p>

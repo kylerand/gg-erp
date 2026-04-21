@@ -6,10 +6,15 @@ export const adminUpdateUserHandler = wrapHandler(
     const username = ctx.event.pathParameters?.username;
     if (!username) return jsonResponse(400, { message: 'username path parameter is required.' });
 
-    const body = parseBody<UpdateUserInput>(ctx.event);
+    const body = parseBody<UpdateUserInput & { role?: string }>(ctx.event);
     if (!body.ok) return jsonResponse(400, { message: body.error });
 
-    const user = await updateUser(decodeURIComponent(username), body.value);
+    const { role, ...rest } = body.value;
+    const input: UpdateUserInput = {
+      ...rest,
+      ...(role !== undefined ? { groups: [role] } : {}),
+    };
+    const user = await updateUser(decodeURIComponent(username), input);
     return jsonResponse(200, { user });
   },
   { requireAuth: true, allowedRoles: ['admin'] },

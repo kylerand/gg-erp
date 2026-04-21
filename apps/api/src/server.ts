@@ -78,6 +78,26 @@ import {
   transitionRoutingStepStateHandler,
 } from './lambda/routing-steps/handlers.js';
 import { getMeHandler } from './lambda/identity/handlers.js';
+import { adminListUsersHandler } from './lambda/identity/admin-list-users.handler.js';
+import { adminCreateUserHandler } from './lambda/identity/admin-create-user.handler.js';
+import { adminUpdateUserHandler } from './lambda/identity/admin-update-user.handler.js';
+import { adminDeleteUserHandler } from './lambda/identity/admin-delete-user.handler.js';
+import {
+  listChannelsHandler,
+  createChannelHandler,
+  listMessagesHandler,
+  sendMessageHandler,
+  listRepliesHandler,
+  editMessageHandler,
+  deleteMessageHandler,
+  addReactionHandler,
+  removeReactionHandler,
+  listTodosHandler,
+  createTodoHandler,
+  updateTodoHandler,
+  listNotificationsHandler,
+  markNotificationsReadHandler,
+} from './lambda/communication/handlers.js';
 import {
   oauthConnectHandler,
   oauthCallbackHandler,
@@ -180,6 +200,13 @@ async function route(
   const sopItMatch = pathname.match(/^\/sop\/inspection-templates(?:\/([^/]+))?$/);
   const routingStepMatch = pathname.match(/^\/tickets\/routing-steps\/([^/]+)/);
   const woQueueMatch = pathname.match(/^\/tickets\/wo-queue\/([^/]+)/);
+  const adminUserMatch = pathname.match(/^\/admin\/users\/([^/]+)/);
+  const channelMessagesMatch = pathname.match(/^\/communication\/channels\/([^/]+)\/messages/);
+  const channelTodosMatch = pathname.match(/^\/communication\/channels\/([^/]+)\/todos/);
+  const commMessageMatch = pathname.match(/^\/communication\/messages\/([^/]+)/);
+  const commMessageRepliesMatch = pathname.match(/^\/communication\/messages\/([^/]+)\/replies/);
+  const commMessageReactionsMatch = pathname.match(/^\/communication\/messages\/([^/]+)\/reactions(?:\/([^/]+))?/);
+  const commTodoMatch = pathname.match(/^\/communication\/todos\/([^/]+)/);
   const qbInvoiceSyncMatch = pathname.match(/^\/accounting\/(?:invoices|invoice-sync)\/([^/]+)/);
   const qbIntegrationAccountMatch = pathname.match(/^\/accounting\/integration-accounts\/([^/]+)/);
   const qbReconciliationRunMatch = pathname.match(/^\/accounting\/reconciliation\/runs\/([^/]+)/);
@@ -365,6 +392,52 @@ async function route(
     result = await listTaxMappingsHandler(event);
   } else if (pathname === '/accounting/mappings/tax' && method === 'PUT') {
     result = await upsertTaxMappingHandler(event);
+
+  // ── Admin — User Management ───────────────────────────────────────────────
+  } else if (pathname === '/admin/users' && method === 'GET') {
+    result = await adminListUsersHandler(event);
+  } else if (pathname === '/admin/users' && method === 'POST') {
+    result = await adminCreateUserHandler(event);
+  } else if (adminUserMatch && method === 'PATCH') {
+    result = await adminUpdateUserHandler({ ...event, pathParameters: { username: adminUserMatch[1] } });
+  } else if (adminUserMatch && method === 'DELETE') {
+    result = await adminDeleteUserHandler({ ...event, pathParameters: { username: adminUserMatch[1] } });
+
+  // ── Communication — Channels ──────────────────────────────────────────────
+  } else if (pathname === '/communication/channels' && method === 'GET') {
+    result = await listChannelsHandler(event);
+  } else if (pathname === '/communication/channels' && method === 'POST') {
+    result = await createChannelHandler(event);
+
+  // ── Communication — Messages ──────────────────────────────────────────────
+  } else if (channelMessagesMatch && method === 'GET') {
+    result = await listMessagesHandler({ ...event, pathParameters: { channelId: channelMessagesMatch[1] } });
+  } else if (channelMessagesMatch && method === 'POST') {
+    result = await sendMessageHandler({ ...event, pathParameters: { channelId: channelMessagesMatch[1] } });
+  } else if (commMessageRepliesMatch && method === 'GET') {
+    result = await listRepliesHandler({ ...event, pathParameters: { messageId: commMessageRepliesMatch[1] } });
+  } else if (commMessageReactionsMatch && method === 'POST') {
+    result = await addReactionHandler({ ...event, pathParameters: { messageId: commMessageReactionsMatch[1] } });
+  } else if (commMessageReactionsMatch && commMessageReactionsMatch[2] && method === 'DELETE') {
+    result = await removeReactionHandler({ ...event, pathParameters: { messageId: commMessageReactionsMatch[1], emoji: commMessageReactionsMatch[2] } });
+  } else if (commMessageMatch && method === 'PATCH') {
+    result = await editMessageHandler({ ...event, pathParameters: { messageId: commMessageMatch[1] } });
+  } else if (commMessageMatch && method === 'DELETE') {
+    result = await deleteMessageHandler({ ...event, pathParameters: { messageId: commMessageMatch[1] } });
+
+  // ── Communication — Todos ─────────────────────────────────────────────────
+  } else if (channelTodosMatch && method === 'GET') {
+    result = await listTodosHandler({ ...event, pathParameters: { channelId: channelTodosMatch[1] } });
+  } else if (channelTodosMatch && method === 'POST') {
+    result = await createTodoHandler({ ...event, pathParameters: { channelId: channelTodosMatch[1] } });
+  } else if (commTodoMatch && method === 'PATCH') {
+    result = await updateTodoHandler({ ...event, pathParameters: { todoId: commTodoMatch[1] } });
+
+  // ── Communication — Notifications ─────────────────────────────────────────
+  } else if (pathname === '/communication/notifications' && method === 'GET') {
+    result = await listNotificationsHandler(event);
+  } else if (pathname === '/communication/notifications/read' && method === 'PATCH') {
+    result = await markNotificationsReadHandler(event);
 
   } else {
     res.writeHead(404, { ...CORS_HEADERS, 'content-type': 'application/json' });

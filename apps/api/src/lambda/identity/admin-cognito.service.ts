@@ -13,7 +13,7 @@ import {
   AdminSetUserPasswordCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 
-const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID ?? '';
+const USER_POOL_ID = process.env.API_COGNITO_USER_POOL_ID ?? process.env.COGNITO_USER_POOL_ID ?? '';
 const client = new CognitoIdentityProviderClient({});
 
 export interface AdminUser {

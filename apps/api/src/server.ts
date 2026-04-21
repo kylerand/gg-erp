@@ -96,6 +96,10 @@ import {
   updateAccountStatusHandler,
   getFailureSummaryHandler,
   retryFailedHandler,
+  listDimensionMappingsHandler,
+  upsertDimensionMappingHandler,
+  listTaxMappingsHandler,
+  upsertTaxMappingHandler,
 } from './lambda/accounting/handlers.js';
 
 const env = loadApiEnv();
@@ -353,6 +357,14 @@ async function route(
     result = await getFailureSummaryHandler(event);
   } else if (pathname === '/accounting/failures/retry' && method === 'POST') {
     result = await retryFailedHandler(event);
+  } else if (pathname === '/accounting/mappings/dimensions' && method === 'GET') {
+    result = await listDimensionMappingsHandler(event);
+  } else if (pathname === '/accounting/mappings/dimensions' && method === 'PUT') {
+    result = await upsertDimensionMappingHandler(event);
+  } else if (pathname === '/accounting/mappings/tax' && method === 'GET') {
+    result = await listTaxMappingsHandler(event);
+  } else if (pathname === '/accounting/mappings/tax' && method === 'PUT') {
+    result = await upsertTaxMappingHandler(event);
 
   } else {
     res.writeHead(404, { ...CORS_HEADERS, 'content-type': 'application/json' });

@@ -14,6 +14,15 @@ on:
   push:
     branches:
       - main
+    # Only run Lambda CD when backend, infra, or shared packages change.
+    # Frontend apps (web, floor-tech, training) are deployed by AWS Amplify
+    # directly from the repo — no Lambda redeploy needed for them.
+    paths:
+      - 'apps/api/**'
+      - 'apps/workers/**'
+      - 'packages/**'
+      - 'infra/**'
+      - '.github/workflows/cd.yml'
 
 concurrency:
   group: cd-${{ github.ref }}

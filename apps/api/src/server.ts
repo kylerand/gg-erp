@@ -121,6 +121,34 @@ import {
   listTaxMappingsHandler,
   upsertTaxMappingHandler,
 } from './lambda/accounting/handlers.js';
+import {
+  listOpportunitiesHandler,
+  getOpportunityHandler,
+  createOpportunityHandler,
+  updateOpportunityHandler,
+  transitionOpportunityStageHandler,
+  listQuotesHandler,
+  getQuoteHandler,
+  createQuoteHandler,
+  updateQuoteHandler,
+  updateQuoteLinesHandler,
+  sendQuoteHandler,
+  acceptQuoteHandler,
+  rejectQuoteHandler,
+  listActivitiesHandler,
+  createActivityHandler,
+  getPipelineStatsHandler,
+  getSalesForecastHandler,
+  getSalesDashboardHandler,
+} from './lambda/sales/handlers.js';
+import { handler as salesAgentChatHandler } from './lambda/sales/agent-chat.handler.js';
+import { handler as salesAgentSessionsHandler } from './lambda/sales/agent-sessions.handler.js';
+import { handler as salesAgentSessionDetailHandler } from './lambda/sales/agent-session-detail.handler.js';
+import { handler as copilotChatHandler } from './lambda/copilot/chat.handler.js';
+import { handler as copilotSessionsHandler } from './lambda/copilot/sessions.handler.js';
+import { handler as copilotSessionDetailHandler } from './lambda/copilot/session-detail.handler.js';
+import { listAuditEventsHandler } from './lambda/audit/handlers.js';
+import { listBuildSlotsHandler, listLaborCapacityHandler } from './lambda/scheduling/handlers.js';
 
 const env = loadApiEnv();
 const PORT = env.apiPort;
@@ -207,6 +235,11 @@ async function route(
   const commMessageRepliesMatch = pathname.match(/^\/communication\/messages\/([^/]+)\/replies/);
   const commMessageReactionsMatch = pathname.match(/^\/communication\/messages\/([^/]+)\/reactions(?:\/([^/]+))?/);
   const commTodoMatch = pathname.match(/^\/communication\/todos\/([^/]+)/);
+  const salesOpportunityMatch = pathname.match(/^\/sales\/opportunities\/([^/]+)/);
+  const salesQuoteMatch = pathname.match(/^\/sales\/quotes\/([^/]+)/);
+  const salesAgentSessionMatch = pathname.match(/^\/sales\/agent\/sessions\/([^/]+)/);
+  const copilotSessionMatch = pathname.match(/^\/copilot\/sessions\/([^/]+)/);
+  const ojtAssignmentMatch = pathname.match(/^\/ojt\/assignments\/([^/]+)\/complete/);
   const qbInvoiceSyncMatch = pathname.match(/^\/accounting\/(?:invoices|invoice-sync)\/([^/]+)/);
   const qbIntegrationAccountMatch = pathname.match(/^\/accounting\/integration-accounts\/([^/]+)/);
   const qbReconciliationRunMatch = pathname.match(/^\/accounting\/reconciliation\/runs\/([^/]+)/);
@@ -438,6 +471,82 @@ async function route(
     result = await listNotificationsHandler(event);
   } else if (pathname === '/communication/notifications/read' && method === 'PATCH') {
     result = await markNotificationsReadHandler(event);
+
+  // ── Sales — Opportunities ─────────────────────────────────────────────────
+  } else if (pathname === '/sales/opportunities' && method === 'GET') {
+    result = await listOpportunitiesHandler(event);
+  } else if (pathname === '/sales/opportunities' && method === 'POST') {
+    result = await createOpportunityHandler(event);
+  } else if (salesOpportunityMatch && pathname.endsWith('/stage') && method === 'POST') {
+    result = await transitionOpportunityStageHandler({ ...event, pathParameters: { id: salesOpportunityMatch[1] } });
+  } else if (salesOpportunityMatch && method === 'GET') {
+    result = await getOpportunityHandler({ ...event, pathParameters: { id: salesOpportunityMatch[1] } });
+  } else if (salesOpportunityMatch && method === 'PATCH') {
+    result = await updateOpportunityHandler({ ...event, pathParameters: { id: salesOpportunityMatch[1] } });
+
+  // ── Sales — Quotes ────────────────────────────────────────────────────────
+  } else if (pathname === '/sales/quotes' && method === 'GET') {
+    result = await listQuotesHandler(event);
+  } else if (pathname === '/sales/quotes' && method === 'POST') {
+    result = await createQuoteHandler(event);
+  } else if (salesQuoteMatch && pathname.endsWith('/lines') && method === 'PATCH') {
+    result = await updateQuoteLinesHandler({ ...event, pathParameters: { id: salesQuoteMatch[1] } });
+  } else if (salesQuoteMatch && pathname.endsWith('/send') && method === 'POST') {
+    result = await sendQuoteHandler({ ...event, pathParameters: { id: salesQuoteMatch[1] } });
+  } else if (salesQuoteMatch && pathname.endsWith('/accept') && method === 'POST') {
+    result = await acceptQuoteHandler({ ...event, pathParameters: { id: salesQuoteMatch[1] } });
+  } else if (salesQuoteMatch && pathname.endsWith('/reject') && method === 'POST') {
+    result = await rejectQuoteHandler({ ...event, pathParameters: { id: salesQuoteMatch[1] } });
+  } else if (salesQuoteMatch && method === 'GET') {
+    result = await getQuoteHandler({ ...event, pathParameters: { id: salesQuoteMatch[1] } });
+  } else if (salesQuoteMatch && method === 'PUT') {
+    result = await updateQuoteHandler({ ...event, pathParameters: { id: salesQuoteMatch[1] } });
+
+  // ── Sales — Activities & Stats ────────────────────────────────────────────
+  } else if (pathname === '/sales/activities' && method === 'GET') {
+    result = await listActivitiesHandler(event);
+  } else if (pathname === '/sales/activities' && method === 'POST') {
+    result = await createActivityHandler(event);
+  } else if (pathname === '/sales/pipeline-stats' && method === 'GET') {
+    result = await getPipelineStatsHandler(event);
+  } else if (pathname === '/sales/forecast' && method === 'GET') {
+    result = await getSalesForecastHandler(event);
+  } else if (pathname === '/sales/dashboard' && method === 'GET') {
+    result = await getSalesDashboardHandler(event);
+
+  // ── Sales — AI Agent ──────────────────────────────────────────────────────
+  } else if (pathname === '/sales/agent/chat' && method === 'POST') {
+    result = await salesAgentChatHandler(event);
+  } else if (pathname === '/sales/agent/sessions' && method === 'GET') {
+    result = await salesAgentSessionsHandler(event);
+  } else if (salesAgentSessionMatch && method === 'GET') {
+    result = await salesAgentSessionDetailHandler({ ...event, pathParameters: { sessionId: salesAgentSessionMatch[1] } });
+
+  // ── Global ERP Copilot ────────────────────────────────────────────────────
+  } else if (pathname === '/copilot/chat' && method === 'POST') {
+    result = await copilotChatHandler(event);
+  } else if (pathname === '/copilot/sessions' && method === 'GET') {
+    result = await copilotSessionsHandler(event);
+  } else if (copilotSessionMatch && method === 'GET') {
+    result = await copilotSessionDetailHandler({ ...event, pathParameters: { sessionId: copilotSessionMatch[1] } });
+
+  // ── Audit ─────────────────────────────────────────────────────────────────
+  } else if (pathname === '/audit/events' && method === 'GET') {
+    result = await listAuditEventsHandler(event);
+
+  // ── Scheduling ────────────────────────────────────────────────────────────
+  } else if (pathname === '/scheduling/slots' && method === 'GET') {
+    result = await listBuildSlotsHandler(event);
+  } else if (pathname === '/scheduling/labor-capacity' && method === 'GET') {
+    result = await listLaborCapacityHandler(event);
+
+  // ── OJT / Training Assignments (aliases for /sop) ─────────────────────────
+  } else if (pathname === '/ojt/assignments' && method === 'GET') {
+    result = await listMyAssignmentsHandler(event);
+  } else if (ojtAssignmentMatch && method === 'POST') {
+    result = await completeAssignmentHandler({ ...event, pathParameters: { assignmentId: ojtAssignmentMatch[1] } });
+  } else if (ojtAssignmentMatch && method === 'PATCH') {
+    result = await completeAssignmentHandler({ ...event, pathParameters: { assignmentId: ojtAssignmentMatch[1] } });
 
   } else {
     res.writeHead(404, { ...CORS_HEADERS, 'content-type': 'application/json' });

@@ -180,7 +180,7 @@ async function route(
   const sopItMatch = pathname.match(/^\/sop\/inspection-templates(?:\/([^/]+))?$/);
   const routingStepMatch = pathname.match(/^\/tickets\/routing-steps\/([^/]+)/);
   const woQueueMatch = pathname.match(/^\/tickets\/wo-queue\/([^/]+)/);
-  const qbInvoiceSyncMatch = pathname.match(/^\/accounting\/invoices\/([^/]+)/);
+  const qbInvoiceSyncMatch = pathname.match(/^\/accounting\/(?:invoices|invoice-sync)\/([^/]+)/);
   const qbIntegrationAccountMatch = pathname.match(/^\/accounting\/integration-accounts\/([^/]+)/);
   const qbReconciliationRunMatch = pathname.match(/^\/accounting\/reconciliation\/runs\/([^/]+)/);
   const qbReconciliationRecordMatch = pathname.match(/^\/accounting\/reconciliation\/records\/([^/]+)/);
@@ -323,15 +323,15 @@ async function route(
     result = await cancelBatchHandler({ ...event, pathParameters: { id: migrationBatchMatch[1] } });
 
   // ── Accounting / QuickBooks ───────────────────────────────────────────────
-  } else if (pathname === '/accounting/quickbooks/connect' && method === 'GET') {
+  } else if ((pathname === '/accounting/oauth/connect' || pathname === '/accounting/quickbooks/connect') && method === 'GET') {
     result = await oauthConnectHandler(event);
-  } else if (pathname === '/accounting/quickbooks/callback' && method === 'GET') {
+  } else if ((pathname === '/accounting/oauth/callback' || pathname === '/accounting/quickbooks/callback') && method === 'GET') {
     result = await oauthCallbackHandler(event);
-  } else if (pathname === '/accounting/quickbooks/status' && method === 'GET') {
+  } else if ((pathname === '/accounting/status' || pathname === '/accounting/quickbooks/status') && method === 'GET') {
     result = await qbStatusHandler(event);
-  } else if (pathname === '/accounting/invoices' && method === 'GET') {
+  } else if ((pathname === '/accounting/invoice-sync' || pathname === '/accounting/invoices') && method === 'GET') {
     result = await listInvoiceSyncsHandler(event);
-  } else if (pathname === '/accounting/invoices' && method === 'POST') {
+  } else if ((pathname === '/accounting/invoice-sync' || pathname === '/accounting/invoices') && method === 'POST') {
     result = await triggerInvoiceSyncHandler(event);
   } else if (qbInvoiceSyncMatch && pathname.endsWith('/retry') && method === 'POST') {
     result = await retryInvoiceSyncHandler({ ...event, pathParameters: { id: qbInvoiceSyncMatch[1] } });
@@ -399,8 +399,8 @@ server.listen(PORT, () => {
   console.log(`   SOP         GET|POST /sop, /sop/modules, /sop/modules/:id`);
   console.log(`   Training    PUT /sop/modules/:id/step-progress, POST /sop/modules/:id/quiz`);
   console.log(`   Migration   GET|POST /migration/batches, /:id, /:id/cancel`);
-  console.log(`   QB OAuth    GET /accounting/quickbooks/connect|callback|status`);
-  console.log(`   Invoices    GET|POST /accounting/invoices, POST /:id/retry`);
+  console.log(`   QB OAuth    GET /accounting/oauth/connect|callback, GET /accounting/status`);
+  console.log(`   Invoices    GET|POST /accounting/invoice-sync, POST /:id/retry`);
   console.log(`   Customers   GET|POST /accounting/customers`);
   console.log(`   Reconcile   GET|POST /accounting/reconciliation/runs, GET /:id, GET /mismatches`);
   console.log(`   Accounts    GET /accounting/integration-accounts, PUT /:id/status`);

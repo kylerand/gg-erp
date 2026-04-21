@@ -18,6 +18,16 @@ const MOCK_ROLES: { value: UserRole; label: string; description: string }[] = [
 const INPUT_CLS = 'w-full border border-[#D9CCBE] rounded-2xl px-4 py-3 text-sm text-[#211F1E] bg-white placeholder:text-[#A89E95] focus:outline-none focus:ring-2 focus:ring-[#E37125]';
 const BTN_CLS = 'w-full rounded-2xl bg-[#E37125] hover:bg-[#C95F18] disabled:opacity-50 text-white font-semibold py-3.5 transition-colors shadow-lg shadow-[#E37125]/20';
 
+function passwordRules(pw: string) {
+  return {
+    length: pw.length >= 12,
+    upper: /[A-Z]/.test(pw),
+    lower: /[a-z]/.test(pw),
+    number: /[0-9]/.test(pw),
+    special: /[^A-Za-z0-9]/.test(pw),
+  };
+}
+
 export default function AuthPage() {
   const router = useRouter();
 
@@ -80,10 +90,12 @@ export default function AuthPage() {
       setError('Passwords do not match.');
       return;
     }
-    if (newPassword.length < 8) {
-      setError('Password must be at least 8 characters.');
-      return;
-    }
+    const rules = passwordRules(newPassword);
+    if (!rules.length) { setError('Password must be at least 12 characters.'); return; }
+    if (!rules.upper) { setError('Password must contain at least one uppercase letter.'); return; }
+    if (!rules.lower) { setError('Password must contain at least one lowercase letter.'); return; }
+    if (!rules.number) { setError('Password must contain at least one number.'); return; }
+    if (!rules.special) { setError('Password must contain at least one special character.'); return; }
     setLoading(true);
     try {
       const result = await doConfirmNewPassword(newPassword);
@@ -101,6 +113,9 @@ export default function AuthPage() {
     setMockRole(role);
     router.push('/');
   }
+
+  const pwRules = passwordRules(newPassword);
+  const pwStarted = newPassword.length > 0;
 
   return (
     <div className="min-h-screen bg-[#211F1E] text-white relative overflow-hidden">
@@ -167,13 +182,20 @@ export default function AuthPage() {
                         type={showNew ? 'text' : 'password'} required autoFocus
                         value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
                         className={`${INPUT_CLS} pr-12`}
-                        placeholder="At least 8 characters"
+                        placeholder="Create a strong password"
                       />
                       <button type="button" onClick={() => setShowNew(!showNew)} tabIndex={-1}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8A7F76] hover:text-[#4F4641] transition-colors p-1"
                         aria-label={showNew ? 'Hide password' : 'Show password'}>
                         <EyeIcon open={showNew} />
                       </button>
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
+                      <RuleCheck met={pwRules.length} started={pwStarted} label="12+ characters" />
+                      <RuleCheck met={pwRules.number} started={pwStarted} label="One number" />
+                      <RuleCheck met={pwRules.upper} started={pwStarted} label="Uppercase letter" />
+                      <RuleCheck met={pwRules.special} started={pwStarted} label="Special character" />
+                      <RuleCheck met={pwRules.lower} started={pwStarted} label="Lowercase letter" />
                     </div>
                   </div>
                   <div>
@@ -225,6 +247,19 @@ export default function AuthPage() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function RuleCheck({ met, started, label }: { met: boolean; started: boolean; label: string }) {
+  return (
+    <div className={`flex items-center gap-1.5 text-xs transition-colors ${
+      !started ? 'text-[#A89E95]' : met ? 'text-green-600' : 'text-red-500'
+    }`}>
+      <span className="flex-shrink-0">
+        {!started ? '○' : met ? '✓' : '✗'}
+      </span>
+      <span>{label}</span>
     </div>
   );
 }

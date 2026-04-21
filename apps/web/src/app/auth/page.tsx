@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { doSignIn, doSignOut, setMockRole, type UserRole } from '@/lib/auth';
+import { doSignIn, doSignOut, doConfirmNewPassword, setMockRole, type UserRole } from '@/lib/auth';
 
 const IS_MOCK = process.env.NEXT_PUBLIC_AUTH_MODE === 'mock';
 
@@ -15,11 +15,24 @@ const MOCK_ROLES: { value: UserRole; label: string; description: string }[] = [
   { value: 'admin', label: 'Admin', description: 'Full access, User Management' },
 ];
 
+const INPUT_CLS = 'w-full border border-[#D9CCBE] rounded-2xl px-4 py-3 text-sm text-[#211F1E] bg-white placeholder:text-[#A89E95] focus:outline-none focus:ring-2 focus:ring-[#E37125]';
+const BTN_CLS = 'w-full rounded-2xl bg-[#E37125] hover:bg-[#C95F18] disabled:opacity-50 text-white font-semibold py-3.5 transition-colors shadow-lg shadow-[#E37125]/20';
+
 export default function AuthPage() {
   const router = useRouter();
+
+  // ── Sign-in state ──────────────────────────────────────────────────────────
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  // ── New-password challenge state ───────────────────────────────────────────
+  const [step, setStep] = useState<'login' | 'new-password'>('login');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNew, setShowNew] = useState(false);
+
+  // ── Shared ─────────────────────────────────────────────────────────────────
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -28,24 +41,57 @@ export default function AuthPage() {
     setLoading(true);
     setError(null);
     try {
-      await doSignIn(email, password);
-      // Hard navigate to force RoleProvider to re-initialize with new session
-      window.location.href = '/';
+      const result = await doSignIn(email, password);
+
+      if (result.nextStep?.signInStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED') {
+        setStep('new-password');
+        return;
+      }
+
+      if (result.isSignedIn) {
+        window.location.href = '/';
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Sign in failed';
-      // If a stale session exists, clear it and retry
       if (message.includes('already a signed in user')) {
         try {
           await doSignOut();
-          await doSignIn(email, password);
-          window.location.href = '/';
-          return;
+          const result = await doSignIn(email, password);
+          if (result.nextStep?.signInStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED') {
+            setStep('new-password');
+            return;
+          }
+          if (result.isSignedIn) window.location.href = '/';
         } catch (retryErr) {
           setError(retryErr instanceof Error ? retryErr.message : 'Sign in failed');
         }
       } else {
         setError(message);
       }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleNewPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const result = await doConfirmNewPassword(newPassword);
+      if (result.isSignedIn) {
+        window.location.href = '/';
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to set new password.');
     } finally {
       setLoading(false);
     }
@@ -82,7 +128,9 @@ export default function AuthPage() {
                   className="mx-auto h-auto w-full max-w-[240px]"
                   priority
                 />
-                <p className="text-[#6E625A] text-sm mt-4">Sign in to continue to the ERP</p>
+                <p className="text-[#6E625A] text-sm mt-4">
+                  {step === 'new-password' ? 'Set your new password to continue' : 'Sign in to continue to the ERP'}
+                </p>
               </div>
 
               {IS_MOCK ? (
@@ -104,6 +152,43 @@ export default function AuthPage() {
                     ))}
                   </div>
                 </div>
+              ) : step === 'new-password' ? (
+                <form onSubmit={handleNewPassword} className="space-y-4">
+                  <div className="text-sm text-[#4F4641] bg-[#FFF8EF] border border-[#F6D1B7] rounded-2xl px-4 py-3">
+                    Your account requires a new password before you can continue.
+                  </div>
+                  {error && (
+                    <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-2xl px-4 py-3">{error}</div>
+                  )}
+                  <div>
+                    <label className="block text-sm font-medium text-[#4F4641] mb-1.5">New password</label>
+                    <div className="relative">
+                      <input
+                        type={showNew ? 'text' : 'password'} required autoFocus
+                        value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
+                        className={`${INPUT_CLS} pr-12`}
+                        placeholder="At least 8 characters"
+                      />
+                      <button type="button" onClick={() => setShowNew(!showNew)} tabIndex={-1}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8A7F76] hover:text-[#4F4641] transition-colors p-1"
+                        aria-label={showNew ? 'Hide password' : 'Show password'}>
+                        <EyeIcon open={showNew} />
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#4F4641] mb-1.5">Confirm new password</label>
+                    <input
+                      type="password" required
+                      value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+                      className={INPUT_CLS}
+                      placeholder="Re-enter your new password"
+                    />
+                  </div>
+                  <button type="submit" disabled={loading} className={BTN_CLS}>
+                    {loading ? 'Setting password…' : 'Set password and sign in'}
+                  </button>
+                </form>
               ) : (
                 <form onSubmit={handleRealSignIn} className="space-y-4">
                   {error && (
@@ -113,7 +198,7 @@ export default function AuthPage() {
                     <label className="block text-sm font-medium text-[#4F4641] mb-1.5">Email</label>
                     <input
                       type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-                      className="w-full border border-[#D9CCBE] rounded-2xl px-4 py-3 text-sm text-[#211F1E] bg-white placeholder:text-[#A89E95] focus:outline-none focus:ring-2 focus:ring-[#E37125]"
+                      className={INPUT_CLS}
                       placeholder="you@golfingarage.com"
                     />
                   </div>
@@ -122,34 +207,16 @@ export default function AuthPage() {
                     <div className="relative">
                       <input
                         type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)}
-                        className="w-full border border-[#D9CCBE] rounded-2xl px-4 py-3 pr-12 text-sm text-[#211F1E] bg-white placeholder:text-[#A89E95] focus:outline-none focus:ring-2 focus:ring-[#E37125]"
+                        className={`${INPUT_CLS} pr-12`}
                       />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
+                      <button type="button" onClick={() => setShowPassword(!showPassword)} tabIndex={-1}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8A7F76] hover:text-[#4F4641] transition-colors p-1"
-                        tabIndex={-1}
-                        aria-label={showPassword ? 'Hide password' : 'Show password'}
-                      >
-                        {showPassword ? (
-                          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-                            <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-                            <line x1="1" y1="1" x2="23" y2="23" />
-                          </svg>
-                        ) : (
-                          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                            <circle cx="12" cy="12" r="3" />
-                          </svg>
-                        )}
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}>
+                        <EyeIcon open={showPassword} />
                       </button>
                     </div>
                   </div>
-                  <button
-                    type="submit" disabled={loading}
-                    className="w-full rounded-2xl bg-[#E37125] hover:bg-[#C95F18] disabled:opacity-50 text-white font-semibold py-3.5 transition-colors shadow-lg shadow-[#E37125]/20"
-                  >
+                  <button type="submit" disabled={loading} className={BTN_CLS}>
                     {loading ? 'Signing in…' : 'Sign in'}
                   </button>
                 </form>
@@ -159,5 +226,20 @@ export default function AuthPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function EyeIcon({ open }: { open: boolean }) {
+  return open ? (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+      <line x1="1" y1="1" x2="23" y2="23" />
+    </svg>
+  ) : (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
   );
 }

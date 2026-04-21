@@ -1,4 +1,4 @@
-import { signIn, signOut, getCurrentUser, fetchAuthSession } from 'aws-amplify/auth';
+import { signIn, signOut, confirmSignIn, getCurrentUser, fetchAuthSession } from 'aws-amplify/auth';
 
 export type UserRole = 'technician' | 'manager' | 'parts' | 'trainer' | 'accounting' | 'admin';
 
@@ -50,6 +50,10 @@ export async function getAuthUser(): Promise<AuthUser | null> {
 export async function doSignIn(email: string, password: string) {
   if (isMockMode) throw new Error('Use mock role selector in mock mode');
   return signIn({ username: email, password });
+}
+
+export async function doConfirmNewPassword(newPassword: string) {
+  return confirmSignIn({ challengeResponse: newPassword });
 }
 
 export async function doSignOut() {

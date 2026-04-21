@@ -304,9 +304,16 @@ export class CustomerSyncService {
       | 'customer_sync.skipped',
     context: CustomerSyncCommandContext,
   ): Promise<void> {
+    const auditAction = {
+      'customer_sync.started': AUDIT_POINTS.customerSyncStart,
+      'customer_sync.succeeded': AUDIT_POINTS.customerSyncSucceeded,
+      'customer_sync.failed': AUDIT_POINTS.customerSyncFailed,
+      'customer_sync.skipped': AUDIT_POINTS.customerSyncSkipped,
+    }[eventName];
+
     await this.deps.audit.record({
       actorId: context.actorId,
-      action: AUDIT_POINTS.invoiceSyncStart, // TODO: add customer_sync audit points
+      action: auditAction,
       entityType: 'CustomerSyncRecord',
       entityId: recordId,
       correlationId: context.correlationId,

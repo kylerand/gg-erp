@@ -1230,11 +1230,11 @@ model IntegrationAccount {
   deletedAt     DateTime?                @map("deleted_at") @db.Timestamptz(6)
   version       Int                      @default(0)
 
-  syncJobs                  SyncJob[]
-  externalIdMappings        ExternalIdMapping[]
-  webhookInboxEvents        WebhookInboxEvent[]
+  syncJobs                   SyncJob[]
+  externalIdMappings         ExternalIdMapping[]
+  webhookInboxEvents         WebhookInboxEvent[]
   financialDimensionMappings FinancialDimensionMapping[]
-  taxCodeMappings           TaxCodeMapping[]
+  taxCodeMappings            TaxCodeMapping[]
 
   @@map("integration_accounts")
   @@schema("integrations")
@@ -1347,17 +1347,17 @@ model FinancialDimensionMapping {
 }
 
 model TaxCodeMapping {
-  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   integrationAccountId String   @map("integration_account_id") @db.Uuid
-  taxRegionCode       String    @map("tax_region_code")
-  internalTaxCode     String    @map("internal_tax_code")
-  externalTaxCodeId   String    @map("external_tax_code_id")
-  externalRateName    String?   @map("external_rate_name")
-  namespace           String    @default("default")
-  isActive            Boolean   @default(true) @map("is_active")
-  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
-  version             Int       @default(0)
+  taxRegionCode        String   @map("tax_region_code")
+  internalTaxCode      String   @map("internal_tax_code")
+  externalTaxCodeId    String   @map("external_tax_code_id")
+  externalRateName     String?  @map("external_rate_name")
+  namespace            String   @default("default")
+  isActive             Boolean  @default(true) @map("is_active")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version              Int      @default(0)
 
   integrationAccount IntegrationAccount @relation(fields: [integrationAccountId], references: [id])
 

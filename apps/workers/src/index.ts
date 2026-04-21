@@ -2,6 +2,7 @@ import { loadWorkerEnv } from './config/env.js';
 import { handleWorkOrderCreated } from './jobs/work-order-created.job.js';
 import { handleWorkOrderCompletedForQb } from './jobs/qb-invoice-sync.job.js';
 import { handleCustomerEventForQb } from './jobs/qb-customer-sync.job.js';
+import { handleWebhookReceivedForPaymentSync } from './jobs/qb-payment-sync.job.js';
 import { forwardAuditLog } from './jobs/audit-log-forwarder.job.js';
 import { WorkerRuntime } from './worker.js';
 import { consoleWorkerLogger } from './observability/logger.js';
@@ -29,6 +30,10 @@ export function createWorkerRuntime(): WorkerRuntime {
 
   runtime.register('customer.updated', async (event) => {
     await handleCustomerEventForQb(event, consoleWorkerLogger, consoleWorkerMetrics);
+  });
+
+  runtime.register('qb.webhook.received', async (event) => {
+    await handleWebhookReceivedForPaymentSync(event, consoleWorkerLogger, consoleWorkerMetrics);
   });
 
   runtime.register('audit.event.recorded', async (event) => {

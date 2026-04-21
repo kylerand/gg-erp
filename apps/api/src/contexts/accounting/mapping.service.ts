@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { PrismaClient, DimensionMappingType } from '@prisma/client';
+import {
+  PrismaClient,
+  DimensionMappingType,
+  type FinancialDimensionMapping as PrismaFinancialDimensionMapping,
+  type TaxCodeMapping as PrismaTaxCodeMapping,
+} from '@prisma/client';
 
 export { DimensionMappingType };
 
@@ -168,9 +173,7 @@ export type MappingQueries = typeof mappingQueries;
 
 // ─── Domain mappers ───────────────────────────────────────────────────────────
 
-function toDimensionDomain(
-  r: Awaited<ReturnType<typeof getMappingPrisma>['financialDimensionMapping']['findFirst']> & object,
-): DimensionMapping {
+function toDimensionDomain(r: PrismaFinancialDimensionMapping): DimensionMapping {
   return {
     id: r.id,
     integrationAccountId: r.integrationAccountId,
@@ -185,9 +188,7 @@ function toDimensionDomain(
   };
 }
 
-function toTaxDomain(
-  r: Awaited<ReturnType<typeof getMappingPrisma>['taxCodeMapping']['findFirst']> & object,
-): TaxMapping {
+function toTaxDomain(r: PrismaTaxCodeMapping): TaxMapping {
   return {
     id: r.id,
     integrationAccountId: r.integrationAccountId,

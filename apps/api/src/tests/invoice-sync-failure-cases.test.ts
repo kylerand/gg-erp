@@ -11,6 +11,8 @@ import {
   InvoiceSyncState,
   type InvoiceSyncRecord,
 } from '../../../../packages/domain/src/model/accounting.js';
+import { InvoiceSyncProcessor } from '../contexts/accounting/invoiceSyncProcessor.service.js';
+import type { MappingService } from '../contexts/accounting/mapping.service.js';
 
 function createMockInvoiceSyncQueries(): InvoiceSyncQueries {
   const records = new Map<string, InvoiceSyncRecord>();
@@ -125,4 +127,98 @@ test('invoice sync marks outbox record as FAILED when publish throws', async () 
   assert.equal(failedRecord.state, 'FAILED');
   assert.equal(failedRecord.failureReason, 'event publish failed');
   assert.ok(failedRecord.failedAt, 'Failed outbox record should track failedAt timestamp');
+});
+
+// ─── InvoiceSyncProcessor preflight tests ────────────────────────────────────
+
+function makeFakePrisma(recordState = 'PENDING') {
+  const updates: Record<string, unknown>[] = [];
+
+  const prisma = {
+    invoiceSyncRecord: {
+      async findUnique(_args: unknown) {
+        return {
+          id: 'rec-1',
+          invoiceNumber: 'INV-001',
+          workOrderId: 'wo-1',
+          state: recordState,
+        };
+      },
+      async update(args: { where: unknown; data: Record<string, unknown> }) {
+        updates.push(args.data);
+        return { ...args.data };
+      },
+    },
+    // Not reached when mapping preflight fails
+    woOrder: {
+      async findUnique(_args: unknown) {
+        return null;
+      },
+    },
+    woPartLine: {
+      async findMany(_args: unknown) {
+        return [];
+      },
+    },
+  };
+
+  return { prisma: prisma as unknown as import('@prisma/client').PrismaClient, updates };
+}
+
+function makeMappingService(error: string | null): MappingService {
+  return {
+    async validateInvoiceMappings(_accountId: string) { return error; },
+    async upsertDimensionMapping() { throw new Error('not used'); },
+    async listDimensionMappings() { return []; },
+    async upsertTaxMapping() { throw new Error('not used'); },
+    async listTaxMappings() { return []; },
+  } as unknown as MappingService;
+}
+
+function makeEntityMapping() {
+  return {
+    async findExternalId() { return null; },
+    async findEntityId() { return null; },
+    async upsertMapping() { throw new Error('not used'); },
+    async deactivateMapping() {},
+    async listMappings() { return { items: [], total: 0 }; },
+  } as unknown as import('../contexts/accounting/entityMapping.service.js').EntityMappingService;
+}
+
+test('processor transitions record to FAILED when required mappings are missing', async () => {
+  const { prisma, updates } = makeFakePrisma();
+  const processor = new InvoiceSyncProcessor({
+    prisma,
+    entityMapping: makeEntityMapping(),
+    mapping: makeMappingService(
+      'MAPPING_MISSING: no active INCOME_ACCOUNT dimension mapping for account acct-1',
+    ),
+  });
+
+  const result = await processor.processRecord('rec-1', 'acct-1', {} as never);
+
+  assert.equal(result.outcome, 'failed');
+  assert.equal(result.errorCode, 'MAPPING_MISSING');
+  assert.match(result.errorMessage!, /MAPPING_MISSING/);
+
+  const failUpdate = updates.find((u) => u.state === 'FAILED');
+  assert.ok(failUpdate, 'Expected a FAILED state update on the sync record');
+  assert.equal(failUpdate.lastErrorCode, 'MAPPING_MISSING');
+});
+
+test('processor skips mapping preflight and proceeds when mappings are valid', async () => {
+  const { prisma, updates } = makeFakePrisma();
+  const processor = new InvoiceSyncProcessor({
+    prisma,
+    entityMapping: makeEntityMapping(),
+    mapping: makeMappingService(null), // all mappings present
+  });
+
+  // Will fail later trying to load the work order (returns null), but must
+  // NOT produce a MAPPING_MISSING error code
+  const result = await processor.processRecord('rec-1', 'acct-1', {} as never);
+
+  assert.notEqual(result.errorCode, 'MAPPING_MISSING');
+  const mappingFailUpdate = updates.find((u) => u.lastErrorCode === 'MAPPING_MISSING');
+  assert.equal(mappingFailUpdate, undefined, 'Should not produce a MAPPING_MISSING update');
 });

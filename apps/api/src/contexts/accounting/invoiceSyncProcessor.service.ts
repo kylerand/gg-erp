@@ -14,10 +14,12 @@
 import { PrismaClient } from '@prisma/client';
 import { QuickBooksClient, type QbTokens } from './quickbooks.client.js';
 import type { EntityMappingService } from './entityMapping.service.js';
+import type { MappingService } from './mapping.service.js';
 
 export interface InvoiceSyncProcessorDeps {
   prisma: PrismaClient;
   entityMapping: EntityMappingService;
+  mapping: MappingService;
 }
 
 export interface ProcessResult {
@@ -52,6 +54,27 @@ export class InvoiceSyncProcessor {
         invoiceNumber: record.invoiceNumber,
         outcome: 'skipped',
         errorMessage: `Record in ${record.state} state`,
+      };
+    }
+
+    // Mapping preflight — non-retryable config check before touching QB
+    const mappingError = await this.deps.mapping.validateInvoiceMappings(integrationAccountId);
+    if (mappingError) {
+      await prisma.invoiceSyncRecord.update({
+        where: { id: recordId },
+        data: {
+          state: 'FAILED',
+          lastErrorCode: 'MAPPING_MISSING',
+          lastErrorMessage: mappingError,
+          updatedAt: new Date(),
+        },
+      });
+      return {
+        recordId,
+        invoiceNumber: record.invoiceNumber,
+        outcome: 'failed',
+        errorCode: 'MAPPING_MISSING',
+        errorMessage: mappingError,
       };
     }
 

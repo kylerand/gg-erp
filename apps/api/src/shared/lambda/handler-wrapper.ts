@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { initSentry, captureLambdaError } from './sentry.js';
 
 export interface LambdaEvent {
   body?: string | null;
@@ -92,7 +91,6 @@ export function wrapHandler(handler: RouteHandler, options: WrapOptions = {}): (
       event,
     };
 
-    initSentry();
     try {
       const result = await handler(ctx);
       return addCorsHeaders(result, options.corsOrigin);
@@ -106,7 +104,6 @@ export function wrapHandler(handler: RouteHandler, options: WrapOptions = {}): (
           error: error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : String(error),
         }),
       );
-      await captureLambdaError(error, { correlationId, requestId, actorUserId });
 
       return jsonResponse(500, {
         message: 'An unexpected error occurred.',

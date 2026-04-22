@@ -1,5 +1,12 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
 
+/**
+ * Mock fallback is only used when the API base points at localhost (dev).
+ * In production we must surface real errors — silent mocks previously caused
+ * pages to render fake data when routes were missing, which masked deploy gaps.
+ */
+const ALLOW_MOCK_FALLBACK = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/.test(API_BASE);
+
 /** Set this to inject an auth token for all requests (call from auth context). */
 let _authToken: string | null = null;
 export function setAuthToken(token: string | null): void {
@@ -13,6 +20,16 @@ type ApiFetchInit = RequestInit & {
   /** Internal flag: skip offline queuing during replay to avoid re-queuing loops. */
   _skipQueue?: boolean;
 };
+
+function shouldUseFallback<T>(fallback: T | undefined): fallback is T {
+  return fallback !== undefined && ALLOW_MOCK_FALLBACK;
+}
+
+function warnFallback(path: string, reason: string): void {
+  if (typeof console !== 'undefined') {
+    console.warn(`[api-client] Using mock fallback for ${path} (${reason}). Fix the API route.`);
+  }
+}
 
 export async function apiFetch<T>(path: string, init?: ApiFetchInit, fallback?: T): Promise<T> {
   const { ifMatch, _skipQueue, ...fetchInit } = init ?? {};
@@ -42,11 +59,17 @@ export async function apiFetch<T>(path: string, init?: ApiFetchInit, fallback?: 
       }
       // Refresh failed — redirect to login
       redirectToLogin();
-      if (fallback !== undefined) return fallback;
+      if (shouldUseFallback(fallback)) {
+        warnFallback(path, 'auth refresh failed');
+        return fallback;
+      }
       throw new Error('Session expired. Redirecting to login.');
     }
 
-    if (fallback !== undefined) return fallback;
+    if (shouldUseFallback(fallback)) {
+      warnFallback(path, `HTTP ${res.status}`);
+      return fallback;
+    }
     const errBody = await res.json().catch(() => ({})) as { message?: string };
     throw new Error(errBody.message ?? `API error ${res.status}: ${path}`);
   } catch (err) {
@@ -58,7 +81,10 @@ export async function apiFetch<T>(path: string, init?: ApiFetchInit, fallback?: 
       queueMutation(path, method, fetchInit.body as string | undefined, idempotencyKey);
       return { _queued: true } as unknown as T;
     }
-    if (fallback !== undefined) return fallback;
+    if (shouldUseFallback(fallback)) {
+      warnFallback(path, err instanceof Error ? err.message : 'network error');
+      return fallback;
+    }
     if (err instanceof Error) throw err;
     throw new Error(`Network error calling ${path}`);
   }

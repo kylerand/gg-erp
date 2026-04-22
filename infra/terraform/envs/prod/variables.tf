@@ -72,6 +72,30 @@ variable "communication_lambda_zip_path" {
   default     = "../../../../apps/api/dist/communication-lambda.zip"
 }
 
+variable "audit_lambda_zip_path" {
+  description = "Path to the packaged audit Lambda zip artifact."
+  type        = string
+  default     = "../../../../apps/api/dist/audit-lambda.zip"
+}
+
+variable "sales_lambda_zip_path" {
+  description = "Path to the packaged sales Lambda zip artifact."
+  type        = string
+  default     = "../../../../apps/api/dist/sales-lambda.zip"
+}
+
+variable "copilot_lambda_zip_path" {
+  description = "Path to the packaged copilot Lambda zip artifact."
+  type        = string
+  default     = "../../../../apps/api/dist/copilot-lambda.zip"
+}
+
+variable "scheduling_lambda_zip_path" {
+  description = "Path to the packaged scheduling Lambda zip artifact."
+  type        = string
+  default     = "../../../../apps/api/dist/scheduling-lambda.zip"
+}
+
 # QuickBooks OAuth
 
 variable "qb_client_id" {
@@ -92,6 +116,13 @@ variable "qb_redirect_uri" {
   description = "QuickBooks OAuth redirect URI"
   type        = string
   default     = ""
+}
+
+variable "qb_webhook_verifier_token" {
+  description = "QuickBooks webhook verifier token for HMAC signature validation"
+  type        = string
+  default     = ""
+  sensitive   = true
 }
 
 # Frontend (Amplify Hosting)

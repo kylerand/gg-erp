@@ -11,6 +11,11 @@ on:
         options:
           - dev
           - prod
+      seed_inventory_master:
+        description: 'Run inventory-master seed after migrations (opt-in)'
+        required: false
+        default: false
+        type: boolean
   push:
     branches:
       - main
@@ -196,6 +201,7 @@ jobs:
           TF_VAR_audit_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/audit-lambda.zip"
           TF_VAR_sales_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/sales-lambda.zip"
           TF_VAR_copilot_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/copilot-lambda.zip"
+          TF_VAR_scheduling_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/scheduling-lambda.zip"
           TF_VAR_qb_client_id: ${{ secrets.QB_CLIENT_ID }}
           TF_VAR_qb_client_secret: ${{ secrets.QB_CLIENT_SECRET }}
           TF_VAR_qb_redirect_uri: ${{ vars.QB_REDIRECT_URI || '' }}
@@ -229,6 +235,7 @@ jobs:
           TF_VAR_audit_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/audit-lambda.zip"
           TF_VAR_sales_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/sales-lambda.zip"
           TF_VAR_copilot_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/copilot-lambda.zip"
+          TF_VAR_scheduling_lambda_zip_path: "${{ github.workspace }}/apps/api/dist/scheduling-lambda.zip"
           TF_VAR_qb_client_id: ${{ secrets.QB_CLIENT_ID }}
           TF_VAR_qb_client_secret: ${{ secrets.QB_CLIENT_SECRET }}
           TF_VAR_qb_redirect_uri: ${{ vars.QB_REDIRECT_URI || '' }}
@@ -295,6 +302,25 @@ jobs:
         env:
           AWS_REGION: us-east-2
           MIGRATION_LAMBDA_NAME: ${{ steps.env.outputs.tf_env == 'dev' && 'gg-erp-dev' || 'gg-erp-prod' }}-run-schema-migration
+        continue-on-error: true
+
+      - name: Seed inventory master (opt-in)
+        # Run only when the workflow is triggered manually with the `seed_inventory_master` flag.
+        # The Aurora DB is in a private VPC, so this step invokes the `seed-inventory-master`
+        # Lambda (in-VPC) rather than trying to reach the DB from the runner.
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.seed_inventory_master == true }}
+        run: |
+          echo "Invoking seed-inventory-master Lambda for ${{ steps.env.outputs.tf_env }}"
+          LAMBDA_NAME="${{ steps.env.outputs.tf_env == 'dev' && 'gg-erp-dev' || 'gg-erp-prod' }}-seed-inventory-master"
+          aws lambda invoke \
+            --function-name "$LAMBDA_NAME" \
+            --region us-east-2 \
+            --payload '{"source":"cd"}' \
+            --cli-binary-format raw-in-base64-out \
+            /tmp/seed-result.json
+          cat /tmp/seed-result.json
+        env:
+          AWS_REGION: us-east-2
         continue-on-error: true
 
       - name: Smoke test - Health check

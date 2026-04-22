@@ -91,6 +91,12 @@ variable "copilot_lambda_zip_path" {
   default     = "../../../../apps/api/dist/copilot-lambda.zip"
 }
 
+variable "scheduling_lambda_zip_path" {
+  description = "Path to the packaged scheduling Lambda zip artifact."
+  type        = string
+  default     = "../../../../apps/api/dist/scheduling-lambda.zip"
+}
+
 # QuickBooks OAuth
 
 variable "qb_client_id" {

@@ -86,6 +86,10 @@ module "api_gateway_lambda" {
   migration_lambda_zip_path   = var.migration_lambda_zip_path
   identity_lambda_zip_path    = var.identity_lambda_zip_path
   communication_lambda_zip_path = var.communication_lambda_zip_path
+  audit_lambda_zip_path         = var.audit_lambda_zip_path
+  sales_lambda_zip_path         = var.sales_lambda_zip_path
+  copilot_lambda_zip_path       = var.copilot_lambda_zip_path
+  scheduling_lambda_zip_path    = var.scheduling_lambda_zip_path
   cognito_user_pool_endpoint  = module.cognito.issuer_url
   cognito_user_pool_id        = module.cognito.user_pool_id
   cognito_user_pool_arn       = module.cognito.user_pool_arn
@@ -96,7 +100,10 @@ module "api_gateway_lambda" {
   qb_client_id                = var.qb_client_id
   qb_client_secret            = var.qb_client_secret
   qb_redirect_uri             = var.qb_redirect_uri
+  qb_webhook_verifier_token   = var.qb_webhook_verifier_token
   frontend_url                = module.amplify_hosting.web_url
+  private_subnet_ids          = module.vpc.private_subnet_ids
+  lambda_security_group_id    = module.vpc.lambda_security_group_id
 }
 
 module "amplify_hosting" {

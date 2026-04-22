@@ -88,6 +88,12 @@ variable "sales_lambda_zip_path" {
   default     = "apps/api/dist/sales-lambda.zip"
 }
 
+variable "scheduling_lambda_zip_path" {
+  description = "Path to the zipped scheduling Lambda artifact."
+  type        = string
+  default     = "apps/api/dist/scheduling-lambda.zip"
+}
+
 variable "qb_client_id" {
   description = "QuickBooks app client ID for OAuth2"
   type        = string
@@ -749,6 +755,93 @@ resource "aws_lambda_function" "tickets_list_sync" {
   }
 }
 
+resource "aws_lambda_function" "tickets_list_all_work_orders" {
+  function_name = "${var.name_prefix}-tickets-list-all-work-orders"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-all-work-orders.handler"
+  filename      = var.tickets_lambda_zip_path
+  source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "tickets_list_technician_tasks" {
+  function_name = "${var.name_prefix}-tickets-list-technician-tasks"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-technician-tasks.handler"
+  filename      = var.tickets_lambda_zip_path
+  source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "tickets_transition_technician_task" {
+  function_name = "${var.name_prefix}-tickets-transition-technician-task"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "transition-technician-task.handler"
+  filename      = var.tickets_lambda_zip_path
+  source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+# ─── Scheduling Lambda Functions ──────────────────────────────────────────────
+
+resource "aws_lambda_function" "scheduling_list_slots" {
+  function_name = "${var.name_prefix}-scheduling-list-slots"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-slots.handler"
+  filename      = var.scheduling_lambda_zip_path
+  source_code_hash = filebase64sha256(var.scheduling_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "scheduling_list_labor_capacity" {
+  function_name = "${var.name_prefix}-scheduling-list-labor-capacity"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-labor-capacity.handler"
+  filename      = var.scheduling_lambda_zip_path
+  source_code_hash = filebase64sha256(var.scheduling_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
 # ─── API GW Integrations + Routes — Identity ──────────────────────────────────
 
 resource "aws_apigatewayv2_integration" "identity_me" {
@@ -1186,6 +1279,79 @@ resource "aws_apigatewayv2_route" "tickets_list_sync" {
   api_id    = aws_apigatewayv2_api.erp.id
   route_key = "GET /tickets/sync"
   target    = "integrations/${aws_apigatewayv2_integration.tickets_list_sync.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "tickets_list_all_work_orders" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.tickets_list_all_work_orders.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "tickets_list_all_work_orders" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /tickets/work-orders"
+  target    = "integrations/${aws_apigatewayv2_integration.tickets_list_all_work_orders.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "tickets_list_technician_tasks" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.tickets_list_technician_tasks.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "tickets_list_technician_tasks" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /tickets/technician-tasks"
+  target    = "integrations/${aws_apigatewayv2_integration.tickets_list_technician_tasks.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "tickets_transition_technician_task" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.tickets_transition_technician_task.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "tickets_transition_technician_task" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "PATCH /tickets/technician-tasks/{id}/state"
+  target    = "integrations/${aws_apigatewayv2_integration.tickets_transition_technician_task.id}"
+  authorizer_id = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+# ─── API GW Integrations + Routes — Scheduling ────────────────────────────────
+
+resource "aws_apigatewayv2_integration" "scheduling_list_slots" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.scheduling_list_slots.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "scheduling_list_slots" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /scheduling/slots"
+  target    = "integrations/${aws_apigatewayv2_integration.scheduling_list_slots.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "scheduling_list_labor_capacity" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.scheduling_list_labor_capacity.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "scheduling_list_labor_capacity" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /scheduling/labor-capacity"
+  target    = "integrations/${aws_apigatewayv2_integration.scheduling_list_labor_capacity.id}"
   authorization_type = "NONE"
 }
 
@@ -2541,12 +2707,17 @@ locals {
     inventory_list_manufacturers       = aws_lambda_function.inventory_list_manufacturers
     inventory_create_manufacturer      = aws_lambda_function.inventory_create_manufacturer
     inventory_plan_material_by_stage   = aws_lambda_function.inventory_plan_material_by_stage
-    tickets_list_tasks    = aws_lambda_function.tickets_list_tasks
-    tickets_create_task   = aws_lambda_function.tickets_create_task
-    tickets_transition    = aws_lambda_function.tickets_transition_task
-    tickets_list_rework   = aws_lambda_function.tickets_list_rework
-    tickets_create_rework = aws_lambda_function.tickets_create_rework
-    tickets_list_sync     = aws_lambda_function.tickets_list_sync
+    tickets_list_tasks                   = aws_lambda_function.tickets_list_tasks
+    tickets_create_task                  = aws_lambda_function.tickets_create_task
+    tickets_transition                   = aws_lambda_function.tickets_transition_task
+    tickets_list_rework                  = aws_lambda_function.tickets_list_rework
+    tickets_create_rework                = aws_lambda_function.tickets_create_rework
+    tickets_list_sync                    = aws_lambda_function.tickets_list_sync
+    tickets_list_all_work_orders         = aws_lambda_function.tickets_list_all_work_orders
+    tickets_list_technician_tasks        = aws_lambda_function.tickets_list_technician_tasks
+    tickets_transition_technician_task   = aws_lambda_function.tickets_transition_technician_task
+    scheduling_list_slots                = aws_lambda_function.scheduling_list_slots
+    scheduling_list_labor_capacity       = aws_lambda_function.scheduling_list_labor_capacity
     attachments_presign_upload   = aws_lambda_function.attachments_presign_upload
     attachments_confirm_upload   = aws_lambda_function.attachments_confirm_upload
     attachments_list             = aws_lambda_function.attachments_list

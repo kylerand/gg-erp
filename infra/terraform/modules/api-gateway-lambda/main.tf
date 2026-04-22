@@ -577,6 +577,74 @@ resource "aws_lambda_function" "inventory_list_lots" {
   }
 }
 
+resource "aws_lambda_function" "inventory_get_part_chain" {
+  function_name = "${var.name_prefix}-inventory-get-part-chain"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "get-part-chain.handler"
+  filename      = var.inventory_lambda_zip_path
+  source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "inventory_plan_material_by_stage" {
+  function_name = "${var.name_prefix}-inventory-plan-material-by-stage"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "plan-material-by-stage.handler"
+  filename      = var.inventory_lambda_zip_path
+  source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "inventory_list_manufacturers" {
+  function_name = "${var.name_prefix}-inventory-list-manufacturers"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-manufacturers.handler"
+  filename      = var.inventory_lambda_zip_path
+  source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "inventory_create_manufacturer" {
+  function_name = "${var.name_prefix}-inventory-create-manufacturer"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "create-manufacturer.handler"
+  filename      = var.inventory_lambda_zip_path
+  source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
 # ─── Tickets Lambda Functions ─────────────────────────────────────────────────
 
 resource "aws_lambda_function" "tickets_list_tasks" {
@@ -973,6 +1041,63 @@ resource "aws_apigatewayv2_route" "inventory_list_lots" {
   route_key = "GET /inventory/lots"
   target    = "integrations/${aws_apigatewayv2_integration.inventory_list_lots.id}"
   authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "inventory_get_part_chain" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.inventory_get_part_chain.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "inventory_get_part_chain" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /inventory/parts/{id}/chain"
+  target    = "integrations/${aws_apigatewayv2_integration.inventory_get_part_chain.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "inventory_plan_material_by_stage" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.inventory_plan_material_by_stage.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "inventory_plan_material_by_stage" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /inventory/planning/material-by-stage"
+  target    = "integrations/${aws_apigatewayv2_integration.inventory_plan_material_by_stage.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "inventory_list_manufacturers" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.inventory_list_manufacturers.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "inventory_list_manufacturers" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /inventory/manufacturers"
+  target    = "integrations/${aws_apigatewayv2_integration.inventory_list_manufacturers.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "inventory_create_manufacturer" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.inventory_create_manufacturer.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "inventory_create_manufacturer" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "POST /inventory/manufacturers"
+  target    = "integrations/${aws_apigatewayv2_integration.inventory_create_manufacturer.id}"
+  authorizer_id = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
 # ─── API GW Integrations + Routes — Tickets ───────────────────────────────────
@@ -2407,11 +2532,15 @@ locals {
     customers_create      = aws_lambda_function.customers_create
     customers_get         = aws_lambda_function.customers_get
     customers_transition  = aws_lambda_function.customers_transition
-    inventory_list_parts  = aws_lambda_function.inventory_list_parts
-    inventory_create_part = aws_lambda_function.inventory_create_part
-    inventory_get_part    = aws_lambda_function.inventory_get_part
-    inventory_list_vendors = aws_lambda_function.inventory_list_vendors
-    inventory_list_lots   = aws_lambda_function.inventory_list_lots
+    inventory_list_parts               = aws_lambda_function.inventory_list_parts
+    inventory_create_part              = aws_lambda_function.inventory_create_part
+    inventory_get_part                 = aws_lambda_function.inventory_get_part
+    inventory_get_part_chain           = aws_lambda_function.inventory_get_part_chain
+    inventory_list_vendors             = aws_lambda_function.inventory_list_vendors
+    inventory_list_lots                = aws_lambda_function.inventory_list_lots
+    inventory_list_manufacturers       = aws_lambda_function.inventory_list_manufacturers
+    inventory_create_manufacturer      = aws_lambda_function.inventory_create_manufacturer
+    inventory_plan_material_by_stage   = aws_lambda_function.inventory_plan_material_by_stage
     tickets_list_tasks    = aws_lambda_function.tickets_list_tasks
     tickets_create_task   = aws_lambda_function.tickets_create_task
     tickets_transition    = aws_lambda_function.tickets_transition_task

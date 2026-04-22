@@ -43,12 +43,16 @@ const lambdas: LambdaEntry[] = [
   { context: 'customers', handler: 'transition',    entry: 'apps/api/src/lambda/customers/transition.handler.ts' },
 
   // inventory
-  { context: 'inventory', handler: 'create-part',  entry: 'apps/api/src/lambda/inventory/create-part.handler.ts' },
-  { context: 'inventory', handler: 'get-part',      entry: 'apps/api/src/lambda/inventory/get-part.handler.ts' },
-  { context: 'inventory', handler: 'list-lots',     entry: 'apps/api/src/lambda/inventory/list-lots.handler.ts' },
-  { context: 'inventory', handler: 'list-parts',    entry: 'apps/api/src/lambda/inventory/list-parts.handler.ts' },
-  { context: 'inventory', handler: 'list-vendors',          entry: 'apps/api/src/lambda/inventory/list-vendors.handler.ts' },
-  { context: 'inventory', handler: 'list-purchase-orders', entry: 'apps/api/src/lambda/inventory/list-purchase-orders.handler.ts' },
+  { context: 'inventory', handler: 'create-part',              entry: 'apps/api/src/lambda/inventory/create-part.handler.ts' },
+  { context: 'inventory', handler: 'get-part',                  entry: 'apps/api/src/lambda/inventory/get-part.handler.ts' },
+  { context: 'inventory', handler: 'get-part-chain',            entry: 'apps/api/src/lambda/inventory/get-part-chain.handler.ts' },
+  { context: 'inventory', handler: 'list-lots',                 entry: 'apps/api/src/lambda/inventory/list-lots.handler.ts' },
+  { context: 'inventory', handler: 'list-parts',                entry: 'apps/api/src/lambda/inventory/list-parts.handler.ts' },
+  { context: 'inventory', handler: 'list-vendors',              entry: 'apps/api/src/lambda/inventory/list-vendors.handler.ts' },
+  { context: 'inventory', handler: 'list-purchase-orders',      entry: 'apps/api/src/lambda/inventory/list-purchase-orders.handler.ts' },
+  { context: 'inventory', handler: 'list-manufacturers',        entry: 'apps/api/src/lambda/inventory/list-manufacturers.handler.ts' },
+  { context: 'inventory', handler: 'create-manufacturer',       entry: 'apps/api/src/lambda/inventory/create-manufacturer.handler.ts' },
+  { context: 'inventory', handler: 'plan-material-by-stage',    entry: 'apps/api/src/lambda/inventory/plan-material-by-stage.handler.ts' },
 
   // tickets
   { context: 'tickets', handler: 'create-rework',    entry: 'apps/api/src/lambda/tickets/create-rework.handler.ts' },

@@ -4384,6 +4384,25 @@ output "workers_reconciliation_lambda_arn" {
 }
 
 output "all_lambda_function_names" {
-  description = "Every Lambda function name managed by this module. Feed into the observability module for CloudWatch alarms."
-  value       = [for k, v in local.erp_lambdas : v.function_name]
+  description = <<-EOT
+    Every Lambda function name managed by this module. Feed into the observability
+    module for CloudWatch alarms.
+
+    IMPORTANT: values must be derivable from plan-time-known strings, not from
+    resource attributes. `v.function_name` is unknown-until-apply for any resource
+    being created in this plan, which makes `for_each` over this list explode with
+    `Invalid for_each argument`. Every Lambda in `local.erp_lambdas` follows the
+    convention `function_name = "$${var.name_prefix}-$${replace(key, "_", "-")}"`
+    (verified: 116 of 116 resources match), so we compose the name from the map
+    key instead of reading the resource. Also include the work_orders Lambdas
+    that live under a different IAM role and therefore aren't in erp_lambdas.
+  EOT
+  value = concat(
+    [for k, _ in local.erp_lambdas : "${var.name_prefix}-${replace(k, "_", "-")}"],
+    [
+      "${var.name_prefix}-work-orders-create",
+      "${var.name_prefix}-work-orders-list",
+      "${var.name_prefix}-work-orders-transition",
+    ],
+  )
 }

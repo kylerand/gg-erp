@@ -184,7 +184,7 @@ jobs:
 
       - name: Terraform Plan
         working-directory: infra/terraform/envs/${{ steps.env.outputs.tf_env }}
-        run: terraform plan -lock-timeout=120s -out=tfplan
+        run: terraform plan -lock-timeout=120s -parallelism=30 -out=tfplan
         env:
           TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-2' }}
           TF_VAR_name_prefix: ${{ steps.env.outputs.name_prefix }}
@@ -220,7 +220,7 @@ jobs:
 
       - name: Terraform Apply
         working-directory: infra/terraform/envs/${{ steps.env.outputs.tf_env }}
-        run: terraform apply -lock-timeout=120s -auto-approve tfplan
+        run: terraform apply -lock-timeout=120s -parallelism=30 -auto-approve tfplan
         env:
           TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-2' }}
           TF_VAR_name_prefix: ${{ steps.env.outputs.name_prefix }}

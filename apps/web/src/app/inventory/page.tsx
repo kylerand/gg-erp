@@ -28,6 +28,8 @@ export default async function InventoryPage() {
           { label: 'Part Lookup', description: 'Search SKUs, bins, stock', href: '/inventory/parts', icon: '🔍' },
           { label: 'Reservations', description: 'Pick list & shortage handling', href: '/inventory/reservations', icon: '📋' },
           { label: 'Receiving', description: 'PO receipt & variance', href: '/inventory/receiving', icon: '📥' },
+          { label: 'Stage Planning', description: 'Material needs by install stage', href: '/inventory/planning', icon: '📊' },
+          { label: 'Manufacturers', description: 'Maker catalog & part numbers', href: '/inventory/manufacturers', icon: '🏭' },
         ].map(item => (
           <Link key={item.href} href={item.href} className="bg-white rounded-lg border border-gray-200 p-5 hover:border-yellow-400 hover:shadow-sm transition-all">
             <div className="text-2xl mb-2">{item.icon}</div>

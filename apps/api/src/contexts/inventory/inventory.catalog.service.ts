@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import {
   InvariantViolationError,
+  LifecycleLevel,
+  type Manufacturer,
+  ManufacturerDesign,
+  ManufacturerState,
   PartSkuDesign,
   PartSkuState,
   type PartSku,
@@ -11,12 +15,18 @@ import {
   type ConfigurePartSubstitutionRequest,
   type CreateBinRequest,
   type CreateLocationRequest,
+  type CreateManufacturerRequest,
   type CreatePartSkuRequest,
   type InventoryBinContract,
   type InventoryLocationContract,
+  type ListManufacturersRequest,
+  type ListPartSkusRequest,
+  type ListPartSkusResponse,
+  type ManufacturerContract,
   type PartSubstitutionContract,
   type UnitOfMeasureContract,
   type UnitOfMeasureConversionContract,
+  type UpdateManufacturerRequest,
   type UpdatePartSkuRequest,
   type UpsertUnitConversionRequest,
   type UpsertUnitOfMeasureRequest
@@ -53,6 +63,19 @@ export class InventoryCatalogService {
         throw new InvariantViolationError(`Part SKU already exists: ${normalizedSku}`);
       }
 
+      const lifecycleLevel = input.lifecycleLevel ?? LifecycleLevel.RAW_COMPONENT;
+      await this.assertLifecycleChain(lifecycleLevel, input.producedFromPartId, input.producedViaStage);
+
+      if (input.manufacturerId) {
+        const manufacturer = await this.deps.repository.findManufacturerById(input.manufacturerId);
+        if (!manufacturer) {
+          throw new InvariantViolationError(`Manufacturer not found: ${input.manufacturerId}`);
+        }
+        if (manufacturer.state === ManufacturerState.INACTIVE) {
+          throw new InvariantViolationError('Cannot assign an INACTIVE manufacturer to a new part');
+        }
+      }
+
       const now = new Date().toISOString();
       const part: PartSku = {
         id: randomUUID(),
@@ -60,6 +83,17 @@ export class InventoryCatalogService {
         state: PartSkuState.ACTIVE,
         name: input.name.trim(),
         description: input.description?.trim() || undefined,
+        variant: input.variant?.trim() || undefined,
+        color: input.color,
+        category: input.category,
+        lifecycleLevel,
+        installStage: input.installStage,
+        manufacturerId: input.manufacturerId,
+        manufacturerPartNumber: input.manufacturerPartNumber?.trim() || undefined,
+        defaultVendorId: input.defaultVendorId,
+        defaultLocationId: input.defaultLocationId,
+        producedFromPartId: input.producedFromPartId,
+        producedViaStage: input.producedViaStage,
         unitOfMeasure: input.unitOfMeasure,
         reorderPoint: input.reorderPoint,
         createdAt: now,
@@ -120,6 +154,110 @@ export class InventoryCatalogService {
         }
       }
 
+      if (input.variant !== undefined) {
+        const variant = input.variant === null ? undefined : input.variant.trim() || undefined;
+        if (variant !== existing.variant) {
+          changedFields.push('variant');
+          updated.variant = variant;
+        }
+      }
+
+      if (input.color !== undefined) {
+        const color = input.color === null ? undefined : input.color;
+        if (color !== existing.color) {
+          changedFields.push('color');
+          updated.color = color;
+        }
+      }
+
+      if (input.category !== undefined) {
+        const category = input.category === null ? undefined : input.category;
+        if (category !== existing.category) {
+          changedFields.push('category');
+          updated.category = category;
+        }
+      }
+
+      if (input.installStage !== undefined) {
+        const installStage = input.installStage === null ? undefined : input.installStage;
+        if (installStage !== existing.installStage) {
+          changedFields.push('installStage');
+          updated.installStage = installStage;
+        }
+      }
+
+      if (input.manufacturerId !== undefined) {
+        const manufacturerId = input.manufacturerId === null ? undefined : input.manufacturerId;
+        if (manufacturerId && manufacturerId !== existing.manufacturerId) {
+          const manufacturer = await this.deps.repository.findManufacturerById(manufacturerId);
+          if (!manufacturer) {
+            throw new InvariantViolationError(`Manufacturer not found: ${manufacturerId}`);
+          }
+        }
+        if (manufacturerId !== existing.manufacturerId) {
+          changedFields.push('manufacturerId');
+          updated.manufacturerId = manufacturerId;
+        }
+      }
+
+      if (input.manufacturerPartNumber !== undefined) {
+        const mfrPart =
+          input.manufacturerPartNumber === null
+            ? undefined
+            : input.manufacturerPartNumber.trim() || undefined;
+        if (mfrPart !== existing.manufacturerPartNumber) {
+          changedFields.push('manufacturerPartNumber');
+          updated.manufacturerPartNumber = mfrPart;
+        }
+      }
+
+      if (input.defaultVendorId !== undefined) {
+        const defaultVendorId = input.defaultVendorId === null ? undefined : input.defaultVendorId;
+        if (defaultVendorId !== existing.defaultVendorId) {
+          changedFields.push('defaultVendorId');
+          updated.defaultVendorId = defaultVendorId;
+        }
+      }
+
+      if (input.defaultLocationId !== undefined) {
+        const defaultLocationId =
+          input.defaultLocationId === null ? undefined : input.defaultLocationId;
+        if (defaultLocationId !== existing.defaultLocationId) {
+          changedFields.push('defaultLocationId');
+          updated.defaultLocationId = defaultLocationId;
+        }
+      }
+
+      if (input.lifecycleLevel !== undefined && input.lifecycleLevel !== existing.lifecycleLevel) {
+        changedFields.push('lifecycleLevel');
+        updated.lifecycleLevel = input.lifecycleLevel;
+      }
+
+      if (input.producedFromPartId !== undefined) {
+        const producedFromPartId =
+          input.producedFromPartId === null ? undefined : input.producedFromPartId;
+        if (producedFromPartId !== existing.producedFromPartId) {
+          changedFields.push('producedFromPartId');
+          updated.producedFromPartId = producedFromPartId;
+        }
+      }
+
+      if (input.producedViaStage !== undefined) {
+        const producedViaStage =
+          input.producedViaStage === null ? undefined : input.producedViaStage;
+        if (producedViaStage !== existing.producedViaStage) {
+          changedFields.push('producedViaStage');
+          updated.producedViaStage = producedViaStage;
+        }
+      }
+
+      await this.assertLifecycleChain(
+        updated.lifecycleLevel,
+        updated.producedFromPartId,
+        updated.producedViaStage,
+        updated.id
+      );
+
       if (input.state !== undefined && input.state !== existing.state) {
         assertTransitionAllowed(existing.state, input.state, PartSkuDesign.lifecycle);
         changedFields.push('state');
@@ -141,6 +279,202 @@ export class InventoryCatalogService {
       );
       return updated;
     });
+  }
+
+  async listPartSkus(
+    query: ListPartSkusRequest,
+    context: CommandContext
+  ): Promise<ListPartSkusResponse> {
+    return this.support.withObservedExecution('inventory.catalog.list_part_skus', context, async () => {
+      return this.deps.repository.listPartSkus(query);
+    });
+  }
+
+  async getPartSku(partSkuId: string, context: CommandContext): Promise<PartSku> {
+    return this.support.withObservedExecution('inventory.catalog.get_part_sku', context, async () => {
+      const part = await this.deps.repository.findPartSkuById(partSkuId);
+      if (!part) {
+        throw new InvariantViolationError(`Part SKU not found: ${partSkuId}`);
+      }
+      return part;
+    });
+  }
+
+  async createManufacturer(
+    input: CreateManufacturerRequest,
+    context: CommandContext
+  ): Promise<ManufacturerContract> {
+    return this.support.withObservedExecution(
+      'inventory.catalog.create_manufacturer',
+      context,
+      async () => {
+        if (!input.manufacturerCode.trim()) {
+          throw new InvariantViolationError('manufacturerCode is required');
+        }
+        if (!input.name.trim()) {
+          throw new InvariantViolationError('Manufacturer name is required');
+        }
+
+        const code = input.manufacturerCode.trim();
+        const existingByCode = await this.deps.repository.findManufacturerByCode(code);
+        if (existingByCode) {
+          throw new InvariantViolationError(`Manufacturer code already exists: ${code}`);
+        }
+        const existingByName = await this.deps.repository.findManufacturerByName(input.name.trim());
+        if (existingByName) {
+          throw new InvariantViolationError(`Manufacturer name already exists: ${input.name.trim()}`);
+        }
+
+        const now = new Date().toISOString();
+        const manufacturer: Manufacturer = {
+          id: randomUUID(),
+          manufacturerCode: code,
+          name: input.name.trim(),
+          state: input.state ?? ManufacturerState.ACTIVE,
+          website: input.website?.trim() || undefined,
+          notes: input.notes?.trim() || undefined,
+          createdAt: now,
+          updatedAt: now
+        };
+        await this.deps.repository.saveManufacturer(manufacturer);
+        await this.support.recordMutation(
+          {
+            action: AUDIT_POINTS.inventoryPartCatalogChange,
+            entityType: 'Manufacturer',
+            entityId: manufacturer.id,
+            metadata: manufacturer,
+            eventName: 'manufacturer.created',
+            successMetricName: 'inventory.catalog.manufacturer.created'
+          },
+          context
+        );
+        return manufacturer;
+      }
+    );
+  }
+
+  async updateManufacturer(
+    input: UpdateManufacturerRequest,
+    context: CommandContext
+  ): Promise<ManufacturerContract> {
+    return this.support.withObservedExecution(
+      'inventory.catalog.update_manufacturer',
+      context,
+      async () => {
+        const existing = await this.deps.repository.findManufacturerById(input.manufacturerId);
+        if (!existing) {
+          throw new InvariantViolationError(`Manufacturer not found: ${input.manufacturerId}`);
+        }
+
+        const updated: Manufacturer = { ...existing };
+        const changedFields: string[] = [];
+
+        if (input.name !== undefined) {
+          const name = input.name.trim();
+          if (!name) throw new InvariantViolationError('Manufacturer name cannot be empty');
+          if (name !== existing.name) {
+            changedFields.push('name');
+            updated.name = name;
+          }
+        }
+        if (input.website !== undefined) {
+          const website = input.website === null ? undefined : input.website.trim() || undefined;
+          if (website !== existing.website) {
+            changedFields.push('website');
+            updated.website = website;
+          }
+        }
+        if (input.notes !== undefined) {
+          const notes = input.notes === null ? undefined : input.notes.trim() || undefined;
+          if (notes !== existing.notes) {
+            changedFields.push('notes');
+            updated.notes = notes;
+          }
+        }
+        if (input.state !== undefined && input.state !== existing.state) {
+          assertTransitionAllowed(existing.state, input.state, ManufacturerDesign.lifecycle);
+          changedFields.push('state');
+          updated.state = input.state;
+        }
+
+        updated.updatedAt = new Date().toISOString();
+        await this.deps.repository.saveManufacturer(updated);
+        await this.support.recordMutation(
+          {
+            action: AUDIT_POINTS.inventoryPartCatalogChange,
+            entityType: 'Manufacturer',
+            entityId: updated.id,
+            metadata: { manufacturerId: updated.id, changedFields, state: updated.state },
+            eventName: 'manufacturer.updated',
+            successMetricName: 'inventory.catalog.manufacturer.updated'
+          },
+          context
+        );
+        return updated;
+      }
+    );
+  }
+
+  async listManufacturers(
+    query: ListManufacturersRequest,
+    context: CommandContext
+  ): Promise<ManufacturerContract[]> {
+    return this.support.withObservedExecution(
+      'inventory.catalog.list_manufacturers',
+      context,
+      async () => {
+        const all = await this.deps.repository.listManufacturers();
+        return query.state ? all.filter((m) => m.state === query.state) : all;
+      }
+    );
+  }
+
+  private async assertLifecycleChain(
+    lifecycleLevel: LifecycleLevel,
+    producedFromPartId: string | undefined,
+    producedViaStage: string | undefined,
+    selfPartId?: string
+  ): Promise<void> {
+    if (lifecycleLevel === LifecycleLevel.RAW_MATERIAL || lifecycleLevel === LifecycleLevel.RAW_COMPONENT) {
+      if (producedFromPartId) {
+        throw new InvariantViolationError(
+          'Raw materials/components must not reference producedFromPartId'
+        );
+      }
+      return;
+    }
+
+    if (!producedFromPartId) {
+      throw new InvariantViolationError(
+        `${lifecycleLevel} requires producedFromPartId pointing to its predecessor`
+      );
+    }
+
+    if (producedFromPartId === selfPartId) {
+      throw new InvariantViolationError('A part cannot be produced from itself');
+    }
+
+    const predecessor = await this.deps.repository.findPartSkuById(producedFromPartId);
+    if (!predecessor) {
+      throw new InvariantViolationError(`Predecessor part not found: ${producedFromPartId}`);
+    }
+
+    const expectedPredecessor =
+      lifecycleLevel === LifecycleLevel.PREPARED_COMPONENT
+        ? LifecycleLevel.RAW_COMPONENT
+        : LifecycleLevel.PREPARED_COMPONENT;
+
+    if (predecessor.lifecycleLevel !== expectedPredecessor) {
+      throw new InvariantViolationError(
+        `${lifecycleLevel} must be produced from a ${expectedPredecessor} (got ${predecessor.lifecycleLevel})`
+      );
+    }
+
+    if (producedViaStage && predecessor.installStage && producedViaStage !== predecessor.installStage) {
+      throw new InvariantViolationError(
+        `producedViaStage (${producedViaStage}) must match predecessor installStage (${predecessor.installStage})`
+      );
+    }
   }
 
   async configurePartSubstitution(

@@ -1,11 +1,19 @@
-import { InvariantViolationError } from '../../../../../packages/domain/src/model/index.js';
+import {
+  InvariantViolationError,
+  type PartSku
+} from '../../../../../packages/domain/src/model/index.js';
 import { AUDIT_POINTS } from '../../audit/index.js';
 import type {
   InventoryBalanceQuery,
   InventoryBalanceRecord,
   InventoryLedgerQuery,
   InventoryLedgerQueryResponse,
+  PartChainNode,
+  PartChainResponse,
   PurchaseOrderInventoryLinkContract,
+  StageMaterialPlanGroup,
+  StageMaterialPlanLine,
+  StageMaterialPlanResponse,
   WorkOrderMaterialStatusContract,
   WorkOrderMaterialStatusLine
 } from './inventory.api.contracts.js';
@@ -131,6 +139,102 @@ export class InventoryQueryService {
           lines: [...linesByPart.values()].sort((left, right) =>
             left.partSkuId.localeCompare(right.partSkuId)
           )
+        };
+      }
+    );
+  }
+
+  async getPartChain(partSkuId: string, context: CommandContext): Promise<PartChainResponse> {
+    return this.support.withObservedExecution('inventory.query.part_chain', context, async () => {
+      if (!partSkuId.trim()) {
+        throw new InvariantViolationError('partSkuId is required');
+      }
+      const part = await this.deps.repository.findPartSkuById(partSkuId);
+      if (!part) {
+        throw new InvariantViolationError(`Part SKU not found: ${partSkuId}`);
+      }
+
+      const ancestors: PartChainNode[] = [];
+      let cursor: PartSku | undefined = part.producedFromPartId
+        ? await this.deps.repository.findPartSkuById(part.producedFromPartId)
+        : undefined;
+      while (cursor) {
+        ancestors.unshift({ part: cursor, producedViaStage: cursor.producedViaStage });
+        cursor = cursor.producedFromPartId
+          ? await this.deps.repository.findPartSkuById(cursor.producedFromPartId)
+          : undefined;
+      }
+
+      const descendants: PartChainNode[] = [];
+      const toVisit: PartSku[] = [part];
+      const { items: allParts } = await this.deps.repository.listPartSkus();
+      while (toVisit.length > 0) {
+        const current = toVisit.shift()!;
+        const children = allParts.filter((candidate) => candidate.producedFromPartId === current.id);
+        for (const child of children) {
+          descendants.push({ part: child, producedViaStage: child.producedViaStage });
+          toVisit.push(child);
+        }
+      }
+
+      return { ancestors, part, descendants };
+    });
+  }
+
+  async planMaterialByStage(context: CommandContext): Promise<StageMaterialPlanResponse> {
+    return this.support.withObservedExecution(
+      'inventory.query.material_plan_by_stage',
+      context,
+      async () => {
+        const [{ items: parts }, lots] = await Promise.all([
+          this.deps.repository.listPartSkus(),
+          this.deps.repository.listLots()
+        ]);
+
+        const onHandByPart = new Map<string, number>();
+        for (const lot of lots) {
+          if (lot.state === 'CONSUMED') continue;
+          const running = onHandByPart.get(lot.partSkuId) ?? 0;
+          onHandByPart.set(lot.partSkuId, running + lot.quantityOnHand);
+        }
+
+        const toLine = (part: PartSku): StageMaterialPlanLine => {
+          const onHand = onHandByPart.get(part.id) ?? 0;
+          const shortfall = Math.max(part.reorderPoint - onHand, 0);
+          return { part, onHand, reorderPoint: part.reorderPoint, shortfall };
+        };
+
+        const groupsByStage = new Map<string, StageMaterialPlanGroup>();
+        const unassigned: StageMaterialPlanLine[] = [];
+
+        for (const part of parts) {
+          const line = toLine(part);
+          if (!part.installStage) {
+            unassigned.push(line);
+            continue;
+          }
+          let group = groupsByStage.get(part.installStage);
+          if (!group) {
+            group = { installStage: part.installStage, lines: [], totalShortfall: 0 };
+            groupsByStage.set(part.installStage, group);
+          }
+          group.lines.push(line);
+          group.totalShortfall += line.shortfall;
+        }
+
+        const stageOrder = ['FABRICATION', 'FRAME', 'WIRING', 'PARTS_PREP', 'FINAL_ASSEMBLY'];
+        const groups = [...groupsByStage.values()].sort(
+          (a, b) => stageOrder.indexOf(a.installStage) - stageOrder.indexOf(b.installStage)
+        );
+        for (const group of groups) {
+          group.lines.sort((a, b) => b.shortfall - a.shortfall || a.part.sku.localeCompare(b.part.sku));
+        }
+        unassigned.sort((a, b) => a.part.sku.localeCompare(b.part.sku));
+
+        return {
+          generatedAt: new Date().toISOString(),
+          groups,
+          unassigned
         };
       }
     );

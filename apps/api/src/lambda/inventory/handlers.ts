@@ -118,21 +118,58 @@ export const inventoryPurchaseOrderQueries = {
 
 // ─── List Parts ───────────────────────────────────────────────────────────────
 
+const PART_INCLUDE = {
+  stockLots: {
+    where: { lotState: 'AVAILABLE' as const },
+    include: { stockLocation: { select: { locationName: true } } },
+  },
+  manufacturer: { select: { manufacturerName: true } },
+  defaultVendor: { select: { vendorName: true } },
+  defaultLocation: { select: { locationName: true } },
+} as const;
+
 export const listPartsHandler = wrapHandler(async (ctx) => {
   const qs = ctx.event.queryStringParameters ?? {};
   const search = qs.search;
   const partState = qs.partState as string | undefined;
+  const category = qs.category as string | undefined;
+  const installStage = qs.installStage as string | undefined;
+  const lifecycleLevel = qs.lifecycleLevel as string | undefined;
+  const manufacturerId = qs.manufacturerId as string | undefined;
+  const defaultVendorId = qs.defaultVendorId as string | undefined;
   const limit = Math.min(parseInt(qs.limit ?? '100', 10), 200);
   const offset = parseInt(qs.offset ?? '0', 10);
 
   const where = {
     ...(partState ? { partState: partState as 'ACTIVE' | 'INACTIVE' | 'DISCONTINUED' } : {}),
+    ...(category
+      ? {
+          category: category as
+            | 'ELECTRONICS' | 'AUDIO' | 'FABRICATION' | 'HARDWARE' | 'SMALL_PARTS' | 'DRIVE_TRAIN',
+        }
+      : {}),
+    ...(installStage
+      ? {
+          installStage: installStage as
+            | 'FABRICATION' | 'FRAME' | 'WIRING' | 'PARTS_PREP' | 'FINAL_ASSEMBLY',
+        }
+      : {}),
+    ...(lifecycleLevel
+      ? {
+          lifecycleLevel: lifecycleLevel as
+            | 'RAW_MATERIAL' | 'RAW_COMPONENT' | 'PREPARED_COMPONENT' | 'ASSEMBLED_COMPONENT',
+        }
+      : {}),
+    ...(manufacturerId ? { manufacturerId } : {}),
+    ...(defaultVendorId ? { defaultVendorId } : {}),
     ...(search
       ? {
           OR: [
             { sku: { contains: search, mode: 'insensitive' as const } },
             { name: { contains: search, mode: 'insensitive' as const } },
+            { variant: { contains: search, mode: 'insensitive' as const } },
             { description: { contains: search, mode: 'insensitive' as const } },
+            { manufacturerPartNumber: { contains: search, mode: 'insensitive' as const } },
           ],
         }
       : {}),
@@ -145,17 +182,183 @@ export const listPartsHandler = wrapHandler(async (ctx) => {
       orderBy: { sku: 'asc' },
       take: limit,
       skip: offset,
-      include: {
-        stockLots: {
-          where: { lotState: 'AVAILABLE' },
-          include: { stockLocation: { select: { locationName: true } } },
-        },
-      },
+      include: PART_INCLUDE,
     }),
     getInventoryPrisma().part.count({ where }),
   ]);
 
   return jsonResponse(200, { items: items.map(toPartResponse), total, limit, offset });
+}, { requireAuth: false });
+
+// ─── Get Part Transformation Chain ───────────────────────────────────────────
+
+export const getPartChainHandler = wrapHandler(async (ctx) => {
+  const id = ctx.event.pathParameters?.id;
+  if (!id) return jsonResponse(400, { message: 'Part ID is required.' });
+
+  const prisma = getInventoryPrisma();
+  const part = await prisma.part.findFirst({
+    where: { id, deletedAt: null },
+    include: PART_INCLUDE,
+  });
+  if (!part) return jsonResponse(404, { message: `Part not found: ${id}` });
+
+  const ancestors: Array<typeof part> = [];
+  let cursorId = part.producedFromPartId;
+  while (cursorId) {
+    const next = await prisma.part.findFirst({
+      where: { id: cursorId, deletedAt: null },
+      include: PART_INCLUDE,
+    });
+    if (!next) break;
+    ancestors.unshift(next);
+    cursorId = next.producedFromPartId;
+  }
+
+  const descendants: Array<typeof part> = [];
+  const toVisit: string[] = [part.id];
+  while (toVisit.length > 0) {
+    const currentId = toVisit.shift()!;
+    const children = await prisma.part.findMany({
+      where: { producedFromPartId: currentId, deletedAt: null },
+      include: PART_INCLUDE,
+      orderBy: { lifecycleLevel: 'asc' },
+    });
+    for (const child of children) {
+      descendants.push(child);
+      toVisit.push(child.id);
+    }
+  }
+
+  return jsonResponse(200, {
+    ancestors: ancestors.map((p) => ({ part: toPartResponse(p), producedViaStage: p.producedViaStage ?? undefined })),
+    part: toPartResponse(part),
+    descendants: descendants.map((p) => ({ part: toPartResponse(p), producedViaStage: p.producedViaStage ?? undefined })),
+  });
+}, { requireAuth: false });
+
+// ─── Material Plan by Install Stage ──────────────────────────────────────────
+
+export const planMaterialByStageHandler = wrapHandler(async () => {
+  const prisma = getInventoryPrisma();
+  const parts = await prisma.part.findMany({
+    where: { deletedAt: null, partState: 'ACTIVE' },
+    orderBy: { sku: 'asc' },
+    include: PART_INCLUDE,
+  });
+
+  const STAGE_ORDER = ['FABRICATION', 'FRAME', 'WIRING', 'PARTS_PREP', 'FINAL_ASSEMBLY'] as const;
+  type Stage = (typeof STAGE_ORDER)[number];
+
+  const toLine = (part: (typeof parts)[number]) => {
+    const onHand = (part.stockLots ?? []).length;
+    const reorderPoint = Number(part.reorderPoint);
+    return {
+      part: toPartResponse(part),
+      onHand,
+      reorderPoint,
+      shortfall: Math.max(reorderPoint - onHand, 0),
+    };
+  };
+
+  const byStage = new Map<Stage, ReturnType<typeof toLine>[]>();
+  const unassigned: ReturnType<typeof toLine>[] = [];
+  for (const p of parts) {
+    const line = toLine(p);
+    if (!p.installStage) {
+      unassigned.push(line);
+      continue;
+    }
+    const arr = byStage.get(p.installStage as Stage) ?? [];
+    arr.push(line);
+    byStage.set(p.installStage as Stage, arr);
+  }
+
+  const groups = STAGE_ORDER.filter((s) => byStage.has(s)).map((stage) => {
+    const lines = (byStage.get(stage) ?? []).sort((a, b) => b.shortfall - a.shortfall || a.part.sku.localeCompare(b.part.sku));
+    return {
+      installStage: stage,
+      lines,
+      totalShortfall: lines.reduce((sum, l) => sum + l.shortfall, 0),
+    };
+  });
+
+  return jsonResponse(200, { generatedAt: new Date().toISOString(), groups, unassigned });
+}, { requireAuth: false });
+
+// ─── List Manufacturers ──────────────────────────────────────────────────────
+
+export const listManufacturersHandler = wrapHandler(async (ctx) => {
+  const qs = ctx.event.queryStringParameters ?? {};
+  const state = qs.state as string | undefined;
+  const limit = Math.min(parseInt(qs.limit ?? '200', 10), 500);
+  const offset = parseInt(qs.offset ?? '0', 10);
+
+  const where = {
+    ...(state ? { manufacturerState: state as 'ACTIVE' | 'INACTIVE' } : {}),
+    deletedAt: null,
+  };
+
+  const [items, total] = await Promise.all([
+    getInventoryPrisma().manufacturer.findMany({
+      where,
+      orderBy: { manufacturerName: 'asc' },
+      take: limit,
+      skip: offset,
+    }),
+    getInventoryPrisma().manufacturer.count({ where }),
+  ]);
+
+  return jsonResponse(200, { items: items.map(toManufacturerResponse), total, limit, offset });
+}, { requireAuth: false });
+
+// ─── Create Manufacturer ─────────────────────────────────────────────────────
+
+interface CreateManufacturerBody {
+  manufacturerCode: string;
+  name: string;
+  website?: string;
+  notes?: string;
+}
+
+export const createManufacturerHandler = wrapHandler(async (ctx) => {
+  const body = parseBody<CreateManufacturerBody>(ctx.event);
+  if (!body.ok) return jsonResponse(400, { message: body.error });
+
+  const { manufacturerCode, name, website, notes } = body.value;
+  if (!manufacturerCode?.trim()) return jsonResponse(422, { message: 'manufacturerCode is required.' });
+  if (!name?.trim()) return jsonResponse(422, { message: 'name is required.' });
+
+  const code = manufacturerCode.trim().toUpperCase();
+  const prisma = getInventoryPrisma();
+  const duplicate = await prisma.manufacturer.findFirst({
+    where: {
+      deletedAt: null,
+      OR: [
+        { manufacturerCode: code },
+        { manufacturerName: { equals: name.trim(), mode: 'insensitive' } },
+      ],
+    },
+  });
+  if (duplicate) {
+    return jsonResponse(409, { message: `Manufacturer already exists: ${duplicate.manufacturerName}` });
+  }
+
+  const now = new Date();
+  const created = await prisma.manufacturer.create({
+    data: {
+      id: randomUUID(),
+      manufacturerCode: code,
+      manufacturerName: name.trim(),
+      manufacturerState: 'ACTIVE',
+      website: website?.trim() || null,
+      notes: notes?.trim() || null,
+      createdAt: now,
+      updatedAt: now,
+    },
+  });
+
+  return jsonResponse(201, { manufacturer: toManufacturerResponse(created) });
 }, { requireAuth: false });
 
 // ─── List Inventory Lots ─────────────────────────────────────────────────────
@@ -209,7 +412,10 @@ export const getPartHandler = wrapHandler(async (ctx) => {
   const id = ctx.event.pathParameters?.id;
   if (!id) return jsonResponse(400, { message: 'Part ID is required.' });
 
-  const part = await getInventoryPrisma().part.findFirst({ where: { id, deletedAt: null } });
+  const part = await getInventoryPrisma().part.findFirst({
+    where: { id, deletedAt: null },
+    include: PART_INCLUDE,
+  });
   if (!part) return jsonResponse(404, { message: `Part not found: ${id}` });
 
   return jsonResponse(200, { part: toPartResponse(part) });
@@ -284,22 +490,72 @@ export const listVendorsHandler = wrapHandler(async (ctx) => {
 
 function toPartResponse(r: {
   id: string; sku: string; name: string; description: string | null;
+  variant?: string | null;
+  color?: string | null;
+  category?: string | null;
+  lifecycleLevel?: string | null;
+  installStage?: string | null;
+  manufacturerId?: string | null;
+  manufacturerPartNumber?: string | null;
+  defaultVendorId?: string | null;
+  defaultLocationId?: string | null;
+  producedFromPartId?: string | null;
+  producedViaStage?: string | null;
   unitOfMeasure: string; partState: string; reorderPoint: unknown;
   createdAt: Date; updatedAt: Date;
   stockLots?: Array<{ lotState: string; stockLocation?: { locationName: string } | null }>;
+  manufacturer?: { manufacturerName: string } | null;
+  defaultVendor?: { vendorName: string } | null;
+  defaultLocation?: { locationName: string } | null;
 }) {
   const availableLots = r.stockLots?.filter(l => l.lotState === 'AVAILABLE') ?? [];
-  const location = availableLots[0]?.stockLocation?.locationName ?? undefined;
+  const location = r.defaultLocation?.locationName ?? availableLots[0]?.stockLocation?.locationName ?? undefined;
   return {
     id: r.id,
     sku: r.sku,
     name: r.name,
     description: r.description ?? undefined,
+    variant: r.variant ?? undefined,
+    color: r.color ?? undefined,
+    category: r.category ?? undefined,
+    lifecycleLevel: r.lifecycleLevel ?? undefined,
+    installStage: r.installStage ?? undefined,
+    manufacturerId: r.manufacturerId ?? undefined,
+    manufacturerName: r.manufacturer?.manufacturerName ?? undefined,
+    manufacturerPartNumber: r.manufacturerPartNumber ?? undefined,
+    defaultVendorId: r.defaultVendorId ?? undefined,
+    defaultVendorName: r.defaultVendor?.vendorName ?? undefined,
+    defaultLocationId: r.defaultLocationId ?? undefined,
+    defaultLocationName: r.defaultLocation?.locationName ?? undefined,
+    producedFromPartId: r.producedFromPartId ?? undefined,
+    producedViaStage: r.producedViaStage ?? undefined,
     unitOfMeasure: r.unitOfMeasure,
     partState: r.partState,
     reorderPoint: Number(r.reorderPoint),
     quantityOnHand: availableLots.length,
     location,
+    createdAt: r.createdAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
+  };
+}
+
+function toManufacturerResponse(r: {
+  id: string;
+  manufacturerCode: string;
+  manufacturerName: string;
+  manufacturerState: string;
+  website: string | null;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    id: r.id,
+    manufacturerCode: r.manufacturerCode,
+    name: r.manufacturerName,
+    state: r.manufacturerState,
+    website: r.website ?? undefined,
+    notes: r.notes ?? undefined,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   };

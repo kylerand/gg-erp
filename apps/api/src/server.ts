@@ -29,8 +29,12 @@ import {
   listLotsHandler,
   listPartsHandler,
   getPartHandler,
+  getPartChainHandler,
   createPartHandler,
   listVendorsHandler,
+  listManufacturersHandler,
+  createManufacturerHandler,
+  planMaterialByStageHandler,
 } from './lambda/inventory/handlers.js';
 import {
   listTasksHandler,
@@ -216,7 +220,7 @@ async function route(
   // ── Path parameter extraction helpers ────────────────────────────────────
   const migrationBatchMatch = pathname.match(/^\/migration\/batches\/([^/]+)/);
   const customerMatch = pathname.match(/^\/identity\/customers\/([^/]+)/);
-  const partMatch = pathname.match(/^\/inventory\/parts\/([^/]+)/);
+  const partMatch = pathname.match(/^\/inventory\/parts\/([^/]+)(?:\/([^/]+))?/);
   const taskMatch = pathname.match(/^\/tickets\/work-orders\/([^/]+)\/tasks(?:\/([^/]+))?/);
   const reworkMatch = pathname.match(/^\/tickets\/work-orders\/([^/]+)\/rework/);
   const qcMatch = pathname.match(/^\/tickets\/work-orders\/([^/]+)\/qc-gates/);
@@ -272,7 +276,15 @@ async function route(
     result = await listLotsHandler(event);
   } else if (pathname === '/inventory/parts' && method === 'POST') {
     result = await createPartHandler(event);
-  } else if (partMatch && method === 'GET') {
+  } else if (pathname === '/inventory/planning/material-by-stage' && method === 'GET') {
+    result = await planMaterialByStageHandler(event);
+  } else if (pathname === '/inventory/manufacturers' && method === 'GET') {
+    result = await listManufacturersHandler(event);
+  } else if (pathname === '/inventory/manufacturers' && method === 'POST') {
+    result = await createManufacturerHandler(event);
+  } else if (partMatch && partMatch[2] === 'chain' && method === 'GET') {
+    result = await getPartChainHandler({ ...event, pathParameters: { id: partMatch[1] } });
+  } else if (partMatch && !partMatch[2] && method === 'GET') {
     result = await getPartHandler({ ...event, pathParameters: { id: partMatch[1] } });
   } else if (pathname === '/inventory/vendors' && method === 'GET') {
     result = await listVendorsHandler(event);

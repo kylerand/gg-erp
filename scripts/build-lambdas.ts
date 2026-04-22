@@ -129,6 +129,7 @@ const lambdas: LambdaEntry[] = [
   // workers
   { context: 'workers', handler: 'payment-sync',      entry: 'apps/workers/src/payment-sync.handler.ts' },
   { context: 'workers', handler: 'reconciliation',    entry: 'apps/workers/src/reconciliation.handler.ts' },
+  { context: 'workers', handler: 'outbox-publisher',  entry: 'apps/workers/src/outbox-publisher.handler.ts' },
 
   // migration
   { context: 'migration', handler: 'cancel-batch',    entry: 'apps/api/src/lambda/migration/cancel-batch.handler.ts' },

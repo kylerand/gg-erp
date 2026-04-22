@@ -49,10 +49,11 @@ module "cognito" {
 }
 
 module "eventbridge" {
-  source                      = "../../modules/eventbridge"
-  name_prefix                 = var.name_prefix
-  archive_retention_days      = 365
-  outbox_publisher_lambda_arn = module.api_gateway_lambda.workers_outbox_publisher_lambda_arn
+  source                           = "../../modules/eventbridge"
+  name_prefix                      = var.name_prefix
+  archive_retention_days           = 365
+  outbox_publisher_lambda_arn      = module.api_gateway_lambda.workers_outbox_publisher_lambda_arn
+  enable_outbox_publisher_schedule = true
 }
 
 module "step_functions" {

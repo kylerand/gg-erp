@@ -75,10 +75,28 @@ variable "outbox_publisher_lambda_arn" {
   description = "ARN of the outbox publisher Lambda invoked on a 1-minute schedule"
 }
 
+variable "enable_outbox_publisher_schedule" {
+  type        = bool
+  default     = false
+  description = "When true, creates the 1-minute EventBridge rule that invokes outbox_publisher_lambda_arn. Decoupled from the ARN so count is known at plan time (the ARN of a not-yet-created Lambda is unknown until apply)."
+}
+
+variable "enable_qb_invoice_sync_rule" {
+  type        = bool
+  default     = false
+  description = "When true, creates the work_order.completed rule that targets qb_invoice_sync_lambda_arn."
+}
+
+variable "enable_qb_customer_sync_rule" {
+  type        = bool
+  default     = false
+  description = "When true, creates the customer.created/updated rule that targets qb_customer_sync_lambda_arn."
+}
+
 # ─── EventBridge Rules — QB Invoice Sync (work_order.completed) ───────────────
 
 resource "aws_cloudwatch_event_rule" "work_order_completed" {
-  count         = var.qb_invoice_sync_lambda_arn != "" ? 1 : 0
+  count         = var.enable_qb_invoice_sync_rule ? 1 : 0
   name          = "${var.name_prefix}-work-order-completed"
   event_bus_name = aws_cloudwatch_event_bus.main.name
   description   = "Routes work_order.completed events to the QB invoice sync Lambda"
@@ -94,7 +112,7 @@ resource "aws_cloudwatch_event_rule" "work_order_completed" {
 }
 
 resource "aws_cloudwatch_event_target" "qb_invoice_sync" {
-  count          = var.qb_invoice_sync_lambda_arn != "" ? 1 : 0
+  count          = var.enable_qb_invoice_sync_rule ? 1 : 0
   rule           = aws_cloudwatch_event_rule.work_order_completed[0].name
   event_bus_name = aws_cloudwatch_event_bus.main.name
   arn            = var.qb_invoice_sync_lambda_arn
@@ -106,7 +124,7 @@ resource "aws_cloudwatch_event_target" "qb_invoice_sync" {
 }
 
 resource "aws_lambda_permission" "allow_eventbridge_qb_invoice_sync" {
-  count         = var.qb_invoice_sync_lambda_arn != "" ? 1 : 0
+  count         = var.enable_qb_invoice_sync_rule ? 1 : 0
   statement_id  = "AllowEventBridgeInvokeQbInvoiceSync"
   action        = "lambda:InvokeFunction"
   function_name = var.qb_invoice_sync_lambda_arn
@@ -117,7 +135,7 @@ resource "aws_lambda_permission" "allow_eventbridge_qb_invoice_sync" {
 # ─── EventBridge Rules — QB Customer Sync (customer.created / customer.updated)
 
 resource "aws_cloudwatch_event_rule" "customer_changed" {
-  count         = var.qb_customer_sync_lambda_arn != "" ? 1 : 0
+  count         = var.enable_qb_customer_sync_rule ? 1 : 0
   name          = "${var.name_prefix}-customer-changed"
   event_bus_name = aws_cloudwatch_event_bus.main.name
   description   = "Routes customer.created and customer.updated events to the QB customer sync Lambda"
@@ -133,7 +151,7 @@ resource "aws_cloudwatch_event_rule" "customer_changed" {
 }
 
 resource "aws_cloudwatch_event_target" "qb_customer_sync" {
-  count          = var.qb_customer_sync_lambda_arn != "" ? 1 : 0
+  count          = var.enable_qb_customer_sync_rule ? 1 : 0
   rule           = aws_cloudwatch_event_rule.customer_changed[0].name
   event_bus_name = aws_cloudwatch_event_bus.main.name
   arn            = var.qb_customer_sync_lambda_arn
@@ -145,7 +163,7 @@ resource "aws_cloudwatch_event_target" "qb_customer_sync" {
 }
 
 resource "aws_lambda_permission" "allow_eventbridge_qb_customer_sync" {
-  count         = var.qb_customer_sync_lambda_arn != "" ? 1 : 0
+  count         = var.enable_qb_customer_sync_rule ? 1 : 0
   statement_id  = "AllowEventBridgeInvokeQbCustomerSync"
   action        = "lambda:InvokeFunction"
   function_name = var.qb_customer_sync_lambda_arn
@@ -167,14 +185,14 @@ resource "aws_cloudwatch_event_rule" "outbox_publisher_schedule" {
 }
 
 resource "aws_cloudwatch_event_target" "outbox_publisher" {
-  count     = var.outbox_publisher_lambda_arn != "" ? 1 : 0
+  count     = var.enable_outbox_publisher_schedule ? 1 : 0
   rule      = aws_cloudwatch_event_rule.outbox_publisher_schedule[0].name
   arn       = var.outbox_publisher_lambda_arn
   target_id = "${var.name_prefix}-outbox-publisher"
 }
 
 resource "aws_lambda_permission" "allow_eventbridge_outbox_publisher" {
-  count         = var.outbox_publisher_lambda_arn != "" ? 1 : 0
+  count         = var.enable_outbox_publisher_schedule ? 1 : 0
   statement_id  = "AllowEventBridgeInvokeOutboxPublisher"
   action        = "lambda:InvokeFunction"
   function_name = var.outbox_publisher_lambda_arn

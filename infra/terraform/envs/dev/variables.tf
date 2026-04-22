@@ -97,6 +97,19 @@ variable "scheduling_lambda_zip_path" {
   default     = "../../../../apps/api/dist/scheduling-lambda.zip"
 }
 
+variable "workers_lambda_zip_path" {
+  description = "Path to the packaged workers Lambda zip artifact."
+  type        = string
+  default     = "../../../../apps/api/dist/workers-lambda.zip"
+}
+
+variable "sentry_dsn" {
+  description = "Sentry DSN for Lambda error tracking. Leave empty to disable."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 # QuickBooks OAuth
 
 variable "qb_client_id" {

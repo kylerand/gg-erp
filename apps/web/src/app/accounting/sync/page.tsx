@@ -52,7 +52,7 @@ export default function SyncMonitorPage() {
         description="QuickBooks invoice sync status"
         action={
           qbConnected === false ? (
-            <a href="/api/accounting/oauth/connect">
+            <a href={`${process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001'}/accounting/oauth/connect`}>
               <Button className="bg-yellow-400 hover:bg-yellow-300 text-gray-900">Connect QuickBooks</Button>
             </a>
           ) : qbConnected ? (

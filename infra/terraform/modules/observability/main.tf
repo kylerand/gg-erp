@@ -15,19 +15,30 @@ variable "api_gateway_id" {
   description = "API Gateway ID for metrics (optional)"
 }
 
+variable "monitored_lambda_names" {
+  type        = list(string)
+  default     = []
+  description = "Full Lambda function names (including name_prefix) to create CloudWatch alarms + log groups for. If empty, falls back to the legacy short-list."
+}
+
 locals {
-  lambda_functions = ["work-orders-create", "work-orders-list", "workers"]
+  # Legacy short list used when no full names are passed in (back-compat for existing state).
+  legacy_lambda_short_names = ["work-orders-create", "work-orders-list", "workers"]
+
+  monitored_full_names = length(var.monitored_lambda_names) > 0 ? var.monitored_lambda_names : [
+    for short in local.legacy_lambda_short_names : "${var.name_prefix}-${short}"
+  ]
 }
 
 data "aws_region" "current" {}
 
 resource "aws_cloudwatch_log_group" "lambda" {
-  for_each          = toset(local.lambda_functions)
-  name              = "/aws/lambda/${var.name_prefix}-${each.value}"
+  for_each          = toset(local.monitored_full_names)
+  name              = "/aws/lambda/${each.value}"
   retention_in_days = var.log_retention_days
 
   tags = {
-    Name     = "${var.name_prefix}-${each.value}-logs"
+    Name     = "${each.value}-logs"
     Function = each.value
   }
 }
@@ -49,7 +60,7 @@ resource "aws_cloudwatch_dashboard" "main" {
           period = 300
           stat   = "Sum"
           metrics = [
-            for fn in local.lambda_functions : ["AWS/Lambda", "Errors", "FunctionName", "${var.name_prefix}-${fn}"]
+            for fn in local.monitored_full_names : ["AWS/Lambda", "Errors", "FunctionName", fn]
           ]
           view = "timeSeries"
         }
@@ -66,7 +77,7 @@ resource "aws_cloudwatch_dashboard" "main" {
           period = 300
           stat   = "p99"
           metrics = [
-            for fn in local.lambda_functions : ["AWS/Lambda", "Duration", "FunctionName", "${var.name_prefix}-${fn}"]
+            for fn in local.monitored_full_names : ["AWS/Lambda", "Duration", "FunctionName", fn]
           ]
           view = "timeSeries"
         }
@@ -76,8 +87,8 @@ resource "aws_cloudwatch_dashboard" "main" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
-  for_each            = toset(local.lambda_functions)
-  alarm_name          = "${var.name_prefix}-${each.value}-errors"
+  for_each            = toset(local.monitored_full_names)
+  alarm_name          = "${each.value}-errors"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2
   metric_name         = "Errors"
@@ -89,7 +100,25 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   treat_missing_data  = "notBreaching"
 
   dimensions = {
-    FunctionName = "${var.name_prefix}-${each.value}"
+    FunctionName = each.value
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "lambda_duration_p99" {
+  for_each            = toset(local.monitored_full_names)
+  alarm_name          = "${each.value}-duration-p99"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 3
+  metric_name         = "Duration"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  extended_statistic  = "p99"
+  threshold           = 10000 # 10s — if cold start + work exceeds this, investigate
+  alarm_description   = "Lambda ${each.value} P99 duration above 10s"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = each.value
   }
 }
 

@@ -33,6 +33,12 @@ variable "cognito_client_id" {
   type        = string
 }
 
+variable "floor_tech_url" {
+  description = "Public URL of the floor-tech Amplify app; injected as NEXT_PUBLIC_FLOOR_TECH_URL into the web app."
+  type        = string
+  default     = ""
+}
+
 variable "aws_region" {
   description = "AWS region for Cognito config"
   type        = string
@@ -108,6 +114,7 @@ resource "aws_amplify_app" "web" {
     NEXT_PUBLIC_COGNITO_USER_POOL_ID = var.cognito_user_pool_id
     NEXT_PUBLIC_COGNITO_CLIENT_ID   = var.cognito_client_id
     NEXT_PUBLIC_AUTH_MODE           = "cognito"
+    NEXT_PUBLIC_FLOOR_TECH_URL      = var.floor_tech_url
     AMPLIFY_MONOREPO_APP_ROOT      = "apps/web"
   }
 }

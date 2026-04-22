@@ -49,9 +49,10 @@ module "cognito" {
 }
 
 module "eventbridge" {
-  source                 = "../../modules/eventbridge"
-  name_prefix            = var.name_prefix
-  archive_retention_days = 365
+  source                      = "../../modules/eventbridge"
+  name_prefix                 = var.name_prefix
+  archive_retention_days      = 365
+  outbox_publisher_lambda_arn = module.api_gateway_lambda.workers_outbox_publisher_lambda_arn
 }
 
 module "step_functions" {
@@ -60,9 +61,10 @@ module "step_functions" {
 }
 
 module "observability" {
-  source             = "../../modules/observability"
-  name_prefix        = var.name_prefix
-  log_retention_days = 90
+  source                 = "../../modules/observability"
+  name_prefix            = var.name_prefix
+  log_retention_days     = 90
+  monitored_lambda_names = module.api_gateway_lambda.all_lambda_function_names
 }
 
 module "secrets" {
@@ -90,6 +92,8 @@ module "api_gateway_lambda" {
   sales_lambda_zip_path         = var.sales_lambda_zip_path
   copilot_lambda_zip_path       = var.copilot_lambda_zip_path
   scheduling_lambda_zip_path    = var.scheduling_lambda_zip_path
+  workers_lambda_zip_path       = var.workers_lambda_zip_path
+  sentry_dsn                    = var.sentry_dsn
   cognito_user_pool_endpoint  = module.cognito.issuer_url
   cognito_user_pool_id        = module.cognito.user_pool_id
   cognito_user_pool_arn       = module.cognito.user_pool_arn
@@ -116,4 +120,5 @@ module "amplify_hosting" {
   cognito_user_pool_id = module.cognito.user_pool_id
   cognito_client_id    = module.cognito.app_client_ids["web"]
   aws_region           = var.aws_region
+  floor_tech_url       = "https://floor.golfingarage.m4nos.com"
 }

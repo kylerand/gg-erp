@@ -94,6 +94,19 @@ variable "scheduling_lambda_zip_path" {
   default     = "apps/api/dist/scheduling-lambda.zip"
 }
 
+variable "workers_lambda_zip_path" {
+  description = "Path to the zipped workers Lambda artifact (outbox-publisher, payment-sync, reconciliation)."
+  type        = string
+  default     = "apps/api/dist/workers-lambda.zip"
+}
+
+variable "sentry_dsn" {
+  description = "Sentry DSN injected into every Lambda. Leave empty to disable Sentry (handler wrapper becomes a no-op)."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "qb_client_id" {
   description = "QuickBooks app client ID for OAuth2"
   type        = string
@@ -385,6 +398,14 @@ resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.erp.id
   name        = "$default"
   auto_deploy = true
+
+  default_route_settings {
+    # Soft caps to prevent runaway costs or accidental DDoS. Tune up after the
+    # migration cutover if real traffic exceeds these.
+    throttling_burst_limit = 1000
+    throttling_rate_limit  = 500
+    detailed_metrics_enabled = true
+  }
 }
 
 # ─── Cognito JWT Authorizer ────────────────────────────────────────────────────
@@ -441,6 +462,7 @@ locals {
     PRISMA_QUERY_ENGINE_LIBRARY = "/var/task/libquery_engine-rhel-openssl-3.0.x.so.node"
     DATABASE_URL                = var.database_url
     DB_DATABASE_URL             = var.database_url
+    SENTRY_DSN                  = var.sentry_dsn
   }
   lambda_accounting_env = merge(local.lambda_common_env, {
     QB_CLIENT_ID               = var.qb_client_id
@@ -2672,6 +2694,77 @@ resource "aws_lambda_function" "seed_inventory_master" {
   }
 }
 
+# ─── Worker Lambdas (outbox publisher, payment sync, reconciliation) ─────────
+
+resource "aws_lambda_function" "workers_outbox_publisher" {
+  function_name = "${var.name_prefix}-workers-outbox-publisher"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "outbox-publisher.handler"
+  filename      = var.workers_lambda_zip_path
+  source_code_hash = filebase64sha256(var.workers_lambda_zip_path)
+  timeout       = 60
+  memory_size   = 512
+  environment {
+    variables = merge(local.lambda_common_env, {
+      EVENT_BUS_NAME = "${var.name_prefix}-erp-events"
+    })
+  }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "workers_payment_sync" {
+  function_name = "${var.name_prefix}-workers-payment-sync"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "payment-sync.handler"
+  filename      = var.workers_lambda_zip_path
+  source_code_hash = filebase64sha256(var.workers_lambda_zip_path)
+  timeout       = 120
+  memory_size   = 512
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "workers_reconciliation" {
+  function_name = "${var.name_prefix}-workers-reconciliation"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "reconciliation.handler"
+  filename      = var.workers_lambda_zip_path
+  source_code_hash = filebase64sha256(var.workers_lambda_zip_path)
+  timeout       = 120
+  memory_size   = 512
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+# Grant worker Lambdas permission to publish events to the EventBridge bus.
+resource "aws_iam_role_policy" "erp_lambda_eventbridge_publish" {
+  name = "${var.name_prefix}-erp-lambda-eventbridge-publish"
+  role = aws_iam_role.erp_lambda.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["events:PutEvents"]
+      Resource = "*"
+    }]
+  })
+}
+
 # S3 read/write access for migration artifacts bucket
 resource "aws_iam_role_policy" "erp_lambda_s3_migration" {
   count = var.migration_artifacts_bucket_name != "" ? 1 : 0
@@ -3298,6 +3391,10 @@ locals {
     accounting_list_reconciliation_runs  = aws_lambda_function.accounting_list_reconciliation_runs
     accounting_list_accounts             = aws_lambda_function.accounting_list_accounts
     accounting_get_failure_summary       = aws_lambda_function.accounting_get_failure_summary
+    workers_outbox_publisher             = aws_lambda_function.workers_outbox_publisher
+    workers_payment_sync                 = aws_lambda_function.workers_payment_sync
+    workers_reconciliation               = aws_lambda_function.workers_reconciliation
+    seed_inventory_master                = aws_lambda_function.seed_inventory_master
     migration_trigger_batch      = aws_lambda_function.migration_trigger_batch
     migration_list_batches       = aws_lambda_function.migration_list_batches
     migration_get_batch          = aws_lambda_function.migration_get_batch
@@ -4272,4 +4369,21 @@ output "api_gateway_id" {
 
 output "cognito_authorizer_id" {
   value = length(aws_apigatewayv2_authorizer.cognito_jwt) > 0 ? aws_apigatewayv2_authorizer.cognito_jwt[0].id : null
+}
+
+output "workers_outbox_publisher_lambda_arn" {
+  value = aws_lambda_function.workers_outbox_publisher.arn
+}
+
+output "workers_payment_sync_lambda_arn" {
+  value = aws_lambda_function.workers_payment_sync.arn
+}
+
+output "workers_reconciliation_lambda_arn" {
+  value = aws_lambda_function.workers_reconciliation.arn
+}
+
+output "all_lambda_function_names" {
+  description = "Every Lambda function name managed by this module. Feed into the observability module for CloudWatch alarms."
+  value       = [for k, v in local.erp_lambdas : v.function_name]
 }

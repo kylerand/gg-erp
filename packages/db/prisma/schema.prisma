@@ -562,24 +562,120 @@ enum PartState {
   @@schema("inventory")
 }
 
+enum LifecycleLevel {
+  RAW_MATERIAL
+  RAW_COMPONENT
+  PREPARED_COMPONENT
+  ASSEMBLED_COMPONENT
+
+  @@schema("inventory")
+}
+
+enum PartCategory {
+  ELECTRONICS
+  AUDIO
+  FABRICATION
+  HARDWARE
+  SMALL_PARTS
+  DRIVE_TRAIN
+
+  @@schema("inventory")
+}
+
+enum InstallStage {
+  FABRICATION
+  FRAME
+  WIRING
+  PARTS_PREP
+  FINAL_ASSEMBLY
+
+  @@schema("inventory")
+}
+
+enum PartColor {
+  BLACK
+  WHITE
+  CHROME
+  RAW_STEEL
+  POWDER_COATED
+  AMBER
+  RED
+  GREY
+  BROWN
+  RAW_ALUMINUM
+  STAINLESS_STEEL
+
+  @@schema("inventory")
+}
+
+enum ManufacturerState {
+  ACTIVE
+  INACTIVE
+
+  @@schema("inventory")
+}
+
+model Manufacturer {
+  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  manufacturerCode  String            @map("manufacturer_code")
+  manufacturerName  String            @map("manufacturer_name")
+  manufacturerState ManufacturerState @default(ACTIVE) @map("manufacturer_state")
+  website           String?
+  notes             String?
+  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime          @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt         DateTime?         @map("deleted_at") @db.Timestamptz(6)
+  version           Int               @default(0)
+
+  parts Part[]
+
+  @@unique([manufacturerCode])
+  @@index([manufacturerState])
+  @@map("manufacturers")
+  @@schema("inventory")
+}
+
 model Part {
-  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  sku           String
-  name          String
-  description   String?
-  unitOfMeasure String    @default("EA") @map("unit_of_measure")
-  partState     PartState @default(ACTIVE) @map("part_state")
-  reorderPoint  Decimal   @default(0) @map("reorder_point") @db.Decimal(14, 3)
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
-  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
-  version       Int       @default(0)
+  id                     String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sku                    String
+  name                   String
+  description            String?
+  variant                String?        @map("variant")
+  color                  PartColor?     @map("color")
+  category               PartCategory?  @map("category")
+  lifecycleLevel         LifecycleLevel @default(RAW_COMPONENT) @map("lifecycle_level")
+  installStage           InstallStage?  @map("install_stage")
+  manufacturerId         String?        @map("manufacturer_id") @db.Uuid
+  manufacturerPartNumber String?        @map("manufacturer_part_number")
+  defaultVendorId        String?        @map("default_vendor_id") @db.Uuid
+  defaultLocationId      String?        @map("default_location_id") @db.Uuid
+  producedFromPartId     String?        @map("produced_from_part_id") @db.Uuid
+  producedViaStage       InstallStage?  @map("produced_via_stage")
+  unitOfMeasure          String         @default("EA") @map("unit_of_measure")
+  partState              PartState      @default(ACTIVE) @map("part_state")
+  reorderPoint           Decimal        @default(0) @map("reorder_point") @db.Decimal(14, 3)
+  createdAt              DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime       @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt              DateTime?      @map("deleted_at") @db.Timestamptz(6)
+  version                Int            @default(0)
+
+  manufacturer     Manufacturer?  @relation(fields: [manufacturerId], references: [id])
+  defaultVendor    Vendor?        @relation("DefaultVendorForParts", fields: [defaultVendorId], references: [id])
+  defaultLocation  StockLocation? @relation("DefaultLocationForParts", fields: [defaultLocationId], references: [id])
+  producedFromPart Part?          @relation("PartLifecycleChain", fields: [producedFromPartId], references: [id])
+  producedToParts  Part[]         @relation("PartLifecycleChain")
 
   stockLots          StockLot[]
   workOrderParts     WoPartLine[]
   purchaseOrderLines PurchaseOrderLine[]
 
+  @@unique([sku])
   @@index([partState])
+  @@index([category, installStage])
+  @@index([lifecycleLevel])
+  @@index([manufacturerId])
+  @@index([defaultVendorId])
+  @@index([producedFromPartId])
   @@map("parts")
   @@schema("inventory")
 }
@@ -606,10 +702,11 @@ model StockLocation {
   deletedAt        DateTime?         @map("deleted_at") @db.Timestamptz(6)
   version          Int               @default(0)
 
-  parent     StockLocation?  @relation("LocationHierarchy", fields: [parentLocationId], references: [id])
-  children   StockLocation[] @relation("LocationHierarchy")
-  stockLots  StockLot[]
-  workOrders WoOrder[]
+  parent          StockLocation?  @relation("LocationHierarchy", fields: [parentLocationId], references: [id])
+  children        StockLocation[] @relation("LocationHierarchy")
+  stockLots       StockLot[]
+  workOrders      WoOrder[]
+  defaultForParts Part[]          @relation("DefaultLocationForParts")
 
   @@map("stock_locations")
   @@schema("inventory")
@@ -670,7 +767,8 @@ model Vendor {
   deletedAt    DateTime?   @map("deleted_at") @db.Timestamptz(6)
   version      Int         @default(0)
 
-  purchaseOrders PurchaseOrder[]
+  purchaseOrders  PurchaseOrder[]
+  defaultForParts Part[]          @relation("DefaultVendorForParts")
 
   @@index([vendorState])
   @@map("vendors")

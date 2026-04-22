@@ -37,6 +37,7 @@
     "db:migrate:reset": "npm run db:reset --workspace=packages/db",
     "db:deploy": "npm run db:deploy --workspace=packages/db",
     "db:seed": "npm run db:seed --workspace=packages/db",
+    "seed:inventory": "npm run db:seed:inventory --workspace=packages/db",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f postgres",
@@ -61,10 +62,12 @@
     "esbuild": "^0.20.0",
     "eslint": "^9.22.0",
     "prettier": "^3.5.3",
+    "prisma": "^5.22.0",
     "tsx": "^4.20.5",
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.1024.0"
+    "@aws-sdk/client-bedrock-runtime": "^3.1024.0",
+    "@prisma/client": "^5.22.0"
   }
 }

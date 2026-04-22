@@ -1,5 +1,11 @@
 import type {
+  InstallStage,
   InventoryLot,
+  LifecycleLevel,
+  Manufacturer,
+  ManufacturerState,
+  PartCategory,
+  PartColor,
   PartSku
 } from '../../../../../packages/domain/src/model/inventory.js';
 
@@ -17,6 +23,17 @@ export interface CreatePartSkuRequest {
   description?: string;
   unitOfMeasure: PartSku['unitOfMeasure'];
   reorderPoint: number;
+  variant?: string;
+  color?: PartColor;
+  category?: PartCategory;
+  lifecycleLevel?: LifecycleLevel;
+  installStage?: InstallStage;
+  manufacturerId?: string;
+  manufacturerPartNumber?: string;
+  defaultVendorId?: string;
+  defaultLocationId?: string;
+  producedFromPartId?: string;
+  producedViaStage?: InstallStage;
 }
 
 export interface UpdatePartSkuRequest {
@@ -25,6 +42,86 @@ export interface UpdatePartSkuRequest {
   description?: string;
   reorderPoint?: number;
   state?: PartSku['state'];
+  variant?: string | null;
+  color?: PartColor | null;
+  category?: PartCategory | null;
+  lifecycleLevel?: LifecycleLevel;
+  installStage?: InstallStage | null;
+  manufacturerId?: string | null;
+  manufacturerPartNumber?: string | null;
+  defaultVendorId?: string | null;
+  defaultLocationId?: string | null;
+  producedFromPartId?: string | null;
+  producedViaStage?: InstallStage | null;
+}
+
+export interface ListPartSkusRequest {
+  search?: string;
+  category?: PartCategory;
+  installStage?: InstallStage;
+  lifecycleLevel?: LifecycleLevel;
+  manufacturerId?: string;
+  defaultVendorId?: string;
+  state?: PartSku['state'];
+  limit?: number;
+  offset?: number;
+}
+
+export interface ListPartSkusResponse {
+  items: PartSku[];
+  total: number;
+}
+
+export interface PartChainNode {
+  part: PartSku;
+  producedViaStage?: InstallStage;
+}
+
+export interface PartChainResponse {
+  ancestors: PartChainNode[];
+  part: PartSku;
+  descendants: PartChainNode[];
+}
+
+export interface StageMaterialPlanLine {
+  part: PartSku;
+  onHand: number;
+  reorderPoint: number;
+  shortfall: number;
+}
+
+export interface StageMaterialPlanGroup {
+  installStage: InstallStage;
+  lines: StageMaterialPlanLine[];
+  totalShortfall: number;
+}
+
+export interface StageMaterialPlanResponse {
+  generatedAt: string;
+  groups: StageMaterialPlanGroup[];
+  unassigned: StageMaterialPlanLine[];
+}
+
+export type ManufacturerContract = Manufacturer;
+
+export interface CreateManufacturerRequest {
+  manufacturerCode: string;
+  name: string;
+  website?: string;
+  notes?: string;
+  state?: ManufacturerState;
+}
+
+export interface UpdateManufacturerRequest {
+  manufacturerId: string;
+  name?: string;
+  website?: string | null;
+  notes?: string | null;
+  state?: ManufacturerState;
+}
+
+export interface ListManufacturersRequest {
+  state?: ManufacturerState;
 }
 
 export interface PartSubstitutionContract {
@@ -480,10 +577,45 @@ export interface InventoryApiRouteContract {
     query: InventoryLedgerQuery,
     ...context: InventoryRouteActorParams
   ): Promise<InventoryLedgerQueryResponse>;
+  listPartSkus(
+    query: ListPartSkusRequest,
+    ...context: InventoryRouteActorParams
+  ): Promise<ListPartSkusResponse>;
+  getPartSku(
+    partSkuId: string,
+    ...context: InventoryRouteActorParams
+  ): Promise<PartSku>;
+  getPartChain(
+    partSkuId: string,
+    ...context: InventoryRouteActorParams
+  ): Promise<PartChainResponse>;
+  planMaterialByStage(
+    ...context: InventoryRouteActorParams
+  ): Promise<StageMaterialPlanResponse>;
+  createManufacturer(
+    input: CreateManufacturerRequest,
+    ...context: InventoryRouteActorParams
+  ): Promise<ManufacturerContract>;
+  updateManufacturer(
+    input: UpdateManufacturerRequest,
+    ...context: InventoryRouteActorParams
+  ): Promise<ManufacturerContract>;
+  listManufacturers(
+    query: ListManufacturersRequest,
+    ...context: InventoryRouteActorParams
+  ): Promise<ManufacturerContract[]>;
 }
 
 export type InventoryImplementedRouteMethodNames =
   | 'createPartSku'
+  | 'updatePartSku'
+  | 'listPartSkus'
+  | 'getPartSku'
+  | 'getPartChain'
+  | 'planMaterialByStage'
+  | 'createManufacturer'
+  | 'updateManufacturer'
+  | 'listManufacturers'
   | 'receiveLot'
   | 'reserveLot'
   | 'releaseLot'

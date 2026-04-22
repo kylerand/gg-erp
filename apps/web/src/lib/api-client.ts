@@ -296,11 +296,59 @@ export async function transitionCustomerState(id: string, state: Customer['state
 
 // ─── Inventory / Parts ────────────────────────────────────────────────────────
 
+export type LifecycleLevel =
+  | 'RAW_MATERIAL'
+  | 'RAW_COMPONENT'
+  | 'PREPARED_COMPONENT'
+  | 'ASSEMBLED_COMPONENT';
+
+export type PartCategory =
+  | 'ELECTRONICS'
+  | 'AUDIO'
+  | 'FABRICATION'
+  | 'HARDWARE'
+  | 'SMALL_PARTS'
+  | 'DRIVE_TRAIN';
+
+export type InstallStage =
+  | 'FABRICATION'
+  | 'FRAME'
+  | 'WIRING'
+  | 'PARTS_PREP'
+  | 'FINAL_ASSEMBLY';
+
+export type PartColor =
+  | 'BLACK'
+  | 'WHITE'
+  | 'CHROME'
+  | 'RAW_STEEL'
+  | 'POWDER_COATED'
+  | 'AMBER'
+  | 'RED'
+  | 'GREY'
+  | 'BROWN'
+  | 'RAW_ALUMINUM'
+  | 'STAINLESS_STEEL';
+
 export interface Part {
   id: string;
   sku: string;
   name: string;
   description?: string;
+  variant?: string;
+  color?: PartColor;
+  category?: PartCategory;
+  lifecycleLevel?: LifecycleLevel;
+  installStage?: InstallStage;
+  manufacturerId?: string;
+  manufacturerName?: string;
+  manufacturerPartNumber?: string;
+  defaultVendorId?: string;
+  defaultVendorName?: string;
+  defaultLocationId?: string;
+  defaultLocationName?: string;
+  producedFromPartId?: string;
+  producedViaStage?: InstallStage;
   unitOfMeasure: string;
   partState: 'ACTIVE' | 'INACTIVE' | 'DISCONTINUED';
   reorderPoint: number;
@@ -310,19 +358,127 @@ export interface Part {
 }
 
 export const MOCK_PARTS: Part[] = [
-  { id: 'p-1', sku: 'BATT-48V-105AH', name: '48V 105Ah Lithium Battery Pack', unitOfMeasure: 'EA', partState: 'ACTIVE', reorderPoint: 2, quantityOnHand: 4, location: 'B-12' },
-  { id: 'p-2', sku: 'MOTOR-AC-5HP', name: 'AC 5HP Golf Cart Motor', unitOfMeasure: 'EA', partState: 'ACTIVE', reorderPoint: 1, quantityOnHand: 2, location: 'A-03' },
-  { id: 'p-3', sku: 'CTRL-SEVCON-48V', name: 'Sevcon 48V Motor Controller', unitOfMeasure: 'EA', partState: 'ACTIVE', reorderPoint: 1, quantityOnHand: 0, location: 'A-07' },
-  { id: 'p-4', sku: 'CHARGER-48V-15A', name: '48V 15A Onboard Charger', unitOfMeasure: 'EA', partState: 'ACTIVE', reorderPoint: 2, quantityOnHand: 6, location: 'C-02' },
+  { id: 'p-1', sku: 'GG-NAVITAS-MOTOR-KIT', name: 'Motor & Controller Kit', lifecycleLevel: 'RAW_COMPONENT', category: 'DRIVE_TRAIN', installStage: 'FRAME', manufacturerName: 'Navitas', manufacturerPartNumber: '10-000891-58-P', defaultVendorName: 'Navitas', unitOfMeasure: 'EA', partState: 'ACTIVE', reorderPoint: 2, quantityOnHand: 4, location: 'B-12' },
+  { id: 'p-2', sku: 'GG-FAB-4LSB-RAW', name: '4-Link Suspension', variant: 'Bent', lifecycleLevel: 'RAW_COMPONENT', category: 'FABRICATION', installStage: 'FABRICATION', manufacturerName: 'Golfin Garage', defaultVendorName: 'Golfin Garage', unitOfMeasure: 'EA', partState: 'ACTIVE', reorderPoint: 2, quantityOnHand: 3, location: 'A-04' },
+  { id: 'p-3', sku: 'GG-FAB-4LSB-PREP', name: '4-Link Suspension', variant: 'Bent', lifecycleLevel: 'PREPARED_COMPONENT', category: 'FABRICATION', installStage: 'FRAME', producedFromPartId: 'p-2', producedViaStage: 'FABRICATION', manufacturerName: 'Golfin Garage', defaultVendorName: 'Golfin Garage', unitOfMeasure: 'EA', partState: 'ACTIVE', reorderPoint: 2, quantityOnHand: 1 },
+  { id: 'p-4', sku: 'GG-FAB-4LSB-ASM', name: '4-Link Suspension', variant: 'Bent', lifecycleLevel: 'ASSEMBLED_COMPONENT', category: 'FABRICATION', producedFromPartId: 'p-3', producedViaStage: 'FRAME', unitOfMeasure: 'EA', partState: 'ACTIVE', reorderPoint: 1, quantityOnHand: 0 },
 ];
 
-export async function listParts(params?: { search?: string; partState?: string; limit?: number; offset?: number }): Promise<{ items: Part[]; total: number }> {
+export interface ListPartsParams {
+  search?: string;
+  partState?: string;
+  category?: PartCategory;
+  installStage?: InstallStage;
+  lifecycleLevel?: LifecycleLevel;
+  manufacturerId?: string;
+  defaultVendorId?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export async function listParts(params?: ListPartsParams): Promise<{ items: Part[]; total: number }> {
   const qs = new URLSearchParams();
   if (params?.search) qs.set('search', params.search);
   if (params?.partState) qs.set('partState', params.partState);
+  if (params?.category) qs.set('category', params.category);
+  if (params?.installStage) qs.set('installStage', params.installStage);
+  if (params?.lifecycleLevel) qs.set('lifecycleLevel', params.lifecycleLevel);
+  if (params?.manufacturerId) qs.set('manufacturerId', params.manufacturerId);
+  if (params?.defaultVendorId) qs.set('defaultVendorId', params.defaultVendorId);
   qs.set('limit', String(params?.limit ?? 25));
   if (params?.offset) qs.set('offset', String(params.offset));
   return apiFetch(`/inventory/parts${qs.size ? `?${qs}` : ''}`, undefined, { items: MOCK_PARTS, total: MOCK_PARTS.length });
+}
+
+export async function getPart(id: string): Promise<Part | undefined> {
+  return apiFetch(`/inventory/parts/${id}`, undefined, MOCK_PARTS.find((p) => p.id === id));
+}
+
+export interface PartChainNode {
+  part: Part;
+  producedViaStage?: InstallStage;
+}
+
+export interface PartChain {
+  ancestors: PartChainNode[];
+  part: Part;
+  descendants: PartChainNode[];
+}
+
+export async function getPartChain(id: string): Promise<PartChain> {
+  const mockPart = MOCK_PARTS.find((p) => p.id === id);
+  const fallback: PartChain = mockPart
+    ? { ancestors: [], part: mockPart, descendants: [] }
+    : { ancestors: [], part: MOCK_PARTS[0], descendants: [] };
+  return apiFetch(`/inventory/parts/${id}/chain`, undefined, fallback);
+}
+
+export interface StageMaterialPlanLine {
+  part: Part;
+  onHand: number;
+  reorderPoint: number;
+  shortfall: number;
+}
+
+export interface StageMaterialPlanGroup {
+  installStage: InstallStage;
+  lines: StageMaterialPlanLine[];
+  totalShortfall: number;
+}
+
+export interface StageMaterialPlanResponse {
+  generatedAt: string;
+  groups: StageMaterialPlanGroup[];
+  unassigned: StageMaterialPlanLine[];
+}
+
+export async function getMaterialPlanByStage(): Promise<StageMaterialPlanResponse> {
+  const mockLines: StageMaterialPlanLine[] = MOCK_PARTS.filter((p) => p.installStage).map((p) => ({
+    part: p,
+    onHand: p.quantityOnHand ?? 0,
+    reorderPoint: p.reorderPoint,
+    shortfall: Math.max(p.reorderPoint - (p.quantityOnHand ?? 0), 0),
+  }));
+  const stageSet = new Set(mockLines.map((l) => l.part.installStage!));
+  const groups: StageMaterialPlanGroup[] = [...stageSet].map((stage) => {
+    const lines = mockLines.filter((l) => l.part.installStage === stage);
+    return { installStage: stage, lines, totalShortfall: lines.reduce((sum, l) => sum + l.shortfall, 0) };
+  });
+  const unassigned = MOCK_PARTS.filter((p) => !p.installStage).map((p) => ({
+    part: p, onHand: p.quantityOnHand ?? 0, reorderPoint: p.reorderPoint, shortfall: Math.max(p.reorderPoint - (p.quantityOnHand ?? 0), 0),
+  }));
+  return apiFetch(`/inventory/planning/material-by-stage`, undefined, {
+    generatedAt: new Date().toISOString(), groups, unassigned,
+  });
+}
+
+// ─── Manufacturers ────────────────────────────────────────────────────────────
+
+export interface Manufacturer {
+  id: string;
+  manufacturerCode: string;
+  name: string;
+  state: 'ACTIVE' | 'INACTIVE';
+  website?: string;
+  notes?: string;
+}
+
+export const MOCK_MANUFACTURERS: Manufacturer[] = [
+  { id: 'mfr-1', manufacturerCode: 'MFR-NAVITAS', name: 'Navitas', state: 'ACTIVE' },
+  { id: 'mfr-2', manufacturerCode: 'MFR-GOLFIN-GARAGE', name: 'Golfin Garage', state: 'ACTIVE' },
+];
+
+export async function listManufacturers(state?: 'ACTIVE' | 'INACTIVE'): Promise<{ items: Manufacturer[]; total: number }> {
+  const qs = state ? `?state=${state}` : '';
+  return apiFetch(`/inventory/manufacturers${qs}`, undefined, { items: MOCK_MANUFACTURERS, total: MOCK_MANUFACTURERS.length });
+}
+
+export async function createManufacturer(input: { manufacturerCode: string; name: string; website?: string; notes?: string }): Promise<Manufacturer> {
+  const data = await apiFetch<{ manufacturer: Manufacturer }>(`/inventory/manufacturers`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return data.manufacturer;
 }
 
 // ─── Vendors ──────────────────────────────────────────────────────────────────

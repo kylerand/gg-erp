@@ -8,6 +8,7 @@ import type {
   ConsumeWorkOrderMaterialRequest,
   CreateBinRequest,
   CreateLocationRequest,
+  CreateManufacturerRequest,
   CreatePartSkuRequest,
   CycleCountReconciliationContract,
   CycleCountSessionContract,
@@ -21,6 +22,11 @@ import type {
   InventoryLocationContract,
   InventoryTransferContract,
   LinkReceiptToPurchaseOrderRequest,
+  ListManufacturersRequest,
+  ListPartSkusRequest,
+  ListPartSkusResponse,
+  ManufacturerContract,
+  PartChainResponse,
   PartSubstitutionContract,
   PurchaseOrderInventoryLinkContract,
   ReceiveLotRequest,
@@ -29,9 +35,11 @@ import type {
   RecordInventoryTransferRequest,
   ReleaseInventoryRequest,
   ReserveInventoryRequest,
+  StageMaterialPlanResponse,
   StartCycleCountSessionRequest,
   UnitOfMeasureContract,
   UnitOfMeasureConversionContract,
+  UpdateManufacturerRequest,
   UpdatePartSkuRequest,
   UpsertUnitConversionRequest,
   UpsertUnitOfMeasureRequest,
@@ -68,6 +76,46 @@ export class InventoryService {
 
   async updatePartSku(input: UpdatePartSkuRequest, context: CommandContext): Promise<PartSku> {
     return this.catalogService.updatePartSku(input, context);
+  }
+
+  async listPartSkus(
+    query: ListPartSkusRequest,
+    context: CommandContext
+  ): Promise<ListPartSkusResponse> {
+    return this.catalogService.listPartSkus(query, context);
+  }
+
+  async getPartSku(partSkuId: string, context: CommandContext): Promise<PartSku> {
+    return this.catalogService.getPartSku(partSkuId, context);
+  }
+
+  async getPartChain(partSkuId: string, context: CommandContext): Promise<PartChainResponse> {
+    return this.queryService.getPartChain(partSkuId, context);
+  }
+
+  async planMaterialByStage(context: CommandContext): Promise<StageMaterialPlanResponse> {
+    return this.queryService.planMaterialByStage(context);
+  }
+
+  async createManufacturer(
+    input: CreateManufacturerRequest,
+    context: CommandContext
+  ): Promise<ManufacturerContract> {
+    return this.catalogService.createManufacturer(input, context);
+  }
+
+  async updateManufacturer(
+    input: UpdateManufacturerRequest,
+    context: CommandContext
+  ): Promise<ManufacturerContract> {
+    return this.catalogService.updateManufacturer(input, context);
+  }
+
+  async listManufacturers(
+    query: ListManufacturersRequest,
+    context: CommandContext
+  ): Promise<ManufacturerContract[]> {
+    return this.catalogService.listManufacturers(query, context);
   }
 
   async configurePartSubstitution(

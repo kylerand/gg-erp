@@ -1,5 +1,7 @@
 import {
   type InventoryLot,
+  type LifecycleLevel,
+  type Manufacturer,
   type PartSku
 } from '../../../../../packages/domain/src/model/inventory.js';
 import {
@@ -16,6 +18,7 @@ import type {
   InventoryLedgerQuery,
   InventoryLedgerQueryResponse,
   InventoryLocationContract,
+  ListPartSkusRequest,
   PartSubstitutionContract,
   PurchaseOrderInventoryLinkContract,
   UnitOfMeasureContract,
@@ -48,10 +51,21 @@ export interface InventoryAllocationRecord extends InventoryAllocationContract {
 }
 
 export interface InventoryRepository {
-  listPartSkus(): Promise<PartSku[]>;
+  listPartSkus(query?: ListPartSkusRequest): Promise<{ items: PartSku[]; total: number }>;
   findPartSkuById(id: string): Promise<PartSku | undefined>;
   findPartSkuBySku(sku: string): Promise<PartSku | undefined>;
+  findPartSkuByNameVariantLevel(
+    name: string,
+    variant: string | undefined,
+    lifecycleLevel: LifecycleLevel
+  ): Promise<PartSku | undefined>;
   savePartSku(part: PartSku): Promise<void>;
+
+  listManufacturers(): Promise<Manufacturer[]>;
+  findManufacturerById(id: string): Promise<Manufacturer | undefined>;
+  findManufacturerByCode(code: string): Promise<Manufacturer | undefined>;
+  findManufacturerByName(name: string): Promise<Manufacturer | undefined>;
+  saveManufacturer(manufacturer: Manufacturer): Promise<void>;
 
   listLots(): Promise<InventoryLot[]>;
   findLotById(id: string): Promise<InventoryLot | undefined>;
@@ -126,6 +140,7 @@ export interface InventoryRepository {
 
 export class InMemoryInventoryRepository implements InventoryRepository {
   private readonly partSkus = new Map<string, PartSku>();
+  private readonly manufacturers = new Map<string, Manufacturer>();
   private readonly lots = new Map<string, InventoryLot>();
   private readonly partSubstitutions = new Map<string, PartSubstitutionContract>();
   private readonly unitsOfMeasure = new Map<string, UnitOfMeasureContract>();
@@ -142,8 +157,37 @@ export class InMemoryInventoryRepository implements InventoryRepository {
   private readonly vendors = new Map<string, Vendor>();
   private readonly purchaseOrders = new Map<string, PurchaseOrder>();
 
-  async listPartSkus(): Promise<PartSku[]> {
-    return [...this.partSkus.values()];
+  async listPartSkus(query?: ListPartSkusRequest): Promise<{ items: PartSku[]; total: number }> {
+    const all = [...this.partSkus.values()];
+    const filtered = all.filter((part) => {
+      if (!query) return true;
+      if (query.state && part.state !== query.state) return false;
+      if (query.category && part.category !== query.category) return false;
+      if (query.installStage && part.installStage !== query.installStage) return false;
+      if (query.lifecycleLevel && part.lifecycleLevel !== query.lifecycleLevel) return false;
+      if (query.manufacturerId && part.manufacturerId !== query.manufacturerId) return false;
+      if (query.defaultVendorId && part.defaultVendorId !== query.defaultVendorId) return false;
+      if (query.search) {
+        const q = query.search.toLowerCase();
+        const haystack = [
+          part.sku,
+          part.name,
+          part.variant ?? '',
+          part.manufacturerPartNumber ?? ''
+        ]
+          .join('\n')
+          .toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    });
+    filtered.sort((a, b) => a.sku.localeCompare(b.sku));
+    const offset = query?.offset ?? 0;
+    const limit = query?.limit ?? filtered.length;
+    return {
+      items: filtered.slice(offset, offset + limit),
+      total: filtered.length
+    };
   }
 
   async findPartSkuById(id: string): Promise<PartSku | undefined> {
@@ -154,8 +198,47 @@ export class InMemoryInventoryRepository implements InventoryRepository {
     return [...this.partSkus.values()].find((part) => part.sku === sku);
   }
 
+  async findPartSkuByNameVariantLevel(
+    name: string,
+    variant: string | undefined,
+    lifecycleLevel: LifecycleLevel
+  ): Promise<PartSku | undefined> {
+    return [...this.partSkus.values()].find(
+      (part) =>
+        part.name === name &&
+        (part.variant ?? undefined) === (variant ?? undefined) &&
+        part.lifecycleLevel === lifecycleLevel
+    );
+  }
+
   async savePartSku(part: PartSku): Promise<void> {
     this.partSkus.set(part.id, part);
+  }
+
+  async listManufacturers(): Promise<Manufacturer[]> {
+    return [...this.manufacturers.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async findManufacturerById(id: string): Promise<Manufacturer | undefined> {
+    return this.manufacturers.get(id);
+  }
+
+  async findManufacturerByCode(code: string): Promise<Manufacturer | undefined> {
+    const normalized = code.trim().toLowerCase();
+    return [...this.manufacturers.values()].find(
+      (mfr) => mfr.manufacturerCode.trim().toLowerCase() === normalized
+    );
+  }
+
+  async findManufacturerByName(name: string): Promise<Manufacturer | undefined> {
+    const normalized = name.trim().toLowerCase();
+    return [...this.manufacturers.values()].find(
+      (mfr) => mfr.name.trim().toLowerCase() === normalized
+    );
+  }
+
+  async saveManufacturer(manufacturer: Manufacturer): Promise<void> {
+    this.manufacturers.set(manufacturer.id, manufacturer);
   }
 
   async listLots(): Promise<InventoryLot[]> {

@@ -26,6 +26,7 @@ interface LambdaEntry {
 const lambdas: LambdaEntry[] = [
   // identity
   { context: 'identity', handler: 'me',             entry: 'apps/api/src/lambda/identity/me.handler.ts' },
+  { context: 'identity', handler: 'list-dealers',   entry: 'apps/api/src/lambda/identity/list-dealers.handler.ts' },
   { context: 'identity', handler: 'admin-list-users',   entry: 'apps/api/src/lambda/identity/admin-list-users.entry.ts' },
   { context: 'identity', handler: 'admin-create-user',  entry: 'apps/api/src/lambda/identity/admin-create-user.entry.ts' },
   { context: 'identity', handler: 'admin-update-user',  entry: 'apps/api/src/lambda/identity/admin-update-user.entry.ts' },
@@ -33,6 +34,7 @@ const lambdas: LambdaEntry[] = [
 
   // work-orders
   { context: 'work-orders', handler: 'create',     entry: 'apps/api/src/lambda/work-orders/create.handler.ts' },
+  { context: 'work-orders', handler: 'get',         entry: 'apps/api/src/lambda/work-orders/get.handler.ts' },
   { context: 'work-orders', handler: 'list',        entry: 'apps/api/src/lambda/work-orders/list.handler.ts' },
   { context: 'work-orders', handler: 'transition',  entry: 'apps/api/src/lambda/work-orders/transition.handler.ts' },
 
@@ -136,6 +138,7 @@ const lambdas: LambdaEntry[] = [
   { context: 'migration', handler: 'run-migration',    entry: 'apps/api/src/lambda/migration/run-migration.entry.ts' },
   { context: 'migration', handler: 'migrate-parts',    entry: 'apps/api/src/lambda/migration/migrate-parts.entry.ts' },
   { context: 'migration', handler: 'run-schema-migration', entry: 'apps/api/src/lambda/migration/run-schema-migration.handler.ts' },
+  { context: 'migration', handler: 'seed-inventory-master', entry: 'apps/api/src/lambda/migration/seed-inventory-master.handler.ts' },
 
   // communication (messaging, channels, todos, notifications)
   { context: 'communication', handler: 'list-channels',           entry: 'apps/api/src/lambda/communication/list-channels.handler.ts' },
@@ -242,6 +245,18 @@ async function buildLambda(lambda: LambdaEntry): Promise<void> {
 
   console.log(`✓ Built ${lambda.context}/${lambda.handler} → dist/lambdas/${lambda.context}/${lambda.handler}.js`);
   copyPrismaEngine(outDir);
+
+  // The seed-inventory-master handler needs the xlsx next to it at /var/task/.
+  if (lambda.handler === 'seed-inventory-master') {
+    const src = join(root, 'data', 'inventory-master.xlsx');
+    const dst = join(outDir, 'inventory-master.xlsx');
+    if (existsSync(src)) {
+      copyFileSync(src, dst);
+      console.log(`  ↳ Copied inventory-master.xlsx to ${lambda.context}/`);
+    } else {
+      console.log(`  ↳ WARN: data/inventory-master.xlsx not found, seed Lambda will fail at runtime`);
+    }
+  }
 }
 
 async function main(): Promise<void> {

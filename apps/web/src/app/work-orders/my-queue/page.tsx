@@ -70,7 +70,7 @@ export default function MyQueuePage() {
     if (!technicianId) return;
     try {
       const { items } = await listTechnicianTasks({ technicianId, limit: 20 });
-      setTasks(items);
+      setTasks(Array.isArray(items) ? items.filter((t): t is TechnicianTask => !!t && !!t.state) : []);
       lastFetchedAtRef.current = new Date();
       setIsStale(false);
       setError(null);
@@ -105,8 +105,14 @@ export default function MyQueuePage() {
     setTasks(prev => prev.map(t => t.id === task.id ? { ...t, state: nextState } : t));
     try {
       const updated = await transitionTechnicianTask(task.id, nextState);
-      setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
-      toast.success(`Task moved to ${nextState.replace(/_/g, ' ').toLowerCase()}`);
+      if (updated && updated.state) {
+        setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
+        toast.success(`Task moved to ${nextState.replace(/_/g, ' ').toLowerCase()}`);
+      } else {
+        // API returned nothing usable — revert the optimistic update.
+        setTasks(prev => prev.map(t => t.id === task.id ? prevTask : t));
+        setError('Task update could not be confirmed by the server. Reverted.');
+      }
     } catch (err) {
       setTasks(prev => prev.map(t => t.id === task.id ? prevTask : t));
       setError(err instanceof Error ? err.message : 'Failed to update task');
@@ -147,8 +153,8 @@ export default function MyQueuePage() {
     }
   }
 
-  const activeTasks = tasks.filter(t => ACTIVE_STATES.includes(t.state));
-  const doneTasks = tasks.filter(t => t.state === 'DONE' || t.state === 'CANCELLED');
+  const activeTasks = tasks.filter(t => t?.state && ACTIVE_STATES.includes(t.state));
+  const doneTasks = tasks.filter(t => t?.state === 'DONE' || t?.state === 'CANCELLED');
   const blockDialogTask = tasks.find(t => t.id === blockDialogTaskId);
 
   if (loading || roleLoading) {

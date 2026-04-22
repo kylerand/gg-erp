@@ -272,6 +272,31 @@ resource "aws_lambda_function" "work_orders_transition" {
   }
 }
 
+resource "aws_lambda_function" "work_orders_get" {
+  function_name = "${var.name_prefix}-work-orders-get"
+  role          = aws_iam_role.work_orders_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "get.handler"
+  filename      = var.work_orders_lambda_zip_path
+  source_code_hash = filebase64sha256(var.work_orders_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+
+  environment {
+    variables = {
+      NODE_ENV                    = "production"
+      PRISMA_QUERY_ENGINE_LIBRARY = "/var/task/libquery_engine-rhel-openssl-3.0.x.so.node"
+      DATABASE_URL                = var.database_url
+      DB_DATABASE_URL             = var.database_url
+    }
+  }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
 resource "aws_apigatewayv2_api" "erp" {
   name          = "${var.name_prefix}-http-api"
   protocol_type = "HTTP"
@@ -324,6 +349,28 @@ resource "aws_apigatewayv2_route" "work_orders_transition" {
   api_id    = aws_apigatewayv2_api.erp.id
   route_key = "PATCH /planning/work-orders/{id}/state"
   target    = "integrations/${aws_apigatewayv2_integration.work_orders_transition.id}"
+}
+
+resource "aws_apigatewayv2_integration" "work_orders_get" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.work_orders_get.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "work_orders_get" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /work-orders/{id}"
+  target    = "integrations/${aws_apigatewayv2_integration.work_orders_get.id}"
+}
+
+resource "aws_lambda_permission" "allow_api_gateway_get_wo" {
+  statement_id  = "AllowExecutionFromApiGatewayGetWO"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.work_orders_get.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*/work-orders/*"
 }
 
 resource "aws_lambda_permission" "allow_api_gateway_transition_wo" {
@@ -414,6 +461,23 @@ resource "aws_lambda_function" "identity_me" {
   role          = aws_iam_role.erp_lambda.arn
   runtime       = "nodejs20.x"
   handler       = "me.handler"
+  filename      = var.identity_lambda_zip_path
+  source_code_hash = filebase64sha256(var.identity_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "identity_list_dealers" {
+  function_name = "${var.name_prefix}-identity-list-dealers"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-dealers.handler"
   filename      = var.identity_lambda_zip_path
   source_code_hash = filebase64sha256(var.identity_lambda_zip_path)
   timeout       = 15
@@ -855,6 +919,21 @@ resource "aws_apigatewayv2_route" "identity_me" {
   api_id    = aws_apigatewayv2_api.erp.id
   route_key = "GET /auth/me"
   target    = "integrations/${aws_apigatewayv2_integration.identity_me.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "identity_list_dealers" {
+  api_id = aws_apigatewayv2_api.erp.id
+  integration_type = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri = aws_lambda_function.identity_list_dealers.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "identity_list_dealers" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /identity/dealers"
+  target    = "integrations/${aws_apigatewayv2_integration.identity_list_dealers.id}"
   authorization_type = "NONE"
 }
 
@@ -1783,6 +1862,324 @@ resource "aws_apigatewayv2_route" "sop_complete_assignment" {
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
+# ─── SOP Training / OJT Additional Lambdas ─────────────────────────────────────
+
+resource "aws_lambda_function" "sop_get_module" {
+  function_name = "${var.name_prefix}-sop-get-module"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "get-module.handler"
+  filename      = var.sop_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "sop_get_module_progress" {
+  function_name = "${var.name_prefix}-sop-get-module-progress"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "get-module-progress.handler"
+  filename      = var.sop_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "sop_update_step_progress" {
+  function_name = "${var.name_prefix}-sop-update-step-progress"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "update-step-progress.handler"
+  filename      = var.sop_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "sop_submit_quiz" {
+  function_name = "${var.name_prefix}-sop-submit-quiz"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "submit-quiz.handler"
+  filename      = var.sop_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "sop_list_notes" {
+  function_name = "${var.name_prefix}-sop-list-notes"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-notes.handler"
+  filename      = var.sop_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "sop_upsert_note" {
+  function_name = "${var.name_prefix}-sop-upsert-note"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "upsert-note.handler"
+  filename      = var.sop_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "sop_list_bookmarks" {
+  function_name = "${var.name_prefix}-sop-list-bookmarks"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-bookmarks.handler"
+  filename      = var.sop_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "sop_toggle_bookmark" {
+  function_name = "${var.name_prefix}-sop-toggle-bookmark"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "toggle-bookmark.handler"
+  filename      = var.sop_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "sop_list_inspection_templates" {
+  function_name = "${var.name_prefix}-sop-list-inspection-templates"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-inspection-templates.handler"
+  filename      = var.sop_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "sop_get_inspection_template" {
+  function_name = "${var.name_prefix}-sop-get-inspection-template"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "get-inspection-template.handler"
+  filename      = var.sop_lambda_zip_path
+  source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+# ─── API GW Integrations + Routes — SOP Additional ─────────────────────────────
+
+resource "aws_apigatewayv2_integration" "sop_get_module" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.sop_get_module.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "sop_get_module" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /sop/modules/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.sop_get_module.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "sop_get_module_progress" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.sop_get_module_progress.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "sop_get_module_progress" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /sop/modules/{id}/progress/{employeeId}"
+  target             = "integrations/${aws_apigatewayv2_integration.sop_get_module_progress.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "sop_update_step_progress" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.sop_update_step_progress.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "sop_update_step_progress" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PUT /sop/modules/{id}/step-progress"
+  target             = "integrations/${aws_apigatewayv2_integration.sop_update_step_progress.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "sop_submit_quiz" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.sop_submit_quiz.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "sop_submit_quiz" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /sop/modules/{id}/quiz"
+  target             = "integrations/${aws_apigatewayv2_integration.sop_submit_quiz.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "sop_list_notes" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.sop_list_notes.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "sop_list_notes" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /sop/notes"
+  target             = "integrations/${aws_apigatewayv2_integration.sop_list_notes.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "sop_upsert_note" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.sop_upsert_note.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "sop_upsert_note" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /sop/notes"
+  target             = "integrations/${aws_apigatewayv2_integration.sop_upsert_note.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "sop_list_bookmarks" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.sop_list_bookmarks.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "sop_list_bookmarks" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /sop/bookmarks"
+  target             = "integrations/${aws_apigatewayv2_integration.sop_list_bookmarks.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "sop_toggle_bookmark" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.sop_toggle_bookmark.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "sop_toggle_bookmark" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /sop/bookmarks"
+  target             = "integrations/${aws_apigatewayv2_integration.sop_toggle_bookmark.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "sop_list_inspection_templates" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.sop_list_inspection_templates.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "sop_list_inspection_templates" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /sop/inspection-templates"
+  target             = "integrations/${aws_apigatewayv2_integration.sop_list_inspection_templates.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "sop_get_inspection_template" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.sop_get_inspection_template.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "sop_get_inspection_template" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /sop/inspection-templates/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.sop_get_inspection_template.id}"
+  authorization_type = "NONE"
+}
+
 # ─── Accounting / QuickBooks Lambdas ─────────────────────────────────────────
 
 resource "aws_lambda_function" "accounting_oauth_connect" {
@@ -2004,6 +2401,138 @@ resource "aws_apigatewayv2_route" "accounting_webhook" {
   target             = "integrations/${aws_apigatewayv2_integration.accounting_webhook.id}"
 }
 
+# ─── Accounting Additional Lambdas ────────────────────────────────────────────
+
+resource "aws_lambda_function" "accounting_list_customer_syncs" {
+  function_name = "${var.name_prefix}-accounting-list-customer-syncs"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-customer-syncs.handler"
+  filename      = var.accounting_lambda_zip_path
+  source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_accounting_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "accounting_list_reconciliation_runs" {
+  function_name = "${var.name_prefix}-accounting-list-reconciliation-runs"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-reconciliation-runs.handler"
+  filename      = var.accounting_lambda_zip_path
+  source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_accounting_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "accounting_list_accounts" {
+  function_name = "${var.name_prefix}-accounting-list-accounts"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "list-accounts.handler"
+  filename      = var.accounting_lambda_zip_path
+  source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_accounting_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "accounting_get_failure_summary" {
+  function_name = "${var.name_prefix}-accounting-get-failure-summary"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "get-failure-summary.handler"
+  filename      = var.accounting_lambda_zip_path
+  source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
+  timeout       = 15
+  memory_size   = 256
+  environment { variables = local.lambda_accounting_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+# ─── API GW Integrations + Routes — Accounting Additional ─────────────────────
+
+resource "aws_apigatewayv2_integration" "accounting_list_customer_syncs" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.accounting_list_customer_syncs.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "accounting_list_customer_syncs" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /accounting/customers"
+  target             = "integrations/${aws_apigatewayv2_integration.accounting_list_customer_syncs.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "accounting_list_reconciliation_runs" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.accounting_list_reconciliation_runs.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "accounting_list_reconciliation_runs" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /accounting/reconciliation/runs"
+  target             = "integrations/${aws_apigatewayv2_integration.accounting_list_reconciliation_runs.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "accounting_list_accounts" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.accounting_list_accounts.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "accounting_list_accounts" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /accounting/integration-accounts"
+  target             = "integrations/${aws_apigatewayv2_integration.accounting_list_accounts.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "accounting_get_failure_summary" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.accounting_get_failure_summary.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "accounting_get_failure_summary" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /accounting/failures/summary"
+  target             = "integrations/${aws_apigatewayv2_integration.accounting_get_failure_summary.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
 # ============================================================
 # Migration Admin Lambdas
 # ============================================================
@@ -2118,6 +2647,23 @@ resource "aws_lambda_function" "run_schema_migration" {
   source_code_hash = filebase64sha256(var.migration_lambda_zip_path)
   timeout       = 300
   memory_size   = 512
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "seed_inventory_master" {
+  function_name = "${var.name_prefix}-seed-inventory-master"
+  role          = aws_iam_role.erp_lambda.arn
+  runtime       = "nodejs20.x"
+  handler       = "seed-inventory-master.handler"
+  filename      = var.migration_lambda_zip_path
+  source_code_hash = filebase64sha256(var.migration_lambda_zip_path)
+  timeout       = 300
+  memory_size   = 1024
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -2694,6 +3240,8 @@ resource "aws_apigatewayv2_route" "migration_cancel_batch" {
 locals {
   erp_lambdas = {
     identity_me           = aws_lambda_function.identity_me
+    identity_list_dealers = aws_lambda_function.identity_list_dealers
+    work_orders_get       = aws_lambda_function.work_orders_get
     customers_list        = aws_lambda_function.customers_list
     customers_create      = aws_lambda_function.customers_create
     customers_get         = aws_lambda_function.customers_get
@@ -2722,20 +3270,34 @@ locals {
     attachments_confirm_upload   = aws_lambda_function.attachments_confirm_upload
     attachments_list             = aws_lambda_function.attachments_list
     attachments_presign_download = aws_lambda_function.attachments_presign_download
-    sop_list                     = aws_lambda_function.sop_list
-    sop_get                      = aws_lambda_function.sop_get
-    sop_create                   = aws_lambda_function.sop_create
-    sop_publish_version          = aws_lambda_function.sop_publish_version
-    sop_list_modules             = aws_lambda_function.sop_list_modules
-    sop_list_assignments         = aws_lambda_function.sop_list_assignments
-    sop_complete_assignment      = aws_lambda_function.sop_complete_assignment
-    accounting_oauth_connect     = aws_lambda_function.accounting_oauth_connect
-    accounting_oauth_callback    = aws_lambda_function.accounting_oauth_callback
-    accounting_status            = aws_lambda_function.accounting_status
-    accounting_list_sync         = aws_lambda_function.accounting_list_sync
-    accounting_retry_sync        = aws_lambda_function.accounting_retry_sync
-    accounting_trigger_sync      = aws_lambda_function.accounting_trigger_sync
-    accounting_webhook           = aws_lambda_function.accounting_webhook
+    sop_list                         = aws_lambda_function.sop_list
+    sop_get                          = aws_lambda_function.sop_get
+    sop_create                       = aws_lambda_function.sop_create
+    sop_publish_version              = aws_lambda_function.sop_publish_version
+    sop_list_modules                 = aws_lambda_function.sop_list_modules
+    sop_list_assignments             = aws_lambda_function.sop_list_assignments
+    sop_complete_assignment          = aws_lambda_function.sop_complete_assignment
+    sop_get_module                   = aws_lambda_function.sop_get_module
+    sop_get_module_progress          = aws_lambda_function.sop_get_module_progress
+    sop_update_step_progress         = aws_lambda_function.sop_update_step_progress
+    sop_submit_quiz                  = aws_lambda_function.sop_submit_quiz
+    sop_list_notes                   = aws_lambda_function.sop_list_notes
+    sop_upsert_note                  = aws_lambda_function.sop_upsert_note
+    sop_list_bookmarks               = aws_lambda_function.sop_list_bookmarks
+    sop_toggle_bookmark              = aws_lambda_function.sop_toggle_bookmark
+    sop_list_inspection_templates    = aws_lambda_function.sop_list_inspection_templates
+    sop_get_inspection_template      = aws_lambda_function.sop_get_inspection_template
+    accounting_oauth_connect             = aws_lambda_function.accounting_oauth_connect
+    accounting_oauth_callback            = aws_lambda_function.accounting_oauth_callback
+    accounting_status                    = aws_lambda_function.accounting_status
+    accounting_list_sync                 = aws_lambda_function.accounting_list_sync
+    accounting_retry_sync                = aws_lambda_function.accounting_retry_sync
+    accounting_trigger_sync              = aws_lambda_function.accounting_trigger_sync
+    accounting_webhook                   = aws_lambda_function.accounting_webhook
+    accounting_list_customer_syncs       = aws_lambda_function.accounting_list_customer_syncs
+    accounting_list_reconciliation_runs  = aws_lambda_function.accounting_list_reconciliation_runs
+    accounting_list_accounts             = aws_lambda_function.accounting_list_accounts
+    accounting_get_failure_summary       = aws_lambda_function.accounting_get_failure_summary
     migration_trigger_batch      = aws_lambda_function.migration_trigger_batch
     migration_list_batches       = aws_lambda_function.migration_list_batches
     migration_get_batch          = aws_lambda_function.migration_get_batch

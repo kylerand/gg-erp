@@ -18,26 +18,12 @@ import { resolveDatabaseUrl } from '../src/client.js';
  *
  * Run with: npm run seed:inventory
  * Override the file with SEED_INVENTORY_FILE=/abs/path/to.xlsx
+ *
+ * Exported `runSeed()` is also consumed by the `seed-inventory-master` Lambda
+ * so prod seeding works from inside the VPC without a jumpbox.
  */
 
-const DEFAULT_FILE = resolve(process.cwd(), 'data', 'inventory-master.xlsx');
-const filePath = process.env.SEED_INVENTORY_FILE
-  ? resolve(process.env.SEED_INVENTORY_FILE)
-  : existsSync(DEFAULT_FILE)
-    ? DEFAULT_FILE
-    : resolve(process.cwd(), '../../data/inventory-master.xlsx');
-
-if (process.env.NODE_ENV === 'production' && process.env.SEED_FORCE !== '1') {
-  throw new Error('Refusing to run inventory seed in production without SEED_FORCE=1');
-}
-
-if (!existsSync(filePath)) {
-  throw new Error(`Inventory master file not found at ${filePath}`);
-}
-
-const prisma = new PrismaClient({
-  datasources: { db: { url: resolveDatabaseUrl() } },
-});
+let prisma: PrismaClient;
 
 type RawRow = {
   partName?: string;
@@ -146,7 +132,7 @@ function canonicalManufacturerName(raw: string): string {
   return MANUFACTURER_NAME_CANONICAL[trimmed] ?? trimmed;
 }
 
-function readRows(): RawRow[] {
+function readRows(filePath: string): RawRow[] {
   const buffer = readFileSync(filePath);
   const workbook = XLSX.read(buffer, { type: 'buffer' });
   const sheet = workbook.Sheets['Inventory Master'];
@@ -322,9 +308,24 @@ async function linkLifecycleChain(): Promise<number> {
   return linkedCount;
 }
 
-async function main(): Promise<void> {
+export interface SeedResult {
+  manufacturersUpserted: number;
+  vendorsUpserted: number;
+  locationsUpserted: number;
+  partsUpserted: number;
+  chainLinksSet: number;
+  rowsReadFromFile: number;
+}
+
+export async function runSeed(filePath: string): Promise<SeedResult> {
+  if (!existsSync(filePath)) {
+    throw new Error(`Inventory master file not found at ${filePath}`);
+  }
+  if (!prisma) {
+    prisma = new PrismaClient({ datasources: { db: { url: resolveDatabaseUrl() } } });
+  }
   console.info(`Seeding inventory master from ${filePath}`);
-  const rows = readRows().filter((r) => r.partName);
+  const rows = readRows(filePath).filter((r) => r.partName);
   console.info(`  • ${rows.length} non-empty rows`);
 
   // Collect unique reference values first so we upsert them once per name.
@@ -395,12 +396,36 @@ async function main(): Promise<void> {
   console.info(`  ✓ Locations upserted:    ${locationCount}`);
   console.info(`  ✓ Parts upserted:        ${partCount}`);
   console.info(`  ✓ Chain links set:       ${linked}`);
+
+  return {
+    manufacturersUpserted: mfrCount,
+    vendorsUpserted: vendorCount,
+    locationsUpserted: locationCount,
+    partsUpserted: partCount,
+    chainLinksSet: linked,
+    rowsReadFromFile: rows.length,
+  };
 }
 
-main()
-  .then(() => prisma.$disconnect())
-  .catch(async (error) => {
-    console.error(error);
-    await prisma.$disconnect();
-    process.exit(1);
-  });
+function resolveDefaultFilePath(): string {
+  if (process.env.SEED_INVENTORY_FILE) return resolve(process.env.SEED_INVENTORY_FILE);
+  const cwdFile = resolve(process.cwd(), 'data', 'inventory-master.xlsx');
+  if (existsSync(cwdFile)) return cwdFile;
+  return resolve(process.cwd(), '../../data/inventory-master.xlsx');
+}
+
+// CLI entrypoint: only runs when invoked directly (not when imported by a Lambda handler).
+const isCli = Boolean(process.argv[1] && process.argv[1].endsWith('seed-inventory-master.ts') ||
+                     process.argv[1]?.endsWith('seed-inventory-master.js'));
+if (isCli) {
+  if (process.env.NODE_ENV === 'production' && process.env.SEED_FORCE !== '1') {
+    throw new Error('Refusing to run inventory seed in production without SEED_FORCE=1');
+  }
+  runSeed(resolveDefaultFilePath())
+    .then(() => prisma.$disconnect())
+    .catch(async (error) => {
+      console.error(error);
+      if (prisma) await prisma.$disconnect();
+      process.exit(1);
+    });
+}

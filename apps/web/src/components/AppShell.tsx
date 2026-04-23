@@ -12,7 +12,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, loading } = useRole();
-  const isAuthRoute = pathname === '/auth';
+  // Treat every /auth/* path as an "auth route" so Cognito's OAuth callback
+  // (/auth/callback) can finish its token exchange without AppShell racing
+  // `getCurrentUser` against Amplify's redirect handler.
+  const isAuthRoute = pathname === '/auth' || pathname.startsWith('/auth/');
   const [copilotOpen, setCopilotOpen] = useState(false);
 
   // Client-side auth guard: redirect to /auth if not signed in

@@ -752,6 +752,27 @@ export async function getQbStatus(): Promise<{ connected: boolean; companyName?:
   return apiFetch('/accounting/status');
 }
 
+// ─── Reconciliation ──────────────────────────────────────────────────────────
+
+export interface ReconciliationRun {
+  id: string;
+  status: string;
+  startedAt: string;
+  completedAt?: string;
+  mismatchCount?: number;
+  summary?: string;
+}
+
+export async function listReconciliationRuns(params?: { limit?: number }): Promise<{ items: ReconciliationRun[]; total: number }> {
+  const qs = new URLSearchParams();
+  if (params?.limit) qs.set('limit', String(params.limit));
+  return apiFetch(
+    `/accounting/reconciliation/runs${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    { items: [], total: 0 },
+  );
+}
+
 // ─── Dealers (legacy alias) ───────────────────────────────────────────────────
 
 export interface Dealer {
@@ -768,7 +789,12 @@ export const MOCK_DEALERS: Dealer[] = [
 ];
 
 export async function listDealers(): Promise<Dealer[]> {
-  return apiFetch('/identity/dealers', undefined, MOCK_DEALERS);
+  const res = await apiFetch<{ items: Dealer[]; total: number } | Dealer[]>(
+    '/identity/dealers',
+    undefined,
+    { items: MOCK_DEALERS, total: MOCK_DEALERS.length },
+  );
+  return Array.isArray(res) ? res : res.items ?? [];
 }
 
 // ─── SOP Documents ────────────────────────────────────────────────────────────

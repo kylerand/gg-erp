@@ -137,7 +137,7 @@ export const listPartsHandler = wrapHandler(async (ctx) => {
   const lifecycleLevel = qs.lifecycleLevel as string | undefined;
   const manufacturerId = qs.manufacturerId as string | undefined;
   const defaultVendorId = qs.defaultVendorId as string | undefined;
-  const limit = Math.min(parseInt(qs.limit ?? '100', 10), 200);
+  const limit = Math.min(parseInt(qs.limit ?? '100', 10), 1000);
   const offset = parseInt(qs.offset ?? '0', 10);
 
   const where = {

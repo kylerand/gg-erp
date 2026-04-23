@@ -77,17 +77,17 @@ Click **+ Create Credentials → OAuth client ID**.
 Click **+ Add URI** and add:
 
 ```
-https://gg-erp-dev-auth.auth.us-east-2.amazoncognito.com
+https://dev-auth.auth.us-east-2.amazoncognito.com
 ```
 
-(When prod Cognito is stood up as its own pool later, you'd add `https://gg-erp-prod-auth.auth.us-east-2.amazoncognito.com` too — not needed today.)
+(When prod Cognito is stood up as its own pool later, you'd add `https://prod-auth.auth.us-east-2.amazoncognito.com` too — not needed today.)
 
 ### Authorized redirect URIs
 
 Click **+ Add URI** and add exactly:
 
 ```
-https://gg-erp-dev-auth.auth.us-east-2.amazoncognito.com/oauth2/idpresponse
+https://dev-auth.auth.us-east-2.amazoncognito.com/oauth2/idpresponse
 ```
 
 This path `/oauth2/idpresponse` is Cognito-specific — don't change it. If you have a typo here, Google returns `redirect_uri_mismatch` and auth fails silently.
@@ -143,11 +143,11 @@ Cognito works without it because the OAuth userinfo endpoint returns email/name,
 
 | Error | Likely cause |
 |---|---|
-| `redirect_uri_mismatch` (Google side) | Redirect URI typo. Must be exactly `https://gg-erp-dev-auth.auth.us-east-2.amazoncognito.com/oauth2/idpresponse` — no trailing slash, https only. |
+| `redirect_uri_mismatch` (Google side) | Redirect URI typo. Must be exactly `https://dev-auth.auth.us-east-2.amazoncognito.com/oauth2/idpresponse` — no trailing slash, https only. |
 | `invalid_client` (Google side) | Client ID wrong in Cognito, or client was disabled in GCP. |
 | Google shows "This account can't be used to sign in" | User is not in the `golfingarage.com` Workspace org. Working as intended. |
 | Cognito shows "Already found an entry for username `Google_12345...`" | A user with that Google `sub` exists. Delete from Cognito user pool or re-link attributes. |
-| Works on `gg-erp-dev-auth` but fails when you add a prod domain | Prod Cognito pool needs its own Google OAuth client (separate Client ID). Don't reuse dev credentials in prod. |
+| Works on `dev-auth` but fails when you add a prod domain | Prod Cognito pool needs its own Google OAuth client (separate Client ID). Don't reuse dev credentials in prod. |
 
 ---
 

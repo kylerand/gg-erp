@@ -182,6 +182,17 @@ jobs:
           TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-2' }}
           TF_VAR_name_prefix: ${{ steps.env.outputs.name_prefix }}
 
+      - name: Reconcile orphan Lambdas into state
+        # Heals the "terraform apply created the Lambda in AWS but exited
+        # before saving state" failure mode. Walks every Lambda function with
+        # our name prefix and imports any that aren't already in state. Safe
+        # to run repeatedly; no-op when state is clean.
+        working-directory: infra/terraform/envs/${{ steps.env.outputs.tf_env }}
+        run: bash "${{ github.workspace }}/scripts/reconcile-lambda-state.sh"
+        env:
+          NAME_PREFIX: ${{ steps.env.outputs.name_prefix }}
+          AWS_REGION: ${{ vars.AWS_REGION || 'us-east-2' }}
+
       - name: Terraform Plan
         working-directory: infra/terraform/envs/${{ steps.env.outputs.tf_env }}
         run: terraform plan -lock-timeout=120s -parallelism=30 -out=tfplan

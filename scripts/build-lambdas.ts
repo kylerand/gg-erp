@@ -141,6 +141,9 @@ const lambdas: LambdaEntry[] = [
   { context: 'migration', handler: 'run-schema-migration', entry: 'apps/api/src/lambda/migration/run-schema-migration.handler.ts' },
   { context: 'migration', handler: 'seed-inventory-master', entry: 'apps/api/src/lambda/migration/seed-inventory-master.handler.ts' },
 
+  // auth (Cognito triggers)
+  { context: 'auth', handler: 'pre-signup',            entry: 'apps/api/src/lambda/auth/pre-signup.handler.ts' },
+
   // communication (messaging, channels, todos, notifications)
   { context: 'communication', handler: 'list-channels',           entry: 'apps/api/src/lambda/communication/list-channels.handler.ts' },
   { context: 'communication', handler: 'create-channel',          entry: 'apps/api/src/lambda/communication/create-channel.handler.ts' },

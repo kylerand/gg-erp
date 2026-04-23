@@ -9,6 +9,13 @@
  * The token manager transparently refreshes tokens when they're close to expiration
  * (within 5 minutes of `expiresAt`).
  */
+import {
+  SecretsManagerClient,
+  GetSecretValueCommand,
+  PutSecretValueCommand,
+  CreateSecretCommand,
+  ResourceNotFoundException,
+} from '@aws-sdk/client-secrets-manager';
 import { refreshAccessToken, type QbTokens } from './quickbooks.client.js';
 
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // 5 minutes before expiry
@@ -53,71 +60,67 @@ export class EnvTokenStore implements TokenStore {
 export class SecretsManagerTokenStore implements TokenStore {
   private cached: QbTokens | null = null;
   private readonly secretId: string;
+  private readonly client: SecretsManagerClient;
 
   constructor(secretId?: string) {
     const env = process.env.NODE_ENV === 'production' ? 'prod' : 'dev';
     this.secretId = secretId ?? `/gg-erp/${env}/qb/tokens`;
+    this.client = new SecretsManagerClient({
+      region: process.env.AWS_REGION ?? 'us-east-2',
+    });
   }
 
   async getTokens(): Promise<QbTokens | null> {
     if (this.cached) return this.cached;
 
     try {
-      const secretString = await this.getSecretValue();
-      if (!secretString) return null;
-
-      const parsed = JSON.parse(secretString) as QbTokens;
+      const res = await this.client.send(
+        new GetSecretValueCommand({ SecretId: this.secretId }),
+      );
+      if (!res.SecretString) return null;
+      const parsed = JSON.parse(res.SecretString) as QbTokens;
       this.cached = parsed;
       return parsed;
-    } catch {
+    } catch (err) {
+      // Missing secret on first connect isn't an error — we'll create it
+      // when saveTokens is called.
+      if (err instanceof ResourceNotFoundException) return null;
       return null;
     }
   }
 
   async saveTokens(tokens: QbTokens): Promise<void> {
+    const value = JSON.stringify(tokens);
     try {
-      await this.putSecretValue(JSON.stringify(tokens));
+      await this.client.send(
+        new PutSecretValueCommand({ SecretId: this.secretId, SecretString: value }),
+      );
       this.cached = tokens;
     } catch (err) {
+      // First QB connect in a fresh environment: the secret doesn't exist yet.
+      // Create it inline so the user doesn't need to provision it out-of-band.
+      if (err instanceof ResourceNotFoundException) {
+        try {
+          await this.client.send(
+            new CreateSecretCommand({
+              Name: this.secretId,
+              SecretString: value,
+              Description: 'QuickBooks OAuth tokens (auto-created on first connect)',
+            }),
+          );
+          this.cached = tokens;
+          return;
+        } catch (createErr) {
+          throw new Error(
+            `Failed to create QB token secret in Secrets Manager: ${
+              createErr instanceof Error ? createErr.message : 'unknown'
+            }`,
+          );
+        }
+      }
       throw new Error(
-        `Failed to save QB tokens to Secrets Manager: ${err instanceof Error ? err.message : 'unknown'}`
+        `Failed to save QB tokens to Secrets Manager: ${err instanceof Error ? err.message : 'unknown'}`,
       );
-    }
-  }
-
-  /**
-   * Fetch secret from AWS Secrets Manager. Uses fetch against the local Lambda
-   * extension endpoint when available, or falls back to the AWS SDK at runtime.
-   */
-  private async getSecretValue(): Promise<string | undefined> {
-    const region = process.env.AWS_REGION ?? 'us-east-2';
-    const endpoint = `https://secretsmanager.${region}.amazonaws.com`;
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-amz-json-1.1',
-        'X-Amz-Target': 'secretsmanager.GetSecretValue',
-      },
-      body: JSON.stringify({ SecretId: this.secretId }),
-    });
-    if (!res.ok) return undefined;
-    const data = (await res.json()) as { SecretString?: string };
-    return data.SecretString;
-  }
-
-  private async putSecretValue(value: string): Promise<void> {
-    const region = process.env.AWS_REGION ?? 'us-east-2';
-    const endpoint = `https://secretsmanager.${region}.amazonaws.com`;
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-amz-json-1.1',
-        'X-Amz-Target': 'secretsmanager.PutSecretValue',
-      },
-      body: JSON.stringify({ SecretId: this.secretId, SecretString: value }),
-    });
-    if (!res.ok) {
-      throw new Error(`Secrets Manager PutSecretValue failed: ${res.status}`);
     }
   }
 }

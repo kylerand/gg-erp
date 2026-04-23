@@ -9,6 +9,14 @@ const GOOGLE_ENABLED =
   process.env.NEXT_PUBLIC_COGNITO_GOOGLE === 'Google' &&
   (process.env.NEXT_PUBLIC_COGNITO_DOMAIN ?? '') !== '';
 
+// Emails in this domain are managed through Google Workspace SSO; the password
+// form is skipped and we redirect straight into the Google OAuth flow.
+const SSO_DOMAIN = 'golfingarage.com';
+
+function isSsoEmail(email: string): boolean {
+  return GOOGLE_ENABLED && email.trim().toLowerCase().endsWith(`@${SSO_DOMAIN}`);
+}
+
 const IS_MOCK = process.env.NEXT_PUBLIC_AUTH_MODE === 'mock';
 
 const MOCK_ROLES: { value: UserRole; label: string; description: string }[] = [
@@ -47,9 +55,34 @@ export default function AuthPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNew, setShowNew] = useState(false);
 
+  // ── Email-first flow ───────────────────────────────────────────────────────
+  // `phase === 'email'` hides the password field until we know the user isn't
+  // a Workspace-SSO account; `phase === 'password'` reveals it.
+  const [phase, setPhase] = useState<'email' | 'password'>('email');
+
   // ── Shared ─────────────────────────────────────────────────────────────────
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  async function handleContinueFromEmail(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!email.trim()) {
+      setError('Please enter your email.');
+      return;
+    }
+    if (isSsoEmail(email)) {
+      setLoading(true);
+      try {
+        await signInWithRedirect({ provider: 'Google' });
+      } catch (err) {
+        setLoading(false);
+        setError(err instanceof Error ? err.message : 'Google sign-in failed');
+      }
+      return;
+    }
+    setPhase('password');
+  }
 
   async function handleRealSignIn(e: React.FormEvent) {
     e.preventDefault();
@@ -217,54 +250,65 @@ export default function AuthPage() {
                   </button>
                 </form>
               ) : (
-                <form onSubmit={handleRealSignIn} className="space-y-4">
-                  {error && (
-                    <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-2xl px-4 py-3">{error}</div>
-                  )}
-                  <div>
-                    <label className="block text-sm font-medium text-[#4F4641] mb-1.5">Email</label>
-                    <input
-                      type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-                      className={INPUT_CLS}
-                      placeholder="you@golfingarage.com"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-[#4F4641] mb-1.5">Password</label>
-                    <div className="relative">
+                phase === 'email' ? (
+                  <form onSubmit={handleContinueFromEmail} className="space-y-4">
+                    {error && (
+                      <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-2xl px-4 py-3">{error}</div>
+                    )}
+                    <div>
+                      <label className="block text-sm font-medium text-[#4F4641] mb-1.5">Email</label>
                       <input
-                        type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)}
-                        className={`${INPUT_CLS} pr-12`}
+                        type="email" required autoFocus value={email} onChange={(e) => setEmail(e.target.value)}
+                        className={INPUT_CLS}
+                        placeholder="you@golfingarage.com"
                       />
-                      <button type="button" onClick={() => setShowPassword(!showPassword)} tabIndex={-1}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8A7F76] hover:text-[#4F4641] transition-colors p-1"
-                        aria-label={showPassword ? 'Hide password' : 'Show password'}>
-                        <EyeIcon open={showPassword} />
-                      </button>
                     </div>
-                  </div>
-                  <button type="submit" disabled={loading} className={BTN_CLS}>
-                    {loading ? 'Signing in…' : 'Sign in'}
-                  </button>
-
-                  {GOOGLE_ENABLED && (
-                    <>
-                      <div className="relative py-2">
-                        <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-[#D9CCBE]" /></div>
-                        <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-3 text-[#8A7F76]">or</span></div>
+                    <button type="submit" disabled={loading} className={BTN_CLS}>
+                      {loading ? 'Redirecting…' : 'Continue'}
+                    </button>
+                    {GOOGLE_ENABLED && (
+                      <p className="text-xs text-center text-[#8A7F76]">
+                        Golfin Garage Workspace accounts will sign in with Google.
+                      </p>
+                    )}
+                  </form>
+                ) : (
+                  <form onSubmit={handleRealSignIn} className="space-y-4">
+                    {error && (
+                      <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-2xl px-4 py-3">{error}</div>
+                    )}
+                    <div>
+                      <label className="block text-sm font-medium text-[#4F4641] mb-1.5">Email</label>
+                      <div className="flex items-center justify-between rounded-2xl border border-[#D9CCBE] bg-[#FAF7F2] px-4 py-3 text-sm text-[#211F1E]">
+                        <span className="truncate">{email}</span>
+                        <button
+                          type="button"
+                          onClick={() => { setPhase('email'); setPassword(''); setError(null); }}
+                          className="text-xs font-semibold text-[#E37125] hover:underline ml-3 flex-shrink-0"
+                        >
+                          Change
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => signInWithRedirect({ provider: 'Google' }).catch((err) => setError(err instanceof Error ? err.message : 'Google sign-in failed'))}
-                        className="w-full flex items-center justify-center gap-2 rounded-2xl border border-[#D9CCBE] bg-white hover:bg-[#FAF7F2] text-[#211F1E] font-semibold py-3.5 transition-colors"
-                      >
-                        <GoogleIcon />
-                        <span>Sign in with Google</span>
-                      </button>
-                      <p className="text-xs text-center text-[#8A7F76]">Restricted to @golfingarage.com accounts</p>
-                    </>
-                  )}
-                </form>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#4F4641] mb-1.5">Password</label>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? 'text' : 'password'} required autoFocus value={password} onChange={(e) => setPassword(e.target.value)}
+                          className={`${INPUT_CLS} pr-12`}
+                        />
+                        <button type="button" onClick={() => setShowPassword(!showPassword)} tabIndex={-1}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8A7F76] hover:text-[#4F4641] transition-colors p-1"
+                          aria-label={showPassword ? 'Hide password' : 'Show password'}>
+                          <EyeIcon open={showPassword} />
+                        </button>
+                      </div>
+                    </div>
+                    <button type="submit" disabled={loading} className={BTN_CLS}>
+                      {loading ? 'Signing in…' : 'Sign in'}
+                    </button>
+                  </form>
+                )
               )}
             </div>
           </div>
@@ -302,13 +346,3 @@ function EyeIcon({ open }: { open: boolean }) {
   );
 }
 
-function GoogleIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
-      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-    </svg>
-  );
-}

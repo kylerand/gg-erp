@@ -102,6 +102,7 @@ module "api_gateway_lambda" {
   database_url                = module.aurora_postgres.database_url
   document_bucket_name        = module.s3.document_bucket_name
   migration_artifacts_bucket_name = module.s3.migration_bucket_name
+  lambda_artifacts_bucket_name    = module.s3.lambda_artifacts_bucket_name
   qb_client_id                = var.qb_client_id
   qb_client_secret            = var.qb_client_secret
   qb_redirect_uri             = var.qb_redirect_uri

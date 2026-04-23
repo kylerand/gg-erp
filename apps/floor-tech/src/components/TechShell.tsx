@@ -19,7 +19,9 @@ export function TechShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, loading } = useAuth();
-  const isAuthRoute = pathname === '/auth';
+  // Treat every /auth/* path as an auth route so Cognito's OAuth callback
+  // (/auth/callback) can finish its token exchange without racing the shell.
+  const isAuthRoute = pathname === '/auth' || pathname.startsWith('/auth/');
 
   if (isAuthRoute) {
     return <>{children}</>;

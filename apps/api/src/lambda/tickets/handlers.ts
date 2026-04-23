@@ -49,12 +49,31 @@ export async function disconnectTicketHandlerDependencies(): Promise<void> {
 
 // ─── Technician Tasks ─────────────────────────────────────────────────────────
 
+// Prisma's UUID columns reject any non-UUID string with a 500 at the driver
+// layer. The frontend occasionally passes demo placeholder IDs (e.g. "emp-1")
+// before Cognito has supplied a real user ID. Treat such filters as "no matches"
+// rather than crashing the endpoint.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function uuidOrNull(value: string | undefined): string | null {
+  if (!value) return null;
+  return UUID_RE.test(value) ? value : null;
+}
+
 export const listTasksHandler = wrapHandler(async (ctx) => {
   const qs = ctx.event.queryStringParameters ?? {};
-  const workOrderId = qs.workOrderId;
-  const technicianId = qs.technicianId;
+  const rawWorkOrderId = qs.workOrderId;
+  const rawTechnicianId = qs.technicianId;
   const state = qs.state as string | undefined;
   const limit = Math.min(parseInt(qs.limit ?? '100', 10), 200);
+
+  const workOrderId = uuidOrNull(rawWorkOrderId);
+  const technicianId = uuidOrNull(rawTechnicianId);
+
+  // If the caller filtered by a non-UUID id, the result set is empty by
+  // definition (no row can match). Short-circuit instead of round-tripping.
+  if ((rawWorkOrderId && !workOrderId) || (rawTechnicianId && !technicianId)) {
+    return jsonResponse(200, { items: [] });
+  }
 
   const where = {
     ...(workOrderId ? { workOrderId } : {}),

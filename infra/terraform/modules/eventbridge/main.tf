@@ -174,7 +174,7 @@ resource "aws_lambda_permission" "allow_eventbridge_qb_customer_sync" {
 # ─── EventBridge Schedule — Outbox Publisher (rate 1 minute) ──────────────────
 
 resource "aws_cloudwatch_event_rule" "outbox_publisher_schedule" {
-  count               = var.outbox_publisher_lambda_arn != "" ? 1 : 0
+  count               = var.enable_outbox_publisher_schedule ? 1 : 0
   name                = "${var.name_prefix}-outbox-publisher-schedule"
   schedule_expression = "rate(1 minute)"
   description         = "Triggers the outbox publisher Lambda every minute to flush pending events"

@@ -39,6 +39,30 @@ variable "floor_tech_url" {
   default     = ""
 }
 
+variable "cognito_domain" {
+  description = "Cognito hosted UI domain (e.g. dev-auth.auth.us-east-2.amazoncognito.com) for OAuth redirect flow."
+  type        = string
+  default     = ""
+}
+
+variable "cognito_google_provider" {
+  description = "Cognito IdP name for Google, or empty string if Google SSO is disabled."
+  type        = string
+  default     = ""
+}
+
+variable "web_public_url" {
+  description = "Public URL of the web app (used as OAuth redirect sign-in/sign-out)."
+  type        = string
+  default     = ""
+}
+
+variable "floor_tech_public_url" {
+  description = "Public URL of the floor-tech app (used as OAuth redirect sign-in/sign-out)."
+  type        = string
+  default     = ""
+}
+
 variable "aws_region" {
   description = "AWS region for Cognito config"
   type        = string
@@ -110,12 +134,15 @@ resource "aws_amplify_app" "web" {
   platform = "WEB_COMPUTE"
 
   environment_variables = {
-    NEXT_PUBLIC_API_BASE_URL        = var.api_base_url
+    NEXT_PUBLIC_API_BASE_URL         = var.api_base_url
     NEXT_PUBLIC_COGNITO_USER_POOL_ID = var.cognito_user_pool_id
-    NEXT_PUBLIC_COGNITO_CLIENT_ID   = var.cognito_client_id
-    NEXT_PUBLIC_AUTH_MODE           = "cognito"
-    NEXT_PUBLIC_FLOOR_TECH_URL      = var.floor_tech_url
-    AMPLIFY_MONOREPO_APP_ROOT      = "apps/web"
+    NEXT_PUBLIC_COGNITO_CLIENT_ID    = var.cognito_client_id
+    NEXT_PUBLIC_COGNITO_DOMAIN       = var.cognito_domain
+    NEXT_PUBLIC_COGNITO_GOOGLE       = var.cognito_google_provider
+    NEXT_PUBLIC_AUTH_MODE            = "cognito"
+    NEXT_PUBLIC_FLOOR_TECH_URL       = var.floor_tech_url
+    NEXT_PUBLIC_APP_URL              = var.web_public_url
+    AMPLIFY_MONOREPO_APP_ROOT        = "apps/web"
   }
 }
 
@@ -170,7 +197,10 @@ resource "aws_amplify_app" "floor_tech" {
     NEXT_PUBLIC_API_BASE_URL         = var.api_base_url
     NEXT_PUBLIC_COGNITO_USER_POOL_ID = var.cognito_user_pool_id
     NEXT_PUBLIC_COGNITO_CLIENT_ID    = var.cognito_client_id
+    NEXT_PUBLIC_COGNITO_DOMAIN       = var.cognito_domain
+    NEXT_PUBLIC_COGNITO_GOOGLE       = var.cognito_google_provider
     NEXT_PUBLIC_AUTH_MODE            = "cognito"
+    NEXT_PUBLIC_APP_URL              = var.floor_tech_public_url
     AMPLIFY_MONOREPO_APP_ROOT        = "apps/floor-tech"
   }
 }

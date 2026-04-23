@@ -2,7 +2,20 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import { signInWithRedirect } from 'aws-amplify/auth';
 import { doSignIn, doSignOut, doConfirmNewPassword, setMockRole, type UserRole } from '@/lib/auth';
+
+const GOOGLE_ENABLED =
+  process.env.NEXT_PUBLIC_COGNITO_GOOGLE === 'Google' &&
+  (process.env.NEXT_PUBLIC_COGNITO_DOMAIN ?? '') !== '';
+
+// Emails in this domain are managed through Google Workspace SSO; the password
+// form is skipped and we redirect straight into the Google OAuth flow.
+const SSO_DOMAIN = 'golfingarage.com';
+
+function isSsoEmail(email: string): boolean {
+  return GOOGLE_ENABLED && email.trim().toLowerCase().endsWith(`@${SSO_DOMAIN}`);
+}
 
 const IS_MOCK = process.env.NEXT_PUBLIC_AUTH_MODE === 'mock';
 
@@ -42,9 +55,34 @@ export default function AuthPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNew, setShowNew] = useState(false);
 
+  // ── Email-first flow ───────────────────────────────────────────────────────
+  // `phase === 'email'` hides the password field until we know the user isn't
+  // a Workspace-SSO account; `phase === 'password'` reveals it.
+  const [phase, setPhase] = useState<'email' | 'password'>('email');
+
   // ── Shared ─────────────────────────────────────────────────────────────────
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  async function handleContinueFromEmail(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!email.trim()) {
+      setError('Please enter your email.');
+      return;
+    }
+    if (isSsoEmail(email)) {
+      setLoading(true);
+      try {
+        await signInWithRedirect({ provider: 'Google' });
+      } catch (err) {
+        setLoading(false);
+        setError(err instanceof Error ? err.message : 'Google sign-in failed');
+      }
+      return;
+    }
+    setPhase('password');
+  }
 
   async function handleRealSignIn(e: React.FormEvent) {
     e.preventDefault();
@@ -212,36 +250,65 @@ export default function AuthPage() {
                   </button>
                 </form>
               ) : (
-                <form onSubmit={handleRealSignIn} className="space-y-4">
-                  {error && (
-                    <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-2xl px-4 py-3">{error}</div>
-                  )}
-                  <div>
-                    <label className="block text-sm font-medium text-[#4F4641] mb-1.5">Email</label>
-                    <input
-                      type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-                      className={INPUT_CLS}
-                      placeholder="you@golfingarage.com"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-[#4F4641] mb-1.5">Password</label>
-                    <div className="relative">
+                phase === 'email' ? (
+                  <form onSubmit={handleContinueFromEmail} className="space-y-4">
+                    {error && (
+                      <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-2xl px-4 py-3">{error}</div>
+                    )}
+                    <div>
+                      <label className="block text-sm font-medium text-[#4F4641] mb-1.5">Email</label>
                       <input
-                        type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)}
-                        className={`${INPUT_CLS} pr-12`}
+                        type="email" required autoFocus value={email} onChange={(e) => setEmail(e.target.value)}
+                        className={INPUT_CLS}
+                        placeholder="you@golfingarage.com"
                       />
-                      <button type="button" onClick={() => setShowPassword(!showPassword)} tabIndex={-1}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8A7F76] hover:text-[#4F4641] transition-colors p-1"
-                        aria-label={showPassword ? 'Hide password' : 'Show password'}>
-                        <EyeIcon open={showPassword} />
-                      </button>
                     </div>
-                  </div>
-                  <button type="submit" disabled={loading} className={BTN_CLS}>
-                    {loading ? 'Signing in…' : 'Sign in'}
-                  </button>
-                </form>
+                    <button type="submit" disabled={loading} className={BTN_CLS}>
+                      {loading ? 'Redirecting…' : 'Continue'}
+                    </button>
+                    {GOOGLE_ENABLED && (
+                      <p className="text-xs text-center text-[#8A7F76]">
+                        Golfin Garage Workspace accounts will sign in with Google.
+                      </p>
+                    )}
+                  </form>
+                ) : (
+                  <form onSubmit={handleRealSignIn} className="space-y-4">
+                    {error && (
+                      <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-2xl px-4 py-3">{error}</div>
+                    )}
+                    <div>
+                      <label className="block text-sm font-medium text-[#4F4641] mb-1.5">Email</label>
+                      <div className="flex items-center justify-between rounded-2xl border border-[#D9CCBE] bg-[#FAF7F2] px-4 py-3 text-sm text-[#211F1E]">
+                        <span className="truncate">{email}</span>
+                        <button
+                          type="button"
+                          onClick={() => { setPhase('email'); setPassword(''); setError(null); }}
+                          className="text-xs font-semibold text-[#E37125] hover:underline ml-3 flex-shrink-0"
+                        >
+                          Change
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#4F4641] mb-1.5">Password</label>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? 'text' : 'password'} required autoFocus value={password} onChange={(e) => setPassword(e.target.value)}
+                          className={`${INPUT_CLS} pr-12`}
+                        />
+                        <button type="button" onClick={() => setShowPassword(!showPassword)} tabIndex={-1}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8A7F76] hover:text-[#4F4641] transition-colors p-1"
+                          aria-label={showPassword ? 'Hide password' : 'Show password'}>
+                          <EyeIcon open={showPassword} />
+                        </button>
+                      </div>
+                    </div>
+                    <button type="submit" disabled={loading} className={BTN_CLS}>
+                      {loading ? 'Signing in…' : 'Sign in'}
+                    </button>
+                  </form>
+                )
               )}
             </div>
           </div>
@@ -278,3 +345,4 @@ function EyeIcon({ open }: { open: boolean }) {
     </svg>
   );
 }
+

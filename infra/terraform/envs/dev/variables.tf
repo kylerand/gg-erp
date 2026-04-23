@@ -139,6 +139,28 @@ variable "qb_webhook_verifier_token" {
   sensitive   = true
 }
 
+# Google SSO (federated via Cognito)
+
+variable "google_client_id" {
+  description = "Google OAuth 2.0 client ID. Empty disables Google SSO."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "google_client_secret" {
+  description = "Google OAuth 2.0 client secret"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "auth_lambda_zip_path" {
+  description = "Path to the zipped auth (Cognito triggers) Lambda artifact."
+  type        = string
+  default     = "apps/api/dist/auth-lambda.zip"
+}
+
 # Frontend (Amplify Hosting)
 
 variable "repository_url" {

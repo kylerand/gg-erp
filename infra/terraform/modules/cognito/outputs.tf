@@ -25,3 +25,8 @@ output "issuer_url" {
   description = "JWT issuer URL for the Cognito user pool"
   value       = local.issuer_url
 }
+
+output "google_identity_provider_name" {
+  description = "Name of the Google identity provider, or empty if disabled"
+  value       = local.google_enabled ? "Google" : ""
+}

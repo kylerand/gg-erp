@@ -43,9 +43,38 @@ module "s3" {
   name_prefix = var.name_prefix
 }
 
+module "cognito_triggers" {
+  source               = "../../modules/cognito-triggers"
+  name_prefix          = var.name_prefix
+  lambda_zip_path      = var.auth_lambda_zip_path
+  allowed_email_domain = "golfingarage.com"
+  sentry_dsn           = var.sentry_dsn
+}
+
 module "cognito" {
   source      = "../../modules/cognito"
   name_prefix = var.name_prefix
+
+  google_client_id      = var.google_client_id
+  google_client_secret  = var.google_client_secret
+  google_hosted_domain  = "golfingarage.com"
+  oauth_callback_urls = [
+    "https://golfingarage.m4nos.com/auth/callback",
+    "https://floor.golfingarage.m4nos.com/auth/callback",
+  ]
+  oauth_logout_urls = [
+    "https://golfingarage.m4nos.com/auth",
+    "https://floor.golfingarage.m4nos.com/auth",
+  ]
+  pre_signup_lambda_arn = module.cognito_triggers.pre_signup_lambda_arn
+}
+
+resource "aws_lambda_permission" "cognito_invoke_pre_signup" {
+  statement_id  = "AllowCognitoInvokePreSignUp"
+  action        = "lambda:InvokeFunction"
+  function_name = module.cognito_triggers.pre_signup_lambda_name
+  principal     = "cognito-idp.amazonaws.com"
+  source_arn    = module.cognito.user_pool_arn
 }
 
 module "eventbridge" {
@@ -112,14 +141,18 @@ module "api_gateway_lambda" {
 }
 
 module "amplify_hosting" {
-  source               = "../../modules/amplify-hosting"
-  name_prefix          = var.name_prefix
-  repository_url       = var.repository_url
-  github_access_token  = var.github_access_token
-  branch               = "main"
-  api_base_url         = module.api_gateway_lambda.api_base_url
-  cognito_user_pool_id = module.cognito.user_pool_id
-  cognito_client_id    = module.cognito.app_client_ids["web"]
-  aws_region           = var.aws_region
-  floor_tech_url       = "https://floor.golfingarage.m4nos.com"
+  source                  = "../../modules/amplify-hosting"
+  name_prefix             = var.name_prefix
+  repository_url          = var.repository_url
+  github_access_token     = var.github_access_token
+  branch                  = "main"
+  api_base_url            = module.api_gateway_lambda.api_base_url
+  cognito_user_pool_id    = module.cognito.user_pool_id
+  cognito_client_id       = module.cognito.app_client_ids["web"]
+  cognito_domain          = module.cognito.domain
+  cognito_google_provider = module.cognito.google_identity_provider_name
+  web_public_url          = "https://golfingarage.m4nos.com"
+  floor_tech_public_url   = "https://floor.golfingarage.m4nos.com"
+  aws_region              = var.aws_region
+  floor_tech_url          = "https://floor.golfingarage.m4nos.com"
 }

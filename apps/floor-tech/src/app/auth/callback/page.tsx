@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { Hub } from 'aws-amplify/utils';
-import { getCurrentUser } from 'aws-amplify/auth';
+import { fetchAuthSession } from 'aws-amplify/auth';
+
+const POLL_INTERVAL_MS = 250;
+const POLL_TIMEOUT_MS = 10_000;
 
 export default function AuthCallbackPage() {
   const [error, setError] = useState<string | null>(null);
@@ -12,30 +15,39 @@ export default function AuthCallbackPage() {
 
     const unsubscribe = Hub.listen('auth', ({ payload }) => {
       if (cancelled) return;
-      switch (payload.event) {
-        case 'signInWithRedirect':
-        case 'signedIn':
-          window.location.replace('/');
-          break;
-        case 'signInWithRedirect_failure': {
-          const msg = (payload as { data?: { error?: { message?: string } } })?.data?.error?.message ?? 'Google sign-in failed';
-          setError(msg);
-          break;
-        }
+      if (payload.event === 'signInWithRedirect_failure') {
+        const msg =
+          (payload as { data?: { error?: { message?: string } } })?.data?.error?.message ??
+          'Google sign-in failed';
+        setError(msg);
       }
     });
 
-    getCurrentUser()
-      .then(() => {
-        if (!cancelled) window.location.replace('/');
-      })
-      .catch(() => {});
+    const start = Date.now();
+    const poll = async (): Promise<void> => {
+      while (!cancelled && Date.now() - start < POLL_TIMEOUT_MS) {
+        try {
+          const session = await fetchAuthSession();
+          if (session.tokens?.idToken) {
+            if (!cancelled) window.location.replace('/');
+            return;
+          }
+        } catch {
+          // still exchanging
+        }
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      }
+      if (!cancelled && !error) {
+        setError('Sign-in took too long. Please try again.');
+      }
+    };
+    void poll();
 
     return () => {
       cancelled = true;
       unsubscribe();
     };
-  }, []);
+  }, [error]);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#211F1E]">

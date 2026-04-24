@@ -1,12 +1,16 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { ClipboardList, Clock3, RefreshCcw, TimerReset } from 'lucide-react';
 import { useAuth } from '@/lib/auth-provider';
 import { doSignOut } from '@/lib/auth';
+
+// Bounce to /auth if the shell's auth check hasn't resolved within this window.
+// Mirrors the web AppShell — see AUTH_LOADING_DEADLINE_MS there.
+const AUTH_LOADING_DEADLINE_MS = 15_000;
 
 const NAV_ITEMS = [
   { href: '/work-orders/my-queue', label: 'Queue', icon: ClipboardList },
@@ -22,6 +26,19 @@ export function TechShell({ children }: { children: ReactNode }) {
   // Treat every /auth/* path as an auth route so Cognito's OAuth callback
   // (/auth/callback) can finish its token exchange without racing the shell.
   const isAuthRoute = pathname === '/auth' || pathname.startsWith('/auth/');
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+
+  useEffect(() => {
+    if (!loading || isAuthRoute) return;
+    const t = setTimeout(() => setLoadingTimedOut(true), AUTH_LOADING_DEADLINE_MS);
+    return () => clearTimeout(t);
+  }, [loading, isAuthRoute]);
+
+  useEffect(() => {
+    if (loadingTimedOut && !isAuthRoute) {
+      window.location.replace('/auth');
+    }
+  }, [loadingTimedOut, isAuthRoute]);
 
   if (isAuthRoute) {
     return <>{children}</>;
@@ -34,6 +51,9 @@ export function TechShell({ children }: { children: ReactNode }) {
         <div className="text-center">
           <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-[#E37125] border-t-transparent" />
           <p className="mt-4 text-sm font-semibold text-[#6E625A]">Loading…</p>
+          {loadingTimedOut && (
+            <p className="mt-3 text-xs text-[#8A7F76]">Taking longer than expected — redirecting to sign in.</p>
+          )}
         </div>
       </div>
     );

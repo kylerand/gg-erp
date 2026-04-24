@@ -8,6 +8,11 @@ import { TopHeader } from '@/components/TopHeader';
 import { useRole } from '@/lib/role-context';
 import GlobalCopilotChat from '@/components/GlobalCopilotChat';
 
+// If `loading` stays true past this deadline (e.g. Amplify's Cognito session
+// read is hanging on a cold OAuth token exchange), bounce to /auth rather
+// than leaving the user on a spinner forever.
+const AUTH_LOADING_DEADLINE_MS = 15_000;
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -17,6 +22,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   // `getCurrentUser` against Amplify's redirect handler.
   const isAuthRoute = pathname === '/auth' || pathname.startsWith('/auth/');
   const [copilotOpen, setCopilotOpen] = useState(false);
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
 
   // Client-side auth guard: redirect to /auth if not signed in
   useEffect(() => {
@@ -24,6 +30,19 @@ export function AppShell({ children }: { children: ReactNode }) {
       router.replace('/auth');
     }
   }, [loading, user, isAuthRoute, router]);
+
+  // Escape hatch for a stuck loading state — see AUTH_LOADING_DEADLINE_MS.
+  useEffect(() => {
+    if (!loading || isAuthRoute) return;
+    const t = setTimeout(() => setLoadingTimedOut(true), AUTH_LOADING_DEADLINE_MS);
+    return () => clearTimeout(t);
+  }, [loading, isAuthRoute]);
+
+  useEffect(() => {
+    if (loadingTimedOut && !isAuthRoute) {
+      window.location.replace('/auth');
+    }
+  }, [loadingTimedOut, isAuthRoute]);
 
   if (isAuthRoute) {
     return <>{children}</>;
@@ -35,6 +54,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#211F1E]">
         <div className="h-10 w-10 border-4 border-[#E37125] border-t-transparent rounded-full animate-spin" />
         <p className="mt-4 text-white/60 text-sm">Checking authentication…</p>
+        {loadingTimedOut && (
+          <p className="mt-3 text-white/40 text-xs">Taking longer than expected — redirecting to sign in.</p>
+        )}
       </div>
     );
   }

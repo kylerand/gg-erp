@@ -1,0 +1,92 @@
+{
+  "app": "floor-tech",
+  "title": "Floor Tech App — Walkthrough",
+  "baseUrl": "http://localhost:3012",
+  "mockRole": "technician",
+  "viewport": { "width": 430, "height": 932 },
+  "scenes": [
+    {
+      "id": "01-intro",
+      "narration": "This is the Floor Tech app — built for technicians working on the shop floor. It runs on bay tablets and phones. Big touch targets, glove-friendly, and offline-first.",
+      "actions": [{ "type": "goto", "path": "/" }]
+    },
+    {
+      "id": "02-signin",
+      "narration": "Sign-in mirrors the ERP — email first, Google single-sign-on for workspace accounts. For the walkthrough we'll use mock mode with a technician role.",
+      "actions": [{ "type": "wait", "ms": 1500 }]
+    },
+    {
+      "id": "03-nav",
+      "narration": "Four tabs along the bottom. Queue, Shift, Time, and Sync. Everything a tech does during a shift lives under one of these four.",
+      "actions": [{ "type": "wait", "ms": 1500 }]
+    },
+    {
+      "id": "04-shift",
+      "narration": "You start the shift on the Shift tab. Tap Clock In to mark this tablet as yours. Then set your availability — Available, On break, or Needs help. Dispatch sees the change immediately.",
+      "actions": [
+        { "type": "click", "selector": "a[href='/shift']" },
+        { "type": "wait", "ms": 2500 }
+      ]
+    },
+    {
+      "id": "05-queue",
+      "narration": "The Queue tab is your work list. Each card is a work order with a number, a material-readiness badge, a sync-status badge, and the next action you need to take.",
+      "actions": [
+        { "type": "click", "selector": "a[href='/work-orders/my-queue']" },
+        { "type": "wait", "ms": 2500 }
+      ]
+    },
+    {
+      "id": "06-wo-detail",
+      "narration": "Tapping a card opens the work order detail. The checklist is the heart of the page — tap a checkbox to mark a task done. Everything updates immediately, even offline.",
+      "actions": [
+        { "type": "clickFirst", "selector": "a[href*='/work-orders/']" },
+        { "type": "wait", "ms": 2500 }
+      ]
+    },
+    {
+      "id": "07-notes-photos",
+      "narration": "Add a note for the next tech, upload a photo as evidence, or request additional parts if you realize something is missing. Every change gets a small sync badge — pending, synced, or needs retry.",
+      "actions": [{ "type": "wait", "ms": 2500 }]
+    },
+    {
+      "id": "08-blocked",
+      "narration": "If something stops you — missing parts, a broken tool, a customer hold — tap Mark Blocked, pick a reason code, and add a sentence of detail. The work order moves off your queue and onto the shop manager's blocked list.",
+      "actions": [{ "type": "wait", "ms": 2000 }]
+    },
+    {
+      "id": "09-time",
+      "narration": "The Time tab has one big button — Start Timer. Tap it when you pick up a work order, tap it again when you put it down. Manual entries cover the times you forget.",
+      "actions": [
+        { "type": "click", "selector": "a[href='/work-orders/time-logging']" },
+        { "type": "wait", "ms": 2500 }
+      ]
+    },
+    {
+      "id": "10-offline",
+      "narration": "When Wi-Fi drops, the banner at the top turns yellow. Every tap still works — updates stack up locally. When you're back online, the app replays them automatically. Nothing is ever lost.",
+      "actions": [{ "type": "wait", "ms": 2500 }]
+    },
+    {
+      "id": "11-sync",
+      "narration": "The Sync tab is where you triage queued updates. Queued, needs retry, and failed counts across the top. Replay Now forces a retry when auto-replay hasn't caught up.",
+      "actions": [
+        { "type": "click", "selector": "a[href='/sync']" },
+        { "type": "wait", "ms": 2500 }
+      ]
+    },
+    {
+      "id": "12-shared-device",
+      "narration": "Bay tablets are shared — clock out when you finish your shift so the next tech starts fresh. Everything you did is logged against your name.",
+      "actions": [
+        { "type": "click", "selector": "a[href='/shift']" },
+        { "type": "wait", "ms": 1800 }
+      ]
+    },
+    {
+      "id": "13-outro",
+      "narration": "That's the Floor Tech app. For the manager's view of the same work orders, or for anything beyond execution, see the ERP walkthrough.",
+      "actions": [{ "type": "wait", "ms": 1500 }]
+    }
+  ]
+}

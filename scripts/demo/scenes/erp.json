@@ -1,0 +1,133 @@
+{
+  "app": "erp",
+  "title": "Golfin Garage ERP — Walkthrough",
+  "baseUrl": "http://localhost:3010",
+  "mockRole": "admin",
+  "viewport": { "width": 1600, "height": 900 },
+  "scenes": [
+    {
+      "id": "01-intro",
+      "narration": "This is the Golfin Garage ERP — the dashboard used by shop managers, sales, parts, accounting, and admins. Everything about running the business lives here.",
+      "actions": [{ "type": "goto", "path": "/" }]
+    },
+    {
+      "id": "02-signin",
+      "narration": "Sign in is email-first. Workspace accounts on golfin garage dot com are redirected to Google. Everyone else falls back to a password. For this walkthrough we'll use the built-in mock mode.",
+      "actions": [{ "type": "wait", "ms": 1000 }]
+    },
+    {
+      "id": "03-dashboard",
+      "narration": "Once signed in you land on the dashboard. The sidebar on the left is your home for every business function — Work Orders, Sales, Inventory, Customers, Training, Planning, Accounting, Messages, Reporting, and Admin.",
+      "actions": [{ "type": "wait", "ms": 1500 }]
+    },
+    {
+      "id": "04-work-orders",
+      "narration": "Work Orders is where the shop spends most of its time. Each work order is one golf-cart build or service job, broken into technician tasks.",
+      "actions": [
+        { "type": "click", "selector": "a[href='/work-orders']" },
+        { "type": "wait", "ms": 2000 }
+      ]
+    },
+    {
+      "id": "05-dispatch",
+      "narration": "The Dispatch Board is how the shop manager lays out the day. Unassigned tasks sit up top. Drag a card onto a technician's lane to assign it.",
+      "actions": [
+        { "type": "click", "selector": "a[href='/work-orders/dispatch']" },
+        { "type": "wait", "ms": 2500 }
+      ]
+    },
+    {
+      "id": "06-my-queue",
+      "narration": "My Queue shows a technician's assigned work. In real life this is used from the mobile Floor Tech app, but the same view is available here for managers who want to see what a tech is looking at.",
+      "actions": [
+        { "type": "click", "selector": "a[href='/work-orders/my-queue']" },
+        { "type": "wait", "ms": 2000 }
+      ]
+    },
+    {
+      "id": "07-inventory",
+      "narration": "Inventory tracks every part across three lifecycle tiers — raw, prepared, and assembled. The shop imported two-hundred sixty-seven parts from the 2026 master list.",
+      "actions": [
+        { "type": "click", "selector": "a[href='/inventory']" },
+        { "type": "wait", "ms": 2000 }
+      ]
+    },
+    {
+      "id": "08-parts",
+      "narration": "The Part Lookup page lets you search by name, SKU, or variant, and filter by manufacturer, vendor, or install stage. Each row shows on-hand quantity and reorder point.",
+      "actions": [
+        { "type": "goto", "path": "/inventory/parts" },
+        { "type": "wait", "ms": 2500 }
+      ]
+    },
+    {
+      "id": "09-planning",
+      "narration": "Stage Planning is the shortage report. Anything with a red shortfall is a part you need to order before the next build.",
+      "actions": [
+        { "type": "goto", "path": "/inventory/planning" },
+        { "type": "wait", "ms": 2500 }
+      ]
+    },
+    {
+      "id": "10-customers",
+      "narration": "The Customers section holds four hundred and forty three customer records, plus a separate dealer directory. Clicking into a customer shows every work order, quote, and message thread tied to them.",
+      "actions": [
+        { "type": "click", "selector": "a[href='/customer-dealers']" },
+        { "type": "wait", "ms": 1500 },
+        { "type": "click", "selector": "a[href='/customer-dealers/customers']" },
+        { "type": "wait", "ms": 2000 }
+      ]
+    },
+    {
+      "id": "11-sales",
+      "narration": "The Sales module covers pipeline, quotes, and forecast. Deals move across a kanban board as they progress from prospecting to closed.",
+      "actions": [
+        { "type": "click", "selector": "a[href='/sales']" },
+        { "type": "wait", "ms": 2000 }
+      ]
+    },
+    {
+      "id": "12-planning-slots",
+      "narration": "Build Slot planning lives under Planning. Monday through Friday, each day has a capacity in hours. Drag work orders across days to balance the week, then publish.",
+      "actions": [
+        { "type": "click", "selector": "a[href='/planning']" },
+        { "type": "wait", "ms": 800 },
+        { "type": "click", "selector": "a[href='/planning/slots']" },
+        { "type": "wait", "ms": 2500 }
+      ]
+    },
+    {
+      "id": "13-accounting",
+      "narration": "Accounting covers QuickBooks sync and reconciliation. First-time setup clicks Connect QuickBooks, rounds through Intuit OAuth, and the token is good for months.",
+      "actions": [
+        { "type": "click", "selector": "a[href='/accounting']" },
+        { "type": "wait", "ms": 800 },
+        { "type": "click", "selector": "a[href='/accounting/sync']" },
+        { "type": "wait", "ms": 2500 }
+      ]
+    },
+    {
+      "id": "14-admin",
+      "narration": "The Admin section is where you manage user access, review the audit trail, and check integration health. User Access maps each employee to one or more roles. The audit trail is immutable — every privileged action is recorded.",
+      "actions": [
+        { "type": "click", "selector": "a[href='/admin']" },
+        { "type": "wait", "ms": 1200 },
+        { "type": "click", "selector": "a[href='/admin/access']" },
+        { "type": "wait", "ms": 2500 }
+      ]
+    },
+    {
+      "id": "15-copilot",
+      "narration": "Finally, the robot button in the bottom right is the Copilot. Ask it anything about your data — open work orders for a customer, parts below reorder point, or someone's training status — and it answers by querying the live system.",
+      "actions": [
+        { "type": "goto", "path": "/" },
+        { "type": "wait", "ms": 2500 }
+      ]
+    },
+    {
+      "id": "16-outro",
+      "narration": "That's the full ERP. For the technician's view of the same world, see the Floor Tech walkthrough. For training authoring, see the Training walkthrough.",
+      "actions": [{ "type": "wait", "ms": 1500 }]
+    }
+  ]
+}

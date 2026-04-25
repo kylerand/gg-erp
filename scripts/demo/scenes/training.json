@@ -1,0 +1,76 @@
+{
+  "app": "training",
+  "title": "Training App — Walkthrough",
+  "baseUrl": "http://localhost:3013",
+  "mockRole": "technician",
+  "viewport": { "width": 1440, "height": 900 },
+  "scenes": [
+    {
+      "id": "01-intro",
+      "narration": "This is the Training app — the technician's surface for completing on-the-job training modules. It's separate from the main ERP so a tech can focus on learning without the rest of the business dashboard in the way.",
+      "actions": [{ "type": "goto", "path": "/" }]
+    },
+    {
+      "id": "02-concepts",
+      "narration": "Training is organized in layers. A standard operating procedure, or SOP, is the written reference. A training module wraps one or more SOPs with steps, a quiz, and optional supervisor sign-off.",
+      "actions": [{ "type": "wait", "ms": 2000 }]
+    },
+    {
+      "id": "03-catalog",
+      "narration": "The modules page shows every module available to you. Required modules are tagged in red. Each card shows estimated time and your progress status — not started, in progress, or completed.",
+      "actions": [
+        { "type": "goto", "path": "/modules" },
+        { "type": "wait", "ms": 2500 }
+      ]
+    },
+    {
+      "id": "04-module-detail",
+      "narration": "Clicking a card opens the module detail. You see the description, any prerequisites, the full list of steps, and whether a quiz or supervisor sign-off is required at the end.",
+      "actions": [
+        { "type": "clickFirst", "selector": "a[href*='/modules/']" },
+        { "type": "wait", "ms": 2500 }
+      ]
+    },
+    {
+      "id": "05-step",
+      "narration": "Each step is a self-contained lesson. A video, written instructions, the tools and materials you'll need, safety warnings, why it matters, key takeaways, and common mistakes. Mark it complete when you're ready to move on.",
+      "actions": [{ "type": "wait", "ms": 2500 }]
+    },
+    {
+      "id": "06-notes-bookmarks",
+      "narration": "Take a private note against any step, or bookmark it for later reference. Your notes and bookmarks stay with you across sessions and devices.",
+      "actions": [{ "type": "wait", "ms": 1800 }]
+    },
+    {
+      "id": "07-quiz",
+      "narration": "After the last step, the module ends with a knowledge check. Multi-choice questions, a pass threshold — default eighty percent — and detailed feedback on every answer.",
+      "actions": [{ "type": "wait", "ms": 2000 }]
+    },
+    {
+      "id": "08-progress",
+      "narration": "The My Progress page is your personal dashboard. Every module you've started or been assigned, with progress bars and completion dates. A good Monday-morning view of what's on your plate.",
+      "actions": [
+        { "type": "goto", "path": "/my-progress" },
+        { "type": "wait", "ms": 2500 }
+      ]
+    },
+    {
+      "id": "09-assignments",
+      "narration": "The Assignments tab separates active from past modules. If a due date is overdue, you see a red badge and expect a nudge from your trainer.",
+      "actions": [
+        { "type": "goto", "path": "/assignments" },
+        { "type": "wait", "ms": 2500 }
+      ]
+    },
+    {
+      "id": "10-trainer-note",
+      "narration": "Trainers work on the other side of this system — from the ERP's Training section. They publish SOPs, build modules, and assign them to employees. The technician experience you just saw is driven by their work.",
+      "actions": [{ "type": "wait", "ms": 2500 }]
+    },
+    {
+      "id": "11-outro",
+      "narration": "That's the Training app. See the Training operator manual for the full SOP, module, and assignment authoring flow trainers use every day.",
+      "actions": [{ "type": "wait", "ms": 1500 }]
+    }
+  ]
+}

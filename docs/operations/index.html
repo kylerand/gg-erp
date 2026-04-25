@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Golfin Garage — Operator Manuals</title>
+  
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #211F1E;
+    --accent: #E37125;
+    --accent-light: #FEE9DC;
+    --border: #E5DCCF;
+    --muted: #6B625B;
+    --surface: #FAF7F2;
+    --green: #16a34a;
+    --green-bg: #dcfce7;
+    --amber: #d97706;
+    --amber-bg: #fef3c7;
+    --red: #dc2626;
+    --red-bg: #fee2e2;
+    --code-bg: #F3EEE5;
+    --radius: 8px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    line-height: 1.6;
+    font-size: 15px;
+  }
+  .container { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+  nav.topbar {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    padding: 0.75rem 1.5rem;
+    display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;
+    font-size: 0.875rem;
+  }
+  nav.topbar .brand { font-weight: 700; color: var(--accent); margin-right: auto; }
+  nav.topbar a { color: var(--muted); text-decoration: none; padding: 0.25rem 0.5rem; border-radius: 4px; }
+  nav.topbar a:hover { background: var(--surface); color: var(--fg); }
+  nav.topbar a.current { color: var(--accent); background: var(--accent-light); font-weight: 600; }
+
+  h1, h2, h3, h4 { color: var(--fg); font-weight: 700; line-height: 1.25; }
+  h1 { font-size: 2rem; margin: 0.5rem 0 1rem; border-bottom: 3px solid var(--accent); padding-bottom: 0.75rem; }
+  h2 { font-size: 1.4rem; margin: 2.25rem 0 0.75rem; padding-top: 0.5rem; border-top: 1px solid var(--border); }
+  h2:first-of-type { border-top: none; padding-top: 0; margin-top: 1.5rem; }
+  h3 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; }
+  h4 { font-size: 0.975rem; margin: 1rem 0 0.4rem; }
+  p { margin: 0.75rem 0; }
+  ul, ol { margin: 0.75rem 0 0.75rem 1.5rem; }
+  li { margin: 0.35rem 0; }
+  li > ul, li > ol { margin-top: 0.35rem; }
+  a { color: var(--accent); }
+  a:hover { text-decoration-thickness: 2px; }
+  code {
+    background: var(--code-bg); color: var(--fg);
+    padding: 0.125rem 0.375rem; border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', monospace;
+    font-size: 0.9em;
+  }
+  pre {
+    background: var(--code-bg); padding: 0.75rem 1rem;
+    border-radius: var(--radius); border: 1px solid var(--border);
+    overflow-x: auto; margin: 1rem 0; font-size: 0.875rem;
+  }
+  pre code { background: transparent; padding: 0; }
+  blockquote {
+    border-left: 4px solid var(--accent); background: var(--accent-light);
+    padding: 0.75rem 1rem; margin: 1rem 0; border-radius: 0 var(--radius) var(--radius) 0;
+    color: var(--fg);
+  }
+  blockquote p:first-child { margin-top: 0; }
+  blockquote p:last-child { margin-bottom: 0; }
+  table {
+    border-collapse: collapse; width: 100%; margin: 1rem 0;
+    font-size: 0.9rem;
+  }
+  th, td {
+    border: 1px solid var(--border); padding: 0.5rem 0.75rem;
+    text-align: left; vertical-align: top;
+  }
+  th { background: var(--surface); font-weight: 600; }
+  tr:nth-child(even) td { background: #FDFBF7; }
+  img { max-width: 100%; height: auto; border-radius: var(--radius); border: 1px solid var(--border); }
+  figure.screenshot-placeholder {
+    margin: 1.25rem 0; padding: 1.5rem; text-align: center;
+    border: 2px dashed var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--muted);
+  }
+  figure.screenshot-placeholder .screenshot-placeholder__icon {
+    font-size: 2rem; opacity: 0.55; margin-bottom: 0.5rem;
+  }
+  figure.screenshot-placeholder figcaption { font-size: 0.875rem; }
+  figure.screenshot-placeholder em { color: var(--fg); font-style: normal; font-weight: 500; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+
+  /* Role-badge inline callouts like [admin only], [shop_manager] */
+  p code:only-child { display: inline; }
+
+  @media print {
+    nav.topbar { display: none; }
+    .container { padding: 0; }
+    a { color: var(--fg); text-decoration: underline; }
+  }
+</style>
+</head>
+<body>
+  <nav class="topbar">
+    <span class="brand">Golfin Garage — Operators</span>
+    <a href="index.html" class="current">Index</a><a href="erp-manual.html" class="">ERP</a><a href="floor-tech-manual.html" class="">Floor Tech</a><a href="training-manual.html" class="">Training</a>
+  </nav>
+  <div class="container">
+    <h1>Golfin Garage Operator Manuals</h1>
+<p>Three apps, three audiences. Pick the one that matches your role.</p>
+<h2>If you only read one thing</h2>
+<ul>
+<li><strong>Shop manager, sales, parts, accounting, front office, admin, trainer</strong> → open <strong><a href="./erp-manual.html">the ERP manual</a></strong> and sign in at <a href="https://golfingarage.m4nos.com">https://golfingarage.m4nos.com</a>.</li>
+<li><strong>Floor technician</strong> → open <strong><a href="./floor-tech-manual.html">the Floor Tech manual</a></strong> and sign in on the bay tablet at <a href="https://floor.golfingarage.m4nos.com">https://floor.golfingarage.m4nos.com</a>.</li>
+<li><strong>Trainer or OJT lead setting up training, or technician completing training</strong> → open <strong><a href="./training-manual.html">the Training manual</a></strong>.</li>
+</ul>
+<h2>Who uses which app</h2>
+<table>
+<thead>
+<tr>
+<th>Your role</th>
+<th>App</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Shop manager</td>
+<td>ERP</td>
+<td>Dispatch board, reporting, open/blocked triage, planning</td>
+</tr>
+<tr>
+<td>Sales / front office</td>
+<td>ERP</td>
+<td>Pipeline, quotes, forecast, customer directory</td>
+</tr>
+<tr>
+<td>Parts manager</td>
+<td>ERP</td>
+<td>Inventory, reservations, receiving, manufacturers</td>
+</tr>
+<tr>
+<td>Accounting</td>
+<td>ERP</td>
+<td>QuickBooks sync, reconciliation, audit trail</td>
+</tr>
+<tr>
+<td>Admin</td>
+<td>ERP</td>
+<td>User access, audit, integrations</td>
+</tr>
+<tr>
+<td>Trainer / OJT lead</td>
+<td>ERP (authoring) + Training app (preview)</td>
+<td>Publish SOPs, assign modules to techs, sign off on completions</td>
+</tr>
+<tr>
+<td>Floor technician</td>
+<td>Floor Tech (primary) + Training app (for OJT)</td>
+<td>Work queue, time, shift, offline-capable checklist execution; consume assigned training modules</td>
+</tr>
+<tr>
+<td>Executive</td>
+<td>ERP (read-only)</td>
+<td>Reporting only</td>
+</tr>
+</tbody></table>
+<h2>Signing in — same for all three apps</h2>
+<p>All three apps authenticate through Amazon Cognito and support two paths:</p>
+<ol>
+<li><strong>Google SSO (recommended)</strong> — any <code>@golfingarage.com</code> Google Workspace account. Type your email on the sign-in screen and click <strong>Continue</strong>; you&#39;ll be redirected to Google, authenticate once, and land back in the app. No password to remember. You must be an active member of the Workspace org — outside accounts are refused.</li>
+<li><strong>Email + password</strong> — for service accounts and anyone not yet on Workspace. Type the email on the sign-in screen, click <strong>Continue</strong>, then enter the password.</li>
+</ol>
+<p>A first-time password change may be required; the app will prompt.</p>
+<h2>When something breaks</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>First check</th>
+<th>Then</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>&quot;Checking authentication…&quot; spinner stays forever after Google sign-in</td>
+<td>Hard-refresh the tab</td>
+<td>Escalate to your admin if still stuck</td>
+</tr>
+<tr>
+<td>&quot;Can&#39;t sign in — not authorized&quot; from Google</td>
+<td>You&#39;re signed into a personal Gmail instead of your <code>@golfingarage.com</code> account</td>
+<td>Switch accounts in the Google chooser</td>
+</tr>
+<tr>
+<td>Floor tech tablet shows a red offline banner</td>
+<td>Check the bay Wi-Fi</td>
+<td>Work continues offline — the Sync tab will replay when you&#39;re back on Wi-Fi</td>
+</tr>
+<tr>
+<td>Connect QuickBooks button errors</td>
+<td>Intuit session expired — not your problem</td>
+<td>Ping the admin; they rotate credentials and retry</td>
+</tr>
+<tr>
+<td>⌘K search returns nothing</td>
+<td>Search only covers work orders, inventory, and customers today</td>
+<td>Use the relevant section&#39;s own filter instead</td>
+</tr>
+</tbody></table>
+<p>Deeper troubleshooting lives at the end of each app-specific manual.</p>
+<h2>What&#39;s in each doc</h2>
+<ul>
+<li><strong><a href="./erp-manual.html">erp-manual.md</a></strong> — 10 nav sections, 8 roles, full workflow walkthroughs, admin surfaces, Copilot chat, offline queue, troubleshooting.</li>
+<li><strong><a href="./floor-tech-manual.html">floor-tech-manual.md</a></strong> — shift start, working the queue, executing a work order, offline mode, time logging, blocking, handoff, troubleshooting.</li>
+<li><strong><a href="./training-manual.html">training-manual.md</a></strong> — two parts: trainers/OJT leads working in the ERP to author SOPs and assign modules; technicians working in the standalone Training app to complete them.</li>
+</ul>
+<h2>Support / escalation</h2>
+<ul>
+<li>Tool breakage, user access requests, integration reconnects: <strong>admin</strong> (<code>krand40@gmail.com</code>).</li>
+<li>Bad data in a work order, missing part, wrong dispatch: <strong>shop manager</strong>.</li>
+<li>Training content errors: <strong>trainer / OJT lead</strong>.</li>
+</ul>
+<h2>For developers</h2>
+<p>This folder is end-user documentation. Architecture, deploy flows, and code-level docs live in <code>docs/architecture/</code>, <code>docs/deployment.md</code>, <code>docs/dns-setup-golfingarage.md</code>, and <code>docs/google-sso-setup.md</code>.</p>
+
+  </div>
+</body>
+</html>

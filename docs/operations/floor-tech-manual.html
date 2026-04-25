@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Floor Tech App Operator Manual — Golfin Garage</title>
+  
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #211F1E;
+    --accent: #E37125;
+    --accent-light: #FEE9DC;
+    --border: #E5DCCF;
+    --muted: #6B625B;
+    --surface: #FAF7F2;
+    --green: #16a34a;
+    --green-bg: #dcfce7;
+    --amber: #d97706;
+    --amber-bg: #fef3c7;
+    --red: #dc2626;
+    --red-bg: #fee2e2;
+    --code-bg: #F3EEE5;
+    --radius: 8px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    line-height: 1.6;
+    font-size: 15px;
+  }
+  .container { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+  nav.topbar {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    padding: 0.75rem 1.5rem;
+    display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;
+    font-size: 0.875rem;
+  }
+  nav.topbar .brand { font-weight: 700; color: var(--accent); margin-right: auto; }
+  nav.topbar a { color: var(--muted); text-decoration: none; padding: 0.25rem 0.5rem; border-radius: 4px; }
+  nav.topbar a:hover { background: var(--surface); color: var(--fg); }
+  nav.topbar a.current { color: var(--accent); background: var(--accent-light); font-weight: 600; }
+
+  h1, h2, h3, h4 { color: var(--fg); font-weight: 700; line-height: 1.25; }
+  h1 { font-size: 2rem; margin: 0.5rem 0 1rem; border-bottom: 3px solid var(--accent); padding-bottom: 0.75rem; }
+  h2 { font-size: 1.4rem; margin: 2.25rem 0 0.75rem; padding-top: 0.5rem; border-top: 1px solid var(--border); }
+  h2:first-of-type { border-top: none; padding-top: 0; margin-top: 1.5rem; }
+  h3 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; }
+  h4 { font-size: 0.975rem; margin: 1rem 0 0.4rem; }
+  p { margin: 0.75rem 0; }
+  ul, ol { margin: 0.75rem 0 0.75rem 1.5rem; }
+  li { margin: 0.35rem 0; }
+  li > ul, li > ol { margin-top: 0.35rem; }
+  a { color: var(--accent); }
+  a:hover { text-decoration-thickness: 2px; }
+  code {
+    background: var(--code-bg); color: var(--fg);
+    padding: 0.125rem 0.375rem; border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', monospace;
+    font-size: 0.9em;
+  }
+  pre {
+    background: var(--code-bg); padding: 0.75rem 1rem;
+    border-radius: var(--radius); border: 1px solid var(--border);
+    overflow-x: auto; margin: 1rem 0; font-size: 0.875rem;
+  }
+  pre code { background: transparent; padding: 0; }
+  blockquote {
+    border-left: 4px solid var(--accent); background: var(--accent-light);
+    padding: 0.75rem 1rem; margin: 1rem 0; border-radius: 0 var(--radius) var(--radius) 0;
+    color: var(--fg);
+  }
+  blockquote p:first-child { margin-top: 0; }
+  blockquote p:last-child { margin-bottom: 0; }
+  table {
+    border-collapse: collapse; width: 100%; margin: 1rem 0;
+    font-size: 0.9rem;
+  }
+  th, td {
+    border: 1px solid var(--border); padding: 0.5rem 0.75rem;
+    text-align: left; vertical-align: top;
+  }
+  th { background: var(--surface); font-weight: 600; }
+  tr:nth-child(even) td { background: #FDFBF7; }
+  img { max-width: 100%; height: auto; border-radius: var(--radius); border: 1px solid var(--border); }
+  figure.screenshot-placeholder {
+    margin: 1.25rem 0; padding: 1.5rem; text-align: center;
+    border: 2px dashed var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--muted);
+  }
+  figure.screenshot-placeholder .screenshot-placeholder__icon {
+    font-size: 2rem; opacity: 0.55; margin-bottom: 0.5rem;
+  }
+  figure.screenshot-placeholder figcaption { font-size: 0.875rem; }
+  figure.screenshot-placeholder em { color: var(--fg); font-style: normal; font-weight: 500; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+
+  /* Role-badge inline callouts like [admin only], [shop_manager] */
+  p code:only-child { display: inline; }
+
+  @media print {
+    nav.topbar { display: none; }
+    .container { padding: 0; }
+    a { color: var(--fg); text-decoration: underline; }
+  }
+</style>
+</head>
+<body>
+  <nav class="topbar">
+    <span class="brand">Golfin Garage — Operators</span>
+    <a href="index.html" class="">Index</a><a href="erp-manual.html" class="">ERP</a><a href="floor-tech-manual.html" class="current">Floor Tech</a><a href="training-manual.html" class="">Training</a>
+  </nav>
+  <div class="container">
+    <h1>Floor Tech App Operator Manual</h1>
+<p>For technicians executing work on the shop floor.</p>
+<p>Live URL: <a href="https://floor.golfingarage.m4nos.com">https://floor.golfingarage.m4nos.com</a> — open it on the bay tablet or your phone.</p>
+<hr>
+<h2>If you only read one thing</h2>
+<p>Clock in on the <strong>Shift</strong> tab. Pull the top card on <strong>Queue</strong>. Check off tasks as you do them; tap <strong>Time</strong> to start the timer. If you&#39;re stuck, tap <strong>Mark blocked</strong> and pick a reason. Everything works offline — the <strong>Sync</strong> tab catches you up when Wi-Fi comes back.</p>
+<hr>
+<h2>What this app is for</h2>
+<p>You&#39;re a floor tech. You work in gloves, often away from Wi-Fi, often on a shared tablet at the bay. This app is built for that:</p>
+<ul>
+<li>Big buttons (56+ pixels tall) so you can tap with gloves or thumbs.</li>
+<li>Four tabs at the bottom — no menus to dig through.</li>
+<li><strong>Offline-first</strong>: the app keeps working when Wi-Fi drops. Your updates stack up in a queue and replay automatically when you reconnect.</li>
+<li>Shared-device friendly — clock-in marks the device as &quot;yours&quot; so the next tech can see who touched what last.</li>
+</ul>
+<p>Anything beyond execution (creating work orders, assigning techs, parts ordering, reporting) lives in the main ERP — that&#39;s your shop manager&#39;s world.</p>
+<hr>
+<h2>Starting your shift</h2>
+<ol>
+<li><strong>Open the app</strong>: <a href="https://floor.golfingarage.m4nos.com">https://floor.golfingarage.m4nos.com</a></li>
+<li><strong>Sign in</strong>: type your <code>@golfingarage.com</code> email, tap <strong>Continue</strong>. You&#39;re sent to Google, authenticate once, and you&#39;re back.</li>
+<li><strong>Shift tab</strong> (bottom nav, second from left): tap <strong>Clock In</strong>. Your name now shows on this tablet.</li>
+<li><strong>Set availability</strong>:<ul>
+<li>🟢 <strong>Available</strong> — ready to pick up tasks.</li>
+<li>🟡 <strong>On break</strong> — out for a bit; dispatch sees you&#39;re unavailable.</li>
+<li>🔴 <strong>Needs help</strong> — flags the shop manager.</li>
+</ul>
+</li>
+</ol>
+<p>If someone else is already clocked in on the tablet, tap <strong>Switch Device User</strong> to swap — this clocks them out.</p>
+<hr>
+<h2>The four tabs</h2>
+<p><img src="./screenshots/floor-tech-nav.png" alt="Floor Tech bottom nav with Queue, Shift, Time, Sync" /></p>
+<table>
+<thead>
+<tr>
+<th>Tab</th>
+<th>What you do here</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Queue</strong></td>
+<td>See and open your assigned work orders.</td>
+</tr>
+<tr>
+<td><strong>Shift</strong></td>
+<td>Clock in/out, availability, switch device user.</td>
+</tr>
+<tr>
+<td><strong>Time</strong></td>
+<td>Start/stop the timer, view today&#39;s entries.</td>
+</tr>
+<tr>
+<td><strong>Sync</strong></td>
+<td>Review and replay offline updates.</td>
+</tr>
+</tbody></table>
+<p>Your current tab is highlighted orange.</p>
+<p>Across the top you&#39;ll see the <strong>Offline Queue Banner</strong>:</p>
+<ul>
+<li>🟢 &quot;Online&quot; — all good, updates go through immediately.</li>
+<li>🟡 &quot;Offline — N updates queued&quot; — you&#39;re working without Wi-Fi; nothing is lost.</li>
+<li>🔴 &quot;Sync failed — N items need retry&quot; — something needs your attention in the Sync tab.</li>
+</ul>
+<hr>
+<h2>Working the queue</h2>
+<p>Tap <strong>Queue</strong>. You see cards for each work order assigned to you. Each card shows:</p>
+<ul>
+<li><strong>WO number and title</strong> (e.g. <code>#1620 — Pier Motorsports lift kit install</code>)</li>
+<li><strong>Material readiness</strong>: 🟢 Ready / 🟡 Partial / 🔴 Not ready</li>
+<li><strong>Sync status</strong>: SYNCED / PENDING / RETRY / FAILED</li>
+<li><strong>Next action</strong>: e.g. &quot;Start frame install&quot;, &quot;Finish QC&quot;</li>
+<li><strong>Rework counter</strong>: <code>0 ↻</code>, <code>1 ↻</code>, <code>3+ ↻</code> — how many times this has come back</li>
+</ul>
+<p>At the top you also see quick stats: <strong>Ready now</strong>, <strong>Blocked</strong>, <strong>Sync attention</strong>.</p>
+<p>Tap any card to open the work order detail.</p>
+<hr>
+<h2>Executing a work order</h2>
+<p>This is where you spend most of your day.</p>
+<h3>The checklist</h3>
+<p>The heart of the page. Each line is a task. Tap the checkbox to mark it done — it updates immediately, even offline. A small badge shows the sync status for each toggle.</p>
+<p>Tasks you can&#39;t do yet are greyed out (prerequisite not met).</p>
+<h3>Notes</h3>
+<p>Scroll to the <strong>Notes</strong> section. Type a note for the next tech, the parts team, or dispatch — whoever will read this WO next. Tap <strong>Save</strong>. Your note appears inline with a PENDING badge until it syncs.</p>
+<p>Notes persist across shifts. A later tech picking up the WO sees everything you wrote.</p>
+<h3>Evidence photos</h3>
+<p>Under any task that supports it, tap the <strong>📷 Upload</strong> slot. On mobile this opens the camera directly; on a tablet it offers file-picker. Take/pick a photo → it attaches to the WO with a PENDING badge.</p>
+<p>Use for:</p>
+<ul>
+<li>Proof of tricky install steps (insurance / warranty claims).</li>
+<li>Damaged part condition on arrival.</li>
+<li>QC evidence for a safety item.</li>
+</ul>
+<p>Photos live offline until you sync — safe to take them away from Wi-Fi.</p>
+<h3>Request additional parts</h3>
+<p>If you open a WO and realize you need a part that isn&#39;t reserved, tap <strong>Request Parts</strong> (at the bottom). Pick the part(s) and quantity; parts manager sees it in their queue.</p>
+<h3>Mark blocked</h3>
+<p>Top-right of the WO detail: <strong>Mark Blocked</strong> button. Tap it → a dialog asks for:</p>
+<ul>
+<li><strong>Reason code</strong>:<ul>
+<li><code>PARTS_MISSING</code> — you need something not on the shelf</li>
+<li><code>WAITING_MANAGER</code> — need a decision</li>
+<li><code>TOOLING_ISSUE</code> — missing/broken tool</li>
+<li><code>CUSTOMER_HOLD</code> — customer asked to pause</li>
+<li><code>SAFETY_CONCERN</code> — something unsafe</li>
+<li><code>OTHER</code></li>
+</ul>
+</li>
+<li><strong>Reason text</strong>: a sentence or two.</li>
+</ul>
+<p>Tap <strong>Block</strong>. The WO status changes to BLOCKED; it leaves your queue and appears on the shop manager&#39;s Open/Blocked screen with your note attached.</p>
+<h3>Completing / handoff</h3>
+<p>Check off the final checklist item. A <strong>Complete</strong> button appears. Tap it to mark the WO done → it leaves your queue and goes to QC or invoicing depending on the workflow.</p>
+<p>If this WO needs a handoff to another stage (e.g. you did frame, next is electrical), the checklist&#39;s last item is &quot;Handoff to next stage&quot; — checking it sends the WO back to dispatch for reassignment.</p>
+<hr>
+<h2>Time logging</h2>
+<p>Tap <strong>Time</strong> (third tab). Two things here:</p>
+<h3>Active timer</h3>
+<p>At the top: one big button. <strong>Start Timer</strong> / <strong>Stop Timer</strong>. Tapping it records wall-clock time against the currently-open work order (or the last one you worked on).</p>
+<p>Rule of thumb: <strong>tap Start when you pick up a WO</strong>, tap <strong>Stop</strong> when you put it down (break, lunch, EOD, switching WOs).</p>
+<h3>Manual entry</h3>
+<p>If you forgot to start the timer: tap <strong>+ Add Manual Entry</strong>. Enter start time, end time, WO. Saves as a PENDING time entry — syncs when you&#39;re online.</p>
+<h3>Today&#39;s entries</h3>
+<p>Scroll down to see every time entry you&#39;ve logged today: WO, start, end, computed hours. Tap any row to edit.</p>
+<hr>
+<h2>Offline mode</h2>
+<p>This is the feature most people don&#39;t understand until they see it work. Here&#39;s the deal:</p>
+<p><strong>When Wi-Fi is solid</strong>, everything you tap goes through immediately. Sync status badges show SYNCED.</p>
+<p><strong>When Wi-Fi drops</strong> (the banner turns yellow/red):</p>
+<ul>
+<li>Every tap still works — checkboxes still toggle, notes still save, photos still attach.</li>
+<li>Updates stack up in a local queue with PENDING badges.</li>
+<li>You don&#39;t need to do anything different.</li>
+</ul>
+<p><strong>When Wi-Fi comes back</strong>:</p>
+<ul>
+<li>The app automatically retries each queued update in order.</li>
+<li>Each one&#39;s badge transitions PENDING → SYNCED (green).</li>
+<li>If one fails (e.g. someone else modified the same record), its badge turns RETRY (yellow) or FAILED (red) and you see it on the Sync tab.</li>
+</ul>
+<h3>The Sync tab</h3>
+<p>Tap <strong>Sync</strong> (fourth tab). Three cards at the top:</p>
+<ul>
+<li><strong>Queued</strong> — updates still waiting to send (you&#39;re probably offline).</li>
+<li><strong>Needs retry</strong> — will retry automatically on the next online moment.</li>
+<li><strong>Failed</strong> — needs you to look at it.</li>
+</ul>
+<p>Below, each queued/failed item shows:</p>
+<ul>
+<li>Kind of update (checklist toggle, note, photo, time entry, blocked).</li>
+<li>The WO it belongs to.</li>
+<li>Error message if failed.</li>
+</ul>
+<p><strong>Replay Now</strong> button — force a retry when you&#39;re online. Use this if the auto-retry hasn&#39;t caught up.</p>
+<p><strong>Important</strong>: every queued update has an idempotency key. Replaying the same queue twice won&#39;t duplicate data.</p>
+<hr>
+<h2>Shared device etiquette</h2>
+<p>The bay tablet isn&#39;t yours personally — it&#39;s shared.</p>
+<ul>
+<li><strong>Start of your shift</strong>: open Shift tab → Clock In. Your name now shows on the device.</li>
+<li><strong>End of your shift</strong>: tap <strong>Clock Out</strong>. The next tech can clock in fresh.</li>
+<li><strong>Switching devices</strong>: tap <strong>Switch Device User</strong> on the Shift tab. This clocks out whoever was on the device and returns to sign-in.</li>
+<li><strong>Borrowing for a minute</strong>: if another tech is clocked in and you just need to glance at a WO, that&#39;s fine — but don&#39;t make changes under their name. Switch users or use your phone.</li>
+</ul>
+<p>Everything you do is logged against your clocked-in name. The Audit Trail in the ERP captures who did what and when.</p>
+<hr>
+<h2>Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>What to check</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>App won&#39;t sign in with Google</td>
+<td>Make sure you&#39;re on your <code>@golfingarage.com</code> account, not personal Gmail. The Google chooser lets you switch.</td>
+</tr>
+<tr>
+<td>Stuck on &quot;Checking authentication…&quot;</td>
+<td>Pull to refresh / hard-reload the page. If it stays stuck, clear the browser&#39;s site data for <code>floor.golfingarage.m4nos.com</code>.</td>
+</tr>
+<tr>
+<td>Offline banner says I&#39;m online but updates still PENDING</td>
+<td>Go to <strong>Sync</strong> tab, tap <strong>Replay Now</strong>. If that still fails, the server&#39;s rejecting your request — screenshot and ping shop manager.</td>
+</tr>
+<tr>
+<td>My checklist toggle un-toggled itself</td>
+<td>Someone else edited the same WO while you were offline. The server&#39;s version won. Re-do the toggle; it&#39;ll stick now.</td>
+</tr>
+<tr>
+<td>Timer keeps resetting to zero</td>
+<td>The timer lives on the device. If you closed the browser tab, the timer paused; reopening continues. If the tab crashed, you&#39;ll need a manual entry for the lost time.</td>
+</tr>
+<tr>
+<td>Can&#39;t find a WO I&#39;m sure was mine</td>
+<td>Check the shop manager&#39;s Open/Blocked board in the main ERP — it may have been reassigned. Audit Trail shows who and when.</td>
+</tr>
+<tr>
+<td>Photo upload says FAILED</td>
+<td>Photo is probably over 10 MB. Retake at lower resolution. The WO detail page&#39;s <strong>Upload</strong> slot accepts up to 10 MB per file.</td>
+</tr>
+<tr>
+<td>&quot;Session expired&quot; mid-shift</td>
+<td>Your Cognito token lapsed (rare — they last 1 hour with auto-refresh). Sign in again; offline queue is preserved.</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>See also</h2>
+<ul>
+<li><strong><a href="./erp-manual.html">ERP manual</a></strong> — what shop managers and dispatch see when you mark blocked or complete a WO.</li>
+<li><strong><a href="./training-manual.html">Training manual</a></strong> — for OJT modules you&#39;ve been assigned.</li>
+<li><strong><a href="./index.html">README</a></strong> — index and sign-in reference.</li>
+</ul>
+
+  </div>
+</body>
+</html>

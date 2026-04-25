@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Training Manual — Golfin Garage</title>
+  
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #211F1E;
+    --accent: #E37125;
+    --accent-light: #FEE9DC;
+    --border: #E5DCCF;
+    --muted: #6B625B;
+    --surface: #FAF7F2;
+    --green: #16a34a;
+    --green-bg: #dcfce7;
+    --amber: #d97706;
+    --amber-bg: #fef3c7;
+    --red: #dc2626;
+    --red-bg: #fee2e2;
+    --code-bg: #F3EEE5;
+    --radius: 8px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    line-height: 1.6;
+    font-size: 15px;
+  }
+  .container { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+  nav.topbar {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    padding: 0.75rem 1.5rem;
+    display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;
+    font-size: 0.875rem;
+  }
+  nav.topbar .brand { font-weight: 700; color: var(--accent); margin-right: auto; }
+  nav.topbar a { color: var(--muted); text-decoration: none; padding: 0.25rem 0.5rem; border-radius: 4px; }
+  nav.topbar a:hover { background: var(--surface); color: var(--fg); }
+  nav.topbar a.current { color: var(--accent); background: var(--accent-light); font-weight: 600; }
+
+  h1, h2, h3, h4 { color: var(--fg); font-weight: 700; line-height: 1.25; }
+  h1 { font-size: 2rem; margin: 0.5rem 0 1rem; border-bottom: 3px solid var(--accent); padding-bottom: 0.75rem; }
+  h2 { font-size: 1.4rem; margin: 2.25rem 0 0.75rem; padding-top: 0.5rem; border-top: 1px solid var(--border); }
+  h2:first-of-type { border-top: none; padding-top: 0; margin-top: 1.5rem; }
+  h3 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; }
+  h4 { font-size: 0.975rem; margin: 1rem 0 0.4rem; }
+  p { margin: 0.75rem 0; }
+  ul, ol { margin: 0.75rem 0 0.75rem 1.5rem; }
+  li { margin: 0.35rem 0; }
+  li > ul, li > ol { margin-top: 0.35rem; }
+  a { color: var(--accent); }
+  a:hover { text-decoration-thickness: 2px; }
+  code {
+    background: var(--code-bg); color: var(--fg);
+    padding: 0.125rem 0.375rem; border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', monospace;
+    font-size: 0.9em;
+  }
+  pre {
+    background: var(--code-bg); padding: 0.75rem 1rem;
+    border-radius: var(--radius); border: 1px solid var(--border);
+    overflow-x: auto; margin: 1rem 0; font-size: 0.875rem;
+  }
+  pre code { background: transparent; padding: 0; }
+  blockquote {
+    border-left: 4px solid var(--accent); background: var(--accent-light);
+    padding: 0.75rem 1rem; margin: 1rem 0; border-radius: 0 var(--radius) var(--radius) 0;
+    color: var(--fg);
+  }
+  blockquote p:first-child { margin-top: 0; }
+  blockquote p:last-child { margin-bottom: 0; }
+  table {
+    border-collapse: collapse; width: 100%; margin: 1rem 0;
+    font-size: 0.9rem;
+  }
+  th, td {
+    border: 1px solid var(--border); padding: 0.5rem 0.75rem;
+    text-align: left; vertical-align: top;
+  }
+  th { background: var(--surface); font-weight: 600; }
+  tr:nth-child(even) td { background: #FDFBF7; }
+  img { max-width: 100%; height: auto; border-radius: var(--radius); border: 1px solid var(--border); }
+  figure.screenshot-placeholder {
+    margin: 1.25rem 0; padding: 1.5rem; text-align: center;
+    border: 2px dashed var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--muted);
+  }
+  figure.screenshot-placeholder .screenshot-placeholder__icon {
+    font-size: 2rem; opacity: 0.55; margin-bottom: 0.5rem;
+  }
+  figure.screenshot-placeholder figcaption { font-size: 0.875rem; }
+  figure.screenshot-placeholder em { color: var(--fg); font-style: normal; font-weight: 500; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+
+  /* Role-badge inline callouts like [admin only], [shop_manager] */
+  p code:only-child { display: inline; }
+
+  @media print {
+    nav.topbar { display: none; }
+    .container { padding: 0; }
+    a { color: var(--fg); text-decoration: underline; }
+  }
+</style>
+</head>
+<body>
+  <nav class="topbar">
+    <span class="brand">Golfin Garage — Operators</span>
+    <a href="index.html" class="">Index</a><a href="erp-manual.html" class="">ERP</a><a href="floor-tech-manual.html" class="">Floor Tech</a><a href="training-manual.html" class="current">Training</a>
+  </nav>
+  <div class="container">
+    <h1>Training Manual</h1>
+<p>Two audiences in one doc. <strong>Part A</strong> is for trainers and OJT leads authoring and assigning training. <strong>Part B</strong> is for technicians consuming it. Pick your part.</p>
+<hr>
+<h2>If you only read one thing</h2>
+<ul>
+<li><strong>Trainer / OJT lead</strong>: you work in the main ERP at <a href="https://golfingarage.m4nos.com/training">https://golfingarage.m4nos.com/training</a>. You publish SOPs, turn them into modules, and assign modules to specific techs. Skip to <strong>Part A</strong>.</li>
+<li><strong>Technician</strong>: you work in the dedicated Training app. It has its own URL (ask your admin — e.g. <code>training.golfingarage.m4nos.com</code>). Skip to <strong>Part B</strong>.</li>
+</ul>
+<hr>
+<h2>Concepts shared by both parts</h2>
+<p>Training is built in layers:</p>
+<ul>
+<li><strong>SOP (Standard Operating Procedure)</strong> — the written reference, authored once, versioned forever. Lives in the SOP Library. Example: <em>&quot;How to install a 4-link suspension, Revision 3.&quot;</em></li>
+<li><strong>TrainingModule</strong> — a learning unit that wraps an SOP. Adds: pass score, whether supervisor sign-off is needed, estimated time, sort order, required-vs-optional flag.</li>
+<li><strong>OjtStep</strong> — a single step inside a module: video, instructions, tool list, materials, safety warnings, why-it-matters, key takeaways, common mistakes.</li>
+<li><strong>OjtKnowledgeCheck</strong> — a quiz question attached to a module. Multi-choice. Explanation shown after submission.</li>
+<li><strong>TrainingAssignment</strong> — this module, assigned to this employee, with an optional due date.</li>
+<li><strong>ModuleProgress</strong> / <strong>StepProgress</strong> — state: not-started / in-progress / completed, current step, video watch progress, completion timestamps.</li>
+<li><strong>Supervisor sign-off</strong> — modules with <code>requiresSupervisorSignoff: true</code> aren&#39;t complete until a supervisor approves.</li>
+<li><strong>Inspection Template</strong> — checklists imported from ShopMonkey; read-only reference material in the SOP Library.</li>
+</ul>
+<hr>
+<h2>Part A — Trainer / OJT Lead</h2>
+<p>Your home base is the ERP&#39;s <strong>Training</strong> section: <a href="https://golfingarage.m4nos.com/training">https://golfingarage.m4nos.com/training</a>.</p>
+<h3>1. SOP Library</h3>
+<p><code>/training/sop</code></p>
+<p><strong>SOPs tab</strong> (default):</p>
+<ul>
+<li>List of every SOP with its status (<code>DRAFT</code> / <code>PUBLISHED</code> / <code>RETIRED</code>), category, and last-updated date.</li>
+<li>Search by title or document code.</li>
+<li><strong>+ New SOP</strong> button (top-right) opens a form:<ul>
+<li><strong>Title</strong> — what the tech will see.</li>
+<li><strong>Category</strong> — e.g. &quot;Frame&quot;, &quot;Electrical&quot;.</li>
+<li><strong>Owner</strong> — the employee responsible for keeping it current.</li>
+<li><strong>Content</strong> — Markdown. Paste in the work instructions, add headings, lists, images.</li>
+</ul>
+</li>
+<li>Save as DRAFT, or <strong>Publish</strong> to move to PUBLISHED immediately.</li>
+</ul>
+<p><strong>Lifecycle</strong>:</p>
+<ul>
+<li><code>DRAFT</code> — only authors see it; never shown to techs.</li>
+<li><code>PUBLISHED</code> — visible to techs; can back modules.</li>
+<li><code>RETIRED</code> — hidden from new module creation but preserved for audit.</li>
+</ul>
+<p><strong>Versioning</strong>: each time you publish changes, a new <code>SopDocumentVersion</code> row is created. Old versions remain viewable. <code>currentVersion</code> is what techs see.</p>
+<p><strong>Inspection Templates tab</strong>:</p>
+<ul>
+<li>Read-only import from ShopMonkey.</li>
+<li>Use these as a reference when authoring an SOP that&#39;s functionally an inspection.</li>
+</ul>
+<h3>2. Module Admin</h3>
+<p><code>/training/admin</code></p>
+<p>Every module, regardless of status. Columns:</p>
+<ul>
+<li>Module code, name, status (<code>ACTIVE</code> / <code>INACTIVE</code> / <code>RETIRED</code>).</li>
+<li>Step count, quiz count (questions).</li>
+<li>Estimated time.</li>
+<li>Required? (flag).</li>
+<li>Pass score (default 80%).</li>
+<li><strong>Preview</strong> — opens the same module view a tech sees, without tracking progress against your account.</li>
+</ul>
+<p>Use this screen to find broken modules (0 steps, no quiz, etc.) or ones you&#39;re retiring.</p>
+<h3>3. Assignments</h3>
+<p><code>/training/assignments</code></p>
+<p>See every assignment across the team. Two groups: <strong>Active</strong> (ASSIGNED / IN_PROGRESS) and <strong>Past</strong> (COMPLETED / FAILED / EXEMPT / CANCELLED).</p>
+<p>An <strong>overdue banner</strong> shows at the top if any active assignment has passed its due date.</p>
+<p><strong>Assign Module</strong> (top-right button): opens a form — pick a module, pick one or more employees, set an optional due date. Confirm to create assignments.</p>
+<blockquote>
+<p><strong>Note</strong>: today&#39;s version of <strong>Assign Module</strong> is a placeholder toast in some builds — if so, ping your admin to create assignments directly in the DB while the UI is being finished.</p>
+</blockquote>
+<h3>4. Review progress</h3>
+<p>Click any assignment to see per-employee progress: current step, step-by-step completion, quiz attempts, score history.</p>
+<h3>5. Supervisor sign-off</h3>
+<p>Modules with <code>requiresSupervisorSignoff: true</code> aren&#39;t complete when the tech finishes. They go into a <strong>Pending Sign-off</strong> state. You (or another supervisor) review the tech&#39;s work and click <strong>Sign Off</strong> to close the assignment.</p>
+<blockquote>
+<p><strong>Note</strong>: the sign-off UI is stubbed in the current build — your admin has a manual path until it&#39;s finished.</p>
+</blockquote>
+<h3>6. Publishing workflow, end-to-end</h3>
+<ol>
+<li>Draft an SOP in the SOP Library. Paste in the written instructions.</li>
+<li>Publish the SOP (DRAFT → PUBLISHED).</li>
+<li>Create a TrainingModule wrapping that SOP (Module Admin).</li>
+<li>Add OjtSteps under the module: video URL, instructions, tools, safety, key takeaways.</li>
+<li>Optionally add OjtKnowledgeCheck questions.</li>
+<li>Set <code>isRequired</code>, <code>passScore</code>, <code>requiresSupervisorSignoff</code>.</li>
+<li>Move module status to <code>ACTIVE</code>.</li>
+<li>Go to Assignments → Assign Module → pick employees and due date.</li>
+<li>Techs see the new assignment in their Training app.</li>
+<li>Monitor completion from the Assignments page.</li>
+</ol>
+<hr>
+<h2>Part B — Technician</h2>
+<p>Your home base is the <strong>Training app</strong> at your training subdomain (ask your admin — typically <code>training.golfingarage.m4nos.com</code>).</p>
+<p>Sign in is identical to the ERP and Floor Tech app: email-first, Google SSO for <code>@golfingarage.com</code> Workspace accounts.</p>
+<p>After sign-in you land on <code>/modules</code>.</p>
+<h3>1. Module catalog</h3>
+<p><code>/modules</code></p>
+<p>A grid of every training module available to you. Each card shows:</p>
+<ul>
+<li>Module code and name.</li>
+<li>Estimated time.</li>
+<li>Status badge: <strong>Not started</strong>, <strong>In progress</strong>, <strong>Completed</strong>.</li>
+<li>If the module is required: a red &quot;Required&quot; tag.</li>
+</ul>
+<p><strong>Filter</strong> / sort by name, code, or sort order.</p>
+<p><strong>Bookmark</strong> — tap the 🔖 icon on a card to save it for later. Your bookmarks live under the Bookmarks view.</p>
+<h3>2. Module detail</h3>
+<p><code>/modules/{moduleCode}</code></p>
+<p>Shows:</p>
+<ul>
+<li>Full description.</li>
+<li>Prerequisites — modules you must complete first.</li>
+<li>Step list with per-step progress.</li>
+<li>Quiz summary (if any): question count, pass score.</li>
+<li>Supervisor sign-off flag if applicable.</li>
+<li><strong>Start</strong> or <strong>Continue</strong> button.</li>
+</ul>
+<h3>3. Working a step</h3>
+<p><code>/modules/{moduleCode}/step/{stepId}</code></p>
+<p>Everything about one step:</p>
+<ul>
+<li><strong>Video</strong> — click to play. Watch progress is tracked (you can pause and resume later).</li>
+<li><strong>Instructions</strong> — the written how-to.</li>
+<li><strong>Tools</strong> — what you&#39;ll need at your bench.</li>
+<li><strong>Materials</strong> — parts the step consumes.</li>
+<li><strong>Safety warnings</strong> — red callout boxes. Read these every time, even if you&#39;ve done it before.</li>
+<li><strong>Why it matters</strong> — context for why the step exists.</li>
+<li><strong>Key takeaways</strong> — what to remember after this step.</li>
+<li><strong>Common mistakes</strong> — stuff people trip on.</li>
+</ul>
+<p>At the bottom:</p>
+<ul>
+<li><strong>Mark step complete</strong> — checks off this step and advances to the next.</li>
+<li><strong>Bookmark</strong> 🔖 — save this specific step (comes up in Bookmarks).</li>
+<li><strong>Add a note</strong> 📝 — your private note on this step. No one else sees it.</li>
+</ul>
+<p>Some steps have <code>requiresConfirmation: true</code> — the <strong>Mark step complete</strong> button asks &quot;Are you sure?&quot; before logging. These are safety-critical steps.</p>
+<h3>4. The quiz</h3>
+<p><code>/modules/{moduleCode}/quiz</code></p>
+<p>Shown after the last step. Layout:</p>
+<ul>
+<li>Progress dots at the top (one per question).</li>
+<li>Current question + multiple-choice options.</li>
+<li><strong>Next</strong> advances. <strong>Previous</strong> goes back.</li>
+</ul>
+<p>After the last question, <strong>Submit</strong>. You see:</p>
+<ul>
+<li>Pass / fail (default passing score: 80%).</li>
+<li>Your score (e.g. 7/10).</li>
+<li>Each question&#39;s correct answer with the explanation from the author.</li>
+</ul>
+<p><strong>Failed the quiz?</strong> You can retake it — each attempt is logged. Some modules allow unlimited retries; some are limited. Module detail tells you.</p>
+<h3>5. My Progress</h3>
+<p><code>/my-progress</code></p>
+<p>Your dashboard:</p>
+<ul>
+<li>Every module you&#39;ve been assigned or started.</li>
+<li>Completion bar per module.</li>
+<li>Step counts.</li>
+<li>Estimated time remaining.</li>
+<li>Completion timestamps.</li>
+</ul>
+<p>Great Monday-morning view of what&#39;s on your plate.</p>
+<h3>6. Assignments</h3>
+<p><code>/assignments</code></p>
+<p>Modules someone explicitly assigned to you, separated into <strong>Active</strong> and <strong>Past</strong>.</p>
+<ul>
+<li><strong>Active</strong>: show due date, current progress, direct link to the module.</li>
+<li><strong>Past</strong>: show score, pass/fail, completion date.</li>
+</ul>
+<p>If a due date is overdue, you see a red <strong>Overdue</strong> badge — expect a nudge from your trainer.</p>
+<h3>7. Bookmarks</h3>
+<p>Tap 🔖 on any module card or step to bookmark it. Bookmarks live at <code>/bookmarks</code> (accessible from the nav).</p>
+<h3>8. Notes</h3>
+<p>Notes you take on steps live with the step. Revisit <code>/modules/{moduleCode}/step/{stepId}</code> to see your notes for that step; they&#39;re private.</p>
+<hr>
+<h2>Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Who</th>
+<th>What to check</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Published an SOP but a tech can&#39;t see the module</td>
+<td>Trainer</td>
+<td>Module status is <code>ACTIVE</code>? SOP&#39;s <code>currentVersion</code> is set? SOP status is <code>PUBLISHED</code>, not <code>DRAFT</code>?</td>
+</tr>
+<tr>
+<td>&quot;Assign Module&quot; button does nothing / shows a toast</td>
+<td>Trainer</td>
+<td>UI stub in current build; ask admin to assign in the DB while the flow is being finished.</td>
+</tr>
+<tr>
+<td>Supervisor sign-off stuck</td>
+<td>Trainer</td>
+<td>UI stub in current build; admin has a manual path.</td>
+</tr>
+<tr>
+<td>Tech says &quot;quiz won&#39;t submit&quot;</td>
+<td>Tech</td>
+<td>Retry: tap Submit again. If still failing, check they&#39;re online. Offline quiz submission isn&#39;t supported.</td>
+</tr>
+<tr>
+<td>&quot;I completed the step but it didn&#39;t save&quot;</td>
+<td>Tech</td>
+<td>Check network. The Training app is NOT offline-first (unlike Floor Tech). Redo once online.</td>
+</tr>
+<tr>
+<td>Can&#39;t find a module I was told I was assigned</td>
+<td>Tech</td>
+<td>Check <strong>Assignments</strong> tab — if not there, the assignment wasn&#39;t actually created. Ask your trainer.</td>
+</tr>
+<tr>
+<td>Video won&#39;t play</td>
+<td>Tech</td>
+<td>Browser permissions. On the tablet, check pop-up/autoplay settings.</td>
+</tr>
+<tr>
+<td>Bookmarks disappeared</td>
+<td>Tech</td>
+<td>Bookmarks are per-user, per-app-session. If you signed in on a different device, they&#39;re still in the DB — hard-refresh the page.</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>See also</h2>
+<ul>
+<li><strong><a href="./erp-manual.html">ERP manual</a></strong> — full ERP walkthrough; the Training section cross-links here.</li>
+<li><strong><a href="./floor-tech-manual.html">Floor Tech manual</a></strong> — what techs use for actual work execution.</li>
+<li><strong><a href="./index.html">README</a></strong> — index and sign-in reference.</li>
+</ul>
+
+  </div>
+</body>
+</html>

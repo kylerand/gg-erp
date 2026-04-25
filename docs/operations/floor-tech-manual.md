@@ -41,7 +41,7 @@ If someone else is already clocked in on the tablet, tap **Switch Device User** 
 
 ## The four tabs
 
-![placeholder: bottom nav with Queue, Shift, Time, Sync](./screenshots/TBD-floor-tech-nav.png)
+![Floor Tech bottom nav with Queue, Shift, Time, Sync](./screenshots/floor-tech-nav.png)
 
 | Tab | What you do here |
 |---|---|

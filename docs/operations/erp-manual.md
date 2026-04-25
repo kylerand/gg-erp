@@ -30,7 +30,7 @@ If Google rejects you with "This account can't be used to sign in", you're on a 
 
 ## At a glance
 
-![placeholder: full ERP layout with callouts for sidebar, header, main area, copilot](./screenshots/TBD-erp-layout.png)
+![ERP dashboard with sidebar, header, main content area, and Copilot](./screenshots/erp-layout.png)
 
 **Sidebar (left)**: always-visible navigation. Click a section to expand it; sub-items show under the parent. Your current page is highlighted in orange.
 

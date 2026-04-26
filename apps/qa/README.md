@@ -7,7 +7,7 @@ End-to-end QA for the three Golfin Garage Next.js apps + the dev API Gateway.
 | Tier | Status | What it does | When |
 |---|---|---|---|
 | **Smoke** | ✅ Phase 1 | Each app loads, sidebar/nav links work, every wired API route returns 2xx/4xx (not 404 from API GW or 5xx) | every PR |
-| **Coverage** | ⏳ Phase 2 | Per-route walk: every page renders, every visible button clicks, every API request validates against a Zod schema | every push to main |
+| **Coverage** | ✅ Phase 2 | Walks every `page.tsx` (~63 routes); network spy records every request/response; Zod schemas validate known API shapes; aggregator emits `violations.md` | every push to main |
 | **Roles + a11y + visual** | ⏳ Phase 3 | One spec per Cognito role + axe-core + screenshot diffs | nightly |
 | **AI exploration agent** | ⏳ Phase 4 | Claude walks the apps using the operator manuals as ground truth, reports drift | weekly / on-demand |
 
@@ -38,6 +38,11 @@ npm run qa:smoke:web
 npm run qa:smoke:floor-tech
 npm run qa:smoke:training
 npm run qa:smoke:api
+
+# coverage tier (Phase 2): walks every page.tsx, captures network traffic
+npm run qa:discover-web   # rebuild routes-web.json
+npm run qa:coverage       # ~15s, 63 specs (10 dynamic-param routes skipped — see comment)
+npm run qa:violations     # produces reports/network/violations.md
 ```
 
 ## Auth in tests
@@ -83,18 +88,24 @@ CI uploads the whole `reports/` directory as the `qa-smoke-report` GitHub Action
 
 ```
 apps/qa/
-  playwright.config.ts          4 projects (smoke-web, smoke-floor-tech, smoke-training, smoke-api)
+  playwright.config.ts          5 projects (smoke-{web,floor-tech,training,api}, coverage)
   fixtures/
-    auth.ts                     signInAs, consoleErrors, failedRequests, waitForAppReady
+    auth.ts                     signInAs, consoleErrors, failedRequests, networkSpy, waitForAppReady
+    network-spy.ts              per-test request/response capture + Zod validation; ndjson per spec
+    schemas.ts                  Zod schemas for top API response shapes
   scripts/
     discover-api-routes.ts      parses terraform → routes.json
-    routes.json                 generated, gitignored — re-run on terraform change
-    known-broken.json           tracked, committed — current API smoke allowlist
+    discover-web-routes.ts      walks app/ dirs → routes-web.json
+    routes.json / routes-web.json  generated, gitignored
+    known-broken.json           tracked — current API smoke allowlist
+    aggregate-violations.ts     ndjson → reports/network/violations.md
   tests/
     smoke/web.spec.ts           sidebar walk + copilot button
     smoke/floor-tech.spec.ts    bottom nav cycle
     smoke/training.spec.ts      catalog + my-progress + assignments
     api/smoke.spec.ts           every wired API route → not 404 from API GW, not 5xx
+    coverage/walk.spec.ts       parameterized over routes-web.json — every page.tsx renders
+  reports/network/              spy ndjson + violations.md (gitignored)
 ```
 
 ## Why Chromium-only at first

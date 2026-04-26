@@ -85,5 +85,15 @@ export default defineConfig({
       // No browser needed for pure HTTP smoke; APIRequestContext handles it.
       use: {},
     },
+
+    // ─── Coverage tier (Phase 2) ───────────────────────────────────────────
+    {
+      name: 'coverage',
+      testMatch: /coverage\/.*\.spec\.ts$/,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1440, height: 900 },
+      },
+    },
   ],
 });

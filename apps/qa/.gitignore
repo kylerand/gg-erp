@@ -3,3 +3,8 @@ reports/
 test-results/
 playwright-report/
 *.log
+
+# Discovery output — regenerate with `npm run qa:discover-{api,web}`.
+# Tracked manifests live in scripts/known-broken.json instead.
+scripts/routes.json
+scripts/routes-web.json

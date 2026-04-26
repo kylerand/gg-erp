@@ -1,4 +1,5 @@
 import { test as base, expect, type ConsoleMessage, type Page } from '@playwright/test';
+import { attachNetworkSpy, type NetworkSpy } from './network-spy.js';
 
 /**
  * Mock-mode roles accepted by all three apps' auth modules. The set is
@@ -41,6 +42,13 @@ export interface QaFixtures {
    */
   failedRequests: Array<{ url: string; status: number; method: string }>;
   clearFailedRequests: () => void;
+
+  /**
+   * Per-test network spy. Records every request/response, validates known
+   * routes against Zod schemas, dumps ndjson on flush. Coverage-tier specs
+   * use this to assert on schema cleanliness; smoke specs ignore it.
+   */
+  networkSpy: NetworkSpy;
 }
 
 export const test = base.extend<QaFixtures>({
@@ -113,6 +121,12 @@ export const test = base.extend<QaFixtures>({
     await use(() => {
       failedRequests.length = 0;
     });
+  },
+
+  networkSpy: async ({ page }, use, testInfo) => {
+    const spy = attachNetworkSpy(page);
+    await use(spy);
+    spy.flush(testInfo);
   },
 });
 

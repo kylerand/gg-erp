@@ -12,10 +12,16 @@
     "qa:all": "playwright test",
     "qa:report": "playwright show-report reports/html",
     "qa:install": "playwright install --with-deps chromium",
-    "qa:discover-api": "tsx scripts/discover-api-routes.ts"
+    "qa:discover-api": "tsx scripts/discover-api-routes.ts",
+    "qa:discover-web": "tsx scripts/discover-web-routes.ts",
+    "qa:coverage": "playwright test --project=coverage",
+    "qa:violations": "tsx scripts/aggregate-violations.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.50.0",
     "tsx": "^4.20.0"
+  },
+  "dependencies": {
+    "zod": "^3.25.76"
   }
 }

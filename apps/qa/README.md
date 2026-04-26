@@ -8,7 +8,7 @@ End-to-end QA for the three Golfin Garage Next.js apps + the dev API Gateway.
 |---|---|---|---|
 | **Smoke** | ✅ Phase 1 | Each app loads, sidebar/nav links work, every wired API route returns 2xx/4xx (not 404 from API GW or 5xx) | every PR |
 | **Coverage** | ✅ Phase 2 | Walks every `page.tsx` (~63 routes); network spy records every request/response; Zod schemas validate known API shapes; aggregator emits `violations.md` | every push to main |
-| **Roles + a11y + visual** | ⏳ Phase 3 | One spec per Cognito role + axe-core + screenshot diffs | nightly |
+| **Roles + a11y + visual** | ✅ Phase 3 | One spec per Cognito role (8 specs, 32 tests); axe-core a11y on 12 representative pages with per-page known-issue allowlist; screenshot baselines on 12 pages | nightly + manual dispatch |
 | **AI exploration agent** | ⏳ Phase 4 | Claude walks the apps using the operator manuals as ground truth, reports drift | weekly / on-demand |
 
 ## Run locally
@@ -43,6 +43,13 @@ npm run qa:smoke:api
 npm run qa:discover-web   # rebuild routes-web.json
 npm run qa:coverage       # ~15s, 63 specs (10 dynamic-param routes skipped — see comment)
 npm run qa:violations     # produces reports/network/violations.md
+
+# deep-crawl tier (Phase 3): role workflows + a11y + visual
+npm run qa:roles          # ~12s, 32 specs across 8 Cognito roles
+npm run qa:a11y           # ~13s, axe-core on 12 pages
+npm run qa:visual         # ~13s, screenshot diff against committed baselines
+npm run qa:visual:update  # regenerate baselines after intentional UI change
+npm run qa:deep           # all three (~25s)
 ```
 
 ## Auth in tests
@@ -105,6 +112,9 @@ apps/qa/
     smoke/training.spec.ts      catalog + my-progress + assignments
     api/smoke.spec.ts           every wired API route → not 404 from API GW, not 5xx
     coverage/walk.spec.ts       parameterized over routes-web.json — every page.tsx renders
+    roles/{8 files}.spec.ts     one per Cognito group; walks the role's primary workflow
+    a11y/all.spec.ts            axe-core scan; per-page known-issue allowlist (a11y-known.json)
+    visual/baselines.spec.ts    Playwright screenshot diff (baselines committed under -snapshots/)
   reports/network/              spy ndjson + violations.md (gitignored)
 ```
 

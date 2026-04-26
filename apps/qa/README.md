@@ -9,7 +9,7 @@ End-to-end QA for the three Golfin Garage Next.js apps + the dev API Gateway.
 | **Smoke** | ✅ Phase 1 | Each app loads, sidebar/nav links work, every wired API route returns 2xx/4xx (not 404 from API GW or 5xx) | every PR |
 | **Coverage** | ✅ Phase 2 | Walks every `page.tsx` (~63 routes); network spy records every request/response; Zod schemas validate known API shapes; aggregator emits `violations.md` | every push to main |
 | **Roles + a11y + visual** | ✅ Phase 3 | One spec per Cognito role (8 specs, 32 tests); axe-core a11y on 12 representative pages with per-page known-issue allowlist; screenshot baselines on 12 pages | nightly + manual dispatch |
-| **AI exploration agent** | ⏳ Phase 4 | Claude walks the apps using the operator manuals as ground truth, reports drift | weekly / on-demand |
+| **AI exploration agent** | ✅ Phase 4 | Claude walks the apps using the operator manuals as ground truth, reports drift. Lives in `apps/qa-agent/` (separate workspace because it needs an Anthropic API key). | manual dispatch |
 
 ## Run locally
 

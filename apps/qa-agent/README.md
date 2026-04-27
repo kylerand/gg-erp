@@ -14,7 +14,7 @@ You need an Anthropic API key:
 export ANTHROPIC_API_KEY=sk-ant-…
 ```
 
-Get one at <https://console.anthropic.com/>. The agent runs Opus by default — about $0.50–$2 per ERP run depending on how many turns it takes. Configurable caps below prevent runaways.
+Get one at <https://console.anthropic.com/>. The agent runs **Sonnet 4.6 by default** — about **$1–$2 per app run** at the default 40-iteration cap. Sonnet was empirically 3× cheaper and produced 2× the findings vs Opus on the same exploration; override with `QA_AGENT_MODEL=claude-opus-4-7` if you want depth at higher cost.
 
 Boot the dev servers in mock-auth mode (separate terminals or backgrounded — same as the other QA tiers):
 
@@ -46,7 +46,7 @@ Output: `reports/findings-<app>-YYYY-MM-DD.md`.
 | `QA_AGENT_MAX_ITERATIONS` | 40 | Hard cap on Claude API turns |
 | `QA_AGENT_MAX_WALL_MS` | 1800000 (30 min) | Wall-clock timeout |
 | `QA_AGENT_MAX_BUDGET_USD` | 5 | Estimated cost ceiling |
-| `QA_AGENT_MODEL` | `claude-opus-4-7` | Model alias |
+| `QA_AGENT_MODEL` | `claude-sonnet-4-6` | Model alias (override for Opus or Haiku) |
 
 When any cap fires the run finishes and writes whatever findings it had so far. Hitting a cap is logged in the report header as `stoppedReason`.
 

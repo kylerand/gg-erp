@@ -76,7 +76,12 @@ export function loadConfig(): AgentConfig {
 
   return {
     apiKey,
-    model: process.env.QA_AGENT_MODEL ?? 'claude-opus-4-7',
+    // Sonnet 4.6 is the default after empirical comparison: 30 iterations
+    // for $1.20 vs Opus's 19 for $4.03 on the same ERP exploration, with
+    // ~2× the findings (8 vs 4) including a high-severity broken finding
+    // Opus missed. Override with QA_AGENT_MODEL=claude-opus-4-7 for runs
+    // where breadth-of-judgment matters more than cost.
+    model: process.env.QA_AGENT_MODEL ?? 'claude-sonnet-4-6',
     app,
     role,
     maxIterations: parseInt(readFlag('max-iterations') ?? process.env.QA_AGENT_MAX_ITERATIONS ?? '40', 10),

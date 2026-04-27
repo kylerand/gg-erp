@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { Hub } from 'aws-amplify/utils';
-import { fetchAuthSession } from 'aws-amplify/auth';
+// Importing `signInWithRedirect` even though we don't call it: in Amplify v6
+// the side-effecting OAuth response handler is registered as part of that
+// module's load. Without this import, tree-shaking can drop it from the
+// callback page bundle (we only call fetchAuthSession here), and the page
+// loads with the OAuth `?code=` in the URL but no listener to process it
+// — so Amplify never starts the token exchange and the page hangs.
+import { fetchAuthSession, signInWithRedirect as _ensureOAuthHandler } from 'aws-amplify/auth';
+void _ensureOAuthHandler;
 
 // Cognito's OAuth code flow returns here with ?code=...&state=... — Amplify's
 // oauth listener picks it up automatically and exchanges for tokens. Hub events
@@ -39,8 +46,20 @@ export default function AuthCallbackPage() {
       }
     }, HARD_DEADLINE_MS);
 
+    // eslint-disable-next-line no-console
+    console.info('[auth/callback] mounted', {
+      url: window.location.href,
+      hasCode: window.location.search.includes('code='),
+      hasState: window.location.search.includes('state='),
+    });
+
+    // Log EVERY auth Hub event so we can see what Amplify is doing during
+    // the OAuth exchange. Without this, we only see the timeout and have
+    // no idea whether the exchange even started.
     const unsubscribe = Hub.listen('auth', ({ payload }) => {
       if (cancelled) return;
+      // eslint-disable-next-line no-console
+      console.info(`[auth/callback] Hub.${payload.event}`, payload);
       if (payload.event === 'signInWithRedirect_failure') {
         const msg =
           (payload as { data?: { error?: { message?: string } } })?.data?.error?.message ??
@@ -51,19 +70,22 @@ export default function AuthCallbackPage() {
 
     const start = Date.now();
     let attempts = 0;
+    let lastError: unknown;
     const poll = async (): Promise<void> => {
       while (!cancelled && Date.now() - start < POLL_TIMEOUT_MS) {
         attempts += 1;
         const session = await withTimeout(
-          fetchAuthSession().catch(() => null),
+          fetchAuthSession().catch((err) => {
+            lastError = err;
+            return null;
+          }),
           PER_CALL_TIMEOUT_MS,
         );
-        if (attempts === 1 || attempts % 8 === 0) {
-          // Sparse trace so devtools shows what's happening if a user
-          // reports the page hanging.
+        if (attempts === 1 || attempts % 4 === 0) {
           // eslint-disable-next-line no-console
           console.info(
             `[auth/callback] attempt ${attempts}: tokens=${!!session?.tokens?.idToken} elapsed=${Date.now() - start}ms`,
+            lastError ? { lastError } : '',
           );
         }
         if (session?.tokens?.idToken) {
@@ -74,7 +96,10 @@ export default function AuthCallbackPage() {
       }
       if (!cancelled && !error) {
         // eslint-disable-next-line no-console
-        console.warn(`[auth/callback] timed out after ${attempts} attempts / ${Date.now() - start}ms`);
+        console.warn(
+          `[auth/callback] timed out after ${attempts} attempts / ${Date.now() - start}ms`,
+          lastError ? { lastError } : '',
+        );
         setError('Sign-in took too long. Please try again.');
       }
     };

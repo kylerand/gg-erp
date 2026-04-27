@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { Hub } from 'aws-amplify/utils';
-import { fetchAuthSession } from 'aws-amplify/auth';
+// See apps/web/src/app/auth/callback/page.tsx for the full explanation —
+// short version: import signInWithRedirect to force-load Amplify v6's
+// OAuth response handler module so it can process the ?code= URL.
+import { fetchAuthSession, signInWithRedirect as _ensureOAuthHandler } from 'aws-amplify/auth';
+void _ensureOAuthHandler;
 
 const POLL_INTERVAL_MS = 250;
 const PER_CALL_TIMEOUT_MS = 2_000;
@@ -28,8 +32,17 @@ export default function AuthCallbackPage() {
       }
     }, HARD_DEADLINE_MS);
 
+    // eslint-disable-next-line no-console
+    console.info('[auth/callback] mounted', {
+      url: window.location.href,
+      hasCode: window.location.search.includes('code='),
+      hasState: window.location.search.includes('state='),
+    });
+
     const unsubscribe = Hub.listen('auth', ({ payload }) => {
       if (cancelled) return;
+      // eslint-disable-next-line no-console
+      console.info(`[auth/callback] Hub.${payload.event}`, payload);
       if (payload.event === 'signInWithRedirect_failure') {
         const msg =
           (payload as { data?: { error?: { message?: string } } })?.data?.error?.message ??
@@ -39,12 +52,25 @@ export default function AuthCallbackPage() {
     });
 
     const start = Date.now();
+    let attempts = 0;
+    let lastError: unknown;
     const poll = async (): Promise<void> => {
       while (!cancelled && Date.now() - start < POLL_TIMEOUT_MS) {
+        attempts += 1;
         const session = await withTimeout(
-          fetchAuthSession().catch(() => null),
+          fetchAuthSession().catch((err) => {
+            lastError = err;
+            return null;
+          }),
           PER_CALL_TIMEOUT_MS,
         );
+        if (attempts === 1 || attempts % 4 === 0) {
+          // eslint-disable-next-line no-console
+          console.info(
+            `[auth/callback] attempt ${attempts}: tokens=${!!session?.tokens?.idToken} elapsed=${Date.now() - start}ms`,
+            lastError ? { lastError } : '',
+          );
+        }
         if (session?.tokens?.idToken) {
           if (!cancelled) window.location.replace('/');
           return;
@@ -52,6 +78,11 @@ export default function AuthCallbackPage() {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
       }
       if (!cancelled && !error) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[auth/callback] timed out after ${attempts} attempts / ${Date.now() - start}ms`,
+          lastError ? { lastError } : '',
+        );
         setError('Sign-in took too long. Please try again.');
       }
     };

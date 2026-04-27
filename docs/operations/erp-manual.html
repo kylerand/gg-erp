@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ERP Operator Manual — Golfin Garage</title>
+  
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #211F1E;
+    --accent: #E37125;
+    --accent-light: #FEE9DC;
+    --border: #E5DCCF;
+    --muted: #6B625B;
+    --surface: #FAF7F2;
+    --green: #16a34a;
+    --green-bg: #dcfce7;
+    --amber: #d97706;
+    --amber-bg: #fef3c7;
+    --red: #dc2626;
+    --red-bg: #fee2e2;
+    --code-bg: #F3EEE5;
+    --radius: 8px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    line-height: 1.6;
+    font-size: 15px;
+  }
+  .container { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+  nav.topbar {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    padding: 0.75rem 1.5rem;
+    display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;
+    font-size: 0.875rem;
+  }
+  nav.topbar .brand { font-weight: 700; color: var(--accent); margin-right: auto; }
+  nav.topbar a { color: var(--muted); text-decoration: none; padding: 0.25rem 0.5rem; border-radius: 4px; }
+  nav.topbar a:hover { background: var(--surface); color: var(--fg); }
+  nav.topbar a.current { color: var(--accent); background: var(--accent-light); font-weight: 600; }
+
+  h1, h2, h3, h4 { color: var(--fg); font-weight: 700; line-height: 1.25; }
+  h1 { font-size: 2rem; margin: 0.5rem 0 1rem; border-bottom: 3px solid var(--accent); padding-bottom: 0.75rem; }
+  h2 { font-size: 1.4rem; margin: 2.25rem 0 0.75rem; padding-top: 0.5rem; border-top: 1px solid var(--border); }
+  h2:first-of-type { border-top: none; padding-top: 0; margin-top: 1.5rem; }
+  h3 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; }
+  h4 { font-size: 0.975rem; margin: 1rem 0 0.4rem; }
+  p { margin: 0.75rem 0; }
+  ul, ol { margin: 0.75rem 0 0.75rem 1.5rem; }
+  li { margin: 0.35rem 0; }
+  li > ul, li > ol { margin-top: 0.35rem; }
+  a { color: var(--accent); }
+  a:hover { text-decoration-thickness: 2px; }
+  code {
+    background: var(--code-bg); color: var(--fg);
+    padding: 0.125rem 0.375rem; border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', monospace;
+    font-size: 0.9em;
+  }
+  pre {
+    background: var(--code-bg); padding: 0.75rem 1rem;
+    border-radius: var(--radius); border: 1px solid var(--border);
+    overflow-x: auto; margin: 1rem 0; font-size: 0.875rem;
+  }
+  pre code { background: transparent; padding: 0; }
+  blockquote {
+    border-left: 4px solid var(--accent); background: var(--accent-light);
+    padding: 0.75rem 1rem; margin: 1rem 0; border-radius: 0 var(--radius) var(--radius) 0;
+    color: var(--fg);
+  }
+  blockquote p:first-child { margin-top: 0; }
+  blockquote p:last-child { margin-bottom: 0; }
+  table {
+    border-collapse: collapse; width: 100%; margin: 1rem 0;
+    font-size: 0.9rem;
+  }
+  th, td {
+    border: 1px solid var(--border); padding: 0.5rem 0.75rem;
+    text-align: left; vertical-align: top;
+  }
+  th { background: var(--surface); font-weight: 600; }
+  tr:nth-child(even) td { background: #FDFBF7; }
+  img { max-width: 100%; height: auto; border-radius: var(--radius); border: 1px solid var(--border); }
+  figure.screenshot-placeholder {
+    margin: 1.25rem 0; padding: 1.5rem; text-align: center;
+    border: 2px dashed var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--muted);
+  }
+  figure.screenshot-placeholder .screenshot-placeholder__icon {
+    font-size: 2rem; opacity: 0.55; margin-bottom: 0.5rem;
+  }
+  figure.screenshot-placeholder figcaption { font-size: 0.875rem; }
+  figure.screenshot-placeholder em { color: var(--fg); font-style: normal; font-weight: 500; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+
+  /* Role-badge inline callouts like [admin only], [shop_manager] */
+  p code:only-child { display: inline; }
+
+  @media print {
+    nav.topbar { display: none; }
+    .container { padding: 0; }
+    a { color: var(--fg); text-decoration: underline; }
+  }
+</style>
+</head>
+<body>
+  <nav class="topbar">
+    <span class="brand">Golfin Garage — Operators</span>
+    <a href="index.html" class="">Index</a><a href="erp-manual.html" class="current">ERP</a><a href="floor-tech-manual.html" class="">Floor Tech</a><a href="training-manual.html" class="">Training</a>
+  </nav>
+  <div class="container">
+    <h1>ERP Operator Manual</h1>
+<p>For shop managers, sales, parts, accounting, admin, and trainers at Golfin Garage.</p>
+<p>Live site: <a href="https://golfingarage.m4nos.com">https://golfingarage.m4nos.com</a></p>
+<hr>
+<h2>If you only read one thing</h2>
+<p>Sign in with your <code>@golfingarage.com</code> Google account. The sidebar on the left groups everything by job function (Work Orders, Sales, Inventory, Customers, Training, Planning, Accounting, Messages, Reporting, Admin). Click the Copilot 🤖 in the bottom-right corner whenever you want a shortcut — it can find customers, look up inventory, pull work orders, and summarize your day.</p>
+<hr>
+<h2>Before you start</h2>
+<p><strong>URL</strong>: <a href="https://golfingarage.m4nos.com">https://golfingarage.m4nos.com</a> — bookmark it.</p>
+<p><strong>Sign-in</strong>:</p>
+<ol>
+<li>Enter your email, click <strong>Continue</strong>.</li>
+<li>If your email is <code>@golfingarage.com</code>, you&#39;re redirected to Google. Sign in once and you&#39;re back in the ERP. No password to remember.</li>
+<li>If you&#39;re a service account (e.g. <code>krand40@gmail.com</code>), you stay on the ERP and type your password.</li>
+</ol>
+<p><strong>First-time users</strong>: you may be asked to set a new password. The requirements show live as you type (12+ characters, mix of upper/lower/number/special).</p>
+<p>If Google rejects you with &quot;This account can&#39;t be used to sign in&quot;, you&#39;re on a personal Gmail instead of your Workspace account — use the Google account picker to switch.</p>
+<hr>
+<h2>At a glance</h2>
+<p><img src="./screenshots/erp-layout.png" alt="ERP dashboard with sidebar, header, main content area, and Copilot" /></p>
+<p><strong>Sidebar (left)</strong>: always-visible navigation. Click a section to expand it; sub-items show under the parent. Your current page is highlighted in orange.</p>
+<p><strong>Header (top)</strong>:</p>
+<ul>
+<li><strong>⌘K search</strong> — quick-find across work orders, inventory, and customers.</li>
+<li><strong>Offline queue indicator</strong> — <code>↑ N pending</code> appears when a mutation (e.g. clicking &quot;Retry sync&quot;) failed due to a network hiccup and is being retried. Click <strong>Replay</strong> to force it.</li>
+<li><strong>Floor Tech App</strong> link — launches the mobile tech app in a new tab.</li>
+<li><strong>Notifications</strong> 🔔 — unread count badge; click to see channel mentions, task assignments, sync failures.</li>
+<li><strong>User menu</strong> — your name, role, Sign out.</li>
+</ul>
+<p><strong>Main area</strong>: the page you navigated to.</p>
+<p><strong>Copilot</strong> 🤖 (bottom-right): press anywhere to ask questions about your data. It can answer things like &quot;show me all open work orders for Pier Motorsports&quot; or &quot;which parts are below reorder point?&quot;</p>
+<p><strong>Session timeout</strong>: you&#39;re auto-refreshed every 5 minutes. If your session actually expires, you&#39;re bounced back to the sign-in page — nothing is lost, just sign in again.</p>
+<hr>
+<h2>Your role, your pages</h2>
+<p>The ERP has 8 roles (Cognito groups). Everyone sees every sidebar section; each role has <strong>its own primary pages</strong> that do their job.</p>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Primary pages</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>admin</code></td>
+<td>Everything. In particular: <strong>Admin → User Access, Audit Trail, Integrations</strong>.</td>
+</tr>
+<tr>
+<td><code>shop_manager</code></td>
+<td><strong>Work Orders → Dispatch Board</strong>, <strong>Open / Blocked</strong>, <strong>Planning → Build Slots</strong>, <strong>Reporting</strong>.</td>
+</tr>
+<tr>
+<td><code>technician</code></td>
+<td><strong>Work Orders → My Queue</strong>, <strong>Training → My OJT</strong>. (Most technicians live in the Floor Tech app, not here.)</td>
+</tr>
+<tr>
+<td><code>parts_manager</code></td>
+<td><strong>Inventory → Part Lookup, Reservations, Receiving, Manufacturers</strong>.</td>
+</tr>
+<tr>
+<td><code>sales</code></td>
+<td><strong>Sales → Pipeline, Quotes, Forecast</strong>. <strong>Customers</strong>.</td>
+</tr>
+<tr>
+<td><code>accounting</code></td>
+<td><strong>Accounting → Sync Monitor, Reconciliation</strong>. <strong>Admin → Audit Trail</strong>.</td>
+</tr>
+<tr>
+<td><code>trainer_ojt_lead</code></td>
+<td><strong>Training → SOP Library, Assignments, Admin</strong>.</td>
+</tr>
+<tr>
+<td><code>read_only_executive</code></td>
+<td><strong>Reporting</strong>, and read-only views of everything else.</td>
+</tr>
+</tbody></table>
+<p>Roles are assigned by an admin under <strong>Admin → User Access</strong>. A user can hold multiple roles.</p>
+<hr>
+<h2>Work Orders</h2>
+<p>The heart of the shop. A <strong>Work Order (WO)</strong> is one golf-cart build or service job. Each WO has a vehicle, a customer, a status, and a list of <strong>technician tasks</strong> — the actual work to be done.</p>
+<h3>Create a work order</h3>
+<p><code>/work-orders/new</code></p>
+<p>Fill in: customer, vehicle (new or existing), build configuration (which BOM), priority, notes. <strong>Save</strong> creates the WO in <code>PLANNED</code> status with tasks generated from the build config.</p>
+<h3>Dispatch Board</h3>
+<p><code>/work-orders/dispatch</code> — <strong>[shop_manager]</strong></p>
+<p>The kanban-style board for assigning tasks to technicians. Columns are people. Unassigned tasks appear at the top. Drag a task card onto a technician&#39;s column to assign; drop it back in &quot;Unassigned&quot; to unassign.</p>
+<p>Use this every morning to lay out the day&#39;s work.</p>
+<h3>Open / Blocked</h3>
+<p><code>/work-orders/open</code> — <strong>[shop_manager]</strong></p>
+<p>All WOs that aren&#39;t <code>COMPLETED</code> or <code>CANCELLED</code>. Use the status filter to zoom in on <code>BLOCKED</code> — those are waiting on parts, approvals, or a second opinion. Each row shows:</p>
+<ul>
+<li>WO number, title, status, age, blocking reason, reporter.</li>
+<li><strong>Unblock</strong> button — clears the block and sends the task back to READY.</li>
+<li><strong>Escalate</strong> — posts to the relevant channel in Messages.</li>
+</ul>
+<h3>My Queue</h3>
+<p><code>/work-orders/my-queue</code> — <strong>[technician]</strong> (mostly used from the Floor Tech App)</p>
+<p>Your assigned tasks, newest first. Tap <strong>Start</strong> to transition <code>READY → IN_PROGRESS</code>; when done, tap <strong>Complete</strong>. If something stops you, tap <strong>Block</strong>, pick a reason code, and add detail.</p>
+<h3>SOP Runner, Time Logging, QC Checklists</h3>
+<p><code>/work-orders/sop-runner</code>, <code>/work-orders/time-logging</code>, <code>/work-orders/qc-checklists</code></p>
+<p>Specialized screens used during task execution — step-by-step work instructions, clock-in/clock-out, and final-quality gates. Most of this is done from the Floor Tech App in practice; see <strong><a href="./floor-tech-manual.html">floor-tech-manual.md</a></strong>.</p>
+<hr>
+<h2>Sales</h2>
+<p><code>/sales</code> — <strong>[sales]</strong></p>
+<p>Dashboard lands on KPIs: total opportunities, weighted forecast, win rate, average deal size.</p>
+<h3>Pipeline</h3>
+<p><code>/sales/pipeline</code> — kanban of deals by stage (<code>PROSPECTING</code>, <code>PROPOSAL</code>, <code>NEGOTIATION</code>, <code>CLOSED_WON</code>, <code>CLOSED_LOST</code>). Drag a deal across stages. Click a card for full detail + activity log.</p>
+<h3>Opportunities</h3>
+<p><code>/sales/opportunities</code> — list view of every deal. Filter by stage, owner, close date.</p>
+<h3>Quotes</h3>
+<p><code>/sales/quotes</code> — all quotes across customers. Status: <code>DRAFT</code>, <code>SENT</code>, <code>ACCEPTED</code>, <code>REJECTED</code>. Creating a new quote: <strong>New Quote</strong> button → pick customer, line items, valid-through date, send.</p>
+<h3>Forecast</h3>
+<p><code>/sales/forecast</code> — weighted and best-case revenue projections for the current and next quarter.</p>
+<h3>Activity Log</h3>
+<p>Under Sales → Activity. Every call, email, meeting, or note logged against an opportunity. Use this to keep a customer&#39;s history complete.</p>
+<hr>
+<h2>Inventory</h2>
+<p><code>/inventory</code> — <strong>[parts_manager]</strong></p>
+<p>Golfin Garage uses a three-tier part lifecycle:</p>
+<ul>
+<li><strong>Raw Component</strong> — a part as delivered (e.g. raw steel tube, a motor)</li>
+<li><strong>Prepared Component</strong> — after fabrication (cut, bent, welded)</li>
+<li><strong>Assembled Component</strong> — after install into a larger subassembly</li>
+</ul>
+<p>Each tier is a separate Part row, linked through a <code>producedFromPartId</code> chain. A single &quot;4-Link Suspension Bent&quot; rolls up as three Parts: Raw → Prepared → Assembled.</p>
+<h3>Part Lookup</h3>
+<p><code>/inventory/parts</code> — 267 parts after initial seed. Search by name, SKU, or variant. Filter by manufacturer, vendor, lifecycle level, install stage, part state (<code>ACTIVE</code> / <code>DISCONTINUED</code>). Each row shows on-hand quantity, reorder point, and last updated.</p>
+<p>Click into a part to see its full record: manufacturer, default vendor, unit of measure, lifecycle level, install stage, transformation chain.</p>
+<h3>Reservations</h3>
+<p><code>/inventory/reservations</code> — parts held for specific work orders. Reservations reduce available stock without committing until the WO pulls them. Clear stale reservations here.</p>
+<h3>Receiving</h3>
+<p><code>/inventory/receiving</code> — log incoming POs. Scan or type the PO number, verify line items, click <strong>Receive</strong>. This increments on-hand and clears expected-arrival flags.</p>
+<h3>Stage Planning</h3>
+<p><code>/inventory/planning</code> — the shortage report. Groups parts by <code>installStage</code> (FABRICATION, FRAME, ELECTRICAL, DRIVETRAIN, STEERING_SUSPENSION, BODY, FINISH). Any row with <code>shortfall &gt; 0</code> is a part you need to order before the next build slot.</p>
+<h3>Manufacturers</h3>
+<p><code>/inventory/manufacturers</code> — the 12 seeded manufacturers (Golfin Garage in-house plus external suppliers). Click to see all parts from one manufacturer; useful when calling a vendor about a batch of backorders.</p>
+<hr>
+<h2>Customers &amp; Dealers</h2>
+<p><code>/customer-dealers</code></p>
+<p>Two tables: <strong>Customers</strong> (443 rows after prior data import) and <strong>Dealers</strong>. Dealers are a special class of customer with ongoing service relationships.</p>
+<h3>Customers</h3>
+<p><code>/customer-dealers/customers</code> — list view. Search by name or email. Filter by status (Active / Inactive). <strong>+ New Customer</strong> creates a new record; fields are name, email, phone, address.</p>
+<p>Click a row to see the customer profile: every work order, quote, invoice, and message thread tied to them. <strong>Deactivate</strong> hides them from default lists (they&#39;re never actually deleted).</p>
+<h3>Dealers</h3>
+<p><code>/customer-dealers/dealers</code> — list view. Dealers have extra fields: territory, service relationship status, contact email.</p>
+<h3>Relationships</h3>
+<p><code>/customer-dealers/relationships</code> — who&#39;s a dealer for which customer / which customer is serviced by which dealer. Edit links here.</p>
+<hr>
+<h2>Training (trainer view)</h2>
+<p><code>/training</code> — <strong>[trainer_ojt_lead]</strong>, <strong>[admin]</strong></p>
+<p>This is the trainer authoring surface. Full detail — including the technician experience — is in <strong><a href="./training-manual.html">training-manual.md</a></strong>. Quick summary of what lives here:</p>
+<ul>
+<li><strong>My OJT</strong> (<code>/training/my-ojt</code>) — your own assigned modules if you&#39;re a trainer who&#39;s also a tech.</li>
+<li><strong>Assignments</strong> (<code>/training/assignments</code>) — every assignment across the team, overdue alerts, assign-module button.</li>
+<li><strong>SOP Library</strong> (<code>/training/sop</code>) — create / publish / retire SOPs. Separate <strong>Inspection Templates</strong> tab for read-only ShopMonkey imports.</li>
+<li><strong>Admin</strong> (<code>/training/admin</code>) — every module regardless of status, step and quiz counts, preview.</li>
+</ul>
+<hr>
+<h2>Planning</h2>
+<p><code>/planning</code> — <strong>[shop_manager]</strong></p>
+<h3>Build Slots</h3>
+<p><code>/planning/slots</code> — the weekly build-slot grid. Mon–Fri, each day has a capacity (default 8h). Unassigned work orders queue at the top; drag onto a day to schedule.</p>
+<p>Each cell shows: order count, committed hours vs capacity. When you&#39;re happy with the week, click <strong>Publish Plan</strong> — this snapshots the plan and notifies the floor.</p>
+<p>Use Monday morning to lay out the week. Re-publish as reality shifts.</p>
+<hr>
+<h2>Accounting</h2>
+<p><code>/accounting</code> — <strong>[accounting]</strong></p>
+<h3>Connect QuickBooks (first time)</h3>
+<p>Go to <strong>Sync Monitor</strong> (<code>/accounting/sync</code>). If not yet connected, a yellow <strong>Connect QuickBooks</strong> button appears at the top. Click it → you&#39;re redirected to Intuit → sign into the company&#39;s QuickBooks account and authorize. You&#39;ll land back on Sync Monitor with a green &quot;Connected&quot; pill.</p>
+<p>This OAuth token is good for 6+ months. If it lapses, you&#39;ll see the Connect button again — just click it.</p>
+<h3>Sync Monitor</h3>
+<p><code>/accounting/sync</code> — a row per synced record (invoice, payment, customer). Status filters: <code>ALL</code>, <code>FAILED</code>, <code>PENDING</code>, <code>SYNCED</code>. For any failed row, click <strong>Retry</strong> — the sync Lambda re-runs immediately. If it fails again, click into the row to see the QB error message (usually a customer-name or item-name mismatch).</p>
+<h3>Reconciliation</h3>
+<p><code>/accounting/reconciliation</code> — history of reconciliation runs comparing ERP invoices against QuickBooks. Each run has a status (<code>RUNNING</code>, <code>COMPLETED</code>, <code>FAILED</code>, <code>CANCELLED</code>) and a mismatch count. Click a run for per-record detail on what differed.</p>
+<p>Reconciliation is triggered nightly; this page is mostly for the accountant reviewing results.</p>
+<hr>
+<h2>Messages</h2>
+<p><code>/messages</code></p>
+<p>Internal chat with four channel types:</p>
+<ul>
+<li><strong>TEAM</strong> — <code>#general</code>, <code>#parts</code>, <code>#shop-floor</code>, <code>#front-office</code>. Everyone can post.</li>
+<li><strong>WORK_ORDER</strong> — auto-created when a WO needs discussion; linked from the WO detail page.</li>
+<li><strong>CUSTOMER</strong> — external-facing threads with a customer.</li>
+<li><strong>DIRECT</strong> — 1:1 between two employees.</li>
+</ul>
+<p>Each channel supports messages, threaded replies, emoji reactions, and <strong>todos</strong> — checklist items with an assignee and due date, tracked inside the channel.</p>
+<p><strong>New Channel</strong> (top-right): name, type, members. Team channels are public by default; toggle private to restrict.</p>
+<p>Unread counts appear in the sidebar and on the Notifications bell.</p>
+<hr>
+<h2>Reporting</h2>
+<p><code>/reporting</code></p>
+<p>Cross-domain KPIs on one screen:</p>
+<ul>
+<li>Work Orders: total, blocked, in progress, completed this period.</li>
+<li>Inventory: low-stock parts, reservations held.</li>
+<li>Sales: forecast, win rate.</li>
+<li>Training: assignments overdue.</li>
+</ul>
+<p>Drill-down links on each tile.</p>
+<hr>
+<h2>Admin</h2>
+<p><code>/admin</code> — <strong>[admin only]</strong></p>
+<h3>User Access</h3>
+<p><code>/admin/access</code> — invite, edit, deactivate users.</p>
+<p><strong>Invite User</strong>: click the button, type email and pick role(s). The user receives a temp password by email; on first sign-in they&#39;re forced to set a new one.</p>
+<p><strong>Edit</strong>: change roles, disable, re-enable.</p>
+<p><strong>Status</strong>: Active, Disabled, or Pending (invited but hasn&#39;t signed in yet).</p>
+<p>Roles map 1:1 to Cognito groups. Changing a role takes effect on the user&#39;s next token refresh (≤ 5 min).</p>
+<h3>Audit Trail</h3>
+<p><code>/admin/audit</code> — every privileged action with timestamp, actor, action code, resource, and outcome (<code>SUCCESS</code> / <code>FAILURE</code> / <code>DENIED</code>). Examples:</p>
+<ul>
+<li><code>USER_INVITED</code></li>
+<li><code>ROLE_CHANGED</code></li>
+<li><code>WORK_ORDER_REASSIGN</code></li>
+<li><code>INVOICE_SYNC</code></li>
+<li><code>ADMIN_ACCESS_ATTEMPT</code></li>
+</ul>
+<p>Search by any of the columns. Rows are immutable — this is the compliance log.</p>
+<h3>Integration Health</h3>
+<p><code>/admin/integrations</code> — cards for QuickBooks, AWS EventBridge, AWS Cognito, and ShopMonkey (the one-time migration). Each shows status (SYNCED / PENDING / ERROR) and last successful sync. QB card has the <strong>Connect</strong> button for OAuth reconnect if the token lapsed.</p>
+<hr>
+<h2>Cross-cutting features</h2>
+<h3>Copilot chat 🤖</h3>
+<p>The floating robot button, always in the bottom-right. Ask it anything about your data. Examples that work today:</p>
+<ul>
+<li>&quot;Show me open work orders for Pier Motorsports&quot;</li>
+<li>&quot;Which parts are below reorder point in ELECTRICAL stage?&quot;</li>
+<li>&quot;What&#39;s Bret Schulz&#39;s service history?&quot;</li>
+<li>&quot;How many WOs did we complete last week?&quot;</li>
+<li>&quot;What training is Nick Markowite overdue on?&quot;</li>
+</ul>
+<p>It&#39;s session-based — your conversation persists while you&#39;re on the site. It sees what page you&#39;re on and uses that as context.</p>
+<h3>Global search (⌘K)</h3>
+<p>Top header, the big search box. Press <code>⌘K</code> (Mac) or <code>Ctrl+K</code> (Windows) from anywhere. Searches work orders, inventory parts, and customers. Press enter to jump to the top result, or arrow-through the list.</p>
+<p>Use Copilot for anything more nuanced than a name/SKU lookup.</p>
+<h3>Notifications 🔔</h3>
+<p>Top-right bell. Unread count badge. Triggers:</p>
+<ul>
+<li>You&#39;re mentioned in a channel.</li>
+<li>A channel todo is assigned to you.</li>
+<li>A sync operation failed.</li>
+<li>A WO you own transitions state.</li>
+</ul>
+<p>Click a notification to jump to the source. <strong>Mark all read</strong> in the dropdown header.</p>
+<h3>Offline queue (<code>↑ N pending</code>)</h3>
+<p>Every write action (create, update, retry) tags the request with an idempotency key. If the network drops mid-request, the app retries in the background and shows <code>↑ N pending</code> in the header. Click <strong>Replay</strong> to force an immediate retry. Nothing is lost — you just see the confirmation once the network comes back.</p>
+<hr>
+<h2>Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>What to check</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Sign-in loops after Google consent</td>
+<td>Clear cookies for <code>golfingarage.m4nos.com</code>; try again. If it persists, your role may have been revoked — ping admin.</td>
+</tr>
+<tr>
+<td>&quot;Checking authentication…&quot; spins forever</td>
+<td>Hard-refresh the tab (<code>⌘⇧R</code> on Mac). Then check <code>/admin/access</code> — is your account Active?</td>
+</tr>
+<tr>
+<td>Connect QuickBooks fails with a callback error</td>
+<td>The QB OAuth redirect URL in Intuit&#39;s developer portal must match ours exactly. This is an admin task; ping admin.</td>
+</tr>
+<tr>
+<td>&quot;Session expired&quot; every few minutes</td>
+<td>Your token refresh is failing. Sign out, clear cookies, sign in fresh. If it persists, admin needs to reset the app client.</td>
+</tr>
+<tr>
+<td>Inventory dashboard shows <code>0 total</code></td>
+<td>The inventory seed hasn&#39;t run against prod. Admin task — 267 parts should appear after <code>seed:inventory</code>.</td>
+</tr>
+<tr>
+<td>A WO that was yours disappeared from My Queue</td>
+<td>Check <code>/work-orders/open</code>; it may have been reassigned or blocked by someone else. Audit Trail shows who.</td>
+</tr>
+<tr>
+<td>Dispatch Board won&#39;t let you drag</td>
+<td>You&#39;re likely viewing as a non-manager role. Only <code>shop_manager</code> and <code>admin</code> can reassign.</td>
+</tr>
+<tr>
+<td>Sync Monitor shows every row <code>FAILED</code> at the same time</td>
+<td>QB token lapsed. Admin reconnects.</td>
+</tr>
+</tbody></table>
+<p>Anything not covered here: start in <strong>Admin → Audit Trail</strong> and search for the timestamp of the problem. 9 times out of 10 the error message is right there.</p>
+<hr>
+<h2>See also</h2>
+<ul>
+<li><strong><a href="./floor-tech-manual.html">Floor Tech manual</a></strong> — the mobile app technicians actually work in.</li>
+<li><strong><a href="./training-manual.html">Training manual</a></strong> — authoring SOPs and assigning OJT modules.</li>
+<li><strong><a href="./index.html">README</a></strong> — index and sign-in reference.</li>
+</ul>
+
+  </div>
+</body>
+</html>

@@ -1,6 +1,8 @@
 'use client';
 
 import { Amplify } from 'aws-amplify';
+import { cognitoUserPoolsTokenProvider } from 'aws-amplify/auth/cognito';
+import { defaultStorage } from 'aws-amplify/utils';
 
 const isMockMode = process.env.NEXT_PUBLIC_AUTH_MODE === 'mock';
 
@@ -16,32 +18,41 @@ const googleEnabled =
   cognitoDomain !== '' && process.env.NEXT_PUBLIC_COGNITO_GOOGLE === 'Google';
 
 if (!isMockMode && typeof window !== 'undefined') {
-  Amplify.configure(
-    {
-      Auth: {
-        Cognito: {
-          userPoolId: process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID ?? '',
-          userPoolClientId: process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID ?? '',
-          loginWith: {
-            email: true,
-            ...(googleEnabled
-              ? {
-                  oauth: {
-                    domain: cognitoDomain,
-                    scopes: ['email', 'openid', 'profile'],
-                    redirectSignIn: [`${appUrl}/auth/callback`],
-                    redirectSignOut: [`${appUrl}/auth`],
-                    responseType: 'code' as const,
-                    providers: ['Google' as const],
-                  },
-                }
-              : {}),
-          },
+  Amplify.configure({
+    Auth: {
+      Cognito: {
+        userPoolId: process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID ?? '',
+        userPoolClientId: process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID ?? '',
+        loginWith: {
+          email: true,
+          ...(googleEnabled
+            ? {
+                oauth: {
+                  domain: cognitoDomain,
+                  scopes: ['email', 'openid', 'profile'],
+                  redirectSignIn: [`${appUrl}/auth/callback`],
+                  redirectSignOut: [`${appUrl}/auth`],
+                  responseType: 'code' as const,
+                  providers: ['Google' as const],
+                },
+              }
+            : {}),
         },
       },
     },
-    { ssr: true },
-  );
+  });
+
+  // Force tokens into localStorage instead of cookies. Previously we passed
+  // `{ ssr: true }` to Amplify.configure, which switches token storage to
+  // cookies — but we never imported `@aws-amplify/adapter-nextjs` (the
+  // companion that knows how to read those cookies on the server). The
+  // half-configured cookie path was fragile across the Cognito → app
+  // redirect (SameSite/Secure semantics differ between auth.amazoncognito.com
+  // and golfingarage.m4nos.com) and would leave tokens unreadable, hanging
+  // /auth/callback forever. localStorage is read synchronously, survives
+  // cross-origin redirects, and is the right default for a pure client-side
+  // app that never reads auth state in a Server Component.
+  cognitoUserPoolsTokenProvider.setKeyValueStorage(defaultStorage);
 }
 
 export default function ConfigureAmplifyClientSide() {

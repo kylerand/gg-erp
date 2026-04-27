@@ -111,6 +111,8 @@ export default function AccountingPage() {
 
   const connected = !!m.qb?.connected;
   const ov = m.qb?.overview;
+  const actions = buildActionQueue(m, connected);
+  const todayState = summarizeState(m, connected, actions.length);
 
   return (
     <div>
@@ -124,8 +126,21 @@ export default function AccountingPage() {
         loading={loading}
       />
 
-      {/* Live data straight from QuickBooks (read-only) */}
+      {/* Today's state — single sentence the user reads first */}
+      <TodayBanner state={todayState} loading={loading} />
+
+      {/* Action queue — prioritized list of things to do */}
       {connected && (
+        <ActionQueue actions={actions} loading={loading} />
+      )}
+
+      {/* Reference: live QB data straight from QuickBooks (read-only) */}
+      {connected && (
+        <details className="mb-6 group" open>
+          <summary className="cursor-pointer text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <span>Reference: live QuickBooks data</span>
+            <span className="group-open:rotate-90 transition-transform inline-block">▸</span>
+          </summary>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <KpiCard
             label="QB customers"
@@ -172,6 +187,7 @@ export default function AccountingPage() {
             loading={loading}
           />
         </div>
+        </details>
       )}
 
       {/* Recent invoices table — straight from QuickBooks */}
@@ -216,6 +232,11 @@ export default function AccountingPage() {
       )}
 
       {/* Top-level KPI grid */}
+      <details className="mb-6 group">
+        <summary className="cursor-pointer text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+          <span>Local sync state</span>
+          <span className="group-open:rotate-90 transition-transform inline-block">▸</span>
+        </summary>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <KpiCard
           label="Total failures"
@@ -254,6 +275,7 @@ export default function AccountingPage() {
           loading={loading}
         />
       </div>
+      </details>
 
       {/* Reconciliation card */}
       <SectionCard
@@ -449,6 +471,198 @@ function SkeletonRows({ rows }: { rows: number }) {
       ))}
     </div>
   );
+}
+
+// ─── Action queue / today's state ───────────────────────────────────────────
+
+interface QueuedAction {
+  severity: 'high' | 'medium' | 'low' | 'info';
+  title: string;
+  detail: string;
+  cta: string;
+  href: string;
+}
+
+function buildActionQueue(m: AccountingMetrics, connected: boolean): QueuedAction[] {
+  const out: QueuedAction[] = [];
+  if (!connected) return out;
+
+  if (m.failureSummary.total > 0) {
+    out.push({
+      severity: 'high',
+      title: `${m.failureSummary.total} sync failure${m.failureSummary.total === 1 ? '' : 's'} need attention`,
+      detail: `${m.failureSummary.invoice} invoice · ${m.failureSummary.customer} customer · ${m.failureSummary.payment} payment. Each failure has an error message; retry once you know the cause is resolved.`,
+      cta: 'Review failures →',
+      href: '/accounting/sync',
+    });
+  }
+
+  const pending = m.invoicePending + m.customerPending;
+  if (pending > 0) {
+    out.push({
+      severity: 'medium',
+      title: `${pending} record${pending === 1 ? '' : 's'} waiting to sync`,
+      detail: 'These ran into a transient error or are queued for the next batch. Usually self-resolves within an hour.',
+      cta: 'View queue →',
+      href: '/accounting/sync',
+    });
+  }
+
+  const lastRecon = m.lastReconciliation;
+  const ageDays = lastRecon
+    ? Math.floor((Date.now() - new Date(lastRecon.startedAt).getTime()) / 86_400_000)
+    : null;
+  if (!lastRecon) {
+    out.push({
+      severity: 'medium',
+      title: 'No reconciliation has ever run',
+      detail: 'Reconciliation compares ERP invoices to QuickBooks records and surfaces mismatches. Runs nightly automatically; trigger one now to bootstrap history.',
+      cta: 'Open reconciliation →',
+      href: '/accounting/reconciliation',
+    });
+  } else if (ageDays !== null && ageDays > 2) {
+    out.push({
+      severity: 'medium',
+      title: `Reconciliation is ${ageDays} days old`,
+      detail: `Last run ${formatDateTime(lastRecon.startedAt)}. Nightly runs may have stalled — trigger one and check the schedule.`,
+      cta: 'Open reconciliation →',
+      href: '/accounting/reconciliation',
+    });
+  } else if (lastRecon.mismatchCount && lastRecon.mismatchCount > 0) {
+    out.push({
+      severity: 'medium',
+      title: `${lastRecon.mismatchCount} reconciliation mismatch${lastRecon.mismatchCount === 1 ? '' : 'es'} unresolved`,
+      detail: `Last run ${formatRelative(lastRecon.startedAt)}. Each mismatch is a record where ERP and QB disagree.`,
+      cta: 'Resolve →',
+      href: '/accounting/reconciliation',
+    });
+  }
+
+  if (out.length === 0) {
+    out.push({
+      severity: 'info',
+      title: 'Nothing needs attention right now',
+      detail: 'All sync records are healthy and reconciliation is current. Check back tomorrow or after the next batch of work orders complete.',
+      cta: 'See sync history →',
+      href: '/accounting/sync',
+    });
+  }
+
+  return out;
+}
+
+interface TodayState {
+  tone: 'green' | 'amber' | 'red' | 'neutral';
+  headline: string;
+  subhead: string;
+}
+
+function summarizeState(m: AccountingMetrics, connected: boolean, actionCount: number): TodayState {
+  if (!connected) {
+    return {
+      tone: 'amber',
+      headline: 'QuickBooks isn\'t connected',
+      subhead: 'Connect to start syncing invoices, customers, and payments.',
+    };
+  }
+  if (m.failureSummary.total > 0) {
+    return {
+      tone: 'red',
+      headline: `${m.failureSummary.total} thing${m.failureSummary.total === 1 ? '' : 's'} need attention today`,
+      subhead: 'Sync failures below — each row tells you what went wrong and how to retry.',
+    };
+  }
+  if (actionCount > 1) {
+    return {
+      tone: 'amber',
+      headline: `${actionCount - 1} item${actionCount - 1 === 1 ? '' : 's'} to review`,
+      subhead: 'No failures, but a few things worth checking. Action queue below.',
+    };
+  }
+  return {
+    tone: 'green',
+    headline: 'All quiet on the accounting front.',
+    subhead: 'Sync is healthy, reconciliation is current. Nothing requires your attention right now.',
+  };
+}
+
+function TodayBanner({ state, loading }: { state: TodayState; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4 animate-pulse">
+        <div className="h-5 w-64 bg-gray-200 rounded" />
+        <div className="h-3 w-96 bg-gray-100 rounded mt-2" />
+      </div>
+    );
+  }
+  const toneStyles: Record<TodayState['tone'], string> = {
+    green: 'bg-green-50 border-green-200 text-green-900',
+    amber: 'bg-yellow-50 border-yellow-200 text-yellow-900',
+    red: 'bg-red-50 border-red-200 text-red-900',
+    neutral: 'bg-gray-50 border-gray-200 text-gray-900',
+  };
+  return (
+    <div className={`mb-4 border rounded-lg p-4 ${toneStyles[state.tone]}`}>
+      <div className="font-semibold text-base">{state.headline}</div>
+      <div className="text-sm mt-1 opacity-80">{state.subhead}</div>
+    </div>
+  );
+}
+
+function ActionQueue({ actions, loading }: { actions: QueuedAction[]; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="mb-6 space-y-2">
+        {[1, 2].map((i) => (
+          <div key={i} className="bg-gray-50 border border-gray-200 rounded-lg p-4 animate-pulse">
+            <div className="h-4 w-72 bg-gray-200 rounded" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="mb-6 space-y-2">
+      {actions.map((a, i) => (
+        <ActionRow key={i} action={a} />
+      ))}
+    </div>
+  );
+}
+
+function ActionRow({ action }: { action: QueuedAction }) {
+  const styles: Record<QueuedAction['severity'], { dot: string; border: string }> = {
+    high: { dot: 'bg-red-500', border: 'border-red-200 bg-red-50/50' },
+    medium: { dot: 'bg-amber-500', border: 'border-amber-200 bg-amber-50/50' },
+    low: { dot: 'bg-blue-500', border: 'border-blue-200 bg-blue-50/50' },
+    info: { dot: 'bg-green-500', border: 'border-green-200 bg-green-50/30' },
+  };
+  const s = styles[action.severity];
+  return (
+    <div className={`border rounded-lg p-4 flex items-start gap-3 ${s.border}`}>
+      <span className={`mt-1.5 h-2 w-2 rounded-full flex-shrink-0 ${s.dot}`} aria-hidden />
+      <div className="flex-1 min-w-0">
+        <div className="font-semibold text-sm text-gray-900">{action.title}</div>
+        <p className="text-xs text-gray-600 mt-1">{action.detail}</p>
+      </div>
+      <Link
+        href={action.href}
+        className="flex-shrink-0 text-xs font-semibold text-gray-900 bg-white border border-gray-300 rounded-md px-3 py-1.5 hover:border-gray-500 hover:bg-gray-50"
+      >
+        {action.cta}
+      </Link>
+    </div>
+  );
+}
+
+function formatRelative(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60_000) return 'just now';
+  const min = Math.floor(ms / 60_000);
+  if (min < 60) return `${min}m ago`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
 }
 
 function formatTime(iso?: string): string {

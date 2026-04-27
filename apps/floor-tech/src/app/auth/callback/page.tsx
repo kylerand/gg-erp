@@ -5,13 +5,28 @@ import { Hub } from 'aws-amplify/utils';
 import { fetchAuthSession } from 'aws-amplify/auth';
 
 const POLL_INTERVAL_MS = 250;
+const PER_CALL_TIMEOUT_MS = 2_000;
 const POLL_TIMEOUT_MS = 10_000;
+const HARD_DEADLINE_MS = 12_000;
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race<T | null>([
+    p,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
 
 export default function AuthCallbackPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+
+    const hardTimeout = setTimeout(() => {
+      if (!cancelled) {
+        setError('Sign-in took too long. Please try again.');
+      }
+    }, HARD_DEADLINE_MS);
 
     const unsubscribe = Hub.listen('auth', ({ payload }) => {
       if (cancelled) return;
@@ -26,14 +41,13 @@ export default function AuthCallbackPage() {
     const start = Date.now();
     const poll = async (): Promise<void> => {
       while (!cancelled && Date.now() - start < POLL_TIMEOUT_MS) {
-        try {
-          const session = await fetchAuthSession();
-          if (session.tokens?.idToken) {
-            if (!cancelled) window.location.replace('/');
-            return;
-          }
-        } catch {
-          // still exchanging
+        const session = await withTimeout(
+          fetchAuthSession().catch(() => null),
+          PER_CALL_TIMEOUT_MS,
+        );
+        if (session?.tokens?.idToken) {
+          if (!cancelled) window.location.replace('/');
+          return;
         }
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
       }
@@ -45,6 +59,7 @@ export default function AuthCallbackPage() {
 
     return () => {
       cancelled = true;
+      clearTimeout(hardTimeout);
       unsubscribe();
     };
   }, [error]);

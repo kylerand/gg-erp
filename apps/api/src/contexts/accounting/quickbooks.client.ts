@@ -127,7 +127,12 @@ export class QuickBooksClient {
   constructor(private readonly tokens: QbTokens) {}
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const url = `${QB_API_BASE}/${this.tokens.realmId}${path}?minorversion=65`;
+    // Some paths already carry their own query string (e.g. `/query?query=...`)
+    // — in that case append the minorversion as an `&` so we don't end up with
+    // two `?`s in the URL, which QB silently folds into the query parameter
+    // value and rejects with a lexical-error 400.
+    const sep = path.includes('?') ? '&' : '?';
+    const url = `${QB_API_BASE}/${this.tokens.realmId}${path}${sep}minorversion=65`;
     const res = await fetch(url, {
       method,
       headers: {
@@ -201,6 +206,78 @@ export class QuickBooksClient {
     return { companyName: data.CompanyInfo.CompanyName, realmId: data.CompanyInfo.Id };
   }
 
+  /**
+   * Total customer count in the QB company. QBO doesn't support COUNT(*)
+   * cleanly — request 1 row and read `maxResults` / `totalCount` from
+   * the response metadata. Falls back to the returned items length if
+   * neither is present.
+   */
+  async countCustomers(): Promise<number> {
+    const data = await this.request<{
+      QueryResponse: {
+        Customer?: unknown[];
+        maxResults?: number;
+        totalCount?: number;
+      };
+    }>(
+      'GET',
+      `/query?query=${encodeURIComponent('SELECT Id FROM Customer MAXRESULTS 1000')}`,
+    );
+    if (typeof data.QueryResponse.totalCount === 'number') return data.QueryResponse.totalCount;
+    return data.QueryResponse.Customer?.length ?? 0;
+  }
+
+  /** Recent invoices ordered by metadata create time, newest first. */
+  async listRecentInvoices(limit = 5): Promise<QbInvoiceSummary[]> {
+    const cap = Math.min(Math.max(limit, 1), 50);
+    const data = await this.request<{ QueryResponse: { Invoice?: QbInvoiceRaw[] } }>(
+      'GET',
+      `/query?query=${encodeURIComponent(
+        `SELECT Id, DocNumber, TotalAmt, Balance, TxnDate, DueDate, CustomerRef FROM Invoice ORDERBY MetaData.CreateTime DESC MAXRESULTS ${cap}`,
+      )}`,
+    );
+    return (data.QueryResponse.Invoice ?? []).map((i) => ({
+      id: i.Id,
+      docNumber: i.DocNumber,
+      totalAmount: i.TotalAmt,
+      balance: i.Balance,
+      txnDate: i.TxnDate,
+      dueDate: i.DueDate,
+      customerName: i.CustomerRef?.name,
+    }));
+  }
+
+  /**
+   * Sum of open invoice balances + count. Cheap proxy for AR; real QB AR
+   * aging is a richer report endpoint we can wire later if needed.
+   */
+  async getOpenInvoicesSummary(): Promise<{ openCount: number; openBalance: number }> {
+    // QB's COUNT can't combine with SUM in a single query; one round trip
+    // for sum with a generous max-results, then count via length.
+    const data = await this.request<{ QueryResponse: { Invoice?: Array<{ Balance: number }> } }>(
+      'GET',
+      `/query?query=${encodeURIComponent('SELECT Balance FROM Invoice WHERE Balance > \'0\' MAXRESULTS 1000')}`,
+    );
+    const items = data.QueryResponse.Invoice ?? [];
+    const openBalance = items.reduce((s, i) => s + (i.Balance ?? 0), 0);
+    return { openCount: items.length, openBalance };
+  }
+
+  /** Full chart of accounts with type breakdown. */
+  async listAccounts(): Promise<QbAccountSummary[]> {
+    const data = await this.request<{ QueryResponse: { Account?: QbAccountRaw[] } }>(
+      'GET',
+      `/query?query=${encodeURIComponent('SELECT Id, Name, AccountType, AccountSubType, Active FROM Account MAXRESULTS 200')}`,
+    );
+    return (data.QueryResponse.Account ?? []).map((a) => ({
+      id: a.Id,
+      name: a.Name,
+      accountType: a.AccountType,
+      accountSubType: a.AccountSubType,
+      active: a.Active ?? true,
+    }));
+  }
+
   /** Fetch a payment by QB payment ID. */
   async getPayment(paymentId: string): Promise<QbPaymentDetails> {
     const data = await this.request<{ Payment: QbPaymentRaw }>(
@@ -247,4 +324,42 @@ export interface QbPaymentDetails {
   paymentMethod?: string;
   txnDate: string;
   linkedInvoiceId?: string;
+}
+
+// ─── QB read-side types (exposed for the accounting overview UI) ─────────────
+
+interface QbInvoiceRaw {
+  Id: string;
+  DocNumber?: string;
+  TotalAmt: number;
+  Balance: number;
+  TxnDate?: string;
+  DueDate?: string;
+  CustomerRef?: { value: string; name?: string };
+}
+
+export interface QbInvoiceSummary {
+  id: string;
+  docNumber?: string;
+  totalAmount: number;
+  balance: number;
+  txnDate?: string;
+  dueDate?: string;
+  customerName?: string;
+}
+
+interface QbAccountRaw {
+  Id: string;
+  Name: string;
+  AccountType: string;
+  AccountSubType?: string;
+  Active?: boolean;
+}
+
+export interface QbAccountSummary {
+  id: string;
+  name: string;
+  accountType: string;
+  accountSubType?: string;
+  active: boolean;
 }

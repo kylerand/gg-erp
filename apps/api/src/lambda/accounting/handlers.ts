@@ -182,10 +182,72 @@ export async function processQbStatus(
 }
 
 export const qbStatusHandler = wrapHandler(async (_ctx) => {
-  return processQbStatus({
+  // Step 1: connection check (cheap; same response shape as before).
+  const baseRes = await processQbStatus({
     getValidTokens: () => tokenManager.getValidTokens(),
     getCompanyInfo: (tokens) => new QuickBooksClient(tokens).getCompanyInfo(),
   });
+  const baseBody = JSON.parse(baseRes.body) as {
+    connected: boolean;
+    companyName?: string;
+    realmId?: string;
+    message?: string;
+  };
+
+  if (!baseBody.connected) {
+    return baseRes;
+  }
+
+  // Step 2: live QB read-side overview. Best-effort — any single failure is
+  // surfaced as an empty field rather than failing the whole status response,
+  // because the connection card itself should still render.
+  let overview: {
+    customerCount?: number;
+    openInvoiceCount?: number;
+    openInvoiceBalance?: number;
+    recentInvoices?: ReturnType<QuickBooksClient['listRecentInvoices']> extends Promise<infer R> ? R : never;
+    accountsByType?: Record<string, number>;
+    accountsTotal?: number;
+    error?: string;
+  } = {};
+  try {
+    const tokens = await tokenManager.getValidTokens();
+    const qb = new QuickBooksClient(tokens);
+    const [customers, recent, ar, accounts] = await Promise.allSettled([
+      qb.countCustomers(),
+      qb.listRecentInvoices(5),
+      qb.getOpenInvoicesSummary(),
+      qb.listAccounts(),
+    ]);
+    if (customers.status === 'fulfilled') overview.customerCount = customers.value;
+    if (recent.status === 'fulfilled') overview.recentInvoices = recent.value;
+    if (ar.status === 'fulfilled') {
+      overview.openInvoiceCount = ar.value.openCount;
+      overview.openInvoiceBalance = ar.value.openBalance;
+    }
+    if (accounts.status === 'fulfilled') {
+      overview.accountsTotal = accounts.value.length;
+      overview.accountsByType = {};
+      for (const a of accounts.value) {
+        overview.accountsByType[a.accountType] = (overview.accountsByType[a.accountType] ?? 0) + 1;
+      }
+    }
+    // Surface the first underlying QB error so it shows on the page —
+    // empty overview without an explanation is worse than showing the cause.
+    const firstFailure = [customers, recent, ar, accounts].find(
+      (r): r is PromiseRejectedResult => r.status === 'rejected',
+    );
+    if (firstFailure && Object.keys(overview).length === 0) {
+      overview.error =
+        firstFailure.reason instanceof Error
+          ? firstFailure.reason.message
+          : String(firstFailure.reason);
+    }
+  } catch (err) {
+    overview = { error: err instanceof Error ? err.message : 'overview fetch failed' };
+  }
+
+  return jsonResponse(200, { ...baseBody, overview });
 }, { requireAuth: false });
 
 // ─── List invoice sync records ────────────────────────────────────────────────

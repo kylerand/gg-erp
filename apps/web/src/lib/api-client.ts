@@ -748,7 +748,33 @@ export async function retryInvoiceSync(id: string): Promise<{ id: string; state:
   return apiFetch(`/accounting/invoice-sync/${id}/retry`, { method: 'POST' });
 }
 
-export async function getQbStatus(): Promise<{ connected: boolean; companyName?: string; realmId?: string; message?: string }> {
+export interface QbInvoiceSummary {
+  id: string;
+  docNumber?: string;
+  totalAmount: number;
+  balance: number;
+  txnDate?: string;
+  dueDate?: string;
+  customerName?: string;
+}
+
+export interface QbOverview {
+  customerCount?: number;
+  openInvoiceCount?: number;
+  openInvoiceBalance?: number;
+  recentInvoices?: QbInvoiceSummary[];
+  accountsByType?: Record<string, number>;
+  accountsTotal?: number;
+  error?: string;
+}
+
+export async function getQbStatus(): Promise<{
+  connected: boolean;
+  companyName?: string;
+  realmId?: string;
+  message?: string;
+  overview?: QbOverview;
+}> {
   return apiFetch('/accounting/status');
 }
 

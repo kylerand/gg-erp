@@ -2,7 +2,10 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRole } from '@/lib/role-context';
-import { listWorkOrders, listParts, listInvoiceSyncRecords } from '@/lib/api-client';
+import {
+  listWorkOrders, listParts, listInvoiceSyncRecords, listAuditEvents,
+  getQbStatus, listReconciliationRuns, getFailureSummary,
+} from '@/lib/api-client';
 import type { UserRole } from '@/lib/auth';
 
 interface DashboardCard {
@@ -48,16 +51,19 @@ const CARDS_BY_ROLE: Record<UserRole, DashboardCard[]> = {
     { id: 'tr4', priority: 'p3', title: 'SOP Drafts',         value: 1,   description: 'SOPs pending review and publish',   href: '/training/sop',            icon: '📖' },
   ],
   accounting: [
-    { id: 'ac1', priority: 'p1', title: 'Sync Failures',     value: 1,    description: 'QB sync records in FAILED state',  href: '/accounting/sync',         icon: '❌', alert: true },
-    { id: 'ac2', priority: 'p2', title: 'Open Exceptions',   value: 2,    description: 'Unresolved reconciliation items',   href: '/accounting/reconciliation', icon: '⚖️' },
-    { id: 'ac3', priority: 'p2', title: 'Pending Sync',      value: 1,    description: 'Records queued for sync',           href: '/accounting/sync',         icon: '⏳' },
-    { id: 'ac4', priority: 'p3', title: 'Synced Today',      value: 12,   description: 'Successful QB sync records',        href: '/accounting/sync',         icon: '✅' },
+    // Static values are 0; the real counts are filled in by fetchCounts → VALUE_OVERRIDES.
+    { id: 'ac0', priority: 'p1', title: 'QB Connection',     value: '…',  description: 'QuickBooks integration status',     href: '/accounting',              icon: '🔌' },
+    { id: 'ac1', priority: 'p1', title: 'Sync Failures',     value: 0,    description: 'Invoice + customer + payment failures', href: '/accounting/sync',     icon: '❌', alert: true },
+    { id: 'ac2', priority: 'p2', title: 'Latest Reconcile',  value: '—',  description: 'Most recent reconciliation run',    href: '/accounting/reconciliation', icon: '⚖️' },
+    { id: 'ac3', priority: 'p2', title: 'Pending Sync',      value: 0,    description: 'Records queued for sync',           href: '/accounting/sync',         icon: '⏳' },
+    { id: 'ac4', priority: 'p3', title: 'Synced Today',      value: 0,    description: 'Invoices synced in last 24h',       href: '/accounting/sync',         icon: '✅' },
   ],
   admin: [
     { id: 'ad1', priority: 'p1', title: 'Auth Failures',     value: 1,    description: 'Denied access attempts in last 24h', href: '/admin/audit',           icon: '🔐', alert: true },
     { id: 'ad2', priority: 'p2', title: 'Integration Health', value: '3/4', description: 'Active connectors',               href: '/admin/integrations',      icon: '🔌' },
     { id: 'ad3', priority: 'p2', title: 'Active Users',      value: 4,    description: 'Users active today',               href: '/admin/access',            icon: '👥' },
-    { id: 'ad4', priority: 'p3', title: 'Audit Events',      value: 24,   description: 'Events logged today',              href: '/admin/audit',             icon: '📜' },
+    // Static value is 0; the real count is filled in by fetchCounts → VALUE_OVERRIDES.ad4.
+    { id: 'ad4', priority: 'p3', title: 'Audit Events',      value: 0,    description: 'Events logged today',              href: '/admin/audit',             icon: '📜' },
   ],
 };
 
@@ -77,7 +83,12 @@ export function RoleDashboard() {
   useEffect(() => {
     async function fetchCounts() {
       try {
-        const [woResult, partsResult, syncResult, woBlocked, woPlanned, woInProgress, woCompleted] = await Promise.allSettled([
+        const [
+          woResult, partsResult, syncResult,
+          woBlocked, woPlanned, woInProgress, woCompleted,
+          auditAll,
+          qbStatus, qbFailureSummary, qbInvoiceSynced, qbReconRuns,
+        ] = await Promise.allSettled([
           listWorkOrders({ limit: 1 }),
           listParts({ limit: 1 }),
           listInvoiceSyncRecords({ state: 'FAILED' }),
@@ -85,6 +96,16 @@ export function RoleDashboard() {
           listWorkOrders({ state: 'PLANNED', limit: 100 }),
           listWorkOrders({ state: 'IN_PROGRESS', limit: 100 }),
           listWorkOrders({ state: 'COMPLETED', limit: 100 }),
+          // Audit events: page through up to 200 recent rows and count those
+          // dated today client-side. The /audit/events endpoint doesn't have
+          // a since= filter today, but 200 rows is more than a busy
+          // shop's daily volume, so this is accurate in practice.
+          listAuditEvents({ limit: 200 }),
+          // QuickBooks integration cards (accounting role).
+          getQbStatus(),
+          getFailureSummary(),
+          listInvoiceSyncRecords({ state: 'SYNCED' }),
+          listReconciliationRuns({ limit: 1 }),
         ]);
 
         const blockedCount = woBlocked.status === 'fulfilled' ? woBlocked.value.total : 0;
@@ -101,6 +122,22 @@ export function RoleDashboard() {
         const completedToday = woCompleted.status === 'fulfilled'
           ? woCompleted.value.items.filter(w => w.completedAt && new Date(w.completedAt).toDateString() === today).length
           : 0;
+        const auditEventsToday = auditAll.status === 'fulfilled'
+          ? auditAll.value.items.filter((e) => new Date(e.createdAt).toDateString() === today).length
+          : 0;
+
+        // QuickBooks integration counts.
+        const qbConnected = qbStatus.status === 'fulfilled' && qbStatus.value.connected;
+        const qbConnectionLabel = qbConnected
+          ? (qbStatus.status === 'fulfilled' && qbStatus.value.companyName) || '✓ Connected'
+          : 'Disconnected';
+        const totalSyncFailures = qbFailureSummary.status === 'fulfilled' ? qbFailureSummary.value.total : syncFailures;
+        const invoicesSyncedToday = qbInvoiceSynced.status === 'fulfilled'
+          ? qbInvoiceSynced.value.items.filter((r) => r.syncedAt && new Date(r.syncedAt).toDateString() === today).length
+          : 0;
+        const lastReconLabel = qbReconRuns.status === 'fulfilled' && qbReconRuns.value.items[0]
+          ? `${qbReconRuns.value.items[0].status} · ${formatRelative(qbReconRuns.value.items[0].startedAt)}`
+          : 'No runs yet';
 
         void woResult; void totalParts;
         setCounts({
@@ -110,6 +147,11 @@ export function RoleDashboard() {
           syncFailures,
           outOfStock,
           completedToday,
+          auditEventsToday,
+          qbConnectionLabel,
+          totalSyncFailures,
+          invoicesSyncedToday,
+          lastReconLabel,
         });
       } catch {
         // silently keep static fallback values
@@ -142,8 +184,12 @@ export function RoleDashboard() {
     m2: counts.planned,
     m4: counts.inProgress !== undefined ? `${counts.inProgress}` : undefined,
     p3c: counts.outOfStock,
-    ac1: counts.syncFailures,
+    ac0: counts.qbConnectionLabel,
+    ac1: counts.totalSyncFailures,
+    ac2: counts.lastReconLabel,
     ac3: counts.syncFailures,
+    ac4: counts.invoicesSyncedToday,
+    ad4: counts.auditEventsToday,
   };
 
   const cards = staticCards.map(c =>
@@ -233,4 +279,16 @@ function getTimeOfDay(): string {
   if (h < 12) return 'morning';
   if (h < 17) return 'afternoon';
   return 'evening';
+}
+
+/** Compact relative timestamp — e.g. "2h ago", "3d ago". For dashboard cards. */
+function formatRelative(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60_000) return 'just now';
+  const min = Math.floor(ms / 60_000);
+  if (min < 60) return `${min}m ago`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
 }

@@ -10,13 +10,34 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 // directly (the Hub listener is a belt-and-suspenders for the error case).
 
 const POLL_INTERVAL_MS = 250;
+const PER_CALL_TIMEOUT_MS = 2_000;
 const POLL_TIMEOUT_MS = 10_000;
+const HARD_DEADLINE_MS = 12_000;
+
+/** Race a promise against a timeout — never blocks longer than `ms`. */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race<T | null>([
+    p,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
 
 export default function AuthCallbackPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+
+    // Hard deadline: regardless of what the poll loop is doing, surface an
+    // error after this elapses. Defends against any path where the loop
+    // ends up not iterating (e.g. a single fetchAuthSession that hangs
+    // forever and outlasts even our per-call timeout, or the JS engine
+    // queueing setTimeout starvation).
+    const hardTimeout = setTimeout(() => {
+      if (!cancelled) {
+        setError('Sign-in took too long. Please try again.');
+      }
+    }, HARD_DEADLINE_MS);
 
     const unsubscribe = Hub.listen('auth', ({ payload }) => {
       if (cancelled) return;
@@ -29,20 +50,31 @@ export default function AuthCallbackPage() {
     });
 
     const start = Date.now();
+    let attempts = 0;
     const poll = async (): Promise<void> => {
       while (!cancelled && Date.now() - start < POLL_TIMEOUT_MS) {
-        try {
-          const session = await fetchAuthSession();
-          if (session.tokens?.idToken) {
-            if (!cancelled) window.location.replace('/');
-            return;
-          }
-        } catch {
-          // Amplify is still mid-exchange; keep polling.
+        attempts += 1;
+        const session = await withTimeout(
+          fetchAuthSession().catch(() => null),
+          PER_CALL_TIMEOUT_MS,
+        );
+        if (attempts === 1 || attempts % 8 === 0) {
+          // Sparse trace so devtools shows what's happening if a user
+          // reports the page hanging.
+          // eslint-disable-next-line no-console
+          console.info(
+            `[auth/callback] attempt ${attempts}: tokens=${!!session?.tokens?.idToken} elapsed=${Date.now() - start}ms`,
+          );
+        }
+        if (session?.tokens?.idToken) {
+          if (!cancelled) window.location.replace('/');
+          return;
         }
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
       }
       if (!cancelled && !error) {
+        // eslint-disable-next-line no-console
+        console.warn(`[auth/callback] timed out after ${attempts} attempts / ${Date.now() - start}ms`);
         setError('Sign-in took too long. Please try again.');
       }
     };
@@ -50,6 +82,7 @@ export default function AuthCallbackPage() {
 
     return () => {
       cancelled = true;
+      clearTimeout(hardTimeout);
       unsubscribe();
     };
   }, [error]);

@@ -13,10 +13,11 @@ import {
   type InvoiceSyncRecord,
   type ReconciliationRun,
   type FailureSummary,
+  type QbOverview,
 } from '@/lib/api-client';
 
 interface AccountingMetrics {
-  qb: { connected: boolean; companyName?: string; realmId?: string } | null;
+  qb: { connected: boolean; companyName?: string; realmId?: string; overview?: QbOverview } | null;
   invoiceFailed: number;
   invoicePending: number;
   invoiceSyncedRecent: InvoiceSyncRecord[];
@@ -109,6 +110,7 @@ export default function AccountingPage() {
   }, []);
 
   const connected = !!m.qb?.connected;
+  const ov = m.qb?.overview;
 
   return (
     <div>
@@ -121,6 +123,97 @@ export default function AccountingPage() {
         realmId={m.qb?.realmId}
         loading={loading}
       />
+
+      {/* Live data straight from QuickBooks (read-only) */}
+      {connected && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <KpiCard
+            label="QB customers"
+            value={ov?.customerCount ?? '—'}
+            tone="neutral"
+            subline="Total in QuickBooks"
+            href="/accounting/sync"
+            loading={loading}
+          />
+          <KpiCard
+            label="Open AR"
+            value={ov?.openInvoiceBalance != null ? formatUsd(ov.openInvoiceBalance) : '—'}
+            tone={ov?.openInvoiceBalance && ov.openInvoiceBalance > 0 ? 'amber' : 'neutral'}
+            subline={`${ov?.openInvoiceCount ?? 0} unpaid invoice${ov?.openInvoiceCount === 1 ? '' : 's'}`}
+            href="/accounting/sync"
+            loading={loading}
+          />
+          <KpiCard
+            label="Chart of accounts"
+            value={ov?.accountsTotal ?? '—'}
+            tone="neutral"
+            subline={
+              ov?.accountsByType
+                ? Object.entries(ov.accountsByType)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 3)
+                    .map(([t, n]) => `${n} ${t}`)
+                    .join(' · ')
+                : 'Loading…'
+            }
+            href="/accounting"
+            loading={loading}
+          />
+          <KpiCard
+            label="Recent invoices"
+            value={ov?.recentInvoices?.length ?? '—'}
+            tone="green"
+            subline={
+              ov?.recentInvoices?.[0]?.txnDate
+                ? `Newest: ${ov.recentInvoices[0].txnDate}`
+                : 'No recent activity'
+            }
+            href="/accounting/sync"
+            loading={loading}
+          />
+        </div>
+      )}
+
+      {/* Recent invoices table — straight from QuickBooks */}
+      {connected && ov?.recentInvoices && ov.recentInvoices.length > 0 && (
+        <SectionCard title="Recent invoices in QuickBooks" action={`Last ${ov.recentInvoices.length}`}>
+          <table className="w-full text-sm">
+            <thead className="text-xs text-gray-500 uppercase">
+              <tr className="text-left">
+                <th className="py-2 pr-3">Invoice</th>
+                <th className="py-2 pr-3">Customer</th>
+                <th className="py-2 pr-3">Date</th>
+                <th className="py-2 pr-3 text-right">Total</th>
+                <th className="py-2 pl-3 text-right">Balance</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {ov.recentInvoices.map((inv) => (
+                <tr key={inv.id}>
+                  <td className="py-2 pr-3 font-medium text-gray-900">#{inv.docNumber ?? inv.id}</td>
+                  <td className="py-2 pr-3 text-gray-700">{inv.customerName ?? '—'}</td>
+                  <td className="py-2 pr-3 text-gray-500">{inv.txnDate ?? '—'}</td>
+                  <td className="py-2 pr-3 text-right text-gray-900">{formatUsd(inv.totalAmount)}</td>
+                  <td className="py-2 pl-3 text-right">
+                    {inv.balance > 0 ? (
+                      <span className="text-amber-700 font-semibold">{formatUsd(inv.balance)}</span>
+                    ) : (
+                      <span className="text-green-700">paid</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </SectionCard>
+      )}
+
+      {/* Notice when overview fetch failed (token expired, network, etc.) */}
+      {connected && ov?.error && (
+        <div className="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
+          QuickBooks live data unavailable: {ov.error}. Sync state below is from the local cache.
+        </div>
+      )}
 
       {/* Top-level KPI grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -361,6 +454,14 @@ function SkeletonRows({ rows }: { rows: number }) {
 function formatTime(iso?: string): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatUsd(n: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(n);
 }
 
 function formatDateTime(iso: string): string {

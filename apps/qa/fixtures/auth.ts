@@ -1,18 +1,63 @@
 import { test as base, expect, type ConsoleMessage, type Page } from '@playwright/test';
+import { attachNetworkSpy, type NetworkSpy } from './network-spy.js';
 
 /**
- * Mock-mode roles accepted by all three apps' auth modules. The set is
- * intentionally constrained to what the apps' `lib/auth.ts` knows how to
- * extract — adding a new value here that the app doesn't recognize falls
- * back to "technician" (see `extractRole` in apps/web/src/lib/auth.ts).
+ * The 8 production Cognito groups, used as mock-mode role strings in the
+ * QA harness. Mock mode stores whatever string we give it in
+ * `localStorage.gg_erp_mock_role` — the app's own `lib/auth.ts` UserRole
+ * type is narrower (6 short names like 'manager') but it accepts any
+ * string at runtime. Role-gated UI that checks `role === 'admin'` will
+ * still light up correctly because the values match exactly.
  */
 export type MockRole =
   | 'admin'
-  | 'manager'
+  | 'shop_manager'
   | 'technician'
-  | 'parts'
-  | 'trainer'
-  | 'accounting';
+  | 'parts_manager'
+  | 'sales'
+  | 'accounting'
+  | 'trainer_ojt_lead'
+  | 'read_only_executive';
+
+/** Every Cognito group, ordered for deterministic test discovery. */
+export const ALL_ROLES: readonly MockRole[] = [
+  'admin',
+  'shop_manager',
+  'technician',
+  'parts_manager',
+  'sales',
+  'accounting',
+  'trainer_ojt_lead',
+  'read_only_executive',
+] as const;
+
+/**
+ * The app each role primarily uses. Drives which dev server a role spec
+ * navigates against by default. Floor techs almost never open the ERP;
+ * trainers don't open floor-tech.
+ */
+export const PRIMARY_APP: Record<MockRole, 'web' | 'floor-tech' | 'training'> = {
+  admin: 'web',
+  shop_manager: 'web',
+  technician: 'floor-tech',
+  parts_manager: 'web',
+  sales: 'web',
+  accounting: 'web',
+  trainer_ojt_lead: 'web',
+  read_only_executive: 'web',
+};
+
+/** Resolve the base URL for a given app from QA env vars. */
+export function appBaseUrl(app: 'web' | 'floor-tech' | 'training'): string {
+  switch (app) {
+    case 'web':
+      return process.env.QA_WEB_URL ?? 'http://localhost:3010';
+    case 'floor-tech':
+      return process.env.QA_FLOOR_TECH_URL ?? 'http://localhost:3012';
+    case 'training':
+      return process.env.QA_TRAINING_URL ?? 'http://localhost:3013';
+  }
+}
 
 export interface ConsoleErrorRecord {
   text: string;
@@ -41,6 +86,13 @@ export interface QaFixtures {
    */
   failedRequests: Array<{ url: string; status: number; method: string }>;
   clearFailedRequests: () => void;
+
+  /**
+   * Per-test network spy. Records every request/response, validates known
+   * routes against Zod schemas, dumps ndjson on flush. Coverage-tier specs
+   * use this to assert on schema cleanliness; smoke specs ignore it.
+   */
+  networkSpy: NetworkSpy;
 }
 
 export const test = base.extend<QaFixtures>({
@@ -113,6 +165,12 @@ export const test = base.extend<QaFixtures>({
     await use(() => {
       failedRequests.length = 0;
     });
+  },
+
+  networkSpy: async ({ page }, use, testInfo) => {
+    const spy = attachNetworkSpy(page);
+    await use(spy);
+    spy.flush(testInfo);
   },
 });
 

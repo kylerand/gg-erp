@@ -1,0 +1,9 @@
+{
+  "_doc": "Known a11y violations on specific pages. Each entry pairs a path with axe rule IDs to exempt for that page only. Just like known-broken.json, the gate fails when this list drifts in either direction — new violations appear, or a known violation gets fixed (so we know to remove the entry).",
+  "pages": {
+    "/work-orders/open": ["select-name"],
+    "/inventory/parts": ["select-name"],
+    "/customer-dealers/customers": ["select-name"],
+    "/sales/pipeline": ["scrollable-region-focusable"]
+  }
+}

@@ -15,7 +15,7 @@ on:
         required: false
         default: 'smoke'
         type: choice
-        options: [smoke, coverage, deep]
+        options: [smoke, coverage, deep, agent]
 
 jobs:
   smoke:
@@ -49,8 +49,10 @@ jobs:
         run: npx playwright install --with-deps chromium
         working-directory: apps/qa
 
-      - name: Discover API routes
-        run: npx tsx scripts/discover-api-routes.ts
+      - name: Discover API + web routes
+        run: |
+          npx tsx scripts/discover-api-routes.ts
+          npx tsx scripts/discover-web-routes.ts
         working-directory: apps/qa
 
       - name: Boot dev servers (mock auth)
@@ -94,3 +96,223 @@ jobs:
             /tmp/floor-tech.log
             /tmp/training.log
           retention-days: 7
+
+  coverage:
+    name: QA coverage
+    runs-on: ubuntu-latest
+    # Phase-2 tier: push-to-main only (and manual dispatch). PR runs would
+    # double the CI footprint without proportional value at this stage.
+    if: github.event_name == 'push' || github.event.inputs.tier == 'coverage' || github.event_name == 'schedule'
+    needs: smoke
+    timeout-minutes: 30
+    env:
+      QA_API_BASE_URL: ${{ vars.QA_API_BASE_URL || 'https://xvkc7v8hue.execute-api.us-east-2.amazonaws.com' }}
+      QA_WEB_URL: http://localhost:3010
+      QA_FLOOR_TECH_URL: http://localhost:3012
+      QA_TRAINING_URL: http://localhost:3013
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+        env:
+          DB_DATABASE_URL: 'postgresql://placeholder:placeholder@localhost:5432/placeholder'
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/qa
+
+      - name: Discover routes
+        run: |
+          npx tsx scripts/discover-api-routes.ts
+          npx tsx scripts/discover-web-routes.ts
+        working-directory: apps/qa
+
+      - name: Boot dev servers (mock auth)
+        run: |
+          (cd apps/web && NEXT_PUBLIC_AUTH_MODE=mock NEXT_TELEMETRY_DISABLED=1 \
+            npx next dev --port 3010 > /tmp/web.log 2>&1 &)
+          (cd apps/floor-tech && NEXT_PUBLIC_AUTH_MODE=mock NEXT_TELEMETRY_DISABLED=1 \
+            npx next dev --port 3012 > /tmp/floor-tech.log 2>&1 &)
+          (cd apps/training && NEXT_PUBLIC_AUTH_MODE=mock NEXT_TELEMETRY_DISABLED=1 \
+            npx next dev --port 3013 > /tmp/training.log 2>&1 &)
+          for port in 3010 3012 3013; do
+            for i in $(seq 1 60); do
+              if curl -fs -o /dev/null "http://localhost:$port/" 2>/dev/null; then
+                echo "port $port is up"; break
+              fi
+              sleep 2
+            done
+          done
+
+      - name: Run coverage
+        run: npm run qa:coverage
+        working-directory: apps/qa
+
+      - name: Aggregate network violations
+        if: always()
+        run: npm run qa:violations
+        working-directory: apps/qa
+
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-coverage-report
+          path: |
+            apps/qa/reports/
+          retention-days: 14
+
+  deep:
+    name: QA deep crawl (roles + a11y + visual)
+    runs-on: ubuntu-latest
+    # Phase-3 tier: nightly schedule + manual dispatch only.
+    if: github.event_name == 'schedule' || github.event.inputs.tier == 'deep'
+    needs: smoke
+    timeout-minutes: 45
+    env:
+      QA_API_BASE_URL: ${{ vars.QA_API_BASE_URL || 'https://xvkc7v8hue.execute-api.us-east-2.amazonaws.com' }}
+      QA_WEB_URL: http://localhost:3010
+      QA_FLOOR_TECH_URL: http://localhost:3012
+      QA_TRAINING_URL: http://localhost:3013
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+        env:
+          DB_DATABASE_URL: 'postgresql://placeholder:placeholder@localhost:5432/placeholder'
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/qa
+
+      - name: Boot dev servers (mock auth)
+        run: |
+          (cd apps/web && NEXT_PUBLIC_AUTH_MODE=mock NEXT_TELEMETRY_DISABLED=1 \
+            npx next dev --port 3010 > /tmp/web.log 2>&1 &)
+          (cd apps/floor-tech && NEXT_PUBLIC_AUTH_MODE=mock NEXT_TELEMETRY_DISABLED=1 \
+            npx next dev --port 3012 > /tmp/floor-tech.log 2>&1 &)
+          (cd apps/training && NEXT_PUBLIC_AUTH_MODE=mock NEXT_TELEMETRY_DISABLED=1 \
+            npx next dev --port 3013 > /tmp/training.log 2>&1 &)
+          for port in 3010 3012 3013; do
+            for i in $(seq 1 60); do
+              if curl -fs -o /dev/null "http://localhost:$port/" 2>/dev/null; then
+                echo "port $port is up"; break
+              fi
+              sleep 2
+            done
+          done
+
+      - name: Run roles + a11y
+        # Visual is opt-in via workflow_dispatch — needs Linux baselines
+        # which haven't been committed yet (only darwin baselines exist).
+        run: npx playwright test --project=roles --project=a11y
+        working-directory: apps/qa
+
+      - name: Upload deep-crawl artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-deep-report
+          path: |
+            apps/qa/reports/
+            apps/qa/test-results/
+          retention-days: 14
+
+  agent:
+    name: QA AI exploration agent
+    runs-on: ubuntu-latest
+    # Phase-4 tier: opt-in only. Costs Anthropic credits; gate behind manual
+    # dispatch + a configured ANTHROPIC_API_KEY secret.
+    if: github.event.inputs.tier == 'agent'
+    timeout-minutes: 45
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      QA_API_BASE_URL: ${{ vars.QA_API_BASE_URL || 'https://xvkc7v8hue.execute-api.us-east-2.amazonaws.com' }}
+      QA_WEB_URL: http://localhost:3010
+      QA_FLOOR_TECH_URL: http://localhost:3012
+      QA_TRAINING_URL: http://localhost:3013
+      QA_AGENT_MAX_ITERATIONS: '30'
+      QA_AGENT_MAX_BUDGET_USD: '3'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Confirm API key present
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "ANTHROPIC_API_KEY not configured as a repo secret; skipping."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+        env:
+          DB_DATABASE_URL: 'postgresql://placeholder:placeholder@localhost:5432/placeholder'
+
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/qa-agent
+
+      - name: Boot dev servers (mock auth)
+        run: |
+          (cd apps/web && NEXT_PUBLIC_AUTH_MODE=mock NEXT_TELEMETRY_DISABLED=1 \
+            npx next dev --port 3010 > /tmp/web.log 2>&1 &)
+          (cd apps/floor-tech && NEXT_PUBLIC_AUTH_MODE=mock NEXT_TELEMETRY_DISABLED=1 \
+            npx next dev --port 3012 > /tmp/floor-tech.log 2>&1 &)
+          (cd apps/training && NEXT_PUBLIC_AUTH_MODE=mock NEXT_TELEMETRY_DISABLED=1 \
+            npx next dev --port 3013 > /tmp/training.log 2>&1 &)
+          for port in 3010 3012 3013; do
+            for i in $(seq 1 60); do
+              if curl -fs -o /dev/null "http://localhost:$port/" 2>/dev/null; then
+                echo "port $port is up"; break
+              fi
+              sleep 2
+            done
+          done
+
+      - name: Run agent against ERP
+        run: npm run agent:erp
+        working-directory: apps/qa-agent
+
+      - name: Run agent against floor-tech
+        if: always()
+        run: npm run agent:floor-tech
+        working-directory: apps/qa-agent
+
+      - name: Run agent against training
+        if: always()
+        run: npm run agent:training
+        working-directory: apps/qa-agent
+
+      - name: Upload findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-agent-findings
+          path: apps/qa-agent/reports/
+          retention-days: 30

@@ -85,5 +85,40 @@ export default defineConfig({
       // No browser needed for pure HTTP smoke; APIRequestContext handles it.
       use: {},
     },
+
+    // ─── Coverage tier (Phase 2) ───────────────────────────────────────────
+    {
+      name: 'coverage',
+      testMatch: /coverage\/.*\.spec\.ts$/,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1440, height: 900 },
+      },
+    },
+
+    // ─── Deep-crawl tier (Phase 3) ─────────────────────────────────────────
+    // Each role spec sets its own viewport via `test.use(...)` so we don't
+    // override per-project here.
+    {
+      name: 'roles',
+      testMatch: /roles\/.*\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'a11y',
+      testMatch: /a11y\/.*\.spec\.ts$/,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1440, height: 900 },
+      },
+    },
+    {
+      name: 'visual',
+      testMatch: /visual\/.*\.spec\.ts$/,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1440, height: 900 },
+      },
+    },
   ],
 });

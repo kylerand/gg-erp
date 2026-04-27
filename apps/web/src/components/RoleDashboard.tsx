@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRole } from '@/lib/role-context';
-import { listWorkOrders, listParts, listInvoiceSyncRecords } from '@/lib/api-client';
+import { listWorkOrders, listParts, listInvoiceSyncRecords, listAuditEvents } from '@/lib/api-client';
 import type { UserRole } from '@/lib/auth';
 
 interface DashboardCard {
@@ -57,7 +57,8 @@ const CARDS_BY_ROLE: Record<UserRole, DashboardCard[]> = {
     { id: 'ad1', priority: 'p1', title: 'Auth Failures',     value: 1,    description: 'Denied access attempts in last 24h', href: '/admin/audit',           icon: '🔐', alert: true },
     { id: 'ad2', priority: 'p2', title: 'Integration Health', value: '3/4', description: 'Active connectors',               href: '/admin/integrations',      icon: '🔌' },
     { id: 'ad3', priority: 'p2', title: 'Active Users',      value: 4,    description: 'Users active today',               href: '/admin/access',            icon: '👥' },
-    { id: 'ad4', priority: 'p3', title: 'Audit Events',      value: 24,   description: 'Events logged today',              href: '/admin/audit',             icon: '📜' },
+    // Static value is 0; the real count is filled in by fetchCounts → VALUE_OVERRIDES.ad4.
+    { id: 'ad4', priority: 'p3', title: 'Audit Events',      value: 0,    description: 'Events logged today',              href: '/admin/audit',             icon: '📜' },
   ],
 };
 
@@ -77,7 +78,7 @@ export function RoleDashboard() {
   useEffect(() => {
     async function fetchCounts() {
       try {
-        const [woResult, partsResult, syncResult, woBlocked, woPlanned, woInProgress, woCompleted] = await Promise.allSettled([
+        const [woResult, partsResult, syncResult, woBlocked, woPlanned, woInProgress, woCompleted, auditAll] = await Promise.allSettled([
           listWorkOrders({ limit: 1 }),
           listParts({ limit: 1 }),
           listInvoiceSyncRecords({ state: 'FAILED' }),
@@ -85,6 +86,11 @@ export function RoleDashboard() {
           listWorkOrders({ state: 'PLANNED', limit: 100 }),
           listWorkOrders({ state: 'IN_PROGRESS', limit: 100 }),
           listWorkOrders({ state: 'COMPLETED', limit: 100 }),
+          // Audit events: page through up to 200 recent rows and count those
+          // dated today client-side. The /audit/events endpoint doesn't have
+          // a since= filter today, but 200 rows is more than a busy
+          // shop's daily volume, so this is accurate in practice.
+          listAuditEvents({ limit: 200 }),
         ]);
 
         const blockedCount = woBlocked.status === 'fulfilled' ? woBlocked.value.total : 0;
@@ -101,6 +107,9 @@ export function RoleDashboard() {
         const completedToday = woCompleted.status === 'fulfilled'
           ? woCompleted.value.items.filter(w => w.completedAt && new Date(w.completedAt).toDateString() === today).length
           : 0;
+        const auditEventsToday = auditAll.status === 'fulfilled'
+          ? auditAll.value.items.filter((e) => new Date(e.createdAt).toDateString() === today).length
+          : 0;
 
         void woResult; void totalParts;
         setCounts({
@@ -110,6 +119,7 @@ export function RoleDashboard() {
           syncFailures,
           outOfStock,
           completedToday,
+          auditEventsToday,
         });
       } catch {
         // silently keep static fallback values
@@ -144,6 +154,7 @@ export function RoleDashboard() {
     p3c: counts.outOfStock,
     ac1: counts.syncFailures,
     ac3: counts.syncFailures,
+    ad4: counts.auditEventsToday,
   };
 
   const cards = staticCards.map(c =>

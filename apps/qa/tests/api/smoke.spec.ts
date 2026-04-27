@@ -42,7 +42,9 @@ interface KnownBroken {
 // 404 is HEALTHY when it's the Lambda saying "record not found" (handler ran).
 // We discriminate via response body — see ProbeResult.isApiGatewayRouteMiss.
 const HEALTHY_STATUSES = new Set([200, 201, 204, 400, 401, 403, 404, 405, 422]);
-const BAD_STATUSES = new Set([500, 501, 502, 503, 504]);
+// Reference set for documentation — actual gating is done via HEALTHY_STATUSES
+// + isApiGatewayRouteMiss below.
+// const BAD_STATUSES = new Set([500, 501, 502, 503, 504]);
 
 function loadRoutes(): ApiRoute[] {
   if (!existsSync(ROUTES_FILE)) {

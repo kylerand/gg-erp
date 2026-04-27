@@ -1,9 +1,4 @@
-import {
-  test,
-  expect,
-  expectNoConsoleErrors,
-  waitForAppReady,
-} from '../../fixtures/auth';
+import { test, expect, waitForAppReady } from '../../fixtures/auth';
 
 /**
  * Training app smoke. Validates the standalone technician training surface

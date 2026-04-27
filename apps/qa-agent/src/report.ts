@@ -28,7 +28,14 @@ export class FindingsCollector {
     return this.items.length;
   }
 
-  asMarkdown(meta: { app: string; role: string; iterations: number; durationMs: number; usdSpent: number }): string {
+  asMarkdown(meta: {
+    app: string;
+    role: string;
+    iterations: number;
+    durationMs: number;
+    usdSpent: number;
+    stoppedReason?: string;
+  }): string {
     const byStatus: Record<Finding['status'], Finding[]> = {
       broken: [],
       missing: [],
@@ -43,6 +50,9 @@ export class FindingsCollector {
     lines.push(`Run on ${new Date().toISOString().slice(0, 19)}Z. Model spent ` +
       `${meta.iterations} iterations / ${(meta.durationMs / 1000).toFixed(0)}s / ` +
       `~$${meta.usdSpent.toFixed(2)}.`);
+    if (meta.stoppedReason) {
+      lines.push(`Stopped reason: **${meta.stoppedReason}**.`);
+    }
     lines.push('');
 
     lines.push('## Executive summary');
@@ -82,7 +92,17 @@ export class FindingsCollector {
     return lines.join('\n');
   }
 
-  write(filePath: string, meta: { app: string; role: string; iterations: number; durationMs: number; usdSpent: number }): void {
+  write(
+    filePath: string,
+    meta: {
+      app: string;
+      role: string;
+      iterations: number;
+      durationMs: number;
+      usdSpent: number;
+      stoppedReason?: string;
+    },
+  ): void {
     mkdirSync(dirname(filePath), { recursive: true });
     writeFileSync(filePath, this.asMarkdown(meta));
   }

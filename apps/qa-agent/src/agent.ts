@@ -37,7 +37,9 @@ function estimateUsd(model: string, inputTokens: number, outputTokens: number): 
 
 async function main(): Promise<void> {
   const config = loadConfig();
-  const client = new Anthropic({ apiKey: config.apiKey });
+  // 90s per request + 2 retries lets us shrug off a single hung connection
+  // without burning the whole iteration budget on a stuck request.
+  const client = new Anthropic({ apiKey: config.apiKey, timeout: 90_000, maxRetries: 2 });
 
   const systemPrompt = readFileSync(
     new URL('./prompts/system.md', import.meta.url),
@@ -74,6 +76,10 @@ async function main(): Promise<void> {
       `[qa-agent] caps: ${config.maxIterations} iter / ${(config.maxWallTimeMs / 60_000).toFixed(0)} min / $${config.maxBudgetUsd}\n`,
   );
 
+  // Wrap the loop so any mid-run crash (API timeout, browser error)
+  // still writes the partial findings report and leaves the run forensically
+  // useful instead of silently lost.
+  try {
   while (iter < config.maxIterations) {
     iter += 1;
     const elapsed = Date.now() - startMs;
@@ -142,6 +148,10 @@ async function main(): Promise<void> {
       break;
     }
   }
+  } catch (err) {
+    stoppedReason = `crashed: ${err instanceof Error ? err.message.split('\n')[0] : String(err)}`;
+    console.error(`\n[qa-agent] mid-run crash: ${stoppedReason} — writing partial report anyway\n`);
+  }
 
   if (iter >= config.maxIterations && stoppedReason === 'completed') {
     stoppedReason = 'iteration cap';
@@ -156,6 +166,7 @@ async function main(): Promise<void> {
     iterations: iter,
     durationMs: Date.now() - startMs,
     usdSpent: usdFinal,
+    stoppedReason,
   });
 
   console.log(`\n[qa-agent] finished: ${stoppedReason}`);

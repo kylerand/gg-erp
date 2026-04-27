@@ -773,6 +773,53 @@ export async function listReconciliationRuns(params?: { limit?: number }): Promi
   );
 }
 
+export interface CustomerSyncRecord {
+  id: string;
+  customerId: string;
+  provider: string;
+  state: 'PENDING' | 'IN_PROGRESS' | 'SYNCED' | 'FAILED' | 'SKIPPED';
+  attemptCount: number;
+  lastErrorCode: string | null;
+}
+
+export async function listCustomerSyncs(params?: { state?: string; limit?: number }): Promise<{ items: CustomerSyncRecord[]; total: number }> {
+  const qs = new URLSearchParams();
+  if (params?.state) qs.set('state', params.state);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  return apiFetch(
+    `/accounting/customers${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    { items: [], total: 0 },
+  );
+}
+
+export interface IntegrationAccount {
+  id: string;
+  name: string;
+  accountType?: string;
+  qbId?: string;
+}
+
+export async function listIntegrationAccounts(): Promise<{ items: IntegrationAccount[]; total: number }> {
+  return apiFetch('/accounting/integration-accounts', undefined, { items: [], total: 0 });
+}
+
+export interface FailureSummary {
+  invoice: number;
+  customer: number;
+  payment: number;
+  total: number;
+}
+
+export async function getFailureSummary(): Promise<FailureSummary> {
+  return apiFetch('/accounting/failures/summary', undefined, {
+    invoice: 0,
+    customer: 0,
+    payment: 0,
+    total: 0,
+  });
+}
+
 // ─── Dealers (legacy alias) ───────────────────────────────────────────────────
 
 export interface Dealer {

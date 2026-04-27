@@ -1,0 +1,96 @@
+name: QA
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    # Nightly deep crawl (Phase 3+): 09:30 UTC = 04:30 ET
+    - cron: '30 9 * * *'
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: 'Which tier to run'
+        required: false
+        default: 'smoke'
+        type: choice
+        options: [smoke, coverage, deep]
+
+jobs:
+  smoke:
+    name: QA smoke
+    runs-on: ubuntu-latest
+    # Always runs on PR/push. Nightly + dispatch may run higher tiers.
+    if: github.event_name == 'pull_request' || github.event_name == 'push' || github.event.inputs.tier == 'smoke' || github.event_name == 'schedule'
+    timeout-minutes: 15
+    env:
+      QA_API_BASE_URL: ${{ vars.QA_API_BASE_URL || 'https://xvkc7v8hue.execute-api.us-east-2.amazonaws.com' }}
+      QA_WEB_URL: http://localhost:3010
+      QA_FLOOR_TECH_URL: http://localhost:3012
+      QA_TRAINING_URL: http://localhost:3013
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+        env:
+          DB_DATABASE_URL: 'postgresql://placeholder:placeholder@localhost:5432/placeholder'
+
+      - name: Install Playwright browsers (chromium only)
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/qa
+
+      - name: Discover API routes
+        run: npx tsx scripts/discover-api-routes.ts
+        working-directory: apps/qa
+
+      - name: Boot dev servers (mock auth)
+        run: |
+          (cd apps/web && NEXT_PUBLIC_AUTH_MODE=mock NEXT_TELEMETRY_DISABLED=1 \
+            npx next dev --port 3010 > /tmp/web.log 2>&1 &)
+          (cd apps/floor-tech && NEXT_PUBLIC_AUTH_MODE=mock NEXT_TELEMETRY_DISABLED=1 \
+            npx next dev --port 3012 > /tmp/floor-tech.log 2>&1 &)
+          (cd apps/training && NEXT_PUBLIC_AUTH_MODE=mock NEXT_TELEMETRY_DISABLED=1 \
+            npx next dev --port 3013 > /tmp/training.log 2>&1 &)
+          # Wait for each to respond.
+          for port in 3010 3012 3013; do
+            for i in $(seq 1 60); do
+              if curl -fs -o /dev/null "http://localhost:$port/" 2>/dev/null; then
+                echo "port $port is up"
+                break
+              fi
+              sleep 2
+            done
+          done
+
+      - name: Run QA smoke (browser + API)
+        run: npm run qa:smoke
+        working-directory: apps/qa
+
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-smoke-report
+          path: apps/qa/reports/
+          retention-days: 14
+
+      - name: Upload dev server logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-smoke-dev-logs
+          path: |
+            /tmp/web.log
+            /tmp/floor-tech.log
+            /tmp/training.log
+          retention-days: 7

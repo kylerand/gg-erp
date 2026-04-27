@@ -1,0 +1,21 @@
+{
+  "name": "@gg-erp/qa",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "qa:smoke": "playwright test --project=smoke-web --project=smoke-floor-tech --project=smoke-training --project=smoke-api",
+    "qa:smoke:web": "playwright test --project=smoke-web",
+    "qa:smoke:floor-tech": "playwright test --project=smoke-floor-tech",
+    "qa:smoke:training": "playwright test --project=smoke-training",
+    "qa:smoke:api": "playwright test --project=smoke-api",
+    "qa:all": "playwright test",
+    "qa:report": "playwright show-report reports/html",
+    "qa:install": "playwright install --with-deps chromium",
+    "qa:discover-api": "tsx scripts/discover-api-routes.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.0",
+    "tsx": "^4.20.0"
+  }
+}

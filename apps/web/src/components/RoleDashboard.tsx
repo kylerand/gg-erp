@@ -55,10 +55,10 @@ const CARDS_BY_ROLE: Record<UserRole, DashboardCard[]> = {
   accounting: [
     // Static values are 0; the real counts are filled in by fetchCounts → VALUE_OVERRIDES.
     { id: 'ac0', priority: 'p1', title: 'QB Connection',     value: '…',  description: 'QuickBooks integration status',     href: '/accounting',              icon: '🔌' },
-    { id: 'ac1', priority: 'p1', title: 'Sync Failures',     value: 0,    description: 'Invoice + customer + payment failures', href: '/accounting/sync',     icon: '❌', alert: true },
+    { id: 'ac1', priority: 'p1', title: 'Sync Failures',     value: 0,    description: 'Invoice + customer + payment failures', href: '/accounting/sync?view=failures',     icon: '❌', alert: true },
     { id: 'ac2', priority: 'p2', title: 'Latest Reconcile',  value: '—',  description: 'Most recent reconciliation run',    href: '/accounting/reconciliation', icon: '⚖️' },
-    { id: 'ac3', priority: 'p2', title: 'Pending Sync',      value: 0,    description: 'Records queued for sync',           href: '/accounting/sync',         icon: '⏳' },
-    { id: 'ac4', priority: 'p3', title: 'Synced Today',      value: 0,    description: 'Invoices synced in last 24h',       href: '/accounting/sync',         icon: '✅' },
+    { id: 'ac3', priority: 'p2', title: 'Pending Sync',      value: 0,    description: 'Records queued for sync',           href: '/accounting/sync?view=queue',         icon: '⏳' },
+    { id: 'ac4', priority: 'p3', title: 'Synced Today',      value: 0,    description: 'Invoices synced in last 24h',       href: '/accounting/sync?view=invoices&state=SYNCED&period=today',         icon: '✅' },
   ],
   admin: [
     { id: 'ad1', priority: 'p1', title: 'Auth Failures',     value: 1,    description: 'Denied access attempts in last 24h', href: '/admin/audit',           icon: '🔐', alert: true },

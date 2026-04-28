@@ -43,6 +43,17 @@ const EMPTY: AccountingMetrics = {
   integrationAccountsCount: 0,
 };
 
+const ACCOUNTING_LINKS = {
+  failures: '/accounting/sync?view=failures',
+  queue: '/accounting/sync?view=queue',
+  invoices: '/accounting/sync?view=invoices',
+  invoicesSyncedToday: '/accounting/sync?view=invoices&state=SYNCED&period=today',
+  customers: '/accounting/sync?view=customers',
+  customersSynced: '/accounting/sync?view=customers&state=SYNCED',
+  accounts: '/accounting/sync?view=accounts',
+  recentInvoices: '/accounting#recent-invoices',
+};
+
 export default function AccountingPage() {
   const [m, setM] = useState<AccountingMetrics>(EMPTY);
   const [loading, setLoading] = useState(true);
@@ -147,7 +158,7 @@ export default function AccountingPage() {
             value={ov?.customerCount ?? '—'}
             tone="neutral"
             subline="Total in QuickBooks"
-            href="/accounting/sync"
+            href={ACCOUNTING_LINKS.customers}
             loading={loading}
           />
           <KpiCard
@@ -155,7 +166,7 @@ export default function AccountingPage() {
             value={ov?.openInvoiceBalance != null ? formatUsd(ov.openInvoiceBalance) : '—'}
             tone={ov?.openInvoiceBalance && ov.openInvoiceBalance > 0 ? 'amber' : 'neutral'}
             subline={`${ov?.openInvoiceCount ?? 0} unpaid invoice${ov?.openInvoiceCount === 1 ? '' : 's'}`}
-            href="/accounting/sync"
+            href={ACCOUNTING_LINKS.recentInvoices}
             loading={loading}
           />
           <KpiCard
@@ -171,7 +182,7 @@ export default function AccountingPage() {
                     .join(' · ')
                 : 'Loading…'
             }
-            href="/accounting"
+            href={ACCOUNTING_LINKS.accounts}
             loading={loading}
           />
           <KpiCard
@@ -183,7 +194,7 @@ export default function AccountingPage() {
                 ? `Newest: ${ov.recentInvoices[0].txnDate}`
                 : 'No recent activity'
             }
-            href="/accounting/sync"
+            href={ACCOUNTING_LINKS.recentInvoices}
             loading={loading}
           />
         </div>
@@ -192,7 +203,7 @@ export default function AccountingPage() {
 
       {/* Recent invoices table — straight from QuickBooks */}
       {connected && ov?.recentInvoices && ov.recentInvoices.length > 0 && (
-        <SectionCard title="Recent invoices in QuickBooks" action={`Last ${ov.recentInvoices.length}`}>
+        <SectionCard id="recent-invoices" title="Recent invoices in QuickBooks" action={`Last ${ov.recentInvoices.length}`}>
           <table className="w-full text-sm">
             <thead className="text-xs text-gray-500 uppercase">
               <tr className="text-left">
@@ -243,7 +254,7 @@ export default function AccountingPage() {
           value={m.failureSummary.total}
           tone={m.failureSummary.total > 0 ? 'red' : 'neutral'}
           subline={`${m.failureSummary.invoice} invoice · ${m.failureSummary.customer} customer · ${m.failureSummary.payment} payment`}
-          href="/accounting/sync"
+          href={ACCOUNTING_LINKS.failures}
           loading={loading}
         />
         <KpiCard
@@ -251,7 +262,7 @@ export default function AccountingPage() {
           value={m.invoicePending + m.customerPending}
           tone={m.invoicePending + m.customerPending > 0 ? 'amber' : 'neutral'}
           subline={`${m.invoicePending} invoice · ${m.customerPending} customer`}
-          href="/accounting/sync"
+          href={ACCOUNTING_LINKS.queue}
           loading={loading}
         />
         <KpiCard
@@ -263,7 +274,7 @@ export default function AccountingPage() {
               ? 'No invoices synced yet today'
               : `Last: ${formatTime(m.invoiceSyncedRecent[0]?.syncedAt)}`
           }
-          href="/accounting/sync"
+          href={ACCOUNTING_LINKS.invoicesSyncedToday}
           loading={loading}
         />
         <KpiCard
@@ -271,7 +282,7 @@ export default function AccountingPage() {
           value={m.customersSyncedTotal - m.customerFailed - m.customerPending}
           tone="neutral"
           subline={`${m.customersSyncedTotal} total · ${m.customerFailed} failed`}
-          href="/accounting/sync"
+          href={ACCOUNTING_LINKS.customersSynced}
           loading={loading}
         />
       </div>
@@ -331,7 +342,7 @@ export default function AccountingPage() {
       {/* Sub-page navigation tiles */}
       <div className="grid grid-cols-2 gap-4 mt-6 max-w-2xl">
         {[
-          { label: 'Sync Monitor', description: 'Per-record sync status and retry', href: '/accounting/sync', icon: '🔄' },
+          { label: 'Sync Monitor', description: 'Per-record sync status and retry', href: ACCOUNTING_LINKS.failures, icon: '🔄' },
           { label: 'Reconciliation', description: 'Mismatch resolution history', href: '/accounting/reconciliation', icon: '⚖️' },
         ].map((item) => (
           <Link
@@ -429,15 +440,16 @@ function KpiCard({
 }
 
 function SectionCard({
-  title, href, action, children,
+  id, title, href, action, children,
 }: {
+  id?: string;
   title: string;
   href?: string;
   action?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-5 mb-4">
+    <div id={id} className="bg-white rounded-lg border border-gray-200 p-5 mb-4 scroll-mt-24">
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-semibold text-sm text-gray-900">{title}</h3>
         {action &&
@@ -493,7 +505,7 @@ function buildActionQueue(m: AccountingMetrics, connected: boolean): QueuedActio
       title: `${m.failureSummary.total} sync failure${m.failureSummary.total === 1 ? '' : 's'} need attention`,
       detail: `${m.failureSummary.invoice} invoice · ${m.failureSummary.customer} customer · ${m.failureSummary.payment} payment. Each failure has an error message; retry once you know the cause is resolved.`,
       cta: 'Review failures →',
-      href: '/accounting/sync',
+      href: ACCOUNTING_LINKS.failures,
     });
   }
 
@@ -504,7 +516,7 @@ function buildActionQueue(m: AccountingMetrics, connected: boolean): QueuedActio
       title: `${pending} record${pending === 1 ? '' : 's'} waiting to sync`,
       detail: 'These ran into a transient error or are queued for the next batch. Usually self-resolves within an hour.',
       cta: 'View queue →',
-      href: '/accounting/sync',
+      href: ACCOUNTING_LINKS.queue,
     });
   }
 
@@ -544,7 +556,7 @@ function buildActionQueue(m: AccountingMetrics, connected: boolean): QueuedActio
       title: 'Nothing needs attention right now',
       detail: 'All sync records are healthy and reconciliation is current. Check back tomorrow or after the next batch of work orders complete.',
       cta: 'See sync history →',
-      href: '/accounting/sync',
+      href: ACCOUNTING_LINKS.invoices,
     });
   }
 

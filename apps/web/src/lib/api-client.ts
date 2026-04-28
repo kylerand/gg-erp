@@ -258,7 +258,7 @@ const MOCK_TODAY: WorkspaceTodayResponse = {
       severity: 'P2',
       title: 'INV-001 failed QuickBooks sync',
       description: 'QuickBooks connection timeout.',
-      primaryHref: '/accounting/sync',
+      primaryHref: '/accounting/sync?view=failures',
       primaryAction: 'Review sync',
       ownerRole: 'accounting',
       sourceType: 'invoice_sync',
@@ -839,10 +839,11 @@ export const MOCK_SYNC_RECORDS: InvoiceSyncRecord[] = [
   { id: 's-2', invoiceNumber: 'INV-002', workOrderId: 'wo-ex-1', provider: 'QUICKBOOKS', state: 'SYNCED', attemptCount: 1, externalReference: 'QB-INV-12345', createdAt: new Date().toISOString() },
 ];
 
-export async function listInvoiceSyncRecords(params?: { state?: string; workOrderId?: string }): Promise<{ items: InvoiceSyncRecord[] }> {
+export async function listInvoiceSyncRecords(params?: { state?: string; workOrderId?: string; limit?: number }): Promise<{ items: InvoiceSyncRecord[] }> {
   const qs = new URLSearchParams();
   if (params?.state) qs.set('state', params.state);
   if (params?.workOrderId) qs.set('workOrderId', params.workOrderId);
+  if (params?.limit) qs.set('limit', String(params.limit));
   const res = await apiFetch<{ items: InvoiceSyncRecord[]; total: number }>(
     `/accounting/invoice-sync${qs.size ? `?${qs}` : ''}`,
   );
@@ -911,6 +912,10 @@ export interface CustomerSyncRecord {
   state: 'PENDING' | 'IN_PROGRESS' | 'SYNCED' | 'FAILED' | 'SKIPPED';
   attemptCount: number;
   lastErrorCode: string | null;
+  lastErrorMessage?: string | null;
+  externalReference?: string | null;
+  createdAt?: string;
+  syncedAt?: string | null;
 }
 
 export async function listCustomerSyncs(params?: { state?: string; limit?: number }): Promise<{ items: CustomerSyncRecord[]; total: number }> {
@@ -926,7 +931,15 @@ export async function listCustomerSyncs(params?: { state?: string; limit?: numbe
 
 export interface IntegrationAccount {
   id: string;
-  name: string;
+  provider?: string;
+  accountKey?: string;
+  displayName?: string;
+  accountStatus?: string;
+  configuration?: unknown;
+  lastSyncedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  name?: string;
   accountType?: string;
   qbId?: string;
 }

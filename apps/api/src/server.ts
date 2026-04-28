@@ -33,6 +33,7 @@ import {
   createPartHandler,
   listVendorsHandler,
   listManufacturersHandler,
+  listPurchaseOrdersHandler,
   createManufacturerHandler,
   planMaterialByStageHandler,
 } from './lambda/inventory/handlers.js';
@@ -81,7 +82,7 @@ import {
   listRoutingStepsHandler,
   transitionRoutingStepStateHandler,
 } from './lambda/routing-steps/handlers.js';
-import { getMeHandler } from './lambda/identity/handlers.js';
+import { getMeHandler, listEmployeesHandler } from './lambda/identity/handlers.js';
 import { adminListUsersHandler } from './lambda/identity/admin-list-users.handler.js';
 import { adminCreateUserHandler } from './lambda/identity/admin-create-user.handler.js';
 import { adminUpdateUserHandler } from './lambda/identity/admin-update-user.handler.js';
@@ -226,12 +227,15 @@ async function route(
   const reworkMatch = pathname.match(/^\/tickets\/work-orders\/([^/]+)\/rework/);
   const qcMatch = pathname.match(/^\/tickets\/work-orders\/([^/]+)\/qc-gates/);
   const timeEntryMatch = pathname.match(/^\/tickets\/work-orders\/([^/]+)\/time-entries(?:\/([^/]+))?/);
+  const flatTimeEntryMatch = pathname.match(/^\/tickets\/time-entries\/([^/]+)/);
+  const technicianTaskMatch = pathname.match(/^\/tickets\/technician-tasks\/([^/]+)/);
   const sopMatch = pathname.match(/^\/sop\/([^/]+)/);
   const sopModuleMatch = pathname.match(/^\/sop\/modules\/([^/]+)/);
   const sopModuleProgressMatch = pathname.match(/^\/sop\/modules\/([^/]+)\/progress\/([^/]+)/);
   const sopQuestionAnswerMatch = pathname.match(/^\/sop\/questions\/([^/]+)\/answer/);
   const sopItMatch = pathname.match(/^\/sop\/inspection-templates(?:\/([^/]+))?$/);
-  const routingStepMatch = pathname.match(/^\/tickets\/routing-steps\/([^/]+)/);
+  const routingStepStateMatch = pathname.match(/^\/planning\/routing-steps\/([^/]+)\/state$/);
+  const legacyRoutingStepMatch = pathname.match(/^\/tickets\/routing-steps\/([^/]+)/);
   const woQueueMatch = pathname.match(/^\/tickets\/wo-queue\/([^/]+)/);
   const adminUserMatch = pathname.match(/^\/admin\/users\/([^/]+)/);
   const channelMessagesMatch = pathname.match(/^\/communication\/channels\/([^/]+)\/messages/);
@@ -253,6 +257,8 @@ async function route(
   // ── Auth ───────────────────────────────────────────────────────────────────
   if (pathname === '/auth/me' && method === 'GET') {
     result = await getMeHandler(event);
+  } else if (pathname === '/hr/employees' && method === 'GET') {
+    result = await listEmployeesHandler(event);
 
   // ── Workspace ─────────────────────────────────────────────────────────────
   } else if (pathname === '/workspace/today' && method === 'GET') {
@@ -271,7 +277,10 @@ async function route(
     result = await createCustomerHandler(event);
   } else if (customerMatch && method === 'GET') {
     result = await getCustomerHandler({ ...event, pathParameters: { id: customerMatch[1] } });
-  } else if (customerMatch && pathname.endsWith('/transition') && method === 'POST') {
+  } else if (customerMatch && (
+    (pathname.endsWith('/transition') && method === 'POST') ||
+    (pathname.endsWith('/state') && method === 'PATCH')
+  )) {
     result = await transitionCustomerStateHandler({ ...event, pathParameters: { id: customerMatch[1] } });
 
   // ── Inventory ─────────────────────────────────────────────────────────────
@@ -287,6 +296,8 @@ async function route(
     result = await listManufacturersHandler(event);
   } else if (pathname === '/inventory/manufacturers' && method === 'POST') {
     result = await createManufacturerHandler(event);
+  } else if (pathname === '/inventory/purchase-orders' && method === 'GET') {
+    result = await listPurchaseOrdersHandler(event);
   } else if (partMatch && partMatch[2] === 'chain' && method === 'GET') {
     result = await getPartChainHandler({ ...event, pathParameters: { id: partMatch[1] } });
   } else if (partMatch && !partMatch[2] && method === 'GET') {
@@ -317,6 +328,12 @@ async function route(
     result = await updateTimeEntryHandler({ ...event, pathParameters: { workOrderId: timeEntryMatch[1], id: timeEntryMatch[2] } });
   } else if (timeEntryMatch && timeEntryMatch[2] && method === 'DELETE') {
     result = await deleteTimeEntryHandler({ ...event, pathParameters: { workOrderId: timeEntryMatch[1], id: timeEntryMatch[2] } });
+  } else if (pathname === '/tickets/time-entries' && method === 'POST') {
+    result = await createTimeEntryHandler(event);
+  } else if (flatTimeEntryMatch && method === 'PATCH') {
+    result = await updateTimeEntryHandler({ ...event, pathParameters: { id: flatTimeEntryMatch[1] } });
+  } else if (flatTimeEntryMatch && method === 'DELETE') {
+    result = await deleteTimeEntryHandler({ ...event, pathParameters: { id: flatTimeEntryMatch[1] } });
   } else if (pathname === '/tickets/invoice-sync' && method === 'GET') {
     result = await listInvoiceSyncHandler(event);
 
@@ -334,10 +351,22 @@ async function route(
   } else if (pathname === '/tickets/time-entries' && method === 'GET') {
     result = await listAllTimeEntriesHandler(event);
 
-  } else if (routingStepMatch && method === 'GET') {
-    result = await listRoutingStepsHandler({ ...event, pathParameters: { workOrderId: routingStepMatch[1] } });
-  } else if (routingStepMatch && method === 'PATCH') {
-    result = await transitionRoutingStepStateHandler({ ...event, pathParameters: { stepId: routingStepMatch[1] } });
+  } else if (pathname === '/tickets/technician-tasks' && method === 'GET') {
+    result = await listTasksHandler(event);
+  } else if (technicianTaskMatch && method === 'PATCH') {
+    result = await transitionTaskHandler({ ...event, pathParameters: { id: technicianTaskMatch[1] } });
+
+  } else if (pathname === '/planning/routing-steps' && method === 'GET') {
+    result = await listRoutingStepsHandler(event);
+  } else if (routingStepStateMatch && method === 'PATCH') {
+    result = await transitionRoutingStepStateHandler({ ...event, pathParameters: { id: routingStepStateMatch[1] } });
+  } else if (legacyRoutingStepMatch && method === 'GET') {
+    result = await listRoutingStepsHandler({
+      ...event,
+      queryStringParameters: { ...(event.queryStringParameters ?? {}), workOrderId: legacyRoutingStepMatch[1] },
+    });
+  } else if (legacyRoutingStepMatch && method === 'PATCH') {
+    result = await transitionRoutingStepStateHandler({ ...event, pathParameters: { id: legacyRoutingStepMatch[1] } });
 
   // ── SOP / Training ────────────────────────────────────────────────────────
   } else if (pathname === '/sop' && method === 'GET') {

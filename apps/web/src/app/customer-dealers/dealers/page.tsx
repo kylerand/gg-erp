@@ -1,10 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
 import { PageHeader, LoadingSkeleton, EmptyState, StatusBadge } from '@gg-erp/ui';
 import { listDealers, type Dealer } from '@/lib/api-client';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 
 export default function DealersPage() {
   const [dealers, setDealers] = useState<Dealer[]>([]);
@@ -19,9 +17,7 @@ export default function DealersPage() {
 
   return (
     <div>
-      <PageHeader title="Dealers" description={`${dealers.length} dealers`}
-        action={<Button className="bg-yellow-400 hover:bg-yellow-300 text-gray-900" onClick={() => toast.info('Add dealer (coming soon)')}>+ Add Dealer</Button>}
-      />
+      <PageHeader title="Dealers" description={`${dealers.length} dealers`} />
       <div className="mb-4">
         <Input placeholder="Search name or territory…" value={search} onChange={e => setSearch(e.target.value)} className="max-w-sm" />
       </div>
@@ -36,7 +32,6 @@ export default function DealersPage() {
                 <th className="px-4 py-3 text-left font-medium text-gray-600">Contact</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-600">Territory</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-600">Relationship</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -46,9 +41,6 @@ export default function DealersPage() {
                   <td className="px-4 py-3 text-gray-500 text-xs">{d.contactEmail ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-500">{d.territory ?? '—'}</td>
                   <td className="px-4 py-3"><StatusBadge status={d.serviceRelationship} /></td>
-                  <td className="px-4 py-3">
-                    <Button size="sm" variant="outline" onClick={() => toast.info(`Edit ${d.name} (coming soon)`)}>Edit</Button>
-                  </td>
                 </tr>
               ))}
             </tbody>

@@ -30,6 +30,24 @@ export const identityQueries = {
       },
     });
   },
+
+  async listEmployees(filters?: { employmentState?: string }) {
+    return getIdentityPrisma().employee.findMany({
+      where: {
+        deletedAt: null,
+        ...(filters?.employmentState
+          ? { employmentState: filters.employmentState as 'ACTIVE' | 'ON_LEAVE' | 'TERMINATED' }
+          : {}),
+      },
+      include: {
+        skills: {
+          where: { deletedAt: null },
+          select: { skillCode: true },
+        },
+      },
+      orderBy: [{ employmentState: 'asc' }, { lastName: 'asc' }, { firstName: 'asc' }],
+    });
+  },
 };
 
 // ─── Response types ─────────────────────────────────────────────────────────
@@ -107,3 +125,23 @@ export const getMeHandler = wrapHandler(
   },
   { requireAuth: true },
 );
+
+// ─── GET /hr/employees ──────────────────────────────────────────────────────
+
+export const listEmployeesHandler = wrapHandler(async (ctx) => {
+  const qs = ctx.event.queryStringParameters ?? {};
+  const items = await identityQueries.listEmployees({ employmentState: qs.state ?? qs.employmentState });
+
+  return jsonResponse(200, {
+    items: items.map((e) => ({
+      id: e.id,
+      employeeNumber: e.employeeNumber,
+      firstName: e.firstName,
+      lastName: e.lastName,
+      employmentState: e.employmentState,
+      hireDate: e.hireDate.toISOString(),
+      skills: e.skills.map((s) => s.skillCode),
+    })),
+    total: items.length,
+  });
+}, { requireAuth: false });

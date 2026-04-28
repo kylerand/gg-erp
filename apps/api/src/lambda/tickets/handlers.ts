@@ -134,6 +134,17 @@ export const transitionTaskHandler = wrapHandler(async (ctx) => {
   const existing = await getPrisma().technicianTask.findUnique({ where: { id } });
   if (!existing) return jsonResponse(404, { message: `Task not found: ${id}` });
 
+  if (nextState === existing.state && technicianId) {
+    const task = await getPrisma().technicianTask.update({
+      where: { id },
+      data: {
+        technicianId,
+        updatedAt: new Date(),
+      },
+    });
+    return jsonResponse(200, { task: toTaskResponse(task) });
+  }
+
   const allowed = TASK_TRANSITIONS[existing.state as string] ?? [];
   if (!allowed.includes(nextState)) {
     return jsonResponse(409, {
@@ -243,7 +254,7 @@ export const listInvoiceSyncHandler = wrapHandler(async (ctx) => {
 
 export const getQcGatesHandler = wrapHandler(async (ctx) => {
   const qs = ctx.event.queryStringParameters ?? {};
-  const workOrderId = qs.workOrderId;
+  const workOrderId = ctx.event.pathParameters?.workOrderId ?? qs.workOrderId;
   if (!workOrderId) return jsonResponse(400, { message: 'workOrderId is required.' });
 
   const gates = await getQcGateService().getGates({ workOrderId, taskId: qs.taskId });
@@ -259,7 +270,8 @@ export const batchSubmitQcGatesHandler = wrapHandler(async (ctx) => {
   }>(ctx.event);
   if (!body.ok) return jsonResponse(400, { message: body.error });
 
-  const { workOrderId, taskId, reviewedBy, results } = body.value;
+  const workOrderId = ctx.event.pathParameters?.workOrderId ?? body.value.workOrderId;
+  const { taskId, reviewedBy, results } = body.value;
   if (!workOrderId) return jsonResponse(400, { message: 'workOrderId is required.' });
   if (!reviewedBy) return jsonResponse(400, { message: 'reviewedBy is required.' });
   if (!results || results.length === 0) return jsonResponse(400, { message: 'results array must not be empty.' });
@@ -272,14 +284,18 @@ export const batchSubmitQcGatesHandler = wrapHandler(async (ctx) => {
     correlationId: ctx.correlationId,
   });
 
-  return jsonResponse(200, outcome);
+  return jsonResponse(200, {
+    ...outcome,
+    status: outcome.overallResult,
+    openReworkCount: outcome.reworkIssuesCreated,
+  });
 }, { requireAuth: false });
 
 // ─── Labor Time Entries ───────────────────────────────────────────────────────
 
 export const listTimeEntriesHandler = wrapHandler(async (ctx) => {
   const qs = ctx.event.queryStringParameters ?? {};
-  const workOrderId = qs.workOrderId;
+  const workOrderId = ctx.event.pathParameters?.workOrderId ?? qs.workOrderId;
   if (!workOrderId) return jsonResponse(400, { message: 'workOrderId is required.' });
 
   const entries = await getTimeEntryService().listEntries({

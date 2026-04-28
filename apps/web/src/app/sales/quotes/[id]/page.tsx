@@ -225,7 +225,7 @@ export default function QuoteDetailPage() {
         )}
         {quote.status === 'ACCEPTED' && (
           <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
-            Convert to Work Order (coming soon)
+            Accepted
           </span>
         )}
       </div>

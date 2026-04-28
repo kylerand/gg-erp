@@ -14,7 +14,7 @@
     "dev:api": "npm run dev --workspace=apps/api",
     "dev:workers": "npm run dev --workspace=apps/workers",
     "test:architecture": "node --test ./packages/test-utils/tests/architecture-files.test.js ./packages/test-utils/tests/plan-progress.test.js ./packages/test-utils/tests/schema-contracts.test.js",
-    "test:api": "tsx --test apps/api/src/tests/",
+    "test:api": "tsx --test $(find apps/api/src/tests -name '*.test.ts' -print)",
     "test:web": "npm run test --workspace=apps/web --if-present",
     "test:floor-tech": "npm run test --workspace=apps/floor-tech --if-present",
     "test:migration": "npm run test --workspace=packages/migration --if-present",

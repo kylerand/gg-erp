@@ -580,6 +580,25 @@ resource "aws_lambda_function" "identity_list_dealers" {
   }
 }
 
+resource "aws_lambda_function" "identity_list_employees" {
+  function_name    = "${var.name_prefix}-identity-list-employees"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-employees.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/identity-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.identity_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.identity_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
 # ─── Customers Lambda Functions ─────────────────────────────────────────────────
 
 resource "aws_lambda_function" "customers_list" {
@@ -736,6 +755,25 @@ resource "aws_lambda_function" "inventory_list_vendors" {
   }
 }
 
+resource "aws_lambda_function" "inventory_list_purchase_orders" {
+  function_name    = "${var.name_prefix}-inventory-list-purchase-orders"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-purchase-orders.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
 resource "aws_lambda_function" "inventory_list_lots" {
   function_name    = "${var.name_prefix}-inventory-list-lots"
   role             = aws_iam_role.erp_lambda.arn
@@ -876,6 +914,177 @@ resource "aws_lambda_function" "tickets_transition_task" {
   role             = aws_iam_role.erp_lambda.arn
   runtime          = "nodejs20.x"
   handler          = "transition-task.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "tickets_get_qc_gates" {
+  function_name    = "${var.name_prefix}-tickets-get-qc-gates"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "get-qc-gates.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "tickets_batch_submit_qc_gates" {
+  function_name    = "${var.name_prefix}-tickets-batch-submit-qc-gates"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "batch-submit-qc-gates.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "tickets_list_time_entries" {
+  function_name    = "${var.name_prefix}-tickets-list-time-entries"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-time-entries.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "tickets_create_time_entry" {
+  function_name    = "${var.name_prefix}-tickets-create-time-entry"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "create-time-entry.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "tickets_update_time_entry" {
+  function_name    = "${var.name_prefix}-tickets-update-time-entry"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "update-time-entry.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "tickets_delete_time_entry" {
+  function_name    = "${var.name_prefix}-tickets-delete-time-entry"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "delete-time-entry.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "tickets_list_all_time_entries" {
+  function_name    = "${var.name_prefix}-tickets-list-all-time-entries"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-all-time-entries.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "tickets_list_routing_steps" {
+  function_name    = "${var.name_prefix}-tickets-list-routing-steps"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-routing-steps.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "tickets_transition_routing_step" {
+  function_name    = "${var.name_prefix}-tickets-transition-routing-step"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "transition-routing-step.handler"
   s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
   s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
   filename         = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
@@ -1072,6 +1281,21 @@ resource "aws_apigatewayv2_route" "identity_list_dealers" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "GET /identity/dealers"
   target             = "integrations/${aws_apigatewayv2_integration.identity_list_dealers.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "identity_list_employees" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.identity_list_employees.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "identity_list_employees" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /hr/employees"
+  target             = "integrations/${aws_apigatewayv2_integration.identity_list_employees.id}"
   authorization_type = "NONE"
 }
 
@@ -1347,6 +1571,20 @@ resource "aws_apigatewayv2_route" "inventory_list_vendors" {
   authorization_type = "NONE"
 }
 
+resource "aws_apigatewayv2_integration" "inventory_list_purchase_orders" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.inventory_list_purchase_orders.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "inventory_list_purchase_orders" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /inventory/purchase-orders"
+  target             = "integrations/${aws_apigatewayv2_integration.inventory_list_purchase_orders.id}"
+  authorization_type = "NONE"
+}
+
 resource "aws_apigatewayv2_integration" "inventory_list_lots" {
   api_id                 = aws_apigatewayv2_api.erp.id
   integration_type       = "AWS_PROXY"
@@ -1460,6 +1698,158 @@ resource "aws_apigatewayv2_route" "tickets_transition_task" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "PATCH /tickets/tasks/{id}/transition"
   target             = "integrations/${aws_apigatewayv2_integration.tickets_transition_task.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "tickets_get_qc_gates" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.tickets_get_qc_gates.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "tickets_get_qc_gates" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /tickets/work-orders/{workOrderId}/qc-gates"
+  target             = "integrations/${aws_apigatewayv2_integration.tickets_get_qc_gates.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "tickets_batch_submit_qc_gates" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.tickets_batch_submit_qc_gates.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "tickets_batch_submit_qc_gates" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /tickets/work-orders/{workOrderId}/qc-gates/batch-submit"
+  target             = "integrations/${aws_apigatewayv2_integration.tickets_batch_submit_qc_gates.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "tickets_list_time_entries" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.tickets_list_time_entries.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "tickets_list_time_entries" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /tickets/work-orders/{workOrderId}/time-entries"
+  target             = "integrations/${aws_apigatewayv2_integration.tickets_list_time_entries.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "tickets_list_all_time_entries" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.tickets_list_all_time_entries.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "tickets_list_all_time_entries" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /tickets/time-entries"
+  target             = "integrations/${aws_apigatewayv2_integration.tickets_list_all_time_entries.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "tickets_create_time_entry" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.tickets_create_time_entry.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "tickets_create_time_entry" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /tickets/time-entries"
+  target             = "integrations/${aws_apigatewayv2_integration.tickets_create_time_entry.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+resource "aws_apigatewayv2_route" "tickets_create_time_entry_for_work_order" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /tickets/work-orders/{workOrderId}/time-entries"
+  target             = "integrations/${aws_apigatewayv2_integration.tickets_create_time_entry.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "tickets_update_time_entry" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.tickets_update_time_entry.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "tickets_update_time_entry" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /tickets/time-entries/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.tickets_update_time_entry.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+resource "aws_apigatewayv2_route" "tickets_update_time_entry_for_work_order" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /tickets/work-orders/{workOrderId}/time-entries/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.tickets_update_time_entry.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "tickets_delete_time_entry" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.tickets_delete_time_entry.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "tickets_delete_time_entry" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "DELETE /tickets/time-entries/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.tickets_delete_time_entry.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+resource "aws_apigatewayv2_route" "tickets_delete_time_entry_for_work_order" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "DELETE /tickets/work-orders/{workOrderId}/time-entries/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.tickets_delete_time_entry.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "tickets_list_routing_steps" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.tickets_list_routing_steps.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "tickets_list_routing_steps" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /planning/routing-steps"
+  target             = "integrations/${aws_apigatewayv2_integration.tickets_list_routing_steps.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "tickets_transition_routing_step" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.tickets_transition_routing_step.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "tickets_transition_routing_step" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /planning/routing-steps/{id}/state"
+  target             = "integrations/${aws_apigatewayv2_integration.tickets_transition_routing_step.id}"
   authorizer_id      = local.authorizer_id
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
@@ -3575,6 +3965,7 @@ locals {
     workspace_today                       = aws_lambda_function.workspace_today
     identity_me                           = aws_lambda_function.identity_me
     identity_list_dealers                 = aws_lambda_function.identity_list_dealers
+    identity_list_employees               = aws_lambda_function.identity_list_employees
     work_orders_get                       = aws_lambda_function.work_orders_get
     customers_list                        = aws_lambda_function.customers_list
     customers_create                      = aws_lambda_function.customers_create
@@ -3585,6 +3976,7 @@ locals {
     inventory_get_part                    = aws_lambda_function.inventory_get_part
     inventory_get_part_chain              = aws_lambda_function.inventory_get_part_chain
     inventory_list_vendors                = aws_lambda_function.inventory_list_vendors
+    inventory_list_purchase_orders        = aws_lambda_function.inventory_list_purchase_orders
     inventory_list_lots                   = aws_lambda_function.inventory_list_lots
     inventory_list_manufacturers          = aws_lambda_function.inventory_list_manufacturers
     inventory_create_manufacturer         = aws_lambda_function.inventory_create_manufacturer
@@ -3592,6 +3984,15 @@ locals {
     tickets_list_tasks                    = aws_lambda_function.tickets_list_tasks
     tickets_create_task                   = aws_lambda_function.tickets_create_task
     tickets_transition                    = aws_lambda_function.tickets_transition_task
+    tickets_get_qc_gates                  = aws_lambda_function.tickets_get_qc_gates
+    tickets_batch_submit_qc_gates         = aws_lambda_function.tickets_batch_submit_qc_gates
+    tickets_list_time_entries             = aws_lambda_function.tickets_list_time_entries
+    tickets_create_time_entry             = aws_lambda_function.tickets_create_time_entry
+    tickets_update_time_entry             = aws_lambda_function.tickets_update_time_entry
+    tickets_delete_time_entry             = aws_lambda_function.tickets_delete_time_entry
+    tickets_list_all_time_entries         = aws_lambda_function.tickets_list_all_time_entries
+    tickets_list_routing_steps            = aws_lambda_function.tickets_list_routing_steps
+    tickets_transition_routing_step       = aws_lambda_function.tickets_transition_routing_step
     tickets_list_rework                   = aws_lambda_function.tickets_list_rework
     tickets_create_rework                 = aws_lambda_function.tickets_create_rework
     tickets_list_sync                     = aws_lambda_function.tickets_list_sync

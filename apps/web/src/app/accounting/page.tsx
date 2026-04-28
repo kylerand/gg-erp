@@ -48,9 +48,9 @@ const ACCOUNTING_LINKS = {
   queue: '/accounting/sync?view=queue',
   invoices: '/accounting/sync?view=invoices',
   invoicesSyncedToday: '/accounting/sync?view=invoices&state=SYNCED&period=today',
-  customers: '/accounting/sync?view=customers',
+  customers: '/accounting#quickbooks-customers',
   customersSynced: '/accounting/sync?view=customers&state=SYNCED',
-  accounts: '/accounting/sync?view=accounts',
+  accounts: '/accounting#chart-of-accounts',
   recentInvoices: '/accounting#recent-invoices',
 };
 
@@ -202,6 +202,62 @@ export default function AccountingPage() {
       )}
 
       {/* Recent invoices table — straight from QuickBooks */}
+      {connected && ov?.customers && ov.customers.length > 0 && (
+        <SectionCard id="quickbooks-customers" title="Customers in QuickBooks" action={`${ov.customers.length} shown`}>
+          <table className="w-full text-sm">
+            <thead className="text-xs text-gray-500 uppercase">
+              <tr className="text-left">
+                <th className="py-2 pr-3">Customer</th>
+                <th className="py-2 pr-3">Company</th>
+                <th className="py-2 pl-3 text-right">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {ov.customers.map((customer) => (
+                <tr key={customer.id}>
+                  <td className="py-2 pr-3 font-medium text-gray-900">{customer.displayName}</td>
+                  <td className="py-2 pr-3 text-gray-600">{customer.companyName ?? '—'}</td>
+                  <td className="py-2 pl-3 text-right">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${customer.active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                      {customer.active ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </SectionCard>
+      )}
+
+      {connected && ov?.accounts && ov.accounts.length > 0 && (
+        <SectionCard id="chart-of-accounts" title="Chart of accounts in QuickBooks" action={`${ov.accounts.length} shown`}>
+          <table className="w-full text-sm">
+            <thead className="text-xs text-gray-500 uppercase">
+              <tr className="text-left">
+                <th className="py-2 pr-3">Account</th>
+                <th className="py-2 pr-3">Type</th>
+                <th className="py-2 pr-3">Subtype</th>
+                <th className="py-2 pl-3 text-right">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {ov.accounts.map((account) => (
+                <tr key={account.id}>
+                  <td className="py-2 pr-3 font-medium text-gray-900">{account.name}</td>
+                  <td className="py-2 pr-3 text-gray-700">{account.accountType}</td>
+                  <td className="py-2 pr-3 text-gray-500">{account.accountSubType ?? '—'}</td>
+                  <td className="py-2 pl-3 text-right">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${account.active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                      {account.active ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </SectionCard>
+      )}
+
       {connected && ov?.recentInvoices && ov.recentInvoices.length > 0 && (
         <SectionCard id="recent-invoices" title="Recent invoices in QuickBooks" action={`Last ${ov.recentInvoices.length}`}>
           <table className="w-full text-sm">

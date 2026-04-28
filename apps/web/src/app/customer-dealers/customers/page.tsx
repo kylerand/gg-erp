@@ -1,8 +1,9 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import { PageHeader, LoadingSkeleton, EmptyState, StatusBadge } from '@gg-erp/ui';
-import { listCustomers, type Customer } from '@/lib/api-client';
+import { listCustomers, transitionCustomerState, type Customer } from '@/lib/api-client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Pagination } from '@/components/ui/pagination';
@@ -38,15 +39,24 @@ export default function CustomersPage() {
     setPage(1);
   }
 
-  function transition(id: string, toState: Customer['state']) {
-    setCustomers(prev => prev.map(c => c.id === id ? { ...c, state: toState } : c));
-    toast.success(`Customer lifecycle updated to ${toState}`);
+  async function transition(id: string, toState: Customer['state']) {
+    try {
+      const updated = await transitionCustomerState(id, toState);
+      setCustomers(prev => prev.map(c => c.id === id ? updated : c));
+      toast.success(`Customer lifecycle updated to ${toState}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Customer lifecycle update failed');
+    }
   }
 
   return (
     <div>
       <PageHeader title="Customers" description={`${total} total`}
-        action={<Button className="bg-yellow-400 hover:bg-yellow-300 text-gray-900" onClick={() => toast.info('Create customer (coming soon)')}>+ New Customer</Button>}
+        action={(
+          <Link href="/customers">
+            <Button className="bg-yellow-400 hover:bg-yellow-300 text-gray-900">+ New Customer</Button>
+          </Link>
+        )}
       />
       <div className="mb-4">
         <Input placeholder="Search name or email…" value={search} onChange={e => handleSearch(e.target.value)} className="max-w-sm" />
@@ -72,9 +82,9 @@ export default function CustomersPage() {
                     <td className="px-4 py-3 text-gray-500">{c.email ?? '—'}</td>
                     <td className="px-4 py-3"><StatusBadge status={c.state} /></td>
                     <td className="px-4 py-3">
-                      {c.state === 'LEAD' && <Button size="sm" variant="outline" onClick={() => transition(c.id, 'ACTIVE')}>Activate</Button>}
-                      {c.state === 'ACTIVE' && <Button size="sm" variant="outline" onClick={() => transition(c.id, 'INACTIVE')}>Deactivate</Button>}
-                      {c.state === 'INACTIVE' && <Button size="sm" variant="outline" onClick={() => transition(c.id, 'ACTIVE')}>Re-activate</Button>}
+                      {c.state === 'LEAD' && <Button size="sm" variant="outline" onClick={() => void transition(c.id, 'ACTIVE')}>Activate</Button>}
+                      {c.state === 'ACTIVE' && <Button size="sm" variant="outline" onClick={() => void transition(c.id, 'INACTIVE')}>Deactivate</Button>}
+                      {c.state === 'INACTIVE' && <Button size="sm" variant="outline" onClick={() => void transition(c.id, 'ACTIVE')}>Re-activate</Button>}
                     </td>
                   </tr>
                 ))}

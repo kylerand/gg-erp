@@ -43,7 +43,7 @@ export async function apiFetch<T>(path: string, init?: ApiFetchInit, fallback?: 
       headers: { ...headers, ...(fetchInit.headers as Record<string, string> | undefined) },
       cache: 'no-store',
     });
-    if (res.ok) return res.json() as Promise<T>;
+    if (res.ok) return parseApiResponse<T>(res);
 
     // On 401, attempt token refresh and retry once
     if (res.status === 401 && typeof window !== 'undefined') {
@@ -55,7 +55,7 @@ export async function apiFetch<T>(path: string, init?: ApiFetchInit, fallback?: 
           headers: { ...headers, ...(fetchInit.headers as Record<string, string> | undefined) },
           cache: 'no-store',
         });
-        if (retry.ok) return retry.json() as Promise<T>;
+        if (retry.ok) return parseApiResponse<T>(retry);
       }
       // Refresh failed — redirect to login
       redirectToLogin();
@@ -87,6 +87,19 @@ export async function apiFetch<T>(path: string, init?: ApiFetchInit, fallback?: 
     }
     if (err instanceof Error) throw err;
     throw new Error(`Network error calling ${path}`);
+  }
+}
+
+async function parseApiResponse<T>(res: Response): Promise<T> {
+  if (res.status === 204) return undefined as T;
+
+  const text = await res.text();
+  if (!text.trim()) return undefined as T;
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return text as T;
   }
 }
 
@@ -633,6 +646,38 @@ export async function listVendors(): Promise<{ items: Vendor[]; total: number }>
   return apiFetch('/inventory/vendors', undefined, { items: MOCK_VENDORS, total: MOCK_VENDORS.length });
 }
 
+export interface PurchaseOrderLine {
+  id: string;
+  lineNumber: number;
+  partId: string;
+  orderedQuantity: number;
+  receivedQuantity: number;
+  rejectedQuantity: number;
+  unitCost: number;
+  lineState: string;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  poNumber: string;
+  vendorId: string;
+  vendorName: string;
+  vendorCode: string;
+  purchaseOrderState: 'DRAFT' | 'APPROVED' | 'SENT' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELLED';
+  orderedAt: string;
+  expectedAt?: string;
+  lineCount: number;
+  lines: PurchaseOrderLine[];
+}
+
+export async function listPurchaseOrders(params?: { status?: string; page?: number; pageSize?: number }): Promise<{ items: PurchaseOrder[]; total: number }> {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
+  return apiFetch(`/inventory/purchase-orders${qs.size ? `?${qs}` : ''}`, undefined, { items: [], total: 0 });
+}
+
 // ─── Employees / Technicians ──────────────────────────────────────────────────
 
 export interface Employee {
@@ -642,17 +687,13 @@ export interface Employee {
   lastName: string;
   employmentState: 'ACTIVE' | 'ON_LEAVE' | 'TERMINATED';
   hireDate: string;
+  skills?: string[];
 }
-
-export const MOCK_EMPLOYEES: Employee[] = [
-  { id: 'emp-1', employeeNumber: 'EMP-001', firstName: 'Dev', lastName: 'Admin', employmentState: 'ACTIVE', hireDate: '2024-01-01' },
-  { id: 'emp-2', employeeNumber: 'EMP-002', firstName: 'Sample', lastName: 'Tech', employmentState: 'ACTIVE', hireDate: '2024-03-01' },
-];
 
 export async function listEmployees(params?: { employmentState?: string }): Promise<{ items: Employee[]; total: number }> {
   const qs = new URLSearchParams();
   if (params?.employmentState) qs.set('state', params.employmentState);
-  return apiFetch(`/hr/employees${qs.size ? `?${qs}` : ''}`, undefined, { items: MOCK_EMPLOYEES, total: MOCK_EMPLOYEES.length });
+  return apiFetch(`/hr/employees${qs.size ? `?${qs}` : ''}`, undefined, { items: [], total: 0 });
 }
 
 // ─── Technician Tasks ─────────────────────────────────────────────────────────────────
@@ -864,11 +905,28 @@ export interface QbInvoiceSummary {
   customerName?: string;
 }
 
+export interface QbCustomerSummary {
+  id: string;
+  displayName: string;
+  companyName?: string;
+  active: boolean;
+}
+
+export interface QbAccountSummary {
+  id: string;
+  name: string;
+  accountType: string;
+  accountSubType?: string;
+  active: boolean;
+}
+
 export interface QbOverview {
   customerCount?: number;
+  customers?: QbCustomerSummary[];
   openInvoiceCount?: number;
   openInvoiceBalance?: number;
   recentInvoices?: QbInvoiceSummary[];
+  accounts?: QbAccountSummary[];
   accountsByType?: Record<string, number>;
   accountsTotal?: number;
   error?: string;
@@ -974,16 +1032,11 @@ export interface Dealer {
   territory?: string;
 }
 
-export const MOCK_DEALERS: Dealer[] = [
-  { id: 'd-1', name: 'East Coast Golf Carts', contactEmail: 'ops@ecgc.com', serviceRelationship: 'ACTIVE', territory: 'Southeast' },
-  { id: 'd-2', name: 'Western Cart Co', contactEmail: 'service@wcc.com', serviceRelationship: 'ACTIVE', territory: 'West' },
-];
-
 export async function listDealers(): Promise<Dealer[]> {
   const res = await apiFetch<{ items: Dealer[]; total: number } | Dealer[]>(
     '/identity/dealers',
     undefined,
-    { items: MOCK_DEALERS, total: MOCK_DEALERS.length },
+    { items: [], total: 0 },
   );
   return Array.isArray(res) ? res : res.items ?? [];
 }
@@ -1199,10 +1252,11 @@ export interface TrainingAssignment {
   version: number;
 }
 
-export async function listMyAssignments(employeeId: string, params?: { status?: string }): Promise<{ items: TrainingAssignment[]; total: number }> {
-  const qs = new URLSearchParams({ employeeId });
+export async function listMyAssignments(employeeId?: string, params?: { status?: string }): Promise<{ items: TrainingAssignment[]; total: number }> {
+  const qs = new URLSearchParams();
+  if (employeeId) qs.set('employeeId', employeeId);
   if (params?.status) qs.set('status', params.status);
-  return apiFetch(`/ojt/assignments?${qs}`, undefined, { items: [], total: 0 });
+  return apiFetch(`/ojt/assignments${qs.size ? `?${qs}` : ''}`, undefined, { items: [], total: 0 });
 }
 
 export async function completeAssignment(id: string, score?: number): Promise<TrainingAssignment> {
@@ -1618,7 +1672,47 @@ export async function getSalesPipelineStats(): Promise<PipelineStats> {
 }
 
 export async function getSalesForecast(): Promise<SalesForecastMonth[]> {
-  return apiFetch('/sales/forecast', undefined, []);
+  const data = await apiFetch<SalesForecastMonth[] | { forecast?: SalesForecastMonth[] }>('/sales/forecast', undefined, []);
+  return Array.isArray(data) ? data : (data.forecast ?? []);
+}
+
+// ─── Attachments ──────────────────────────────────────────────────────────────
+
+export interface UploadedAttachment {
+  attachmentId: string;
+  fileName: string;
+}
+
+export async function uploadAttachment(input: {
+  entityType: string;
+  entityId: string;
+  file: File;
+}): Promise<UploadedAttachment> {
+  const presign = await apiFetch<{ attachmentId: string; uploadUrl: string }>(
+    '/attachments/presign',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        entityType: input.entityType,
+        entityId: input.entityId,
+        fileName: input.file.name,
+        mimeType: input.file.type || 'application/octet-stream',
+        sizeBytes: input.file.size,
+      }),
+    },
+  );
+
+  const upload = await fetch(presign.uploadUrl, {
+    method: 'PUT',
+    headers: { 'content-type': input.file.type || 'application/octet-stream' },
+    body: input.file,
+  });
+  if (!upload.ok) {
+    throw new Error(`Attachment upload failed (${upload.status})`);
+  }
+
+  await apiFetch(`/attachments/${presign.attachmentId}/confirm`, { method: 'PUT' });
+  return { attachmentId: presign.attachmentId, fileName: input.file.name };
 }
 
 export async function getSalesDashboard(): Promise<SalesDashboard> {

@@ -3,7 +3,7 @@ const tsPlugin = require('@typescript-eslint/eslint-plugin');
 
 module.exports = [
   {
-    ignores: ['dist/**', '.terraform/**', 'node_modules/**', 'coverage/**'],
+    ignores: ['dist/**', '**/.next/**', '.terraform/**', 'node_modules/**', 'coverage/**'],
   },
   {
     files: ['**/*.js', '**/*.cjs', '**/*.mjs'],

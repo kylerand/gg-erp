@@ -55,9 +55,9 @@ module "cognito" {
   source      = "../../modules/cognito"
   name_prefix = var.name_prefix
 
-  google_client_id      = var.google_client_id
-  google_client_secret  = var.google_client_secret
-  google_hosted_domain  = "golfingarage.com"
+  google_client_id     = var.google_client_id
+  google_client_secret = var.google_client_secret
+  google_hosted_domain = "golfingarage.com"
   oauth_callback_urls = [
     "https://golfingarage.m4nos.com/auth/callback",
     "https://floor.golfingarage.m4nos.com/auth/callback",
@@ -106,39 +106,40 @@ module "secrets" {
 }
 
 module "api_gateway_lambda" {
-  source                      = "../../modules/api-gateway-lambda"
-  name_prefix                 = var.name_prefix
-  work_orders_lambda_zip_path = var.work_orders_lambda_zip_path
-  customers_lambda_zip_path   = var.customers_lambda_zip_path
-  inventory_lambda_zip_path   = var.inventory_lambda_zip_path
-  tickets_lambda_zip_path     = var.tickets_lambda_zip_path
-  attachments_lambda_zip_path = var.attachments_lambda_zip_path
-  sop_lambda_zip_path         = var.sop_lambda_zip_path
-  accounting_lambda_zip_path  = var.accounting_lambda_zip_path
-  migration_lambda_zip_path   = var.migration_lambda_zip_path
-  identity_lambda_zip_path    = var.identity_lambda_zip_path
-  communication_lambda_zip_path = var.communication_lambda_zip_path
-  audit_lambda_zip_path         = var.audit_lambda_zip_path
-  sales_lambda_zip_path         = var.sales_lambda_zip_path
-  copilot_lambda_zip_path       = var.copilot_lambda_zip_path
-  scheduling_lambda_zip_path    = var.scheduling_lambda_zip_path
-  workers_lambda_zip_path       = var.workers_lambda_zip_path
-  sentry_dsn                    = var.sentry_dsn
-  cognito_user_pool_endpoint  = module.cognito.issuer_url
-  cognito_user_pool_id        = module.cognito.user_pool_id
-  cognito_user_pool_arn       = module.cognito.user_pool_arn
-  cognito_audience            = [module.cognito.app_client_ids["web"]]
-  database_url                = module.aurora_postgres.database_url
-  document_bucket_name        = module.s3.document_bucket_name
+  source                          = "../../modules/api-gateway-lambda"
+  name_prefix                     = var.name_prefix
+  work_orders_lambda_zip_path     = var.work_orders_lambda_zip_path
+  customers_lambda_zip_path       = var.customers_lambda_zip_path
+  inventory_lambda_zip_path       = var.inventory_lambda_zip_path
+  tickets_lambda_zip_path         = var.tickets_lambda_zip_path
+  attachments_lambda_zip_path     = var.attachments_lambda_zip_path
+  sop_lambda_zip_path             = var.sop_lambda_zip_path
+  accounting_lambda_zip_path      = var.accounting_lambda_zip_path
+  migration_lambda_zip_path       = var.migration_lambda_zip_path
+  identity_lambda_zip_path        = var.identity_lambda_zip_path
+  communication_lambda_zip_path   = var.communication_lambda_zip_path
+  audit_lambda_zip_path           = var.audit_lambda_zip_path
+  sales_lambda_zip_path           = var.sales_lambda_zip_path
+  copilot_lambda_zip_path         = var.copilot_lambda_zip_path
+  scheduling_lambda_zip_path      = var.scheduling_lambda_zip_path
+  workspace_lambda_zip_path       = var.workspace_lambda_zip_path
+  workers_lambda_zip_path         = var.workers_lambda_zip_path
+  sentry_dsn                      = var.sentry_dsn
+  cognito_user_pool_endpoint      = module.cognito.issuer_url
+  cognito_user_pool_id            = module.cognito.user_pool_id
+  cognito_user_pool_arn           = module.cognito.user_pool_arn
+  cognito_audience                = [module.cognito.app_client_ids["web"]]
+  database_url                    = module.aurora_postgres.database_url
+  document_bucket_name            = module.s3.document_bucket_name
   migration_artifacts_bucket_name = module.s3.migration_bucket_name
   lambda_artifacts_bucket_name    = module.s3.lambda_artifacts_bucket_name
-  qb_client_id                = var.qb_client_id
-  qb_client_secret            = var.qb_client_secret
-  qb_redirect_uri             = var.qb_redirect_uri
-  qb_webhook_verifier_token   = var.qb_webhook_verifier_token
-  frontend_url                = module.amplify_hosting.web_url
-  private_subnet_ids          = module.vpc.private_subnet_ids
-  lambda_security_group_id    = module.vpc.lambda_security_group_id
+  qb_client_id                    = var.qb_client_id
+  qb_client_secret                = var.qb_client_secret
+  qb_redirect_uri                 = var.qb_redirect_uri
+  qb_webhook_verifier_token       = var.qb_webhook_verifier_token
+  frontend_url                    = module.amplify_hosting.web_url
+  private_subnet_ids              = module.vpc.private_subnet_ids
+  lambda_security_group_id        = module.vpc.lambda_security_group_id
 }
 
 module "amplify_hosting" {

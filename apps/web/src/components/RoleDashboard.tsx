@@ -5,8 +5,10 @@ import { useRole } from '@/lib/role-context';
 import {
   listWorkOrders, listParts, listInvoiceSyncRecords, listAuditEvents,
   getQbStatus, listReconciliationRuns, getFailureSummary,
+  getWorkspaceToday,
 } from '@/lib/api-client';
 import type { UserRole } from '@/lib/auth';
+import type { WorkspaceTodayItem, WorkspaceTodayResponse } from '@/lib/api-client';
 
 interface DashboardCard {
   id: string;
@@ -79,6 +81,7 @@ const DEFAULT_ROLE_LANDING: Record<UserRole, string> = {
 export function RoleDashboard() {
   const { role, user, loading } = useRole();
   const [counts, setCounts] = useState<Record<string, number | string>>({});
+  const [today, setToday] = useState<WorkspaceTodayResponse | null>(null);
 
   useEffect(() => {
     async function fetchCounts() {
@@ -160,6 +163,20 @@ export function RoleDashboard() {
     void fetchCounts();
   }, []);
 
+  useEffect(() => {
+    if (loading) return;
+    const effectiveRole: UserRole = role ?? 'technician';
+    async function fetchToday() {
+      try {
+        const nextToday = await getWorkspaceToday(effectiveRole);
+        setToday(nextToday);
+      } catch {
+        setToday(null);
+      }
+    }
+    void fetchToday();
+  }, [loading, role]);
+
   if (loading) {
     return (
       <div>
@@ -206,15 +223,17 @@ export function RoleDashboard() {
       <div className="mb-8 brand-panel p-6">
         <div className="brand-pill border-[#F6D1B7] bg-[#FFF3E8] text-[#8A4A18]">Today at a glance</div>
         <h1 className="mt-4 text-4xl text-[#211F1E]" data-brand-heading="true">
-          Good {getTimeOfDay()}, {user?.name ?? 'there'} 👋
+          Good {getTimeOfDay()}, {user?.name ?? 'there'}
         </h1>
         <p className="text-sm text-[#6E625A] mt-2 capitalize">
           {effectiveRole} · {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
         </p>
         <Link href={landing} className="inline-block mt-4 text-sm text-[#B1581B] hover:text-[#8A4A18] font-semibold hover:underline">
-          → Go to my workspace
+          Go to my workspace
         </Link>
       </div>
+
+      <TodayQueue today={today} className="mb-8" />
 
       {p1Cards.length > 0 && (
         <section className="mb-6">
@@ -253,6 +272,80 @@ export function RoleDashboard() {
       )}
     </div>
   );
+}
+
+function TodayQueue({ today, className }: { today: WorkspaceTodayResponse | null; className?: string }) {
+  const items = today?.items ?? [];
+  return (
+    <section className={`brand-panel p-5 ${className ?? ''}`}>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <div className="brand-pill border-[#D9CCBE] bg-white text-[#6E625A]">Operator worklist</div>
+          <h2 className="mt-3 text-2xl text-[#211F1E]" data-brand-heading="true">What needs attention next</h2>
+        </div>
+        <div className="grid grid-cols-4 gap-2 text-center">
+          <MiniCount label="Total" value={today?.summary.total ?? 0} />
+          <MiniCount label="P1" value={today?.summary.p1 ?? 0} tone="red" />
+          <MiniCount label="P2" value={today?.summary.p2 ?? 0} tone="amber" />
+          <MiniCount label="P3" value={today?.summary.p3 ?? 0} tone="blue" />
+        </div>
+      </div>
+
+      <div className="mt-4 divide-y divide-[#E4D8CB] overflow-hidden rounded-xl border border-[#E4D8CB] bg-white">
+        {items.length > 0 ? (
+          items.slice(0, 6).map((item) => <TodayQueueItem key={item.id} item={item} />)
+        ) : (
+          <div className="px-4 py-8 text-sm text-[#6E625A]">
+            No urgent work surfaced for this role right now.
+          </div>
+        )}
+      </div>
+
+      {today && today.warnings.length > 0 && (
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+          Some worklist sources could not be refreshed. Showing the available live items.
+        </div>
+      )}
+    </section>
+  );
+}
+
+function TodayQueueItem({ item }: { item: WorkspaceTodayItem }) {
+  const cfg = severityConfig(item.severity);
+  return (
+    <Link href={item.primaryHref} className="grid gap-3 px-4 py-3 transition-colors hover:bg-[#FFF7EE] md:grid-cols-[7rem_1fr_auto] md:items-center">
+      <div className={`inline-flex h-8 w-20 items-center justify-center rounded-lg border text-xs font-bold ${cfg.classes}`}>
+        {item.severity}
+      </div>
+      <div>
+        <div className="text-sm font-semibold text-[#211F1E]">{item.title}</div>
+        <div className="mt-0.5 text-xs text-[#6E625A]">{item.description}</div>
+      </div>
+      <div className="text-xs font-semibold text-[#B1581B]">{item.primaryAction}</div>
+    </Link>
+  );
+}
+
+function MiniCount({ label, value, tone }: { label: string; value: number; tone?: 'red' | 'amber' | 'blue' }) {
+  const classes = tone === 'red'
+    ? 'border-red-200 bg-red-50 text-red-700'
+    : tone === 'amber'
+      ? 'border-amber-200 bg-amber-50 text-amber-700'
+      : tone === 'blue'
+        ? 'border-blue-200 bg-blue-50 text-blue-700'
+        : 'border-[#E4D8CB] bg-white text-[#211F1E]';
+  return (
+    <div className={`min-w-16 rounded-xl border px-3 py-2 ${classes}`}>
+      <div className="text-lg font-bold leading-none">{value}</div>
+      <div className="mt-1 text-[10px] font-semibold uppercase">{label}</div>
+    </div>
+  );
+}
+
+function severityConfig(severity: WorkspaceTodayItem['severity']) {
+  if (severity === 'P1') return { classes: 'border-red-200 bg-red-50 text-red-700' };
+  if (severity === 'P2') return { classes: 'border-amber-200 bg-amber-50 text-amber-700' };
+  return { classes: 'border-blue-200 bg-blue-50 text-blue-700' };
 }
 
 function DashCard({ card }: { card: DashboardCard }) {

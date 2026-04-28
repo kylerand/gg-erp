@@ -32,6 +32,9 @@ const lambdas: LambdaEntry[] = [
   { context: 'identity', handler: 'admin-update-user',  entry: 'apps/api/src/lambda/identity/admin-update-user.entry.ts' },
   { context: 'identity', handler: 'admin-delete-user',  entry: 'apps/api/src/lambda/identity/admin-delete-user.entry.ts' },
 
+  // workspace
+  { context: 'workspace', handler: 'today', entry: 'apps/api/src/lambda/workspace/today.handler.ts' },
+
   // work-orders
   { context: 'work-orders', handler: 'create',     entry: 'apps/api/src/lambda/work-orders/create.handler.ts' },
   { context: 'work-orders', handler: 'get',         entry: 'apps/api/src/lambda/work-orders/get.handler.ts' },

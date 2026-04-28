@@ -173,6 +173,111 @@ export function setupOfflineQueueReplay(): void {
 // Auto-wire on import (no-op in SSR)
 setupOfflineQueueReplay();
 
+// ─── Workspace Today Queue ──────────────────────────────────────────────────
+
+export type WorkspaceRole = 'technician' | 'manager' | 'parts' | 'trainer' | 'accounting' | 'admin';
+export type TodaySeverity = 'P1' | 'P2' | 'P3';
+export type TodayFreshness = 'LIVE' | 'STALE';
+export type TodayModule = 'work_orders' | 'inventory' | 'purchasing' | 'training' | 'accounting' | 'admin';
+
+export interface WorkspaceTodayItem {
+  id: string;
+  module: TodayModule;
+  severity: TodaySeverity;
+  title: string;
+  description: string;
+  primaryHref: string;
+  primaryAction: string;
+  ownerRole: WorkspaceRole;
+  dueAt?: string;
+  sourceType: string;
+  sourceId: string;
+  freshness: TodayFreshness;
+}
+
+export interface WorkspaceTodayResponse {
+  generatedAt: string;
+  role: WorkspaceRole;
+  summary: {
+    p1: number;
+    p2: number;
+    p3: number;
+    total: number;
+  };
+  items: WorkspaceTodayItem[];
+  warnings: Array<{ source: string; message: string }>;
+}
+
+const MOCK_TODAY: WorkspaceTodayResponse = {
+  generatedAt: new Date().toISOString(),
+  role: 'manager',
+  summary: { p1: 2, p2: 2, p3: 0, total: 4 },
+  items: [
+    {
+      id: 'mock-blocked-work',
+      module: 'work_orders',
+      severity: 'P1',
+      title: 'WO-002 is blocked',
+      description: 'Waiting on battery pack before the build can continue.',
+      primaryHref: '/work-orders/open',
+      primaryAction: 'Review blocker',
+      ownerRole: 'manager',
+      sourceType: 'work_order',
+      sourceId: 'wo-2',
+      freshness: 'LIVE',
+    },
+    {
+      id: 'mock-shortage',
+      module: 'inventory',
+      severity: 'P1',
+      title: 'GG-FAB-4LSB-ASM below minimum',
+      description: '4-Link Suspension: 0 on hand, 1 minimum.',
+      primaryHref: '/inventory/parts/p-4',
+      primaryAction: 'Review part',
+      ownerRole: 'parts',
+      sourceType: 'part',
+      sourceId: 'p-4',
+      freshness: 'LIVE',
+    },
+    {
+      id: 'mock-dispatch',
+      module: 'work_orders',
+      severity: 'P2',
+      title: 'Task waiting for assignment',
+      description: 'A ready routing step has no technician assigned.',
+      primaryHref: '/work-orders/dispatch',
+      primaryAction: 'Assign task',
+      ownerRole: 'manager',
+      sourceType: 'technician_task',
+      sourceId: 'task-1',
+      freshness: 'LIVE',
+    },
+    {
+      id: 'mock-qb',
+      module: 'accounting',
+      severity: 'P2',
+      title: 'INV-001 failed QuickBooks sync',
+      description: 'QuickBooks connection timeout.',
+      primaryHref: '/accounting/sync',
+      primaryAction: 'Review sync',
+      ownerRole: 'accounting',
+      sourceType: 'invoice_sync',
+      sourceId: 's-1',
+      freshness: 'LIVE',
+    },
+  ],
+  warnings: [],
+};
+
+export async function getWorkspaceToday(role?: WorkspaceRole): Promise<WorkspaceTodayResponse> {
+  const qs = new URLSearchParams();
+  if (role) qs.set('role', role);
+  return apiFetch(`/workspace/today${qs.size ? `?${qs}` : ''}`, undefined, {
+    ...MOCK_TODAY,
+    role: role ?? MOCK_TODAY.role,
+  });
+}
+
 // ─── Work Orders (planning schema) ───────────────────────────────────────────
 
 export interface WorkOrder {
@@ -1589,4 +1694,3 @@ export async function getCopilotSession(
 ): Promise<{ id: string; messages: AgentChatMessage[] }> {
   return apiFetch(`/copilot/sessions/${id}`);
 }
-

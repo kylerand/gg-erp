@@ -193,10 +193,20 @@ export function DispatchClient() {
   }
 
   const staleMinutes = Math.floor((Date.now() - lastRefreshDisplay) / 60_000);
+  const todayState = summarizeDispatchState({
+    loading,
+    error,
+    isStale,
+    unassigned: unassigned.length,
+    techCount: ACTIVE_TECHS.length,
+    techTasks,
+  });
 
   return (
     <div className="space-y-4">
       <PageHeader title="Dispatch Board" description="Assign and manage technician tasks" />
+
+      <DispatchBanner state={todayState} loading={loading} />
 
       {isStale && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm text-amber-700 flex items-center justify-between gap-3">
@@ -364,6 +374,74 @@ export function DispatchClient() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+    </div>
+  );
+}
+
+interface DispatchTodayState {
+  tone: 'green' | 'amber' | 'red' | 'neutral';
+  headline: string;
+  subhead: string;
+}
+
+function summarizeDispatchState(args: {
+  loading: boolean;
+  error: string | null;
+  isStale: boolean;
+  unassigned: number;
+  techCount: number;
+  techTasks: Record<string, TechnicianTask[]>;
+}): DispatchTodayState {
+  if (args.error) {
+    return {
+      tone: 'red',
+      headline: 'Dispatch board failed to load.',
+      subhead: 'Tasks below may be missing or stale. Retry the request to recover.',
+    };
+  }
+  if (args.techCount === 0) {
+    return {
+      tone: 'amber',
+      headline: 'No active technicians on shift.',
+      subhead: 'Add or activate a technician before assigning tasks.',
+    };
+  }
+  const inProgress = Object.values(args.techTasks)
+    .flat()
+    .filter((t) => t.state === 'IN_PROGRESS').length;
+  if (args.unassigned === 0) {
+    return {
+      tone: 'green',
+      headline: 'Queue is clear.',
+      subhead: `All READY tasks are assigned. ${inProgress} task${inProgress === 1 ? '' : 's'} in progress across ${args.techCount} tech${args.techCount === 1 ? '' : 's'}.`,
+    };
+  }
+  return {
+    tone: 'amber',
+    headline: `${args.unassigned} task${args.unassigned === 1 ? '' : 's'} waiting to be assigned.`,
+    subhead: `${inProgress} in progress · ${args.techCount} tech${args.techCount === 1 ? '' : 's'} on shift. Tap "+ Assign" on any unassigned card to route it.`,
+  };
+}
+
+function DispatchBanner({ state, loading }: { state: DispatchTodayState; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 animate-pulse">
+        <div className="h-5 w-64 bg-gray-200 rounded" />
+        <div className="h-3 w-96 bg-gray-100 rounded mt-2" />
+      </div>
+    );
+  }
+  const toneStyles: Record<DispatchTodayState['tone'], string> = {
+    green: 'bg-green-50 border-green-200 text-green-900',
+    amber: 'bg-yellow-50 border-yellow-200 text-yellow-900',
+    red: 'bg-red-50 border-red-200 text-red-900',
+    neutral: 'bg-gray-50 border-gray-200 text-gray-900',
+  };
+  return (
+    <div className={`border rounded-lg p-4 ${toneStyles[state.tone]}`}>
+      <div className="font-semibold text-base">{state.headline}</div>
+      <div className="text-sm mt-1 opacity-80">{state.subhead}</div>
     </div>
   );
 }

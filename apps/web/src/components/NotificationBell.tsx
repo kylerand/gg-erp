@@ -73,9 +73,10 @@ export function NotificationBell() {
         }
       }
 
-      if (notification.referenceType === 'channel' && notification.referenceId) {
+      const href = getNotificationHref(notification);
+      if (href) {
         setOpen(false);
-        router.push(`/communication/channels/${notification.referenceId}`);
+        router.push(href);
       }
     },
     [router],
@@ -170,4 +171,24 @@ export function NotificationBell() {
       )}
     </div>
   );
+}
+
+function getNotificationHref(notification: AppNotification): string | null {
+  if (!notification.referenceId) return null;
+
+  switch (notification.referenceType) {
+    case 'channel':
+      return `/messages?channel=${encodeURIComponent(notification.referenceId)}`;
+    case 'work_order':
+    case 'wo_order':
+      return `/work-orders/${encodeURIComponent(notification.referenceId)}`;
+    case 'customer':
+      return `/customer-dealers/customers?search=${encodeURIComponent(notification.referenceId)}`;
+    case 'quote':
+      return `/sales/quotes/${encodeURIComponent(notification.referenceId)}`;
+    case 'opportunity':
+      return `/sales/opportunities/${encodeURIComponent(notification.referenceId)}`;
+    default:
+      return '/messages';
+  }
 }

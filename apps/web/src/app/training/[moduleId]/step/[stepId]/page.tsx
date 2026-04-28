@@ -20,6 +20,7 @@ import {
   listNotes,
   toggleBookmark,
   listBookmarks,
+  saveNote,
   type TrainingModule,
   type OjtStep,
   type ModuleProgressData,
@@ -27,11 +28,27 @@ import {
 } from '@/lib/api-client';
 import { useRole } from '@/lib/role-context';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function emptyProgress(moduleId: string, employeeId: string): ModuleProgressData {
+  return {
+    moduleId,
+    employeeId,
+    status: 'not-started',
+    currentStep: null,
+    startedAt: null,
+    completedAt: null,
+    steps: [],
+    quizAttempts: [],
+  };
+}
+
 export default function StepPage() {
   const params = useParams<{ moduleId: string; stepId: string }>();
   const { moduleId, stepId } = params;
   const { user } = useRole();
   const employeeId = user?.userId ?? '';
+  const canTrackProgress = UUID_RE.test(employeeId);
 
   const [module, setModule] = useState<TrainingModule | null>(null);
   const [progress, setProgress] = useState<ModuleProgressData | null>(null);
@@ -50,12 +67,22 @@ export default function StepPage() {
     let cancelled = false;
     async function load() {
       try {
-        const [mod, prog, notesList, bookmarksList] = await Promise.all([
-          getTrainingModule(moduleId),
-          getModuleProgress(moduleId, employeeId),
-          listNotes(employeeId, moduleId),
-          listBookmarks(employeeId, moduleId),
+        const mod = await getTrainingModule(moduleId);
+        const [progressResult, notesResult, bookmarksResult] = await Promise.allSettled([
+          canTrackProgress
+            ? getModuleProgress(moduleId, employeeId)
+            : Promise.resolve(emptyProgress(moduleId, employeeId)),
+          canTrackProgress ? listNotes(employeeId, moduleId) : Promise.resolve([]),
+          canTrackProgress ? listBookmarks(employeeId, moduleId) : Promise.resolve([]),
         ]);
+
+        const prog =
+          progressResult.status === 'fulfilled'
+            ? progressResult.value
+            : emptyProgress(mod.id, employeeId);
+        const notesList = notesResult.status === 'fulfilled' ? notesResult.value : [];
+        const bookmarksList = bookmarksResult.status === 'fulfilled' ? bookmarksResult.value : [];
+
         if (!cancelled) {
           setModule(mod);
           setProgress(prog);
@@ -70,12 +97,13 @@ export default function StepPage() {
     }
     load();
     return () => { cancelled = true; };
-  }, [moduleId, stepId]);
+  }, [canTrackProgress, employeeId, moduleId, stepId]);
 
   const stepStatus = progress?.steps.find(s => s.stepId === stepId);
   const completedStepIds = new Set(progress?.steps.filter(s => s.status === 'completed').map(s => s.stepId) ?? []);
 
   function handleVideoProgress(pct: number) {
+    if (!canTrackProgress) return;
     updateStepProgress(moduleId, {
       employeeId: employeeId,
       stepId,
@@ -84,6 +112,7 @@ export default function StepPage() {
   }
 
   function handleVideoComplete() {
+    if (!canTrackProgress) return;
     updateStepProgress(moduleId, {
       employeeId: employeeId,
       stepId,
@@ -93,6 +122,7 @@ export default function StepPage() {
   }
 
   async function handleMarkComplete() {
+    if (!canTrackProgress) return;
     await updateStepProgress(moduleId, {
       employeeId: employeeId,
       stepId,
@@ -104,8 +134,16 @@ export default function StepPage() {
   }
 
   async function handleBookmarkToggle() {
-    const next = await toggleBookmark(employeeId, module!.id, stepId);
+    if (!module || !canTrackProgress) return;
+    const next = await toggleBookmark(employeeId, module.id, stepId);
     setBookmarked(next);
+  }
+
+  async function handleSaveNote(content: string) {
+    if (!module || !canTrackProgress) return;
+    await saveNote(employeeId, module.id, content, stepId);
+    const updatedNotes = await listNotes(employeeId, module.id);
+    setNotes(updatedNotes.filter(n => n.stepId === stepId));
   }
 
   if (loading) {
@@ -153,7 +191,11 @@ export default function StepPage() {
 
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-bold text-gray-900">{step.title}</h1>
-          <BookmarkButton isBookmarked={bookmarked} onToggle={handleBookmarkToggle} />
+          <BookmarkButton
+            isBookmarked={bookmarked}
+            onToggle={handleBookmarkToggle}
+            loading={!canTrackProgress}
+          />
         </div>
 
         {/* Safety warnings */}
@@ -199,6 +241,7 @@ export default function StepPage() {
           moduleId={module.id}
           stepId={stepId}
           initialNotes={notes}
+          onSave={canTrackProgress ? handleSaveNote : undefined}
         />
 
         {/* Navigation */}
@@ -207,8 +250,8 @@ export default function StepPage() {
           prevStepId={prevStep?.id}
           nextStepId={nextStep?.id}
           isLastStep={isLastStep}
-          stepCompleted={stepStatus?.status === 'completed'}
-          onMarkComplete={handleMarkComplete}
+          stepCompleted={!canTrackProgress || stepStatus?.status === 'completed'}
+          onMarkComplete={canTrackProgress ? handleMarkComplete : undefined}
         />
       </div>
     </div>

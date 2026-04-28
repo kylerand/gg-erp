@@ -1,6 +1,5 @@
 'use client';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { signInWithRedirect } from 'aws-amplify/auth';
 import { doSignIn, doSignOut, doConfirmNewPassword, setMockRole, type UserRole } from '@/lib/auth';
@@ -42,8 +41,6 @@ function passwordRules(pw: string) {
 }
 
 export default function AuthPage() {
-  const router = useRouter();
-
   // ── Sign-in state ──────────────────────────────────────────────────────────
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -149,7 +146,7 @@ export default function AuthPage() {
 
   function handleMockSignIn(role: UserRole) {
     setMockRole(role);
-    router.push('/');
+    window.location.href = '/';
   }
 
   const pwRules = passwordRules(newPassword);
@@ -345,4 +342,3 @@ function EyeIcon({ open }: { open: boolean }) {
     </svg>
   );
 }
-

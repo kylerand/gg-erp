@@ -1,7 +1,9 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import Image from 'next/image';
-import { Search, WifiOff, Smartphone } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import { Plus, Search, Smartphone, WifiOff } from 'lucide-react';
+import { GlobalCommandPalette, QuickCreateMenu } from './GlobalCommandPalette';
 import { NotificationBell } from './NotificationBell';
 import { getAuthUser, type AuthUser } from '../lib/auth';
 
@@ -40,9 +42,13 @@ function getInitials(nameOrEmail: string): string {
 }
 
 export function TopHeader() {
+  const pathname = usePathname();
   const [isOnline, setIsOnline] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+  const quickCreateRef = useRef<HTMLDivElement>(null);
   const queuedCount = useOfflineQueue(refreshKey);
 
   useEffect(() => {
@@ -61,10 +67,43 @@ export function TopHeader() {
     };
   }, []);
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isTyping =
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable;
+      if (isTyping) return;
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setCommandOpen(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  useEffect(() => {
+    if (!quickCreateOpen) return;
+    const handleClick = (event: MouseEvent) => {
+      if (quickCreateRef.current && !quickCreateRef.current.contains(event.target as Node)) {
+        setQuickCreateOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [quickCreateOpen]);
+
   const handleReplay = useCallback(() => {
     window.dispatchEvent(new CustomEvent('offline-queue:replay'));
     setTimeout(() => setRefreshKey(k => k + 1), 800);
   }, []);
+
+  const floorTechBase = process.env.NEXT_PUBLIC_FLOOR_TECH_URL ?? 'http://localhost:3002';
+  const floorTechHref = `${floorTechBase}?source=erp&returnTo=${encodeURIComponent(pathname)}`;
 
   return (
     <header className="sticky top-0 z-20 border-b border-[#D9CCBE] bg-[#FFF8EF]/95 backdrop-blur flex items-center px-4 sm:px-6 py-3 gap-4 flex-shrink-0">
@@ -74,13 +113,18 @@ export function TopHeader() {
 
       {/* Search */}
       <div className="flex items-center gap-2 flex-1 max-w-xl">
-        <div className="flex items-center gap-2 w-full bg-white border border-[#D9CCBE] rounded-2xl px-4 py-3 text-sm text-[#6E625A] cursor-pointer hover:border-[#E37125] transition-colors shadow-sm">
+        <button
+          type="button"
+          onClick={() => setCommandOpen(true)}
+          className="flex items-center gap-2 w-full bg-white border border-[#D9CCBE] rounded-2xl px-4 py-3 text-sm text-[#6E625A] cursor-pointer hover:border-[#E37125] transition-colors shadow-sm text-left"
+          aria-label="Search ERP destinations"
+        >
           <Search size={14} className="flex-shrink-0" />
           <span className="flex-1">Search work orders, inventory, customers</span>
           <kbd className="hidden sm:inline-flex items-center gap-0.5 text-xs text-[#85776F] bg-[#F9F8D1] border border-[#E6DFC6] rounded-lg px-2 py-1 font-sans">
             <span>⌘</span><span>K</span>
           </kbd>
-        </div>
+        </button>
       </div>
 
       {/* Connectivity badge */}
@@ -105,8 +149,23 @@ export function TopHeader() {
 
       {/* Actions */}
       <div className="flex items-center gap-2">
+        <div ref={quickCreateRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setQuickCreateOpen((open) => !open)}
+            className="hidden sm:flex items-center gap-2 rounded-2xl border border-[#D9CCBE] bg-white px-3 py-2 text-xs font-semibold text-[#4F4641] hover:border-[#E37125] hover:text-[#211F1E] transition-colors"
+            aria-label="Create new ERP record"
+            aria-expanded={quickCreateOpen}
+          >
+            <Plus size={14} />
+            <span>Create</span>
+          </button>
+          {quickCreateOpen && (
+            <QuickCreateMenu onNavigate={() => setQuickCreateOpen(false)} />
+          )}
+        </div>
         <a
-          href={process.env.NEXT_PUBLIC_FLOOR_TECH_URL ?? 'http://localhost:3002'}
+          href={floorTechHref}
           className="hidden lg:flex items-center gap-2 rounded-2xl border border-[#D9CCBE] bg-white px-3 py-2 text-xs font-semibold text-[#4F4641] hover:border-[#E37125] hover:text-[#211F1E] transition-colors"
         >
           <Smartphone size={14} />
@@ -132,6 +191,7 @@ export function TopHeader() {
           </div>
         </div>
       </div>
+      <GlobalCommandPalette open={commandOpen} onClose={() => setCommandOpen(false)} />
     </header>
   );
 }

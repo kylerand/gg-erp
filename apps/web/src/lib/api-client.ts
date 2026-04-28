@@ -1,4 +1,5 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
+const IS_AUTH_MOCK = process.env.NEXT_PUBLIC_AUTH_MODE === 'mock';
 
 /**
  * Mock fallback is only used when the API base points at localhost (dev).
@@ -44,6 +45,14 @@ export async function apiFetch<T>(path: string, init?: ApiFetchInit, fallback?: 
       cache: 'no-store',
     });
     if (res.ok) return parseApiResponse<T>(res);
+
+    if (res.status === 401 && IS_AUTH_MOCK) {
+      if (shouldUseFallback(fallback)) {
+        warnFallback(path, 'mock auth token rejected by local API');
+        return fallback;
+      }
+      throw new Error(`Mock auth token rejected by local API: ${path}`);
+    }
 
     // On 401, attempt token refresh and retry once
     if (res.status === 401 && typeof window !== 'undefined') {
@@ -367,9 +376,71 @@ export interface WoOrder {
   updatedAt: string;
 }
 
+export interface WoOrderChecklistItem {
+  id: string;
+  label: string;
+  done: boolean;
+}
+
+export interface WoOrderPartLine {
+  id: string;
+  name: string;
+  qty: number;
+  state: 'READY' | 'RESERVED' | 'SHORT' | 'REQUESTED';
+}
+
+export interface WoOrderNote {
+  id: string;
+  author: string;
+  message: string;
+  createdAt: string;
+}
+
+export interface WoOrderDetail {
+  id: string;
+  number: string;
+  title: string;
+  customer: string;
+  cart: string;
+  bay: string;
+  status: WoOrder['status'];
+  eta: string;
+  syncStatus: 'SYNCED' | 'PENDING' | 'FAILED';
+  materialReadiness: 'READY' | 'PARTIAL' | 'NOT_READY';
+  shortageCount?: number;
+  reworkLoop: number;
+  checklist: WoOrderChecklistItem[];
+  parts: WoOrderPartLine[];
+  notes: WoOrderNote[];
+}
+
 export const MOCK_WO_ORDERS: WoOrder[] = [
   { id: 'wo-ex-1', workOrderNumber: 'WO-2024-0001', title: 'Club Car DS Full Build — Lifted Off-Road', customerReference: 'CUST-DEMO-001', status: 'READY', priority: 2, openedAt: new Date().toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
 ];
+
+export const MOCK_WO_ORDER_DETAIL: WoOrderDetail = {
+  id: 'wo-ex-1',
+  number: 'WO-2024-0001',
+  title: 'Club Car DS Full Build — Lifted Off-Road',
+  customer: 'CUST-DEMO-001',
+  cart: 'Club Car DS',
+  bay: 'Main Shop',
+  status: 'READY',
+  eta: 'No due date',
+  syncStatus: 'SYNCED',
+  materialReadiness: 'READY',
+  reworkLoop: 0,
+  checklist: [
+    { id: 'op-1', label: 'Frame inspection', done: true },
+    { id: 'op-2', label: 'Parts staging', done: false },
+    { id: 'op-3', label: 'Final QC', done: false },
+  ],
+  parts: [
+    { id: 'part-1', name: 'Lift kit', qty: 1, state: 'READY' },
+    { id: 'part-2', name: 'Wheel set', qty: 1, state: 'RESERVED' },
+  ],
+  notes: [],
+};
 
 export async function listWoOrders(params?: { status?: string; search?: string; limit?: number; offset?: number }): Promise<{ items: WoOrder[]; total: number }> {
   const qs = new URLSearchParams();
@@ -380,8 +451,13 @@ export async function listWoOrders(params?: { status?: string; search?: string; 
   return apiFetch(`/tickets/work-orders${qs.size ? `?${qs}` : ''}`, undefined, { items: MOCK_WO_ORDERS, total: MOCK_WO_ORDERS.length });
 }
 
-export async function getWoOrder(id: string): Promise<WoOrder | null> {
-  return apiFetch<WoOrder | null>(`/work-orders/${id}`, undefined, null);
+export async function getWoOrder(id: string): Promise<WoOrderDetail | null> {
+  const data = await apiFetch<{ workOrder: WoOrderDetail }>(
+    `/tickets/wo-queue/${id}`,
+    undefined,
+    { workOrder: { ...MOCK_WO_ORDER_DETAIL, id } },
+  );
+  return data.workOrder;
 }
 
 // ─── Customers ────────────────────────────────────────────────────────────────

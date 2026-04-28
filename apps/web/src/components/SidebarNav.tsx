@@ -93,7 +93,7 @@ const NAV_SECTIONS: NavSection[] = [
     href: '/accounting',
     icon: Receipt,
     children: [
-      { label: 'Sync Monitor', href: '/accounting/sync' },
+      { label: 'Sync Monitor', href: '/accounting/sync?view=failures' },
       { label: 'Reconciliation', href: '/accounting/reconciliation' },
     ],
   },

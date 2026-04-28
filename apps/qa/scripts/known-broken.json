@@ -1,7 +1,6 @@
 {
   "_doc": "Routes with an expected non-healthy API smoke status in the currently deployed QA API. Smoke fails when this list drifts in EITHER direction — a new bug joins, OR an existing bug gets fixed/deployed (so we know to remove the entry). File a Linear ticket when adding long-lived handler bugs; remove pending-deploy entries after the route is live.",
   "broken": [
-    { "method": "POST", "path": "/accounting/webhook", "expectStatus": 500, "note": "Webhook signature validation throws when no body/headers; needs explicit 400 path for unsigned probes." },
-    { "method": "GET", "path": "/workspace/today", "expectStatus": 404, "note": "Declared in PR #37 but not deployed to the QA API yet; remove after dev deploy returns a handler response." }
+    { "method": "POST", "path": "/accounting/webhook", "expectStatus": 500, "note": "Webhook signature validation throws when no body/headers; needs explicit 400 path for unsigned probes." }
   ]
 }

@@ -96,6 +96,12 @@ variable "scheduling_lambda_zip_path" {
   default     = "../../../../apps/api/dist/scheduling-lambda.zip"
 }
 
+variable "workspace_lambda_zip_path" {
+  description = "Path to the packaged workspace Lambda zip artifact."
+  type        = string
+  default     = "../../../../apps/api/dist/workspace-lambda.zip"
+}
+
 variable "workers_lambda_zip_path" {
   description = "Path to the packaged workers Lambda zip artifact."
   type        = string

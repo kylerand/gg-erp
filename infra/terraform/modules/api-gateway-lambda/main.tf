@@ -94,6 +94,12 @@ variable "scheduling_lambda_zip_path" {
   default     = "apps/api/dist/scheduling-lambda.zip"
 }
 
+variable "workspace_lambda_zip_path" {
+  description = "Path to the zipped workspace Lambda artifact."
+  type        = string
+  default     = "apps/api/dist/workspace-lambda.zip"
+}
+
 variable "lambda_artifacts_bucket_name" {
   description = <<-EOT
     S3 bucket holding the per-context Lambda zips (e.g. `lambdas/inventory-lambda.zip`).
@@ -223,16 +229,16 @@ resource "aws_iam_role_policy_attachment" "work_orders_lambda_vpc" {
 }
 
 resource "aws_lambda_function" "work_orders_create" {
-  function_name = "${var.name_prefix}-work-orders-create"
-  role          = aws_iam_role.work_orders_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "create.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/work-orders-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.work_orders_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-work-orders-create"
+  role             = aws_iam_role.work_orders_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "create.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/work-orders-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.work_orders_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.work_orders_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
 
   environment {
     variables = {
@@ -250,16 +256,16 @@ resource "aws_lambda_function" "work_orders_create" {
 }
 
 resource "aws_lambda_function" "work_orders_list" {
-  function_name = "${var.name_prefix}-work-orders-list"
-  role          = aws_iam_role.work_orders_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/work-orders-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.work_orders_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-work-orders-list"
+  role             = aws_iam_role.work_orders_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/work-orders-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.work_orders_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.work_orders_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
 
   environment {
     variables = {
@@ -277,16 +283,16 @@ resource "aws_lambda_function" "work_orders_list" {
 }
 
 resource "aws_lambda_function" "work_orders_transition" {
-  function_name = "${var.name_prefix}-work-orders-transition"
-  role          = aws_iam_role.work_orders_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "transition.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/work-orders-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.work_orders_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-work-orders-transition"
+  role             = aws_iam_role.work_orders_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "transition.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/work-orders-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.work_orders_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.work_orders_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
 
   environment {
     variables = {
@@ -304,16 +310,16 @@ resource "aws_lambda_function" "work_orders_transition" {
 }
 
 resource "aws_lambda_function" "work_orders_get" {
-  function_name = "${var.name_prefix}-work-orders-get"
-  role          = aws_iam_role.work_orders_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "get.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/work-orders-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.work_orders_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-work-orders-get"
+  role             = aws_iam_role.work_orders_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "get.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/work-orders-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.work_orders_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.work_orders_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
 
   environment {
     variables = {
@@ -422,8 +428,8 @@ resource "aws_apigatewayv2_stage" "default" {
   default_route_settings {
     # Soft caps to prevent runaway costs or accidental DDoS. Tune up after the
     # migration cutover if real traffic exceeds these.
-    throttling_burst_limit = 1000
-    throttling_rate_limit  = 500
+    throttling_burst_limit   = 1000
+    throttling_rate_limit    = 500
     detailed_metrics_enabled = true
   }
 }
@@ -485,30 +491,68 @@ locals {
     SENTRY_DSN                  = var.sentry_dsn
   }
   lambda_accounting_env = merge(local.lambda_common_env, {
-    QB_CLIENT_ID               = var.qb_client_id
-    QB_CLIENT_SECRET           = var.qb_client_secret
-    QB_REDIRECT_URI            = var.qb_redirect_uri
-    QB_WEBHOOK_VERIFIER_TOKEN  = var.qb_webhook_verifier_token
-    FRONTEND_URL               = var.frontend_url
+    QB_CLIENT_ID              = var.qb_client_id
+    QB_CLIENT_SECRET          = var.qb_client_secret
+    QB_REDIRECT_URI           = var.qb_redirect_uri
+    QB_WEBHOOK_VERIFIER_TOKEN = var.qb_webhook_verifier_token
+    FRONTEND_URL              = var.frontend_url
   })
   lambda_admin_env = merge(local.lambda_common_env, {
     COGNITO_USER_POOL_ID = var.cognito_user_pool_id
   })
 }
 
+# ─── Workspace Lambda Functions ───────────────────────────────────────────────
+
+resource "aws_lambda_function" "workspace_today" {
+  function_name    = "${var.name_prefix}-workspace-today"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "today.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/workspace-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.workspace_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.workspace_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "workspace_today" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.workspace_today.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "workspace_today" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /workspace/today"
+  target             = "integrations/${aws_apigatewayv2_integration.workspace_today.id}"
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorizer_id      = local.authorizer_id
+}
+
 # ─── Identity Lambda Functions ─────────────────────────────────────────────────
 
 resource "aws_lambda_function" "identity_me" {
-  function_name = "${var.name_prefix}-identity-me"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "me.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/identity-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.identity_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-identity-me"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "me.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/identity-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.identity_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.identity_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -518,16 +562,16 @@ resource "aws_lambda_function" "identity_me" {
 }
 
 resource "aws_lambda_function" "identity_list_dealers" {
-  function_name = "${var.name_prefix}-identity-list-dealers"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-dealers.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/identity-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.identity_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-identity-list-dealers"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-dealers.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/identity-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.identity_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.identity_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -539,16 +583,16 @@ resource "aws_lambda_function" "identity_list_dealers" {
 # ─── Customers Lambda Functions ─────────────────────────────────────────────────
 
 resource "aws_lambda_function" "customers_list" {
-  function_name = "${var.name_prefix}-customers-list"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/customers-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.customers_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-customers-list"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/customers-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.customers_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.customers_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -558,16 +602,16 @@ resource "aws_lambda_function" "customers_list" {
 }
 
 resource "aws_lambda_function" "customers_create" {
-  function_name = "${var.name_prefix}-customers-create"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "create.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/customers-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.customers_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-customers-create"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "create.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/customers-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.customers_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.customers_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -577,16 +621,16 @@ resource "aws_lambda_function" "customers_create" {
 }
 
 resource "aws_lambda_function" "customers_get" {
-  function_name = "${var.name_prefix}-customers-get"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "get.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/customers-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.customers_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-customers-get"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "get.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/customers-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.customers_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.customers_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -596,16 +640,16 @@ resource "aws_lambda_function" "customers_get" {
 }
 
 resource "aws_lambda_function" "customers_transition" {
-  function_name = "${var.name_prefix}-customers-transition"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "transition.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/customers-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.customers_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-customers-transition"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "transition.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/customers-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.customers_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.customers_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -617,16 +661,16 @@ resource "aws_lambda_function" "customers_transition" {
 # ─── Inventory Lambda Functions ───────────────────────────────────────────────
 
 resource "aws_lambda_function" "inventory_list_parts" {
-  function_name = "${var.name_prefix}-inventory-list-parts"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-parts.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-inventory-list-parts"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-parts.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -636,16 +680,16 @@ resource "aws_lambda_function" "inventory_list_parts" {
 }
 
 resource "aws_lambda_function" "inventory_create_part" {
-  function_name = "${var.name_prefix}-inventory-create-part"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "create-part.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-inventory-create-part"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "create-part.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -655,16 +699,16 @@ resource "aws_lambda_function" "inventory_create_part" {
 }
 
 resource "aws_lambda_function" "inventory_get_part" {
-  function_name = "${var.name_prefix}-inventory-get-part"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "get-part.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-inventory-get-part"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "get-part.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -674,16 +718,16 @@ resource "aws_lambda_function" "inventory_get_part" {
 }
 
 resource "aws_lambda_function" "inventory_list_vendors" {
-  function_name = "${var.name_prefix}-inventory-list-vendors"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-vendors.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-inventory-list-vendors"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-vendors.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -693,16 +737,16 @@ resource "aws_lambda_function" "inventory_list_vendors" {
 }
 
 resource "aws_lambda_function" "inventory_list_lots" {
-  function_name = "${var.name_prefix}-inventory-list-lots"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-lots.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-inventory-list-lots"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-lots.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -712,16 +756,16 @@ resource "aws_lambda_function" "inventory_list_lots" {
 }
 
 resource "aws_lambda_function" "inventory_get_part_chain" {
-  function_name = "${var.name_prefix}-inventory-get-part-chain"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "get-part-chain.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-inventory-get-part-chain"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "get-part-chain.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -731,16 +775,16 @@ resource "aws_lambda_function" "inventory_get_part_chain" {
 }
 
 resource "aws_lambda_function" "inventory_plan_material_by_stage" {
-  function_name = "${var.name_prefix}-inventory-plan-material-by-stage"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "plan-material-by-stage.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-inventory-plan-material-by-stage"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "plan-material-by-stage.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -750,16 +794,16 @@ resource "aws_lambda_function" "inventory_plan_material_by_stage" {
 }
 
 resource "aws_lambda_function" "inventory_list_manufacturers" {
-  function_name = "${var.name_prefix}-inventory-list-manufacturers"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-manufacturers.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-inventory-list-manufacturers"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-manufacturers.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -769,16 +813,16 @@ resource "aws_lambda_function" "inventory_list_manufacturers" {
 }
 
 resource "aws_lambda_function" "inventory_create_manufacturer" {
-  function_name = "${var.name_prefix}-inventory-create-manufacturer"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "create-manufacturer.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-inventory-create-manufacturer"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "create-manufacturer.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -790,16 +834,16 @@ resource "aws_lambda_function" "inventory_create_manufacturer" {
 # ─── Tickets Lambda Functions ─────────────────────────────────────────────────
 
 resource "aws_lambda_function" "tickets_list_tasks" {
-  function_name = "${var.name_prefix}-tickets-list-tasks"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-tasks.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-tickets-list-tasks"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-tasks.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -809,16 +853,16 @@ resource "aws_lambda_function" "tickets_list_tasks" {
 }
 
 resource "aws_lambda_function" "tickets_create_task" {
-  function_name = "${var.name_prefix}-tickets-create-task"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "create-task.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-tickets-create-task"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "create-task.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -828,16 +872,16 @@ resource "aws_lambda_function" "tickets_create_task" {
 }
 
 resource "aws_lambda_function" "tickets_transition_task" {
-  function_name = "${var.name_prefix}-tickets-transition-task"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "transition-task.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-tickets-transition-task"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "transition-task.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -847,16 +891,16 @@ resource "aws_lambda_function" "tickets_transition_task" {
 }
 
 resource "aws_lambda_function" "tickets_list_rework" {
-  function_name = "${var.name_prefix}-tickets-list-rework"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-rework.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-tickets-list-rework"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-rework.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -866,16 +910,16 @@ resource "aws_lambda_function" "tickets_list_rework" {
 }
 
 resource "aws_lambda_function" "tickets_create_rework" {
-  function_name = "${var.name_prefix}-tickets-create-rework"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "create-rework.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-tickets-create-rework"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "create-rework.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -885,16 +929,16 @@ resource "aws_lambda_function" "tickets_create_rework" {
 }
 
 resource "aws_lambda_function" "tickets_list_sync" {
-  function_name = "${var.name_prefix}-tickets-list-sync"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-sync.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-tickets-list-sync"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-sync.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -904,16 +948,16 @@ resource "aws_lambda_function" "tickets_list_sync" {
 }
 
 resource "aws_lambda_function" "tickets_list_all_work_orders" {
-  function_name = "${var.name_prefix}-tickets-list-all-work-orders"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-all-work-orders.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-tickets-list-all-work-orders"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-all-work-orders.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -923,16 +967,16 @@ resource "aws_lambda_function" "tickets_list_all_work_orders" {
 }
 
 resource "aws_lambda_function" "tickets_list_technician_tasks" {
-  function_name = "${var.name_prefix}-tickets-list-technician-tasks"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-technician-tasks.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-tickets-list-technician-tasks"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-technician-tasks.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -942,16 +986,16 @@ resource "aws_lambda_function" "tickets_list_technician_tasks" {
 }
 
 resource "aws_lambda_function" "tickets_transition_technician_task" {
-  function_name = "${var.name_prefix}-tickets-transition-technician-task"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "transition-technician-task.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-tickets-transition-technician-task"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "transition-technician-task.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -963,16 +1007,16 @@ resource "aws_lambda_function" "tickets_transition_technician_task" {
 # ─── Scheduling Lambda Functions ──────────────────────────────────────────────
 
 resource "aws_lambda_function" "scheduling_list_slots" {
-  function_name = "${var.name_prefix}-scheduling-list-slots"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-slots.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/scheduling-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.scheduling_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-scheduling-list-slots"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-slots.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/scheduling-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.scheduling_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.scheduling_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -982,16 +1026,16 @@ resource "aws_lambda_function" "scheduling_list_slots" {
 }
 
 resource "aws_lambda_function" "scheduling_list_labor_capacity" {
-  function_name = "${var.name_prefix}-scheduling-list-labor-capacity"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-labor-capacity.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/scheduling-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.scheduling_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-scheduling-list-labor-capacity"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-labor-capacity.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/scheduling-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.scheduling_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.scheduling_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -1003,89 +1047,89 @@ resource "aws_lambda_function" "scheduling_list_labor_capacity" {
 # ─── API GW Integrations + Routes — Identity ──────────────────────────────────
 
 resource "aws_apigatewayv2_integration" "identity_me" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.identity_me.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.identity_me.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "identity_me" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "GET /auth/me"
-  target    = "integrations/${aws_apigatewayv2_integration.identity_me.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /auth/me"
+  target             = "integrations/${aws_apigatewayv2_integration.identity_me.id}"
   authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "identity_list_dealers" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.identity_list_dealers.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.identity_list_dealers.invoke_arn
   payload_format_version = "2.0"
 }
 
 resource "aws_apigatewayv2_route" "identity_list_dealers" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "GET /identity/dealers"
-  target    = "integrations/${aws_apigatewayv2_integration.identity_list_dealers.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /identity/dealers"
+  target             = "integrations/${aws_apigatewayv2_integration.identity_list_dealers.id}"
   authorization_type = "NONE"
 }
 
 # ─── Admin User Management Lambda Functions ────────────────────────────────────
 
 resource "aws_lambda_function" "admin_list_users" {
-  function_name = "${var.name_prefix}-admin-list-users"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "admin-list-users.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/identity-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.identity_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-admin-list-users"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "admin-list-users.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/identity-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.identity_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.identity_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_admin_env }
 }
 
 resource "aws_lambda_function" "admin_create_user" {
-  function_name = "${var.name_prefix}-admin-create-user"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "admin-create-user.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/identity-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.identity_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-admin-create-user"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "admin-create-user.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/identity-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.identity_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.identity_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_admin_env }
 }
 
 resource "aws_lambda_function" "admin_update_user" {
-  function_name = "${var.name_prefix}-admin-update-user"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "admin-update-user.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/identity-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.identity_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-admin-update-user"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "admin-update-user.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/identity-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.identity_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.identity_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_admin_env }
 }
 
 resource "aws_lambda_function" "admin_delete_user" {
-  function_name = "${var.name_prefix}-admin-delete-user"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "admin-delete-user.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/identity-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.identity_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-admin-delete-user"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "admin-delete-user.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/identity-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.identity_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.identity_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_admin_env }
 }
 
@@ -1133,9 +1177,9 @@ resource "aws_apigatewayv2_integration" "admin_list_users" {
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "admin_list_users" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "GET /admin/users"
-  target    = "integrations/${aws_apigatewayv2_integration.admin_list_users.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /admin/users"
+  target             = "integrations/${aws_apigatewayv2_integration.admin_list_users.id}"
   authorization_type = "NONE"
 }
 
@@ -1147,9 +1191,9 @@ resource "aws_apigatewayv2_integration" "admin_create_user" {
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "admin_create_user" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "POST /admin/users"
-  target    = "integrations/${aws_apigatewayv2_integration.admin_create_user.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /admin/users"
+  target             = "integrations/${aws_apigatewayv2_integration.admin_create_user.id}"
   authorizer_id      = local.authorizer_id
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
@@ -1162,9 +1206,9 @@ resource "aws_apigatewayv2_integration" "admin_update_user" {
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "admin_update_user" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "PATCH /admin/users/{username}"
-  target    = "integrations/${aws_apigatewayv2_integration.admin_update_user.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /admin/users/{username}"
+  target             = "integrations/${aws_apigatewayv2_integration.admin_update_user.id}"
   authorizer_id      = local.authorizer_id
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
@@ -1177,9 +1221,9 @@ resource "aws_apigatewayv2_integration" "admin_delete_user" {
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "admin_delete_user" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "DELETE /admin/users/{username}"
-  target    = "integrations/${aws_apigatewayv2_integration.admin_delete_user.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "DELETE /admin/users/{username}"
+  target             = "integrations/${aws_apigatewayv2_integration.admin_delete_user.id}"
   authorizer_id      = local.authorizer_id
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
@@ -1187,352 +1231,352 @@ resource "aws_apigatewayv2_route" "admin_delete_user" {
 # ─── API GW Integrations + Routes — Customers ─────────────────────────────────
 
 resource "aws_apigatewayv2_integration" "customers_list" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.customers_list.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.customers_list.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "customers_list" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "GET /identity/customers"
-  target    = "integrations/${aws_apigatewayv2_integration.customers_list.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /identity/customers"
+  target             = "integrations/${aws_apigatewayv2_integration.customers_list.id}"
   authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "customers_create" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.customers_create.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.customers_create.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "customers_create" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "POST /identity/customers"
-  target    = "integrations/${aws_apigatewayv2_integration.customers_create.id}"
-  authorizer_id = local.authorizer_id
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /identity/customers"
+  target             = "integrations/${aws_apigatewayv2_integration.customers_create.id}"
+  authorizer_id      = local.authorizer_id
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "customers_get" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.customers_get.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.customers_get.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "customers_get" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "GET /identity/customers/{id}"
-  target    = "integrations/${aws_apigatewayv2_integration.customers_get.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /identity/customers/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.customers_get.id}"
   authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "customers_transition" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.customers_transition.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.customers_transition.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "customers_transition" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "PATCH /identity/customers/{id}/state"
-  target    = "integrations/${aws_apigatewayv2_integration.customers_transition.id}"
-  authorizer_id = local.authorizer_id
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /identity/customers/{id}/state"
+  target             = "integrations/${aws_apigatewayv2_integration.customers_transition.id}"
+  authorizer_id      = local.authorizer_id
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
 # ─── API GW Integrations + Routes — Inventory ─────────────────────────────────
 
 resource "aws_apigatewayv2_integration" "inventory_list_parts" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.inventory_list_parts.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.inventory_list_parts.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "inventory_list_parts" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "GET /inventory/parts"
-  target    = "integrations/${aws_apigatewayv2_integration.inventory_list_parts.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /inventory/parts"
+  target             = "integrations/${aws_apigatewayv2_integration.inventory_list_parts.id}"
   authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "inventory_create_part" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.inventory_create_part.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.inventory_create_part.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "inventory_create_part" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "POST /inventory/parts"
-  target    = "integrations/${aws_apigatewayv2_integration.inventory_create_part.id}"
-  authorizer_id = local.authorizer_id
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /inventory/parts"
+  target             = "integrations/${aws_apigatewayv2_integration.inventory_create_part.id}"
+  authorizer_id      = local.authorizer_id
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "inventory_get_part" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.inventory_get_part.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.inventory_get_part.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "inventory_get_part" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "GET /inventory/parts/{id}"
-  target    = "integrations/${aws_apigatewayv2_integration.inventory_get_part.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /inventory/parts/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.inventory_get_part.id}"
   authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "inventory_list_vendors" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.inventory_list_vendors.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.inventory_list_vendors.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "inventory_list_vendors" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "GET /inventory/vendors"
-  target    = "integrations/${aws_apigatewayv2_integration.inventory_list_vendors.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /inventory/vendors"
+  target             = "integrations/${aws_apigatewayv2_integration.inventory_list_vendors.id}"
   authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "inventory_list_lots" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.inventory_list_lots.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.inventory_list_lots.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "inventory_list_lots" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "GET /inventory/lots"
-  target    = "integrations/${aws_apigatewayv2_integration.inventory_list_lots.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /inventory/lots"
+  target             = "integrations/${aws_apigatewayv2_integration.inventory_list_lots.id}"
   authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "inventory_get_part_chain" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.inventory_get_part_chain.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.inventory_get_part_chain.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "inventory_get_part_chain" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "GET /inventory/parts/{id}/chain"
-  target    = "integrations/${aws_apigatewayv2_integration.inventory_get_part_chain.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /inventory/parts/{id}/chain"
+  target             = "integrations/${aws_apigatewayv2_integration.inventory_get_part_chain.id}"
   authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "inventory_plan_material_by_stage" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.inventory_plan_material_by_stage.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.inventory_plan_material_by_stage.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "inventory_plan_material_by_stage" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "GET /inventory/planning/material-by-stage"
-  target    = "integrations/${aws_apigatewayv2_integration.inventory_plan_material_by_stage.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /inventory/planning/material-by-stage"
+  target             = "integrations/${aws_apigatewayv2_integration.inventory_plan_material_by_stage.id}"
   authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "inventory_list_manufacturers" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.inventory_list_manufacturers.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.inventory_list_manufacturers.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "inventory_list_manufacturers" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "GET /inventory/manufacturers"
-  target    = "integrations/${aws_apigatewayv2_integration.inventory_list_manufacturers.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /inventory/manufacturers"
+  target             = "integrations/${aws_apigatewayv2_integration.inventory_list_manufacturers.id}"
   authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "inventory_create_manufacturer" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.inventory_create_manufacturer.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.inventory_create_manufacturer.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "inventory_create_manufacturer" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "POST /inventory/manufacturers"
-  target    = "integrations/${aws_apigatewayv2_integration.inventory_create_manufacturer.id}"
-  authorizer_id = local.authorizer_id
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /inventory/manufacturers"
+  target             = "integrations/${aws_apigatewayv2_integration.inventory_create_manufacturer.id}"
+  authorizer_id      = local.authorizer_id
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
 # ─── API GW Integrations + Routes — Tickets ───────────────────────────────────
 
 resource "aws_apigatewayv2_integration" "tickets_list_tasks" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.tickets_list_tasks.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.tickets_list_tasks.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "tickets_list_tasks" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "GET /tickets/tasks"
-  target    = "integrations/${aws_apigatewayv2_integration.tickets_list_tasks.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /tickets/tasks"
+  target             = "integrations/${aws_apigatewayv2_integration.tickets_list_tasks.id}"
   authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "tickets_create_task" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.tickets_create_task.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.tickets_create_task.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "tickets_create_task" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "POST /tickets/tasks"
-  target    = "integrations/${aws_apigatewayv2_integration.tickets_create_task.id}"
-  authorizer_id = local.authorizer_id
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /tickets/tasks"
+  target             = "integrations/${aws_apigatewayv2_integration.tickets_create_task.id}"
+  authorizer_id      = local.authorizer_id
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "tickets_transition_task" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.tickets_transition_task.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.tickets_transition_task.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "tickets_transition_task" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "PATCH /tickets/tasks/{id}/transition"
-  target    = "integrations/${aws_apigatewayv2_integration.tickets_transition_task.id}"
-  authorizer_id = local.authorizer_id
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /tickets/tasks/{id}/transition"
+  target             = "integrations/${aws_apigatewayv2_integration.tickets_transition_task.id}"
+  authorizer_id      = local.authorizer_id
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "tickets_list_rework" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.tickets_list_rework.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.tickets_list_rework.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "tickets_list_rework" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "GET /tickets/rework"
-  target    = "integrations/${aws_apigatewayv2_integration.tickets_list_rework.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /tickets/rework"
+  target             = "integrations/${aws_apigatewayv2_integration.tickets_list_rework.id}"
   authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "tickets_create_rework" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.tickets_create_rework.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.tickets_create_rework.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "tickets_create_rework" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "POST /tickets/rework"
-  target    = "integrations/${aws_apigatewayv2_integration.tickets_create_rework.id}"
-  authorizer_id = local.authorizer_id
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /tickets/rework"
+  target             = "integrations/${aws_apigatewayv2_integration.tickets_create_rework.id}"
+  authorizer_id      = local.authorizer_id
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "tickets_list_sync" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.tickets_list_sync.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.tickets_list_sync.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "tickets_list_sync" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "GET /tickets/sync"
-  target    = "integrations/${aws_apigatewayv2_integration.tickets_list_sync.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /tickets/sync"
+  target             = "integrations/${aws_apigatewayv2_integration.tickets_list_sync.id}"
   authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "tickets_list_all_work_orders" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.tickets_list_all_work_orders.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.tickets_list_all_work_orders.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "tickets_list_all_work_orders" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "GET /tickets/work-orders"
-  target    = "integrations/${aws_apigatewayv2_integration.tickets_list_all_work_orders.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /tickets/work-orders"
+  target             = "integrations/${aws_apigatewayv2_integration.tickets_list_all_work_orders.id}"
   authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "tickets_list_technician_tasks" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.tickets_list_technician_tasks.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.tickets_list_technician_tasks.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "tickets_list_technician_tasks" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "GET /tickets/technician-tasks"
-  target    = "integrations/${aws_apigatewayv2_integration.tickets_list_technician_tasks.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /tickets/technician-tasks"
+  target             = "integrations/${aws_apigatewayv2_integration.tickets_list_technician_tasks.id}"
   authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "tickets_transition_technician_task" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.tickets_transition_technician_task.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.tickets_transition_technician_task.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "tickets_transition_technician_task" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "PATCH /tickets/technician-tasks/{id}/state"
-  target    = "integrations/${aws_apigatewayv2_integration.tickets_transition_technician_task.id}"
-  authorizer_id = local.authorizer_id
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /tickets/technician-tasks/{id}/state"
+  target             = "integrations/${aws_apigatewayv2_integration.tickets_transition_technician_task.id}"
+  authorizer_id      = local.authorizer_id
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
 # ─── API GW Integrations + Routes — Scheduling ────────────────────────────────
 
 resource "aws_apigatewayv2_integration" "scheduling_list_slots" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.scheduling_list_slots.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.scheduling_list_slots.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "scheduling_list_slots" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "GET /scheduling/slots"
-  target    = "integrations/${aws_apigatewayv2_integration.scheduling_list_slots.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /scheduling/slots"
+  target             = "integrations/${aws_apigatewayv2_integration.scheduling_list_slots.id}"
   authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "scheduling_list_labor_capacity" {
-  api_id = aws_apigatewayv2_api.erp.id
-  integration_type = "AWS_PROXY"
-  integration_method = "POST"
-  integration_uri = aws_lambda_function.scheduling_list_labor_capacity.invoke_arn
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.scheduling_list_labor_capacity.invoke_arn
   payload_format_version = "2.0"
 }
 resource "aws_apigatewayv2_route" "scheduling_list_labor_capacity" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "GET /scheduling/labor-capacity"
-  target    = "integrations/${aws_apigatewayv2_integration.scheduling_list_labor_capacity.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /scheduling/labor-capacity"
+  target             = "integrations/${aws_apigatewayv2_integration.scheduling_list_labor_capacity.id}"
   authorization_type = "NONE"
 }
 
@@ -1545,16 +1589,16 @@ locals {
 }
 
 resource "aws_lambda_function" "attachments_presign_upload" {
-  function_name = "${var.name_prefix}-attachments-presign-upload"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "presign-upload.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/attachments-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.attachments_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-attachments-presign-upload"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "presign-upload.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/attachments-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.attachments_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.attachments_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_attachments_env }
 
   vpc_config {
@@ -1564,16 +1608,16 @@ resource "aws_lambda_function" "attachments_presign_upload" {
 }
 
 resource "aws_lambda_function" "attachments_confirm_upload" {
-  function_name = "${var.name_prefix}-attachments-confirm-upload"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "confirm-upload.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/attachments-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.attachments_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-attachments-confirm-upload"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "confirm-upload.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/attachments-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.attachments_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.attachments_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_attachments_env }
 
   vpc_config {
@@ -1583,16 +1627,16 @@ resource "aws_lambda_function" "attachments_confirm_upload" {
 }
 
 resource "aws_lambda_function" "attachments_list" {
-  function_name = "${var.name_prefix}-attachments-list"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/attachments-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.attachments_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-attachments-list"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/attachments-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.attachments_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.attachments_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_attachments_env }
 
   vpc_config {
@@ -1602,16 +1646,16 @@ resource "aws_lambda_function" "attachments_list" {
 }
 
 resource "aws_lambda_function" "attachments_presign_download" {
-  function_name = "${var.name_prefix}-attachments-presign-download"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "presign-download.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/attachments-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.attachments_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-attachments-presign-download"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "presign-download.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/attachments-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.attachments_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.attachments_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_attachments_env }
 
   vpc_config {
@@ -1629,8 +1673,8 @@ resource "aws_iam_role_policy" "erp_lambda_s3_documents" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
-        Action = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
         Resource = "arn:aws:s3:::${var.document_bucket_name}/*"
       }
     ]
@@ -1753,16 +1797,16 @@ resource "aws_apigatewayv2_route" "attachments_presign_download" {
 # ─── SOP / OJT Lambdas ────────────────────────────────────────────────────────
 
 resource "aws_lambda_function" "sop_list" {
-  function_name = "${var.name_prefix}-sop-list"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sop-list"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -1772,16 +1816,16 @@ resource "aws_lambda_function" "sop_list" {
 }
 
 resource "aws_lambda_function" "sop_get" {
-  function_name = "${var.name_prefix}-sop-get"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "get.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sop-get"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "get.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -1791,16 +1835,16 @@ resource "aws_lambda_function" "sop_get" {
 }
 
 resource "aws_lambda_function" "sop_create" {
-  function_name = "${var.name_prefix}-sop-create"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "create.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sop-create"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "create.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -1810,16 +1854,16 @@ resource "aws_lambda_function" "sop_create" {
 }
 
 resource "aws_lambda_function" "sop_publish_version" {
-  function_name = "${var.name_prefix}-sop-publish-version"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "publish-version.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sop-publish-version"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "publish-version.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -1829,16 +1873,16 @@ resource "aws_lambda_function" "sop_publish_version" {
 }
 
 resource "aws_lambda_function" "sop_list_modules" {
-  function_name = "${var.name_prefix}-sop-list-modules"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-modules.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sop-list-modules"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-modules.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -1848,16 +1892,16 @@ resource "aws_lambda_function" "sop_list_modules" {
 }
 
 resource "aws_lambda_function" "sop_list_assignments" {
-  function_name = "${var.name_prefix}-sop-list-assignments"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-assignments.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sop-list-assignments"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-assignments.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -1867,16 +1911,16 @@ resource "aws_lambda_function" "sop_list_assignments" {
 }
 
 resource "aws_lambda_function" "sop_complete_assignment" {
-  function_name = "${var.name_prefix}-sop-complete-assignment"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "complete-assignment.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sop-complete-assignment"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "complete-assignment.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -1989,16 +2033,16 @@ resource "aws_apigatewayv2_route" "sop_complete_assignment" {
 # ─── SOP Training / OJT Additional Lambdas ─────────────────────────────────────
 
 resource "aws_lambda_function" "sop_get_module" {
-  function_name = "${var.name_prefix}-sop-get-module"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "get-module.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sop-get-module"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "get-module.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -2008,16 +2052,16 @@ resource "aws_lambda_function" "sop_get_module" {
 }
 
 resource "aws_lambda_function" "sop_get_module_progress" {
-  function_name = "${var.name_prefix}-sop-get-module-progress"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "get-module-progress.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sop-get-module-progress"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "get-module-progress.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -2027,16 +2071,16 @@ resource "aws_lambda_function" "sop_get_module_progress" {
 }
 
 resource "aws_lambda_function" "sop_update_step_progress" {
-  function_name = "${var.name_prefix}-sop-update-step-progress"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "update-step-progress.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sop-update-step-progress"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "update-step-progress.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -2046,16 +2090,16 @@ resource "aws_lambda_function" "sop_update_step_progress" {
 }
 
 resource "aws_lambda_function" "sop_submit_quiz" {
-  function_name = "${var.name_prefix}-sop-submit-quiz"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "submit-quiz.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sop-submit-quiz"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "submit-quiz.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -2065,16 +2109,16 @@ resource "aws_lambda_function" "sop_submit_quiz" {
 }
 
 resource "aws_lambda_function" "sop_list_notes" {
-  function_name = "${var.name_prefix}-sop-list-notes"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-notes.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sop-list-notes"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-notes.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -2084,16 +2128,16 @@ resource "aws_lambda_function" "sop_list_notes" {
 }
 
 resource "aws_lambda_function" "sop_upsert_note" {
-  function_name = "${var.name_prefix}-sop-upsert-note"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "upsert-note.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sop-upsert-note"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "upsert-note.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -2103,16 +2147,16 @@ resource "aws_lambda_function" "sop_upsert_note" {
 }
 
 resource "aws_lambda_function" "sop_list_bookmarks" {
-  function_name = "${var.name_prefix}-sop-list-bookmarks"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-bookmarks.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sop-list-bookmarks"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-bookmarks.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -2122,16 +2166,16 @@ resource "aws_lambda_function" "sop_list_bookmarks" {
 }
 
 resource "aws_lambda_function" "sop_toggle_bookmark" {
-  function_name = "${var.name_prefix}-sop-toggle-bookmark"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "toggle-bookmark.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sop-toggle-bookmark"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "toggle-bookmark.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -2141,16 +2185,16 @@ resource "aws_lambda_function" "sop_toggle_bookmark" {
 }
 
 resource "aws_lambda_function" "sop_list_inspection_templates" {
-  function_name = "${var.name_prefix}-sop-list-inspection-templates"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-inspection-templates.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sop-list-inspection-templates"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-inspection-templates.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -2160,16 +2204,16 @@ resource "aws_lambda_function" "sop_list_inspection_templates" {
 }
 
 resource "aws_lambda_function" "sop_get_inspection_template" {
-  function_name = "${var.name_prefix}-sop-get-inspection-template"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "get-inspection-template.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sop-get-inspection-template"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "get-inspection-template.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -2327,16 +2371,16 @@ resource "aws_apigatewayv2_route" "sop_get_inspection_template" {
 # ─── Accounting / QuickBooks Lambdas ─────────────────────────────────────────
 
 resource "aws_lambda_function" "accounting_oauth_connect" {
-  function_name = "${var.name_prefix}-accounting-oauth-connect"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "oauth-connect.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-accounting-oauth-connect"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "oauth-connect.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_accounting_env }
 
   vpc_config {
@@ -2346,16 +2390,16 @@ resource "aws_lambda_function" "accounting_oauth_connect" {
 }
 
 resource "aws_lambda_function" "accounting_oauth_callback" {
-  function_name = "${var.name_prefix}-accounting-oauth-callback"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "oauth-callback.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-accounting-oauth-callback"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "oauth-callback.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_accounting_env }
 
   vpc_config {
@@ -2365,16 +2409,16 @@ resource "aws_lambda_function" "accounting_oauth_callback" {
 }
 
 resource "aws_lambda_function" "accounting_status" {
-  function_name = "${var.name_prefix}-accounting-status"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "status.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-accounting-status"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "status.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_accounting_env }
 
   vpc_config {
@@ -2384,16 +2428,16 @@ resource "aws_lambda_function" "accounting_status" {
 }
 
 resource "aws_lambda_function" "accounting_list_sync" {
-  function_name = "${var.name_prefix}-accounting-list-sync"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-sync.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-accounting-list-sync"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-sync.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_accounting_env }
 
   vpc_config {
@@ -2403,16 +2447,16 @@ resource "aws_lambda_function" "accounting_list_sync" {
 }
 
 resource "aws_lambda_function" "accounting_retry_sync" {
-  function_name = "${var.name_prefix}-accounting-retry-sync"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "retry-sync.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-accounting-retry-sync"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "retry-sync.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_accounting_env }
 
   vpc_config {
@@ -2422,16 +2466,16 @@ resource "aws_lambda_function" "accounting_retry_sync" {
 }
 
 resource "aws_lambda_function" "accounting_trigger_sync" {
-  function_name = "${var.name_prefix}-accounting-trigger-sync"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "trigger-sync.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-accounting-trigger-sync"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "trigger-sync.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_accounting_env }
 
   vpc_config {
@@ -2441,16 +2485,16 @@ resource "aws_lambda_function" "accounting_trigger_sync" {
 }
 
 resource "aws_lambda_function" "accounting_webhook" {
-  function_name = "${var.name_prefix}-accounting-webhook"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "webhook.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-accounting-webhook"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "webhook.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_accounting_env }
 
   vpc_config {
@@ -2562,16 +2606,16 @@ resource "aws_apigatewayv2_route" "accounting_webhook" {
 # ─── Accounting Additional Lambdas ────────────────────────────────────────────
 
 resource "aws_lambda_function" "accounting_list_customer_syncs" {
-  function_name = "${var.name_prefix}-accounting-list-customer-syncs"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-customer-syncs.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-accounting-list-customer-syncs"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-customer-syncs.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_accounting_env }
 
   vpc_config {
@@ -2581,16 +2625,16 @@ resource "aws_lambda_function" "accounting_list_customer_syncs" {
 }
 
 resource "aws_lambda_function" "accounting_list_reconciliation_runs" {
-  function_name = "${var.name_prefix}-accounting-list-reconciliation-runs"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-reconciliation-runs.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-accounting-list-reconciliation-runs"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-reconciliation-runs.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_accounting_env }
 
   vpc_config {
@@ -2600,16 +2644,16 @@ resource "aws_lambda_function" "accounting_list_reconciliation_runs" {
 }
 
 resource "aws_lambda_function" "accounting_list_accounts" {
-  function_name = "${var.name_prefix}-accounting-list-accounts"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-accounts.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-accounting-list-accounts"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-accounts.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_accounting_env }
 
   vpc_config {
@@ -2619,16 +2663,16 @@ resource "aws_lambda_function" "accounting_list_accounts" {
 }
 
 resource "aws_lambda_function" "accounting_get_failure_summary" {
-  function_name = "${var.name_prefix}-accounting-get-failure-summary"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "get-failure-summary.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-accounting-get-failure-summary"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "get-failure-summary.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_accounting_env }
 
   vpc_config {
@@ -2704,16 +2748,16 @@ resource "aws_apigatewayv2_route" "accounting_get_failure_summary" {
 # ============================================================
 
 resource "aws_lambda_function" "migration_trigger_batch" {
-  function_name = "${var.name_prefix}-migration-trigger-batch"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "trigger-batch.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/migration-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.migration_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-migration-trigger-batch"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "trigger-batch.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/migration-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.migration_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.migration_lambda_zip_path)
-  timeout       = 30
-  memory_size   = 256
+  timeout          = 30
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -2722,16 +2766,16 @@ resource "aws_lambda_function" "migration_trigger_batch" {
   }
 }
 resource "aws_lambda_function" "migration_list_batches" {
-  function_name = "${var.name_prefix}-migration-list-batches"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-batches.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/migration-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.migration_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-migration-list-batches"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-batches.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/migration-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.migration_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.migration_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -2740,16 +2784,16 @@ resource "aws_lambda_function" "migration_list_batches" {
   }
 }
 resource "aws_lambda_function" "migration_get_batch" {
-  function_name = "${var.name_prefix}-migration-get-batch"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "get-batch.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/migration-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.migration_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-migration-get-batch"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "get-batch.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/migration-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.migration_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.migration_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -2758,16 +2802,16 @@ resource "aws_lambda_function" "migration_get_batch" {
   }
 }
 resource "aws_lambda_function" "migration_cancel_batch" {
-  function_name = "${var.name_prefix}-migration-cancel-batch"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "cancel-batch.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/migration-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.migration_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-migration-cancel-batch"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "cancel-batch.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/migration-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.migration_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.migration_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -2778,16 +2822,16 @@ resource "aws_lambda_function" "migration_cancel_batch" {
 
 # Long-running migration runner — reads export from S3, runs all ETL waves
 resource "aws_lambda_function" "migration_runner" {
-  function_name = "${var.name_prefix}-migration-runner"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "run-migration.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/migration-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.migration_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-migration-runner"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "run-migration.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/migration-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.migration_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.migration_lambda_zip_path)
-  timeout       = 900
-  memory_size   = 1024
+  timeout          = 900
+  memory_size      = 1024
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -2798,16 +2842,16 @@ resource "aws_lambda_function" "migration_runner" {
 
 # Parts migration — fetches from ShopMonkey API and runs Waves C/F/G
 resource "aws_lambda_function" "migrate_parts" {
-  function_name = "${var.name_prefix}-migrate-parts"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "migrate-parts.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/migration-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.migration_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-migrate-parts"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "migrate-parts.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/migration-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.migration_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.migration_lambda_zip_path)
-  timeout       = 900
-  memory_size   = 1024
+  timeout          = 900
+  memory_size      = 1024
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -2817,16 +2861,16 @@ resource "aws_lambda_function" "migrate_parts" {
 }
 
 resource "aws_lambda_function" "run_schema_migration" {
-  function_name = "${var.name_prefix}-run-schema-migration"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "run-schema-migration.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/migration-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.migration_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-run-schema-migration"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "run-schema-migration.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/migration-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.migration_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.migration_lambda_zip_path)
-  timeout       = 300
-  memory_size   = 512
+  timeout          = 300
+  memory_size      = 512
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -2836,16 +2880,16 @@ resource "aws_lambda_function" "run_schema_migration" {
 }
 
 resource "aws_lambda_function" "seed_inventory_master" {
-  function_name = "${var.name_prefix}-seed-inventory-master"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "seed-inventory-master.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/migration-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.migration_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-seed-inventory-master"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "seed-inventory-master.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/migration-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.migration_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.migration_lambda_zip_path)
-  timeout       = 300
-  memory_size   = 1024
+  timeout          = 300
+  memory_size      = 1024
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -2857,16 +2901,16 @@ resource "aws_lambda_function" "seed_inventory_master" {
 # ─── Worker Lambdas (outbox publisher, payment sync, reconciliation) ─────────
 
 resource "aws_lambda_function" "workers_outbox_publisher" {
-  function_name = "${var.name_prefix}-workers-outbox-publisher"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "outbox-publisher.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/workers-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.workers_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-workers-outbox-publisher"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "outbox-publisher.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/workers-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.workers_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.workers_lambda_zip_path)
-  timeout       = 60
-  memory_size   = 512
+  timeout          = 60
+  memory_size      = 512
   environment {
     variables = merge(local.lambda_common_env, {
       EVENT_BUS_NAME = "${var.name_prefix}-erp-events"
@@ -2880,16 +2924,16 @@ resource "aws_lambda_function" "workers_outbox_publisher" {
 }
 
 resource "aws_lambda_function" "workers_payment_sync" {
-  function_name = "${var.name_prefix}-workers-payment-sync"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "payment-sync.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/workers-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.workers_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-workers-payment-sync"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "payment-sync.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/workers-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.workers_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.workers_lambda_zip_path)
-  timeout       = 120
-  memory_size   = 512
+  timeout          = 120
+  memory_size      = 512
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -2899,16 +2943,16 @@ resource "aws_lambda_function" "workers_payment_sync" {
 }
 
 resource "aws_lambda_function" "workers_reconciliation" {
-  function_name = "${var.name_prefix}-workers-reconciliation"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "reconciliation.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/workers-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.workers_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-workers-reconciliation"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "reconciliation.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/workers-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.workers_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.workers_lambda_zip_path)
-  timeout       = 120
-  memory_size   = 512
+  timeout          = 120
+  memory_size      = 512
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -2939,8 +2983,8 @@ resource "aws_iam_role_policy" "erp_lambda_s3_migration" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect   = "Allow"
-      Action   = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"]
+      Effect = "Allow"
+      Action = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"]
       Resource = [
         "arn:aws:s3:::${var.migration_artifacts_bucket_name}",
         "arn:aws:s3:::${var.migration_artifacts_bucket_name}/*"
@@ -2971,16 +3015,16 @@ resource "aws_iam_role_policy" "erp_lambda_bedrock" {
 # ── Audit context ────────────────────────────────────────────────────────────
 
 resource "aws_lambda_function" "audit_list_events" {
-  function_name = "${var.name_prefix}-audit-list-events"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-audit-events.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/audit-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.audit_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-audit-list-events"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-audit-events.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/audit-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.audit_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.audit_lambda_zip_path)
-  timeout       = 30
-  memory_size   = 256
+  timeout          = 30
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -3012,16 +3056,16 @@ resource "aws_lambda_permission" "audit_list_events" {
 # ── Communication context ────────────────────────────────────────────────────
 
 resource "aws_lambda_function" "communication_list_channels" {
-  function_name = "${var.name_prefix}-communication-list-channels"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-channels.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-communication-list-channels"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-channels.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -3030,16 +3074,16 @@ resource "aws_lambda_function" "communication_list_channels" {
 }
 
 resource "aws_lambda_function" "communication_create_channel" {
-  function_name = "${var.name_prefix}-communication-create-channel"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "create-channel.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-communication-create-channel"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "create-channel.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -3048,16 +3092,16 @@ resource "aws_lambda_function" "communication_create_channel" {
 }
 
 resource "aws_lambda_function" "communication_list_messages" {
-  function_name = "${var.name_prefix}-communication-list-messages"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-messages.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-communication-list-messages"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-messages.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -3066,16 +3110,16 @@ resource "aws_lambda_function" "communication_list_messages" {
 }
 
 resource "aws_lambda_function" "communication_list_replies" {
-  function_name = "${var.name_prefix}-communication-list-replies"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-replies.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-communication-list-replies"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-replies.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -3084,16 +3128,16 @@ resource "aws_lambda_function" "communication_list_replies" {
 }
 
 resource "aws_lambda_function" "communication_send_message" {
-  function_name = "${var.name_prefix}-communication-send-message"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "send-message.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-communication-send-message"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "send-message.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -3102,16 +3146,16 @@ resource "aws_lambda_function" "communication_send_message" {
 }
 
 resource "aws_lambda_function" "communication_edit_message" {
-  function_name = "${var.name_prefix}-communication-edit-message"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "edit-message.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-communication-edit-message"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "edit-message.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -3120,16 +3164,16 @@ resource "aws_lambda_function" "communication_edit_message" {
 }
 
 resource "aws_lambda_function" "communication_delete_message" {
-  function_name = "${var.name_prefix}-communication-delete-message"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "delete-message.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-communication-delete-message"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "delete-message.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -3138,16 +3182,16 @@ resource "aws_lambda_function" "communication_delete_message" {
 }
 
 resource "aws_lambda_function" "communication_add_reaction" {
-  function_name = "${var.name_prefix}-communication-add-reaction"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "add-reaction.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-communication-add-reaction"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "add-reaction.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -3156,16 +3200,16 @@ resource "aws_lambda_function" "communication_add_reaction" {
 }
 
 resource "aws_lambda_function" "communication_remove_reaction" {
-  function_name = "${var.name_prefix}-communication-remove-reaction"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "remove-reaction.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-communication-remove-reaction"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "remove-reaction.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -3174,16 +3218,16 @@ resource "aws_lambda_function" "communication_remove_reaction" {
 }
 
 resource "aws_lambda_function" "communication_list_todos" {
-  function_name = "${var.name_prefix}-communication-list-todos"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-todos.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-communication-list-todos"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-todos.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -3192,16 +3236,16 @@ resource "aws_lambda_function" "communication_list_todos" {
 }
 
 resource "aws_lambda_function" "communication_create_todo" {
-  function_name = "${var.name_prefix}-communication-create-todo"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "create-todo.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-communication-create-todo"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "create-todo.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -3210,16 +3254,16 @@ resource "aws_lambda_function" "communication_create_todo" {
 }
 
 resource "aws_lambda_function" "communication_update_todo" {
-  function_name = "${var.name_prefix}-communication-update-todo"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "update-todo.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-communication-update-todo"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "update-todo.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -3228,16 +3272,16 @@ resource "aws_lambda_function" "communication_update_todo" {
 }
 
 resource "aws_lambda_function" "communication_list_notifications" {
-  function_name = "${var.name_prefix}-communication-list-notifications"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-notifications.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-communication-list-notifications"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-notifications.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -3246,16 +3290,16 @@ resource "aws_lambda_function" "communication_list_notifications" {
 }
 
 resource "aws_lambda_function" "communication_mark_notifications_read" {
-  function_name = "${var.name_prefix}-communication-mark-notifications-read"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "mark-notifications-read.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-communication-mark-notifications-read"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "mark-notifications-read.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/communication-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.communication_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.communication_lambda_zip_path)
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -3528,86 +3572,87 @@ resource "aws_apigatewayv2_route" "migration_cancel_batch" {
 
 locals {
   erp_lambdas = {
-    identity_me           = aws_lambda_function.identity_me
-    identity_list_dealers = aws_lambda_function.identity_list_dealers
-    work_orders_get       = aws_lambda_function.work_orders_get
-    customers_list        = aws_lambda_function.customers_list
-    customers_create      = aws_lambda_function.customers_create
-    customers_get         = aws_lambda_function.customers_get
-    customers_transition  = aws_lambda_function.customers_transition
-    inventory_list_parts               = aws_lambda_function.inventory_list_parts
-    inventory_create_part              = aws_lambda_function.inventory_create_part
-    inventory_get_part                 = aws_lambda_function.inventory_get_part
-    inventory_get_part_chain           = aws_lambda_function.inventory_get_part_chain
-    inventory_list_vendors             = aws_lambda_function.inventory_list_vendors
-    inventory_list_lots                = aws_lambda_function.inventory_list_lots
-    inventory_list_manufacturers       = aws_lambda_function.inventory_list_manufacturers
-    inventory_create_manufacturer      = aws_lambda_function.inventory_create_manufacturer
-    inventory_plan_material_by_stage   = aws_lambda_function.inventory_plan_material_by_stage
-    tickets_list_tasks                   = aws_lambda_function.tickets_list_tasks
-    tickets_create_task                  = aws_lambda_function.tickets_create_task
-    tickets_transition                   = aws_lambda_function.tickets_transition_task
-    tickets_list_rework                  = aws_lambda_function.tickets_list_rework
-    tickets_create_rework                = aws_lambda_function.tickets_create_rework
-    tickets_list_sync                    = aws_lambda_function.tickets_list_sync
-    tickets_list_all_work_orders         = aws_lambda_function.tickets_list_all_work_orders
-    tickets_list_technician_tasks        = aws_lambda_function.tickets_list_technician_tasks
-    tickets_transition_technician_task   = aws_lambda_function.tickets_transition_technician_task
-    scheduling_list_slots                = aws_lambda_function.scheduling_list_slots
-    scheduling_list_labor_capacity       = aws_lambda_function.scheduling_list_labor_capacity
-    attachments_presign_upload   = aws_lambda_function.attachments_presign_upload
-    attachments_confirm_upload   = aws_lambda_function.attachments_confirm_upload
-    attachments_list             = aws_lambda_function.attachments_list
-    attachments_presign_download = aws_lambda_function.attachments_presign_download
-    sop_list                         = aws_lambda_function.sop_list
-    sop_get                          = aws_lambda_function.sop_get
-    sop_create                       = aws_lambda_function.sop_create
-    sop_publish_version              = aws_lambda_function.sop_publish_version
-    sop_list_modules                 = aws_lambda_function.sop_list_modules
-    sop_list_assignments             = aws_lambda_function.sop_list_assignments
-    sop_complete_assignment          = aws_lambda_function.sop_complete_assignment
-    sop_get_module                   = aws_lambda_function.sop_get_module
-    sop_get_module_progress          = aws_lambda_function.sop_get_module_progress
-    sop_update_step_progress         = aws_lambda_function.sop_update_step_progress
-    sop_submit_quiz                  = aws_lambda_function.sop_submit_quiz
-    sop_list_notes                   = aws_lambda_function.sop_list_notes
-    sop_upsert_note                  = aws_lambda_function.sop_upsert_note
-    sop_list_bookmarks               = aws_lambda_function.sop_list_bookmarks
-    sop_toggle_bookmark              = aws_lambda_function.sop_toggle_bookmark
-    sop_list_inspection_templates    = aws_lambda_function.sop_list_inspection_templates
-    sop_get_inspection_template      = aws_lambda_function.sop_get_inspection_template
-    accounting_oauth_connect             = aws_lambda_function.accounting_oauth_connect
-    accounting_oauth_callback            = aws_lambda_function.accounting_oauth_callback
-    accounting_status                    = aws_lambda_function.accounting_status
-    accounting_list_sync                 = aws_lambda_function.accounting_list_sync
-    accounting_retry_sync                = aws_lambda_function.accounting_retry_sync
-    accounting_trigger_sync              = aws_lambda_function.accounting_trigger_sync
-    accounting_webhook                   = aws_lambda_function.accounting_webhook
-    accounting_list_customer_syncs       = aws_lambda_function.accounting_list_customer_syncs
-    accounting_list_reconciliation_runs  = aws_lambda_function.accounting_list_reconciliation_runs
-    accounting_list_accounts             = aws_lambda_function.accounting_list_accounts
-    accounting_get_failure_summary       = aws_lambda_function.accounting_get_failure_summary
-    workers_outbox_publisher             = aws_lambda_function.workers_outbox_publisher
-    workers_payment_sync                 = aws_lambda_function.workers_payment_sync
-    workers_reconciliation               = aws_lambda_function.workers_reconciliation
-    seed_inventory_master                = aws_lambda_function.seed_inventory_master
-    migration_trigger_batch      = aws_lambda_function.migration_trigger_batch
-    migration_list_batches       = aws_lambda_function.migration_list_batches
-    migration_get_batch          = aws_lambda_function.migration_get_batch
-    migration_cancel_batch       = aws_lambda_function.migration_cancel_batch
-    communication_list_channels          = aws_lambda_function.communication_list_channels
-    communication_create_channel         = aws_lambda_function.communication_create_channel
-    communication_list_messages          = aws_lambda_function.communication_list_messages
-    communication_list_replies           = aws_lambda_function.communication_list_replies
-    communication_send_message           = aws_lambda_function.communication_send_message
-    communication_edit_message           = aws_lambda_function.communication_edit_message
-    communication_delete_message         = aws_lambda_function.communication_delete_message
-    communication_add_reaction           = aws_lambda_function.communication_add_reaction
-    communication_remove_reaction        = aws_lambda_function.communication_remove_reaction
-    communication_list_todos             = aws_lambda_function.communication_list_todos
-    communication_create_todo            = aws_lambda_function.communication_create_todo
-    communication_update_todo            = aws_lambda_function.communication_update_todo
-    communication_list_notifications     = aws_lambda_function.communication_list_notifications
+    workspace_today                       = aws_lambda_function.workspace_today
+    identity_me                           = aws_lambda_function.identity_me
+    identity_list_dealers                 = aws_lambda_function.identity_list_dealers
+    work_orders_get                       = aws_lambda_function.work_orders_get
+    customers_list                        = aws_lambda_function.customers_list
+    customers_create                      = aws_lambda_function.customers_create
+    customers_get                         = aws_lambda_function.customers_get
+    customers_transition                  = aws_lambda_function.customers_transition
+    inventory_list_parts                  = aws_lambda_function.inventory_list_parts
+    inventory_create_part                 = aws_lambda_function.inventory_create_part
+    inventory_get_part                    = aws_lambda_function.inventory_get_part
+    inventory_get_part_chain              = aws_lambda_function.inventory_get_part_chain
+    inventory_list_vendors                = aws_lambda_function.inventory_list_vendors
+    inventory_list_lots                   = aws_lambda_function.inventory_list_lots
+    inventory_list_manufacturers          = aws_lambda_function.inventory_list_manufacturers
+    inventory_create_manufacturer         = aws_lambda_function.inventory_create_manufacturer
+    inventory_plan_material_by_stage      = aws_lambda_function.inventory_plan_material_by_stage
+    tickets_list_tasks                    = aws_lambda_function.tickets_list_tasks
+    tickets_create_task                   = aws_lambda_function.tickets_create_task
+    tickets_transition                    = aws_lambda_function.tickets_transition_task
+    tickets_list_rework                   = aws_lambda_function.tickets_list_rework
+    tickets_create_rework                 = aws_lambda_function.tickets_create_rework
+    tickets_list_sync                     = aws_lambda_function.tickets_list_sync
+    tickets_list_all_work_orders          = aws_lambda_function.tickets_list_all_work_orders
+    tickets_list_technician_tasks         = aws_lambda_function.tickets_list_technician_tasks
+    tickets_transition_technician_task    = aws_lambda_function.tickets_transition_technician_task
+    scheduling_list_slots                 = aws_lambda_function.scheduling_list_slots
+    scheduling_list_labor_capacity        = aws_lambda_function.scheduling_list_labor_capacity
+    attachments_presign_upload            = aws_lambda_function.attachments_presign_upload
+    attachments_confirm_upload            = aws_lambda_function.attachments_confirm_upload
+    attachments_list                      = aws_lambda_function.attachments_list
+    attachments_presign_download          = aws_lambda_function.attachments_presign_download
+    sop_list                              = aws_lambda_function.sop_list
+    sop_get                               = aws_lambda_function.sop_get
+    sop_create                            = aws_lambda_function.sop_create
+    sop_publish_version                   = aws_lambda_function.sop_publish_version
+    sop_list_modules                      = aws_lambda_function.sop_list_modules
+    sop_list_assignments                  = aws_lambda_function.sop_list_assignments
+    sop_complete_assignment               = aws_lambda_function.sop_complete_assignment
+    sop_get_module                        = aws_lambda_function.sop_get_module
+    sop_get_module_progress               = aws_lambda_function.sop_get_module_progress
+    sop_update_step_progress              = aws_lambda_function.sop_update_step_progress
+    sop_submit_quiz                       = aws_lambda_function.sop_submit_quiz
+    sop_list_notes                        = aws_lambda_function.sop_list_notes
+    sop_upsert_note                       = aws_lambda_function.sop_upsert_note
+    sop_list_bookmarks                    = aws_lambda_function.sop_list_bookmarks
+    sop_toggle_bookmark                   = aws_lambda_function.sop_toggle_bookmark
+    sop_list_inspection_templates         = aws_lambda_function.sop_list_inspection_templates
+    sop_get_inspection_template           = aws_lambda_function.sop_get_inspection_template
+    accounting_oauth_connect              = aws_lambda_function.accounting_oauth_connect
+    accounting_oauth_callback             = aws_lambda_function.accounting_oauth_callback
+    accounting_status                     = aws_lambda_function.accounting_status
+    accounting_list_sync                  = aws_lambda_function.accounting_list_sync
+    accounting_retry_sync                 = aws_lambda_function.accounting_retry_sync
+    accounting_trigger_sync               = aws_lambda_function.accounting_trigger_sync
+    accounting_webhook                    = aws_lambda_function.accounting_webhook
+    accounting_list_customer_syncs        = aws_lambda_function.accounting_list_customer_syncs
+    accounting_list_reconciliation_runs   = aws_lambda_function.accounting_list_reconciliation_runs
+    accounting_list_accounts              = aws_lambda_function.accounting_list_accounts
+    accounting_get_failure_summary        = aws_lambda_function.accounting_get_failure_summary
+    workers_outbox_publisher              = aws_lambda_function.workers_outbox_publisher
+    workers_payment_sync                  = aws_lambda_function.workers_payment_sync
+    workers_reconciliation                = aws_lambda_function.workers_reconciliation
+    seed_inventory_master                 = aws_lambda_function.seed_inventory_master
+    migration_trigger_batch               = aws_lambda_function.migration_trigger_batch
+    migration_list_batches                = aws_lambda_function.migration_list_batches
+    migration_get_batch                   = aws_lambda_function.migration_get_batch
+    migration_cancel_batch                = aws_lambda_function.migration_cancel_batch
+    communication_list_channels           = aws_lambda_function.communication_list_channels
+    communication_create_channel          = aws_lambda_function.communication_create_channel
+    communication_list_messages           = aws_lambda_function.communication_list_messages
+    communication_list_replies            = aws_lambda_function.communication_list_replies
+    communication_send_message            = aws_lambda_function.communication_send_message
+    communication_edit_message            = aws_lambda_function.communication_edit_message
+    communication_delete_message          = aws_lambda_function.communication_delete_message
+    communication_add_reaction            = aws_lambda_function.communication_add_reaction
+    communication_remove_reaction         = aws_lambda_function.communication_remove_reaction
+    communication_list_todos              = aws_lambda_function.communication_list_todos
+    communication_create_todo             = aws_lambda_function.communication_create_todo
+    communication_update_todo             = aws_lambda_function.communication_update_todo
+    communication_list_notifications      = aws_lambda_function.communication_list_notifications
     communication_mark_notifications_read = aws_lambda_function.communication_mark_notifications_read
   }
 }
@@ -3642,16 +3687,16 @@ resource "aws_lambda_permission" "allow_api_gateway_list" {
 # ── Sales context ─────────────────────────────────────────────────────────────
 
 resource "aws_lambda_function" "sales_list_opportunities" {
-  function_name = "${var.name_prefix}-sales-list-opportunities"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-opportunities.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sales-list-opportunities"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-opportunities.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
-  timeout       = 30
-  memory_size   = 256
+  timeout          = 30
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -3681,16 +3726,16 @@ resource "aws_lambda_permission" "sales_list_opportunities" {
 }
 
 resource "aws_lambda_function" "sales_get_opportunity" {
-  function_name = "${var.name_prefix}-sales-get-opportunity"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "get-opportunity.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sales-get-opportunity"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "get-opportunity.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
-  timeout       = 30
-  memory_size   = 256
+  timeout          = 30
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -3720,16 +3765,16 @@ resource "aws_lambda_permission" "sales_get_opportunity" {
 }
 
 resource "aws_lambda_function" "sales_create_opportunity" {
-  function_name = "${var.name_prefix}-sales-create-opportunity"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "create-opportunity.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sales-create-opportunity"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "create-opportunity.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
-  timeout       = 30
-  memory_size   = 256
+  timeout          = 30
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -3759,16 +3804,16 @@ resource "aws_lambda_permission" "sales_create_opportunity" {
 }
 
 resource "aws_lambda_function" "sales_update_opportunity" {
-  function_name = "${var.name_prefix}-sales-update-opportunity"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "update-opportunity.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sales-update-opportunity"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "update-opportunity.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
-  timeout       = 30
-  memory_size   = 256
+  timeout          = 30
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -3798,16 +3843,16 @@ resource "aws_lambda_permission" "sales_update_opportunity" {
 }
 
 resource "aws_lambda_function" "sales_transition_opportunity" {
-  function_name = "${var.name_prefix}-sales-transition-opportunity"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "transition-opportunity.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sales-transition-opportunity"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "transition-opportunity.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
-  timeout       = 30
-  memory_size   = 256
+  timeout          = 30
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -3837,16 +3882,16 @@ resource "aws_lambda_permission" "sales_transition_opportunity" {
 }
 
 resource "aws_lambda_function" "sales_list_quotes" {
-  function_name = "${var.name_prefix}-sales-list-quotes"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-quotes.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sales-list-quotes"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-quotes.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
-  timeout       = 30
-  memory_size   = 256
+  timeout          = 30
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -3876,16 +3921,16 @@ resource "aws_lambda_permission" "sales_list_quotes" {
 }
 
 resource "aws_lambda_function" "sales_get_quote" {
-  function_name = "${var.name_prefix}-sales-get-quote"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "get-quote.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sales-get-quote"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "get-quote.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
-  timeout       = 30
-  memory_size   = 256
+  timeout          = 30
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -3915,16 +3960,16 @@ resource "aws_lambda_permission" "sales_get_quote" {
 }
 
 resource "aws_lambda_function" "sales_create_quote" {
-  function_name = "${var.name_prefix}-sales-create-quote"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "create-quote.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sales-create-quote"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "create-quote.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
-  timeout       = 30
-  memory_size   = 256
+  timeout          = 30
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -3954,16 +3999,16 @@ resource "aws_lambda_permission" "sales_create_quote" {
 }
 
 resource "aws_lambda_function" "sales_update_quote" {
-  function_name = "${var.name_prefix}-sales-update-quote"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "update-quote.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sales-update-quote"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "update-quote.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
-  timeout       = 30
-  memory_size   = 256
+  timeout          = 30
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -3993,16 +4038,16 @@ resource "aws_lambda_permission" "sales_update_quote" {
 }
 
 resource "aws_lambda_function" "sales_update_quote_lines" {
-  function_name = "${var.name_prefix}-sales-update-quote-lines"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "update-quote-lines.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sales-update-quote-lines"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "update-quote-lines.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
-  timeout       = 30
-  memory_size   = 256
+  timeout          = 30
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -4032,16 +4077,16 @@ resource "aws_lambda_permission" "sales_update_quote_lines" {
 }
 
 resource "aws_lambda_function" "sales_send_quote" {
-  function_name = "${var.name_prefix}-sales-send-quote"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "send-quote.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sales-send-quote"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "send-quote.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
-  timeout       = 30
-  memory_size   = 256
+  timeout          = 30
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -4071,16 +4116,16 @@ resource "aws_lambda_permission" "sales_send_quote" {
 }
 
 resource "aws_lambda_function" "sales_accept_quote" {
-  function_name = "${var.name_prefix}-sales-accept-quote"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "accept-quote.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sales-accept-quote"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "accept-quote.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
-  timeout       = 30
-  memory_size   = 256
+  timeout          = 30
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -4110,16 +4155,16 @@ resource "aws_lambda_permission" "sales_accept_quote" {
 }
 
 resource "aws_lambda_function" "sales_reject_quote" {
-  function_name = "${var.name_prefix}-sales-reject-quote"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "reject-quote.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sales-reject-quote"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "reject-quote.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
-  timeout       = 30
-  memory_size   = 256
+  timeout          = 30
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -4149,16 +4194,16 @@ resource "aws_lambda_permission" "sales_reject_quote" {
 }
 
 resource "aws_lambda_function" "sales_list_activities" {
-  function_name = "${var.name_prefix}-sales-list-activities"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "list-activities.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sales-list-activities"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-activities.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
-  timeout       = 30
-  memory_size   = 256
+  timeout          = 30
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -4188,16 +4233,16 @@ resource "aws_lambda_permission" "sales_list_activities" {
 }
 
 resource "aws_lambda_function" "sales_create_activity" {
-  function_name = "${var.name_prefix}-sales-create-activity"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "create-activity.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sales-create-activity"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "create-activity.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
-  timeout       = 30
-  memory_size   = 256
+  timeout          = 30
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -4227,16 +4272,16 @@ resource "aws_lambda_permission" "sales_create_activity" {
 }
 
 resource "aws_lambda_function" "sales_pipeline_stats" {
-  function_name = "${var.name_prefix}-sales-pipeline-stats"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "pipeline-stats.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sales-pipeline-stats"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "pipeline-stats.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
-  timeout       = 30
-  memory_size   = 256
+  timeout          = 30
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -4266,16 +4311,16 @@ resource "aws_lambda_permission" "sales_pipeline_stats" {
 }
 
 resource "aws_lambda_function" "sales_forecast" {
-  function_name = "${var.name_prefix}-sales-forecast"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "forecast.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sales-forecast"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "forecast.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
-  timeout       = 30
-  memory_size   = 256
+  timeout          = 30
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -4305,16 +4350,16 @@ resource "aws_lambda_permission" "sales_forecast" {
 }
 
 resource "aws_lambda_function" "sales_dashboard" {
-  function_name = "${var.name_prefix}-sales-dashboard"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "dashboard.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sales-dashboard"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "dashboard.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
-  timeout       = 30
-  memory_size   = 256
+  timeout          = 30
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
   vpc_config {
     subnet_ids         = var.private_subnet_ids
@@ -4346,16 +4391,16 @@ resource "aws_lambda_permission" "sales_dashboard" {
 # ── Sales AI Agent ───────────────────────────────────────────────────────────
 
 resource "aws_lambda_function" "sales_agent_chat" {
-  function_name = "${var.name_prefix}-sales-agent-chat"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "agent-chat.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sales-agent-chat"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "agent-chat.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
-  timeout       = 120
-  memory_size   = 512
+  timeout          = 120
+  memory_size      = 512
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -4372,9 +4417,9 @@ resource "aws_apigatewayv2_integration" "sales_agent_chat" {
 }
 
 resource "aws_apigatewayv2_route" "sales_agent_chat" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "POST /sales/agent/chat"
-  target    = "integrations/${aws_apigatewayv2_integration.sales_agent_chat.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /sales/agent/chat"
+  target             = "integrations/${aws_apigatewayv2_integration.sales_agent_chat.id}"
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
   authorizer_id      = local.authorizer_id
 }
@@ -4387,16 +4432,16 @@ resource "aws_lambda_permission" "sales_agent_chat" {
 }
 
 resource "aws_lambda_function" "sales_agent_sessions" {
-  function_name = "${var.name_prefix}-sales-agent-sessions"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "agent-sessions.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sales-agent-sessions"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "agent-sessions.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
-  timeout       = 30
-  memory_size   = 256
+  timeout          = 30
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -4413,9 +4458,9 @@ resource "aws_apigatewayv2_integration" "sales_agent_sessions" {
 }
 
 resource "aws_apigatewayv2_route" "sales_agent_sessions" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "GET /sales/agent/sessions"
-  target    = "integrations/${aws_apigatewayv2_integration.sales_agent_sessions.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /sales/agent/sessions"
+  target             = "integrations/${aws_apigatewayv2_integration.sales_agent_sessions.id}"
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
   authorizer_id      = local.authorizer_id
 }
@@ -4428,16 +4473,16 @@ resource "aws_lambda_permission" "sales_agent_sessions" {
 }
 
 resource "aws_lambda_function" "sales_agent_session_detail" {
-  function_name = "${var.name_prefix}-sales-agent-session-detail"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "agent-session-detail.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-sales-agent-session-detail"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "agent-session-detail.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
-  timeout       = 30
-  memory_size   = 256
+  timeout          = 30
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -4454,9 +4499,9 @@ resource "aws_apigatewayv2_integration" "sales_agent_session_detail" {
 }
 
 resource "aws_apigatewayv2_route" "sales_agent_session_detail" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "GET /sales/agent/sessions/{sessionId}"
-  target    = "integrations/${aws_apigatewayv2_integration.sales_agent_session_detail.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /sales/agent/sessions/{sessionId}"
+  target             = "integrations/${aws_apigatewayv2_integration.sales_agent_session_detail.id}"
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
   authorizer_id      = local.authorizer_id
 }
@@ -4473,16 +4518,16 @@ resource "aws_lambda_permission" "sales_agent_session_detail" {
 # =============================================================================
 
 resource "aws_lambda_function" "copilot_chat" {
-  function_name = "${var.name_prefix}-copilot-chat"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "chat.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/copilot-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.copilot_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-copilot-chat"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "chat.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/copilot-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.copilot_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.copilot_lambda_zip_path)
-  timeout       = 120
-  memory_size   = 512
+  timeout          = 120
+  memory_size      = 512
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -4499,9 +4544,9 @@ resource "aws_apigatewayv2_integration" "copilot_chat" {
 }
 
 resource "aws_apigatewayv2_route" "copilot_chat" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "POST /copilot/chat"
-  target    = "integrations/${aws_apigatewayv2_integration.copilot_chat.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /copilot/chat"
+  target             = "integrations/${aws_apigatewayv2_integration.copilot_chat.id}"
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
   authorizer_id      = local.authorizer_id
 }
@@ -4514,16 +4559,16 @@ resource "aws_lambda_permission" "copilot_chat" {
 }
 
 resource "aws_lambda_function" "copilot_sessions" {
-  function_name = "${var.name_prefix}-copilot-sessions"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "sessions.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/copilot-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.copilot_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-copilot-sessions"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "sessions.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/copilot-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.copilot_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.copilot_lambda_zip_path)
-  timeout       = 30
-  memory_size   = 256
+  timeout          = 30
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -4540,9 +4585,9 @@ resource "aws_apigatewayv2_integration" "copilot_sessions" {
 }
 
 resource "aws_apigatewayv2_route" "copilot_sessions" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "GET /copilot/sessions"
-  target    = "integrations/${aws_apigatewayv2_integration.copilot_sessions.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /copilot/sessions"
+  target             = "integrations/${aws_apigatewayv2_integration.copilot_sessions.id}"
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
   authorizer_id      = local.authorizer_id
 }
@@ -4555,16 +4600,16 @@ resource "aws_lambda_permission" "copilot_sessions" {
 }
 
 resource "aws_lambda_function" "copilot_session_detail" {
-  function_name = "${var.name_prefix}-copilot-session-detail"
-  role          = aws_iam_role.erp_lambda.arn
-  runtime       = "nodejs20.x"
-  handler       = "session-detail.handler"
-  s3_bucket      = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key         = var.lambda_artifacts_bucket_name != "" ? "lambdas/copilot-lambda.zip" : null
-  filename      = var.lambda_artifacts_bucket_name == "" ? var.copilot_lambda_zip_path : null
+  function_name    = "${var.name_prefix}-copilot-session-detail"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "session-detail.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/copilot-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.copilot_lambda_zip_path : null
   source_code_hash = filebase64sha256(var.copilot_lambda_zip_path)
-  timeout       = 30
-  memory_size   = 256
+  timeout          = 30
+  memory_size      = 256
   environment { variables = local.lambda_common_env }
 
   vpc_config {
@@ -4581,9 +4626,9 @@ resource "aws_apigatewayv2_integration" "copilot_session_detail" {
 }
 
 resource "aws_apigatewayv2_route" "copilot_session_detail" {
-  api_id    = aws_apigatewayv2_api.erp.id
-  route_key = "GET /copilot/sessions/{sessionId}"
-  target    = "integrations/${aws_apigatewayv2_integration.copilot_session_detail.id}"
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /copilot/sessions/{sessionId}"
+  target             = "integrations/${aws_apigatewayv2_integration.copilot_session_detail.id}"
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
   authorizer_id      = local.authorizer_id
 }

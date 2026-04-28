@@ -153,6 +153,7 @@ import { handler as copilotSessionsHandler } from './lambda/copilot/sessions.han
 import { handler as copilotSessionDetailHandler } from './lambda/copilot/session-detail.handler.js';
 import { listAuditEventsHandler } from './lambda/audit/handlers.js';
 import { listBuildSlotsHandler, listLaborCapacityHandler } from './lambda/scheduling/handlers.js';
+import { getWorkspaceTodayHandler } from './lambda/workspace/handlers.js';
 
 const env = loadApiEnv();
 const PORT = env.apiPort;
@@ -252,6 +253,10 @@ async function route(
   // ── Auth ───────────────────────────────────────────────────────────────────
   if (pathname === '/auth/me' && method === 'GET') {
     result = await getMeHandler(event);
+
+  // ── Workspace ─────────────────────────────────────────────────────────────
+  } else if (pathname === '/workspace/today' && method === 'GET') {
+    result = await getWorkspaceTodayHandler(event);
 
   // ── Planning ──────────────────────────────────────────────────────────────
   } else if (pathname === '/planning/work-orders' && method === 'POST') {
@@ -583,6 +588,7 @@ const server = createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`\n🚀 GG ERP API (local dev) running at http://localhost:${PORT}`);
   console.log(`   Auth        GET /auth/me`);
+  console.log(`   Workspace   GET /workspace/today`);
   console.log(`   Customers   GET|POST /identity/customers, GET|POST /:id/transition`);
   console.log(`   Inventory   GET|POST /inventory/parts, GET /inventory/vendors`);
   console.log(`   Tickets     /tickets/work-orders/:id/tasks|rework|qc-gates|time-entries`);

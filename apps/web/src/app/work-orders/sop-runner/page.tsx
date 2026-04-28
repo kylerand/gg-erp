@@ -9,7 +9,7 @@ import type { EvidenceFile } from '@gg-erp/ui';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, uploadAttachment } from '@/lib/api-client';
 import { useRole } from '@/lib/role-context';
 
 interface SopStep {
@@ -24,13 +24,33 @@ interface SopStep {
   failedReason?: string;
 }
 
-const MOCK_STEPS: SopStep[] = [
-  { id: 's1', sequence: 1, title: 'Safety Inspection', description: 'Inspect vehicle for damage, check brake condition, inspect wiring harness.', requiresEvidence: true, executionState: 'COMPLETE', canStart: true },
-  { id: 's2', sequence: 2, title: 'Battery Disconnect', description: 'Disconnect main battery pack. Verify 0V across terminals with multimeter.', requiresEvidence: false, executionState: 'IN_PROGRESS', canStart: true },
-  { id: 's3', sequence: 3, title: 'Motor Removal', description: 'Remove drive motor assembly. Label all connectors before disconnecting.', requiresEvidence: true, executionState: 'PENDING', canStart: false },
-  { id: 's4', sequence: 4, title: 'Controller Swap', description: 'Install new controller. Verify pinout against wiring diagram.', requiresEvidence: false, executionState: 'PENDING', canStart: false },
-  { id: 's5', sequence: 5, title: 'QC Sign-Off', description: 'Run QC checklist and record test results before cart leaves the floor.', requiresEvidence: true, executionState: 'PENDING', canStart: false },
-];
+interface RoutingStepApi {
+  id: string;
+  stepCode?: string;
+  stepName?: string;
+  sequenceNo?: number;
+  title?: string;
+  sequence?: number;
+  description?: string;
+  requiresEvidence?: boolean;
+  executionState: SopStep['executionState'];
+  canStart: boolean;
+  failedReason?: string;
+}
+
+function toSopStep(step: RoutingStepApi): SopStep {
+  return {
+    id: step.id,
+    sequence: step.sequence ?? step.sequenceNo ?? 0,
+    title: step.title ?? step.stepName ?? step.stepCode ?? 'Routing step',
+    description: step.description ?? '',
+    requiresEvidence: Boolean(step.requiresEvidence),
+    executionState: step.executionState,
+    canStart: step.canStart,
+    sopReference: step.stepCode,
+    failedReason: step.failedReason,
+  };
+}
 
 const TTL_MS = 30 * 60 * 1000;
 
@@ -93,18 +113,23 @@ function SOPRunnerContent() {
   }
 
   const loadSteps = useCallback(async () => {
+    if (!workOrderId) {
+      setSteps([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
       const qs = new URLSearchParams();
-      if (workOrderId) qs.set('workOrderId', workOrderId);
+      qs.set('workOrderId', workOrderId);
       if (taskId) qs.set('taskId', taskId);
-      const data = await apiFetch<{ steps: SopStep[] }>(
+      const data = await apiFetch<{ steps: RoutingStepApi[] }>(
         `/planning/routing-steps${qs.size ? `?${qs}` : ''}`,
-        undefined,
-        { steps: MOCK_STEPS },
       );
-      const loaded = data.steps.length > 0 ? data.steps : MOCK_STEPS;
+      const loaded = Array.isArray(data.steps) ? data.steps.map(toSopStep) : [];
 
       // Validate and discard expired localStorage save
       if (taskId) {
@@ -164,7 +189,7 @@ function SOPRunnerContent() {
     }
     const step = steps.find(s => s.id === stepId);
     const files = evidenceMap[stepId] ?? [];
-    const evidenceAttachmentIds = files.filter(f => f.uploadState === 'done').map(() => 'mock-attachment-id');
+    const evidenceAttachmentIds = files.filter(f => f.uploadState === 'done').map(f => f.id);
     try {
       await apiFetch(
         `/planning/routing-steps/${stepId}/state`,
@@ -213,27 +238,35 @@ function SOPRunnerContent() {
       progress: 0,
     }));
     setEvidenceMap(prev => ({ ...prev, [stepId]: [...(prev[stepId] ?? []), ...newFiles] }));
-    // Simulate upload: advance progress every 200ms, complete after ~1s
-    newFiles.forEach(ef => {
-      let prog = 0;
-      const tick = setInterval(() => {
-        prog += 25;
-        setEvidenceMap(prev => ({
-          ...prev,
-          [stepId]: (prev[stepId] ?? []).map(f => f.id === ef.id ? { ...f, progress: Math.min(prog, 100) } : f),
-        }));
-        if (prog >= 100) {
-          clearInterval(tick);
-          setTimeout(() => {
-            setEvidenceMap(prev => ({
-              ...prev,
-              [stepId]: (prev[stepId] ?? []).map(f =>
-                f.id === ef.id ? { ...f, uploadState: 'done' as const, progress: 100 } : f,
-              ),
-            }));
-          }, 200);
-        }
-      }, 200);
+
+    files.forEach((file, index) => {
+      const pending = newFiles[index];
+      if (!pending) return;
+      void uploadAttachment({ entityType: 'routing-step', entityId: stepId, file })
+        .then((uploaded) => {
+          setEvidenceMap(prev => ({
+            ...prev,
+            [stepId]: (prev[stepId] ?? []).map(f =>
+              f.id === pending.id
+                ? { ...f, id: uploaded.attachmentId, uploadState: 'done' as const, progress: 100 }
+                : f,
+            ),
+          }));
+        })
+        .catch((err) => {
+          setEvidenceMap(prev => ({
+            ...prev,
+            [stepId]: (prev[stepId] ?? []).map(f =>
+              f.id === pending.id
+                ? {
+                    ...f,
+                    uploadState: 'error' as const,
+                    errorMessage: err instanceof Error ? err.message : 'Upload failed',
+                  }
+                : f,
+            ),
+          }));
+        });
     });
   }
 
@@ -302,36 +335,48 @@ function SOPRunnerContent() {
         </Card>
       )}
 
-      {/* Timer */}
-      <Card>
-        <CardHeader><CardTitle className="text-sm">Elapsed Time</CardTitle></CardHeader>
-        <CardContent className="flex items-center gap-4">
-          <div className="font-mono text-2xl text-gray-900 tabular-nums">{formatElapsed(elapsed)}</div>
-          {timerStartedAt === null ? (
-            <Button size="sm" onClick={startTimer} className="bg-yellow-400 hover:bg-yellow-300 text-gray-900 min-h-[48px]">
-              ▶ Start Timer
-            </Button>
-          ) : (
-            <span className="text-xs text-gray-400 italic">Running</span>
-          )}
-        </CardContent>
-      </Card>
+      {!error && steps.length === 0 && (
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-gray-500">
+            {workOrderId
+              ? 'No routing steps are configured for this work order.'
+              : 'Select a task from My Queue to begin.'}
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Progress bar */}
-      <Card>
-        <CardContent className="pt-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-gray-600">{completedCount} / {totalCount} steps complete</span>
-            <span className="text-sm font-semibold text-gray-900">{progress}%</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div className="bg-yellow-400 h-2 rounded-full transition-all" style={{ width: `${progress}%` }} />
-          </div>
-        </CardContent>
-      </Card>
+      {steps.length > 0 && (
+        <>
+          {/* Timer */}
+          <Card>
+            <CardHeader><CardTitle className="text-sm">Elapsed Time</CardTitle></CardHeader>
+            <CardContent className="flex items-center gap-4">
+              <div className="font-mono text-2xl text-gray-900 tabular-nums">{formatElapsed(elapsed)}</div>
+              {timerStartedAt === null ? (
+                <Button size="sm" onClick={startTimer} className="bg-yellow-400 hover:bg-yellow-300 text-gray-900 min-h-[48px]">
+                  ▶ Start Timer
+                </Button>
+              ) : (
+                <span className="text-xs text-gray-400 italic">Running</span>
+              )}
+            </CardContent>
+          </Card>
 
-      {/* Steps */}
-      <div className="space-y-3">
+          {/* Progress bar */}
+          <Card>
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-gray-600">{completedCount} / {totalCount} steps complete</span>
+                <span className="text-sm font-semibold text-gray-900">{progress}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="bg-yellow-400 h-2 rounded-full transition-all" style={{ width: `${progress}%` }} />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Steps */}
+          <div className="space-y-3">
         {steps.map(step => {
           const isActive = step.executionState === 'IN_PROGRESS';
           const isPending = step.executionState === 'PENDING';
@@ -438,7 +483,9 @@ function SOPRunnerContent() {
             </Card>
           );
         })}
-      </div>
+          </div>
+        </>
+      )}
 
       {/* Navigate to QC checklist once all steps are done */}
       {allComplete && (

@@ -14,22 +14,14 @@ import {
 } from '@/components/ui/sheet';
 import {
   apiFetch,
+  listEmployees,
   listTechnicianTasks,
-  MOCK_EMPLOYEES,
   mutationHeaders,
 } from '@/lib/api-client';
 import type { Employee, TechnicianTask } from '@/lib/api-client';
 
 const REFRESH_INTERVAL = 30_000;
 const STALE_THRESHOLD = 2 * 60_000;
-
-// Hardcoded skill map for MVP — replace with API data when available
-const TECH_SKILL_MAP: Record<string, string[]> = {
-  'emp-1': ['ELECTRICAL', 'BATTERY', 'MECHANICAL'],
-  'emp-2': ['ELECTRICAL', 'SUSPENSION', 'MECHANICAL'],
-};
-
-const ACTIVE_TECHS = MOCK_EMPLOYEES.filter(e => e.employmentState === 'ACTIVE');
 
 function formatAge(ts: string): string {
   const mins = Math.floor((Date.now() - new Date(ts).getTime()) / 60_000);
@@ -39,7 +31,7 @@ function formatAge(ts: string): string {
 }
 
 function missingSkills(tech: Employee, required: string[]): string[] {
-  const techSkills = TECH_SKILL_MAP[tech.id] ?? [];
+  const techSkills = tech.skills ?? [];
   return required.filter(s => !techSkills.includes(s));
 }
 
@@ -99,6 +91,7 @@ function TaskCard({
 export function DispatchClient() {
   const [unassigned, setUnassigned] = useState<TechnicianTask[]>([]);
   const [techTasks, setTechTasks] = useState<Record<string, TechnicianTask[]>>({});
+  const [activeTechs, setActiveTechs] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isStale, setIsStale] = useState(false);
@@ -113,15 +106,18 @@ export function DispatchClient() {
   const loadData = useCallback(async () => {
     setError(null);
     try {
+      const employeeData = await listEmployees({ employmentState: 'ACTIVE' });
+      const techs = employeeData.items;
       const [unassignedData, ...techDataArr] = await Promise.all([
         listTechnicianTasks({ state: 'READY', assignedOnly: false }),
-        ...ACTIVE_TECHS.map(tech => listTechnicianTasks({ technicianId: tech.id })),
+        ...techs.map(tech => listTechnicianTasks({ technicianId: tech.id })),
       ]);
 
+      setActiveTechs(techs);
       setUnassigned(unassignedData.items.filter(t => !t.technicianId));
 
       const map: Record<string, TechnicianTask[]> = {};
-      ACTIVE_TECHS.forEach((tech, i) => {
+      techs.forEach((tech, i) => {
         map[tech.id] = techDataArr[i]?.items ?? [];
       });
       setTechTasks(map);
@@ -181,7 +177,7 @@ export function DispatchClient() {
         return cleaned;
       });
 
-      const tech = ACTIVE_TECHS.find(t => t.id === assigningTechId);
+      const tech = activeTechs.find(t => t.id === assigningTechId);
       toast.success(`Assigned to ${tech ? `${tech.firstName} ${tech.lastName}` : assigningTechId}`);
       setSheetOpen(false);
       setSelectedTask(null);
@@ -198,7 +194,7 @@ export function DispatchClient() {
     error,
     isStale,
     unassigned: unassigned.length,
-    techCount: ACTIVE_TECHS.length,
+    techCount: activeTechs.length,
     techTasks,
   });
 
@@ -258,13 +254,13 @@ export function DispatchClient() {
 
           {/* Per-technician columns */}
           <div className="flex-1 min-w-0 overflow-x-auto">
-            {ACTIVE_TECHS.length === 0 ? (
+            {activeTechs.length === 0 ? (
               <div className="border-2 border-dashed border-gray-200 rounded-lg p-10 text-center text-sm text-gray-400">
                 No active technicians
               </div>
             ) : (
               <div className="flex gap-4">
-                {ACTIVE_TECHS.map(tech => {
+                {activeTechs.map(tech => {
                   const tasks = techTasks[tech.id] ?? [];
                   const hasInProgress = tasks.some(t => t.state === 'IN_PROGRESS');
                   return (
@@ -334,7 +330,7 @@ export function DispatchClient() {
               {/* Technician list */}
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Select Technician</p>
-                {ACTIVE_TECHS.map(tech => {
+                {activeTechs.map(tech => {
                   const missing = missingSkills(tech, selectedTask.requiredSkillCodes ?? []);
                   const isCurrent = tech.id === selectedTask.technicianId;
                   const isSelected = assigningTechId === tech.id;

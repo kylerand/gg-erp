@@ -2,7 +2,6 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { PageHeader } from '@gg-erp/ui';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { listMyAssignments, type TrainingAssignment } from '@/lib/api-client';
 
@@ -42,11 +41,6 @@ export default function AssignmentsPage() {
       <PageHeader
         title="Team Assignments"
         description="Track training progress across your team"
-        action={
-          <Button className="bg-yellow-400 hover:bg-yellow-300 text-gray-900" onClick={() => toast.info('Assign module — coming soon')}>
-            + Assign Module
-          </Button>
-        }
       />
 
       {loading ? (
@@ -89,7 +83,6 @@ export default function AssignmentsPage() {
                       <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${STATUS_CLASSES[a.assignmentStatus] ?? 'bg-gray-100 text-gray-500'}`}>
                         {a.assignmentStatus.replace('_', ' ')}
                       </span>
-                      <Button size="sm" variant="outline" onClick={() => toast.info('Reassign — coming soon')}>Reassign</Button>
                     </div>
                   </CardContent>
                 </Card>

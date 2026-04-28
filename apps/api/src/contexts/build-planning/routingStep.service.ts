@@ -147,16 +147,32 @@ export class RoutingStepService {
       include: { stepEvidenceAttachments: true },
     });
 
+    if (params.state === 'COMPLETE' && params.evidenceAttachmentIds?.length) {
+      await this.db.stepEvidenceAttachment.createMany({
+        data: params.evidenceAttachmentIds.map((fileAttachmentId) => ({
+          routingStepId: updated.id,
+          fileAttachmentId,
+          uploadedBy: params.technicianId,
+        })),
+      });
+    }
+
+    const updatedWithEvidence = await this.db.routingSopStep.findUnique({
+      where: { id: updated.id },
+      include: { stepEvidenceAttachments: true },
+    });
+    const stepForResponse = updatedWithEvidence ?? updated;
+
     const allStepStates = await this.db.routingSopStep.findMany({
-      where: { workOrderId: updated.workOrderId },
+      where: { workOrderId: stepForResponse.workOrderId },
       select: { sequenceNo: true, executionState: true },
       orderBy: { sequenceNo: 'asc' },
     });
 
     return {
-      ...updated,
-      canStart: computeCanStart(updated.sequenceNo, allStepStates),
-      evidenceAttachments: updated.stepEvidenceAttachments.map(toStepEvidenceAttachment),
+      ...stepForResponse,
+      canStart: computeCanStart(stepForResponse.sequenceNo, allStepStates),
+      evidenceAttachments: stepForResponse.stepEvidenceAttachments.map(toStepEvidenceAttachment),
     };
   }
 }

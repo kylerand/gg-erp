@@ -1,91 +1,71 @@
 'use client';
-import { useState } from 'react';
-import { toast } from 'sonner';
-import { PageHeader, EmptyState, StatusBadge } from '@gg-erp/ui';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useEffect, useState } from 'react';
+import { PageHeader, EmptyState, LoadingSkeleton, StatusBadge } from '@gg-erp/ui';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { listPurchaseOrders, type PurchaseOrder } from '@/lib/api-client';
 
-interface POLine { id: string; sku: string; partName: string; qtyOrdered: number; qtyReceived: number; }
-interface PO { id: string; poNumber: string; vendor: string; status: 'OPEN' | 'PARTIAL' | 'RECEIVED' | 'CLOSED'; lines: POLine[]; }
-
-const MOCK_POS: PO[] = [
-  { id: 'po1', poNumber: 'PO-2026-001', vendor: 'East Coast Golf Carts', status: 'OPEN', lines: [
-    { id: 'l1', sku: 'BAT-48V-105AH', partName: '48V Battery Pack', qtyOrdered: 10, qtyReceived: 0 },
-    { id: 'l2', sku: 'CTL-CNVSN-KT', partName: 'Conversion Controller Kit', qtyOrdered: 5, qtyReceived: 0 },
-  ]},
-  { id: 'po2', poNumber: 'PO-2026-002', vendor: 'Western Cart Co', status: 'PARTIAL', lines: [
-    { id: 'l3', sku: 'CHRG-48V-OBC', partName: 'On-Board Charger', qtyOrdered: 8, qtyReceived: 3 },
-  ]},
-];
+const OPEN_STATES = new Set(['APPROVED', 'SENT', 'PARTIALLY_RECEIVED']);
 
 export default function ReceivingPage() {
-  const [pos, setPos] = useState(MOCK_POS);
-  const [receiving, setReceiving] = useState<Record<string, string>>({});
-  const [selectedPO, setSelectedPO] = useState<string | null>(null);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  function receiveLines(poId: string) {
-    setPos(prev => prev.map(po => {
-      if (po.id !== poId) return po;
-      const lines = po.lines.map(l => {
-        const qty = parseInt(receiving[l.id] ?? '0', 10);
-        if (qty > l.qtyOrdered - l.qtyReceived) { toast.error(`Over-receipt on ${l.sku} — max ${l.qtyOrdered - l.qtyReceived}`); return l; }
-        return { ...l, qtyReceived: l.qtyReceived + (qty || 0) };
-      });
-      const allReceived = lines.every(l => l.qtyReceived >= l.qtyOrdered);
-      return { ...po, lines, status: allReceived ? 'RECEIVED' as const : 'PARTIAL' as const };
-    }));
-    setReceiving({});
-    toast.success('Receipt recorded');
-  }
-
-  const openPOs = pos.filter(p => p.status !== 'CLOSED');
-  if (openPOs.length === 0) return <div><PageHeader title="Receiving" /><EmptyState icon="📭" title="No open POs" description="All purchase orders are closed." /></div>;
+  useEffect(() => {
+    listPurchaseOrders({ pageSize: 100 })
+      .then(res => setPurchaseOrders(res.items.filter(po => OPEN_STATES.has(po.purchaseOrderState))))
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
     <div>
-      <PageHeader title="Receiving & Counts" description="Record PO receipts and resolve variances" />
-      <div className="space-y-4">
-        {openPOs.map(po => (
-          <Card key={po.id} className={selectedPO === po.id ? 'border-yellow-400' : ''}>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm">{po.poNumber} · {po.vendor}</CardTitle>
-                <div className="flex items-center gap-3">
-                  <StatusBadge status={po.status} />
-                  <Button size="sm" variant="outline" onClick={() => setSelectedPO(selectedPO === po.id ? null : po.id)}>
-                    {selectedPO === po.id ? 'Collapse' : 'Receive'}
-                  </Button>
+      <PageHeader title="Receiving & Counts" description="Open purchase orders ready for receipt" />
+      {loading ? (
+        <LoadingSkeleton rows={4} cols={4} />
+      ) : purchaseOrders.length === 0 ? (
+        <EmptyState icon="📭" title="No open POs" description="No approved or sent purchase orders are ready for receipt." />
+      ) : (
+        <div className="space-y-4">
+          {purchaseOrders.map(po => (
+            <Card key={po.id}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm">{po.poNumber} · {po.vendorName}</CardTitle>
+                  <StatusBadge status={po.purchaseOrderState} />
                 </div>
-              </div>
-            </CardHeader>
-            {selectedPO === po.id && (
+              </CardHeader>
               <CardContent>
-                <div className="space-y-3 mb-4">
-                  {po.lines.map(line => (
-                    <div key={line.id} className="flex items-center gap-4">
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">{line.partName}</p>
-                        <p className="text-xs text-gray-400">{line.sku} · Ordered: {line.qtyOrdered} · Received: {line.qtyReceived}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Input type="number" min="0" max={line.qtyOrdered - line.qtyReceived}
-                          value={receiving[line.id] ?? ''}
-                          onChange={e => setReceiving(prev => ({ ...prev, [line.id]: e.target.value }))}
-                          placeholder="Qty" className="w-20 h-8 text-sm" />
-                        <span className="text-xs text-gray-400">of {line.qtyOrdered - line.qtyReceived}</span>
-                      </div>
-                    </div>
-                  ))}
+                <div className="overflow-hidden rounded-lg border border-gray-200">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">Line</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">Part</th>
+                        <th className="px-3 py-2 text-right font-medium text-gray-600">Ordered</th>
+                        <th className="px-3 py-2 text-right font-medium text-gray-600">Received</th>
+                        <th className="px-3 py-2 text-right font-medium text-gray-600">Open</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {po.lines.map(line => {
+                        const openQty = Math.max(line.orderedQuantity - line.receivedQuantity - line.rejectedQuantity, 0);
+                        return (
+                          <tr key={line.id}>
+                            <td className="px-3 py-2 text-gray-500">{line.lineNumber}</td>
+                            <td className="px-3 py-2 font-mono text-xs text-gray-700">{line.partId}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">{line.orderedQuantity}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">{line.receivedQuantity}</td>
+                            <td className="px-3 py-2 text-right tabular-nums font-medium">{openQty}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-                <Button size="sm" onClick={() => receiveLines(po.id)} className="bg-yellow-400 hover:bg-yellow-300 text-gray-900">
-                  Record Receipt
-                </Button>
               </CardContent>
-            )}
-          </Card>
-        ))}
-      </div>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

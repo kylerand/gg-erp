@@ -203,9 +203,11 @@ export const qbStatusHandler = wrapHandler(async (_ctx) => {
   // because the connection card itself should still render.
   let overview: {
     customerCount?: number;
+    customers?: ReturnType<QuickBooksClient['listCustomers']> extends Promise<infer R> ? R : never;
     openInvoiceCount?: number;
     openInvoiceBalance?: number;
     recentInvoices?: ReturnType<QuickBooksClient['listRecentInvoices']> extends Promise<infer R> ? R : never;
+    accounts?: ReturnType<QuickBooksClient['listAccounts']> extends Promise<infer R> ? R : never;
     accountsByType?: Record<string, number>;
     accountsTotal?: number;
     error?: string;
@@ -213,19 +215,25 @@ export const qbStatusHandler = wrapHandler(async (_ctx) => {
   try {
     const tokens = await tokenManager.getValidTokens();
     const qb = new QuickBooksClient(tokens);
-    const [customers, recent, ar, accounts] = await Promise.allSettled([
+    const [customerCount, customerList, recent, ar, accounts] = await Promise.allSettled([
       qb.countCustomers(),
+      qb.listCustomers(200),
       qb.listRecentInvoices(5),
       qb.getOpenInvoicesSummary(),
       qb.listAccounts(),
     ]);
-    if (customers.status === 'fulfilled') overview.customerCount = customers.value;
+    if (customerCount.status === 'fulfilled') overview.customerCount = customerCount.value;
+    if (customerList.status === 'fulfilled') {
+      overview.customers = customerList.value;
+      overview.customerCount ??= customerList.value.length;
+    }
     if (recent.status === 'fulfilled') overview.recentInvoices = recent.value;
     if (ar.status === 'fulfilled') {
       overview.openInvoiceCount = ar.value.openCount;
       overview.openInvoiceBalance = ar.value.openBalance;
     }
     if (accounts.status === 'fulfilled') {
+      overview.accounts = accounts.value;
       overview.accountsTotal = accounts.value.length;
       overview.accountsByType = {};
       for (const a of accounts.value) {
@@ -234,7 +242,7 @@ export const qbStatusHandler = wrapHandler(async (_ctx) => {
     }
     // Surface the first underlying QB error so it shows on the page —
     // empty overview without an explanation is worse than showing the cause.
-    const firstFailure = [customers, recent, ar, accounts].find(
+    const firstFailure = [customerCount, customerList, recent, ar, accounts].find(
       (r): r is PromiseRejectedResult => r.status === 'rejected',
     );
     if (firstFailure && Object.keys(overview).length === 0) {

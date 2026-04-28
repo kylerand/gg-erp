@@ -189,7 +189,6 @@ export default function SOPLibraryPage() {
                       <th className="px-4 py-3 text-left font-medium text-gray-600">Rev</th>
                       <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
                       <th className="px-4 py-3 text-left font-medium text-gray-600">Updated</th>
-                      <th className="px-4 py-3"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -207,9 +206,6 @@ export default function SOPLibraryPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-gray-400 text-xs">{new Date(s.updatedAt).toLocaleDateString()}</td>
-                        <td className="px-4 py-3">
-                          <Button size="sm" variant="outline" onClick={() => toast.info(`SOP ${s.documentCode} viewer coming soon`)}>View</Button>
-                        </td>
                       </tr>
                     ))}
                   </tbody>

@@ -227,6 +227,25 @@ export class QuickBooksClient {
     return data.QueryResponse.Customer?.length ?? 0;
   }
 
+  /** Read-only customer list for the accounting overview. */
+  async listCustomers(limit = 200): Promise<QbCustomerSummary[]> {
+    const cap = Math.min(Math.max(limit, 1), 200);
+    const data = await this.request<{ QueryResponse: { Customer?: QbCustomerRaw[] } }>(
+      'GET',
+      `/query?query=${encodeURIComponent(
+        `SELECT Id, DisplayName, CompanyName, Active FROM Customer MAXRESULTS ${cap}`,
+      )}`,
+    );
+    return (data.QueryResponse.Customer ?? [])
+      .map((c) => ({
+        id: c.Id,
+        displayName: c.DisplayName,
+        companyName: c.CompanyName,
+        active: c.Active ?? true,
+      }))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
+  }
+
   /** Recent invoices ordered by metadata create time, newest first. */
   async listRecentInvoices(limit = 5): Promise<QbInvoiceSummary[]> {
     const cap = Math.min(Math.max(limit, 1), 50);
@@ -346,6 +365,20 @@ export interface QbInvoiceSummary {
   txnDate?: string;
   dueDate?: string;
   customerName?: string;
+}
+
+interface QbCustomerRaw {
+  Id: string;
+  DisplayName: string;
+  CompanyName?: string;
+  Active?: boolean;
+}
+
+export interface QbCustomerSummary {
+  id: string;
+  displayName: string;
+  companyName?: string;
+  active: boolean;
 }
 
 interface QbAccountRaw {

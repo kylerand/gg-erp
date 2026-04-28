@@ -13,16 +13,25 @@ export default function ForecastPage() {
   const [forecast, setForecast] = useState<SalesForecastMonth[]>([]);
   const [stats, setStats] = useState<PipelineStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const [forecastData, statsData] = await Promise.all([
         getSalesForecast(),
         getSalesPipelineStats(),
       ]);
-      setForecast(forecastData);
-      setStats(statsData);
+      setForecast(Array.isArray(forecastData) ? forecastData : []);
+      setStats({
+        ...statsData,
+        byStage: Array.isArray(statsData.byStage) ? statsData.byStage : [],
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load sales forecast');
+      setForecast([]);
+      setStats(null);
     } finally {
       setLoading(false);
     }
@@ -33,6 +42,8 @@ export default function ForecastPage() {
   }, [load]);
 
   const maxValue = Math.max(...forecast.map((m) => m.weightedValue), 1);
+  const rawWinRate = stats?.winRate ?? 0;
+  const winRatePercent = rawWinRate <= 1 ? rawWinRate * 100 : rawWinRate;
 
   return (
     <div>
@@ -47,6 +58,10 @@ export default function ForecastPage() {
 
       {loading ? (
         <LoadingSkeleton rows={8} cols={4} />
+      ) : error ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
       ) : (
         <>
           {/* Pipeline summary stats */}
@@ -55,7 +70,7 @@ export default function ForecastPage() {
               { label: 'Total Opportunities', value: stats?.totalOpportunities ?? 0, color: 'text-gray-700' },
               { label: 'Total Pipeline Value', value: `$${(stats?.totalValue ?? 0).toLocaleString()}`, color: 'text-gray-700' },
               { label: 'Weighted Forecast', value: `$${(stats?.weightedForecast ?? 0).toLocaleString()}`, color: 'text-green-700' },
-              { label: 'Win Rate', value: `${(stats?.winRate ?? 0).toFixed(1)}%`, color: 'text-blue-700' },
+              { label: 'Win Rate', value: `${winRatePercent.toFixed(1)}%`, color: 'text-blue-700' },
               { label: 'Avg Deal Size', value: `$${(stats?.avgDealSize ?? 0).toLocaleString()}`, color: 'text-purple-700' },
             ].map((stat) => (
               <div key={stat.label} className="bg-white rounded-lg border border-gray-200 p-4">

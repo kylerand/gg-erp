@@ -46,7 +46,7 @@ export const listRoutingStepsHandler = wrapHandler(async (ctx) => {
 // ─── PATCH /planning/routing-steps/:id/state ─────────────────────────────────
 
 export const transitionRoutingStepStateHandler = wrapHandler(async (ctx) => {
-  const id = ctx.event.pathParameters?.id;
+  const id = ctx.event.pathParameters?.id ?? ctx.event.pathParameters?.stepId;
   if (!id) {
     return jsonResponse(400, { message: 'Step ID path parameter is required.' });
   }
@@ -110,8 +110,11 @@ function toStepResponse(step: RoutingSopStepWithExecution) {
     workOrderId: step.workOrderId,
     stepCode: step.stepCode,
     stepName: step.stepName,
+    title: step.stepName,
     sequenceNo: step.sequenceNo,
+    sequence: step.sequenceNo,
     description: step.description ?? undefined,
+    requiresEvidence: false,
     estimatedMinutes: step.estimatedMinutes ?? undefined,
     executionState: step.executionState,
     completedBy: step.completedBy ?? undefined,

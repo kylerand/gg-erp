@@ -19,15 +19,6 @@ interface QcGate {
   failureNote?: string;
 }
 
-const DEFAULT_GATES: QcGate[] = [
-  { id: 'g1', gateLabel: 'Brake function test — both wheels stop within 10ft at 10mph', isCritical: true, result: null },
-  { id: 'g2', gateLabel: 'Battery voltage within spec (±2V of rated)', isCritical: true, result: null },
-  { id: 'g3', gateLabel: 'All connectors seated and latched', isCritical: false, result: null },
-  { id: 'g4', gateLabel: 'Wiring harness routed without pinch points', isCritical: false, result: null },
-  { id: 'g5', gateLabel: 'Controller firmware version confirmed', isCritical: false, result: null },
-  { id: 'g6', gateLabel: 'Test drive completed — 5 lap minimum', isCritical: true, result: null },
-];
-
 const RESULT_BTN_ACTIVE: Record<string, string> = {
   PASS: 'bg-green-600 text-white border-green-600',
   FAIL: 'bg-red-600 text-white border-red-600',
@@ -37,6 +28,14 @@ const RESULT_BTN_ACTIVE: Record<string, string> = {
 type SubmitOutcome =
   | { status: 'PASSED' }
   | { status: 'FAILED'; openReworkCount: number; reworkLoopCount: number };
+
+interface QcSubmitResponse {
+  status?: 'PASSED' | 'FAILED';
+  overallResult?: 'PASSED' | 'FAILED';
+  openReworkCount?: number;
+  reworkIssuesCreated?: number;
+  activeReworkLoopCount?: number;
+}
 
 function QCChecklistsContent() {
   const params = useSearchParams();
@@ -53,18 +52,22 @@ function QCChecklistsContent() {
   const [reworkLoopCount, setReworkLoopCount] = useState(0);
 
   const loadGates = useCallback(async () => {
+    if (!workOrderId) {
+      setGates([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
       const qs = new URLSearchParams();
-      if (workOrderId) qs.set('workOrderId', workOrderId);
       if (taskId) qs.set('taskId', taskId);
       const data = await apiFetch<{ gates: QcGate[] }>(
-        `/tickets/qc-gates${qs.size ? `?${qs}` : ''}`,
-        undefined,
-        { gates: DEFAULT_GATES },
+        `/tickets/work-orders/${workOrderId}/qc-gates${qs.size ? `?${qs}` : ''}`,
       );
-      setGates(data.gates.length > 0 ? data.gates : DEFAULT_GATES);
+      setGates(Array.isArray(data.gates) ? data.gates : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load QC gates');
     } finally {
@@ -88,7 +91,7 @@ function QCChecklistsContent() {
 
   const criticalPending = gates.filter(g => g.isCritical && g.result === null);
   const criticalFailMissingNote = gates.filter(g => g.isCritical && g.result === 'FAIL' && !g.failureNote?.trim());
-  const canSubmit = criticalPending.length === 0 && criticalFailMissingNote.length === 0;
+  const canSubmit = gates.length > 0 && criticalPending.length === 0 && criticalFailMissingNote.length === 0;
 
   async function handleSubmit() {
     if (!reviewedBy) {
@@ -98,26 +101,31 @@ function QCChecklistsContent() {
     if (!canSubmit) return;
     setSubmitting(true);
     try {
-      const results = gates.map(g => ({ gateId: g.id, result: g.result, failureNote: g.failureNote }));
-      const resp = await apiFetch<{ status: string; openReworkCount?: number; activeReworkLoopCount?: number }>(
-        '/tickets/qc-gates/batch-submit',
+      const results = gates.map(g => ({
+        gateLabel: g.gateLabel,
+        isCritical: g.isCritical,
+        result: g.result ?? 'NA',
+        failureNote: g.failureNote,
+      }));
+      const resp = await apiFetch<QcSubmitResponse>(
+        `/tickets/work-orders/${workOrderId}/qc-gates/batch-submit`,
         {
           method: 'POST',
           body: JSON.stringify({ workOrderId, taskId, reviewedBy, results }),
         },
-        {
-          status: gates.some(g => g.isCritical && g.result === 'FAIL') ? 'FAILED' : 'PASSED',
-          openReworkCount: gates.filter(g => g.result === 'FAIL').length,
-          activeReworkLoopCount: 0,
-        },
       );
       const loopCount = resp.activeReworkLoopCount ?? 0;
+      const status = resp.status ?? resp.overallResult;
       setReworkLoopCount(loopCount);
-      if (resp.status === 'PASSED') {
+      if (status === 'PASSED') {
         setOutcome({ status: 'PASSED' });
         toast.success('QC Approved');
       } else {
-        setOutcome({ status: 'FAILED', openReworkCount: resp.openReworkCount ?? 0, reworkLoopCount: loopCount });
+        setOutcome({
+          status: 'FAILED',
+          openReworkCount: resp.openReworkCount ?? resp.reworkIssuesCreated ?? 0,
+          reworkLoopCount: loopCount,
+        });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to submit QC');
@@ -173,6 +181,16 @@ function QCChecklistsContent() {
         </Card>
       )}
 
+      {!error && !outcome && gates.length === 0 && (
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-gray-500">
+            {workOrderId
+              ? 'No QC checklist is configured for this work order.'
+              : 'Select a work order from My Queue to load its QC checklist.'}
+          </CardContent>
+        </Card>
+      )}
+
       {outcome?.status === 'PASSED' && (
         <Card className="border-green-400 bg-green-50">
           <CardContent className="pt-6 text-center space-y-3">
@@ -202,7 +220,7 @@ function QCChecklistsContent() {
         </Card>
       )}
 
-      {!outcome && (
+      {!outcome && gates.length > 0 && (
         <>
           <div className="space-y-3">
             {gates.map(gate => (

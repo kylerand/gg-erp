@@ -23,20 +23,16 @@ interface TimeEntry {
   computedHours: number;
 }
 
-const MOCK_ENTRIES: TimeEntry[] = [
-  {
-    id: 't1', workOrderId: 'wo-1', technicianId: 'emp-1',
-    startedAt: new Date(Date.now() - 3 * 3_600_000).toISOString(),
-    endedAt: new Date(Date.now() - 0.5 * 3_600_000).toISOString(),
-    description: 'Motor removal and inspection', source: 'AUTO', computedHours: 2.5,
-  },
-  {
-    id: 't2', workOrderId: 'wo-1', technicianId: 'emp-1',
-    startedAt: new Date(Date.now() - 5 * 3_600_000).toISOString(),
-    endedAt: new Date(Date.now() - 4 * 3_600_000).toISOString(),
-    description: 'Parts cleaning', source: 'MANUAL', manualHours: 1.0, computedHours: 1.0,
-  },
-];
+type TimeEntriesResponse = { items?: TimeEntry[]; entries?: TimeEntry[] };
+type TimeEntryMutationResponse = TimeEntry | { entry: TimeEntry };
+
+function normalizeTimeEntries(data: TimeEntriesResponse): TimeEntry[] {
+  return Array.isArray(data.items) ? data.items : (Array.isArray(data.entries) ? data.entries : []);
+}
+
+function unwrapTimeEntry(data: TimeEntryMutationResponse): TimeEntry {
+  return 'entry' in data ? data.entry : data;
+}
 
 function checkOverlap(entries: TimeEntry[], startedAt: string, endedAt: string): boolean {
   const newStart = new Date(startedAt).getTime();
@@ -74,12 +70,10 @@ function TimeLoggingContent() {
     try {
       const qs = new URLSearchParams();
       if (workOrderId) qs.set('workOrderId', workOrderId);
-      const data = await apiFetch<{ items: TimeEntry[] }>(
+      const data = await apiFetch<TimeEntriesResponse>(
         `/tickets/time-entries${qs.size ? `?${qs}` : ''}`,
-        undefined,
-        { items: MOCK_ENTRIES },
       );
-      setEntries(data.items);
+      setEntries(normalizeTimeEntries(data));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load time entries');
     } finally {
@@ -105,7 +99,7 @@ function TimeLoggingContent() {
 
     setSubmitting(true);
     try {
-      const newEntry = await apiFetch<TimeEntry>(
+      const newEntry = await apiFetch<TimeEntryMutationResponse>(
         '/tickets/time-entries',
         {
           method: 'POST',
@@ -118,19 +112,8 @@ function TimeLoggingContent() {
             startedAt,
           }),
         },
-        {
-          id: `t-${Date.now()}`,
-          workOrderId: addWO || workOrderId,
-          technicianId,
-          startedAt,
-          endedAt,
-          manualHours: h,
-          description: addDesc,
-          source: 'MANUAL',
-          computedHours: h,
-        },
       );
-      setEntries(prev => [newEntry, ...prev]);
+      setEntries(prev => [unwrapTimeEntry(newEntry), ...prev]);
       setAddHours('');
       setAddDesc('');
       toast.success(`${h}h logged`);

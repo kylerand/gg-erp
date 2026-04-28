@@ -204,8 +204,7 @@ export const listMyAssignmentsHandler = wrapHandler(async (ctx) => {
   const employeeId = ctx.event.pathParameters?.employeeId
     ?? ctx.event.queryStringParameters?.employeeId;
 
-  if (!employeeId) return jsonResponse(400, { message: 'employeeId is required.' });
-  if (!UUID_RE.test(employeeId)) return jsonResponse(400, { message: 'employeeId must be a valid UUID.' });
+  if (employeeId && !UUID_RE.test(employeeId)) return jsonResponse(400, { message: 'employeeId must be a valid UUID.' });
 
   const qs = ctx.event.queryStringParameters ?? {};
   const status = qs.status;
@@ -213,7 +212,7 @@ export const listMyAssignmentsHandler = wrapHandler(async (ctx) => {
   const offset = parseInt(qs.offset ?? '0', 10);
 
   const where = {
-    employeeId,
+    ...(employeeId ? { employeeId } : {}),
     ...(status ? { assignmentStatus: status as 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'EXEMPT' | 'CANCELLED' } : {}),
   };
 

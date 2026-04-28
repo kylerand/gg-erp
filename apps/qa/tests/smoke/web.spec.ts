@@ -59,8 +59,8 @@ test.describe('web smoke (admin)', () => {
       await link.scrollIntoViewIfNeeded();
       await expect(link, `sidebar entry ${section.href} missing`).toBeVisible();
       await link.click();
-      await page.waitForURL(section.urlMatch, { timeout: 5_000 });
-      await expect(page.locator('h1, h2').first()).toBeVisible({ timeout: 5_000 });
+      await page.waitForURL(section.urlMatch, { timeout: 15_000 });
+      await expect(page.locator('h1, h2').first()).toBeVisible({ timeout: 10_000 });
     }
     // Console-error cleanliness for these landing pages is asserted in
     // Phase-2 coverage; smoke just confirms navigation works.

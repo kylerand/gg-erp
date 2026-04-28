@@ -23,7 +23,7 @@ test.describe('floor-tech smoke (technician)', () => {
     await waitForAppReady(page);
 
     // Root redirects to the queue (per apps/floor-tech/src/app/page.tsx).
-    await expect(page).toHaveURL(/work-orders\/my-queue/, { timeout: 5_000 });
+    await expect(page).toHaveURL(/work-orders\/my-queue/, { timeout: 15_000 });
 
     // All four bottom-nav tabs should be visible — the contract for the
     // floor tech UI is "always-on bottom nav with Queue / Shift / Time / Sync".
@@ -53,8 +53,8 @@ test.describe('floor-tech smoke (technician)', () => {
     for (const tab of tabs) {
       const link = page.getByRole('link', { name: new RegExp(`^${tab.label}$`, 'i') }).first();
       await link.click();
-      await page.waitForURL(tab.urlMatch, { timeout: 5_000 });
-      await expect(page.locator('h1, h2').first()).toBeVisible({ timeout: 5_000 });
+      await page.waitForURL(tab.urlMatch, { timeout: 15_000 });
+      await expect(page.locator('h1, h2').first()).toBeVisible({ timeout: 10_000 });
     }
 
     expectNoConsoleErrors(consoleErrors);

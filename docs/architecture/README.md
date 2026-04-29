@@ -17,6 +17,7 @@ This folder contains principal-level architecture docs for the Golfin Garage ERP
 - `postgresql-rollout-and-seeding.md`
 - `authn-authz-implementation-plan.md`
 - `domain-event-model-eventbridge-outbox.md`
+- `erpnext-adoption-blueprint.md`
 
 ## Module-specific design documents
 

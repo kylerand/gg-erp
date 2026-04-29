@@ -4,6 +4,12 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import {
+  getErpCommandDestinations,
+  getErpQuickCreateDestinations,
+  normalizeErpRoute,
+  type ErpCommandDestinationDescriptor,
+} from '@gg-erp/domain';
+import {
   BarChart3,
   BookOpen,
   CalendarDays,
@@ -31,6 +37,7 @@ import { Input } from '@/components/ui/input';
 type CommandIcon = LucideIcon;
 
 interface CommandDestination {
+  key: string;
   label: string;
   description: string;
   href: string;
@@ -42,178 +49,34 @@ interface CommandDestination {
 const RECENT_ROUTES_KEY = 'gg_erp_recent_routes';
 const MAX_RECENTS = 6;
 
-const DESTINATIONS: CommandDestination[] = [
-  {
-    label: 'Work Orders',
-    description: 'Open the full work-order list.',
-    href: '/work-orders',
-    group: 'Work Orders',
-    keywords: ['wo', 'jobs', 'builds', 'orders'],
-    icon: Wrench,
-  },
-  {
-    label: 'Blocked Work',
-    description: 'Triage work orders that need attention.',
-    href: '/work-orders?status=BLOCKED',
-    group: 'Work Orders',
-    keywords: ['blocked', 'stalled', 'triage'],
-    icon: Wrench,
-  },
-  {
-    label: 'Dispatch Board',
-    description: 'Assign and balance shop work.',
-    href: '/work-orders/dispatch',
-    group: 'Work Orders',
-    keywords: ['dispatch', 'assign', 'tech'],
-    icon: CalendarDays,
-  },
-  {
-    label: 'New Work Order',
-    description: 'Create a build or service job.',
-    href: '/work-orders/new',
-    group: 'Create',
-    keywords: ['new', 'create', 'job'],
-    icon: Plus,
-  },
-  {
-    label: 'Quote List',
-    description: 'Review quotes and customer approvals.',
-    href: '/sales/quotes',
-    group: 'Sales',
-    keywords: ['quote', 'estimate', 'approval'],
-    icon: DollarSign,
-  },
-  {
-    label: 'New Quote',
-    description: 'Start a customer quote.',
-    href: '/sales/quotes/new',
-    group: 'Create',
-    keywords: ['new', 'quote', 'estimate'],
-    icon: Plus,
-  },
-  {
-    label: 'Sales Pipeline',
-    description: 'Track opportunities and follow-ups.',
-    href: '/sales/pipeline',
-    group: 'Sales',
-    keywords: ['opportunity', 'pipeline', 'lead'],
-    icon: DollarSign,
-  },
-  {
-    label: 'Part Lookup',
-    description: 'Search parts, stock, bins, and SKUs.',
-    href: '/inventory/parts',
-    group: 'Inventory',
-    keywords: ['parts', 'sku', 'stock', 'bin'],
-    icon: Package,
-  },
-  {
-    label: 'Reservations',
-    description: 'Review reserved and short parts.',
-    href: '/inventory/reservations',
-    group: 'Inventory',
-    keywords: ['reserve', 'shortage', 'pick'],
-    icon: Package,
-  },
-  {
-    label: 'Receiving',
-    description: 'Receive purchase orders and inbound parts.',
-    href: '/inventory/receiving',
-    group: 'Inventory',
-    keywords: ['po', 'purchase', 'receive', 'vendor'],
-    icon: Package,
-  },
-  {
-    label: 'Customers',
-    description: 'Open customer and dealer records.',
-    href: '/customer-dealers/customers',
-    group: 'Customers',
-    keywords: ['customer', 'dealer', 'contact'],
-    icon: Users,
-  },
-  {
-    label: 'Messages',
-    description: 'Open team and customer conversations.',
-    href: '/messages',
-    group: 'Communication',
-    keywords: ['chat', 'message', 'channel'],
-    icon: MessageCircle,
-  },
-  {
-    label: 'Training Assignments',
-    description: 'Review OJT assignments and evidence.',
-    href: '/training/assignments',
-    group: 'Training',
-    keywords: ['training', 'ojt', 'assignment'],
-    icon: BookOpen,
-  },
-  {
-    label: 'SOP Library',
-    description: 'Find procedures and shop knowledge.',
-    href: '/training/sop',
-    group: 'Training',
-    keywords: ['sop', 'procedure', 'knowledge'],
-    icon: BookOpen,
-  },
-  {
-    label: 'QuickBooks Customers',
-    description: 'Open the live QuickBooks customer list.',
-    href: '/accounting/quickbooks/customers',
-    group: 'Accounting',
-    keywords: ['quickbooks', 'qb', 'customer', 'accounting'],
-    icon: Receipt,
-  },
-  {
-    label: 'QuickBooks Invoices',
-    description: 'Review live QuickBooks invoice activity and AR.',
-    href: '/accounting/quickbooks/invoices',
-    group: 'Accounting',
-    keywords: ['quickbooks', 'qb', 'invoice', 'ar', 'accounting'],
-    icon: Receipt,
-  },
-  {
-    label: 'QuickBooks Chart of Accounts',
-    description: 'Browse live QuickBooks chart-of-accounts rows.',
-    href: '/accounting/quickbooks/chart-of-accounts',
-    group: 'Accounting',
-    keywords: ['quickbooks', 'qb', 'chart', 'coa', 'accounting'],
-    icon: Receipt,
-  },
-  {
-    label: 'Accounting Sync Monitor',
-    description: 'Review QuickBooks queues and failures.',
-    href: '/accounting/sync?view=failures',
-    group: 'Accounting',
-    keywords: ['quickbooks', 'sync', 'failure', 'invoice'],
-    icon: Receipt,
-  },
-  {
-    label: 'Reconciliation',
-    description: 'Compare ERP and QuickBooks records.',
-    href: '/accounting/reconciliation',
-    group: 'Accounting',
-    keywords: ['reconcile', 'quickbooks', 'accounting'],
-    icon: Receipt,
-  },
-  {
-    label: 'Reporting',
-    description: 'Open operational reports and alerts.',
-    href: '/reporting',
-    group: 'Reports',
-    keywords: ['report', 'analytics', 'dashboard'],
-    icon: BarChart3,
-  },
-  {
-    label: 'Admin Settings',
-    description: 'Manage access, audit trail, and integrations.',
-    href: '/admin',
-    group: 'Admin',
-    keywords: ['settings', 'access', 'audit', 'integrations'],
-    icon: Settings2,
-  },
-];
+const ICON_BY_DESTINATION: Record<ErpCommandDestinationDescriptor['icon'], CommandIcon> = {
+  'work-orders': Wrench,
+  sales: DollarSign,
+  inventory: Package,
+  customers: Users,
+  training: BookOpen,
+  planning: CalendarDays,
+  accounting: Receipt,
+  messages: MessageCircle,
+  reporting: BarChart3,
+  admin: Settings2,
+  plus: Plus,
+};
 
-const QUICK_CREATE = DESTINATIONS.filter((destination) => destination.group === 'Create');
+function toCommandDestination(destination: ErpCommandDestinationDescriptor): CommandDestination {
+  return {
+    key: destination.key,
+    label: destination.label,
+    description: destination.description,
+    href: destination.route,
+    group: destination.group,
+    keywords: [...destination.keywords],
+    icon: ICON_BY_DESTINATION[destination.icon],
+  };
+}
+
+const DESTINATIONS = getErpCommandDestinations().map(toCommandDestination);
+const QUICK_CREATE = getErpQuickCreateDestinations().map(toCommandDestination);
 
 interface RecentRoute {
   label: string;
@@ -222,12 +85,14 @@ interface RecentRoute {
 }
 
 function routeMatches(pathname: string, href: string): boolean {
-  const [hrefPath] = href.split('?');
+  const hrefPath = normalizeErpRoute(href);
   return pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
 }
 
 function labelForPath(pathname: string): string {
-  const destination = DESTINATIONS.find((item) => routeMatches(pathname, item.href));
+  const destination = DESTINATIONS.filter((item) => routeMatches(pathname, item.href)).sort(
+    (left, right) => normalizeErpRoute(right.href).length - normalizeErpRoute(left.href).length,
+  )[0];
   if (destination) return destination.label;
   if (pathname === '/') return 'Dashboard';
   return pathname
@@ -260,13 +125,7 @@ function destinationMatches(destination: CommandDestination, query: string): boo
   return haystack.includes(query);
 }
 
-export function GlobalCommandPalette({
-  open,
-  onClose,
-}: {
-  open: boolean;
-  onClose: () => void;
-}) {
+export function GlobalCommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const pathname = usePathname();
   const [query, setQuery] = useState('');
   const [recentRoutes, setRecentRoutes] = useState<RecentRoute[]>([]);
@@ -298,7 +157,12 @@ export function GlobalCommandPalette({
   }, [query]);
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen: boolean) => { if (!nextOpen) onClose(); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen: boolean) => {
+        if (!nextOpen) onClose();
+      }}
+    >
       <DialogContent className="sm:max-w-2xl p-0 overflow-hidden">
         <DialogHeader className="border-b border-[#E4D8CB] px-4 py-4">
           <DialogTitle>Search ERP</DialogTitle>
@@ -349,7 +213,7 @@ export function GlobalCommandPalette({
               </h3>
               <div className="grid gap-2 sm:grid-cols-2">
                 {QUICK_CREATE.map((destination) => (
-                  <CommandLink key={destination.href} destination={destination} onClose={onClose} />
+                  <CommandLink key={destination.key} destination={destination} onClose={onClose} />
                 ))}
               </div>
             </section>
@@ -363,7 +227,7 @@ export function GlobalCommandPalette({
               {results.length > 0 ? (
                 results.map((destination) => (
                   <CommandLink
-                    key={destination.href}
+                    key={destination.key}
                     destination={destination}
                     onClose={onClose}
                     compact
@@ -390,7 +254,7 @@ export function QuickCreateMenu({ onNavigate }: { onNavigate?: () => void }) {
       </div>
       {QUICK_CREATE.map((destination) => (
         <Link
-          key={destination.href}
+          key={destination.key}
           href={destination.href}
           onClick={onNavigate}
           className="flex items-start gap-3 border-b border-[#F0E8DC] px-3 py-3 text-sm last:border-b-0 hover:bg-[#FFF8EF]"
@@ -402,17 +266,6 @@ export function QuickCreateMenu({ onNavigate }: { onNavigate?: () => void }) {
           </span>
         </Link>
       ))}
-      <Link
-        href="/messages"
-        onClick={onNavigate}
-        className="flex items-start gap-3 px-3 py-3 text-sm hover:bg-[#FFF8EF]"
-      >
-        <MessageCircle size={16} className="mt-0.5 text-[#B1581B]" />
-        <span>
-          <span className="block font-semibold text-[#211F1E]">New Message</span>
-          <span className="block text-xs text-[#6E625A]">Open channels and start a thread.</span>
-        </span>
-      </Link>
     </div>
   );
 }

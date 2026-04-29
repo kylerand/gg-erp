@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "test": "tsx --test tests/",
+    "test": "tsx --test $(find tests -name '*.test.ts' -print)",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   }
 }

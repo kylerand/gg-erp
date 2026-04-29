@@ -1,7 +1,8 @@
 'use client';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
+import { getLiveErpWorkspaces, normalizeErpRoute, type ErpModuleKey } from '@gg-erp/domain';
 import {
   Wrench,
   DollarSign,
@@ -17,115 +18,50 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-interface NavChild {
-  label: string;
-  href: string;
+const NAV_SECTIONS = getLiveErpWorkspaces();
+
+const ICON_BY_MODULE: Record<ErpModuleKey, LucideIcon> = {
+  'work-orders': Wrench,
+  sales: DollarSign,
+  inventory: Package,
+  customers: Users,
+  training: BookOpen,
+  planning: CalendarDays,
+  accounting: Receipt,
+  messages: MessageCircle,
+  reporting: BarChart3,
+  admin: Settings2,
+};
+
+function routeHasQuery(href: string): boolean {
+  return href.includes('?');
 }
 
-interface NavSection {
-  label: string;
-  href: string;
-  icon: LucideIcon;
-  children: NavChild[];
+function routeQueryMatches(searchParams: URLSearchParams, href: string): boolean {
+  const query = href.split('?')[1]?.split('#')[0];
+  if (!query) return true;
+
+  const hrefParams = new URLSearchParams(query);
+  return Array.from(hrefParams.entries()).every(([key, value]) => searchParams.get(key) === value);
 }
 
-const NAV_SECTIONS: NavSection[] = [
-  {
-    label: 'Work Orders',
-    href: '/work-orders',
-    icon: Wrench,
-    children: [
-      { label: 'My Queue', href: '/work-orders/my-queue' },
-      { label: 'Dispatch Board', href: '/work-orders/dispatch' },
-      { label: 'Open / Blocked', href: '/work-orders/open' },
-    ],
-  },
-  {
-    label: 'Sales',
-    href: '/sales',
-    icon: DollarSign,
-    children: [
-      { label: 'Pipeline', href: '/sales/pipeline' },
-      { label: 'Quotes', href: '/sales/quotes' },
-      { label: 'Forecast', href: '/sales/forecast' },
-    ],
-  },
-  {
-    label: 'Inventory',
-    href: '/inventory',
-    icon: Package,
-    children: [
-      { label: 'Part Lookup', href: '/inventory/parts' },
-      { label: 'Reservations', href: '/inventory/reservations' },
-      { label: 'Receiving', href: '/inventory/receiving' },
-    ],
-  },
-  {
-    label: 'Customers',
-    href: '/customer-dealers',
-    icon: Users,
-    children: [
-      { label: 'Customers', href: '/customer-dealers/customers' },
-      { label: 'Dealers', href: '/customer-dealers/dealers' },
-      { label: 'Relationships', href: '/customer-dealers/relationships' },
-    ],
-  },
-  {
-    label: 'Training',
-    href: '/training',
-    icon: BookOpen,
-    children: [
-      { label: 'My OJT', href: '/training/my-ojt' },
-      { label: 'Assignments', href: '/training/assignments' },
-      { label: 'SOP Library', href: '/training/sop' },
-    ],
-  },
-  {
-    label: 'Planning',
-    href: '/planning',
-    icon: CalendarDays,
-    children: [
-      { label: 'Build Slots', href: '/planning/slots' },
-    ],
-  },
-  {
-    label: 'Accounting',
-    href: '/accounting',
-    icon: Receipt,
-    children: [
-      { label: 'Sync Monitor', href: '/accounting/sync?view=failures' },
-      { label: 'Reconciliation', href: '/accounting/reconciliation' },
-    ],
-  },
-  {
-    label: 'Messages',
-    href: '/messages',
-    icon: MessageCircle,
-    children: [
-      { label: 'Team Channels', href: '/messages?type=TEAM' },
-      { label: 'Customer Threads', href: '/messages?type=CUSTOMER' },
-    ],
-  },
-  {
-    label: 'Reporting',
-    href: '/reporting',
-    icon: BarChart3,
-    children: [],
-  },
-  {
-    label: 'Admin',
-    href: '/admin',
-    icon: Settings2,
-    children: [
-      { label: 'User Access', href: '/admin/access' },
-      { label: 'Audit Trail', href: '/admin/audit' },
-      { label: 'Integrations', href: '/admin/integrations' },
-    ],
-  },
-];
+function sectionRouteIsActive(pathname: string, href: string): boolean {
+  const hrefPath = normalizeErpRoute(href);
+  return pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
+}
+
+function childRouteIsActive(
+  pathname: string,
+  searchParams: URLSearchParams,
+  href: string,
+): boolean {
+  if (pathname !== normalizeErpRoute(href)) return false;
+  return routeHasQuery(href) ? routeQueryMatches(searchParams, href) : true;
+}
 
 export function SidebarNav() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   return (
     <aside className="hidden xl:flex w-72 min-h-screen bg-[#211F1E] text-white border-r border-white/10 flex-col flex-shrink-0">
@@ -142,7 +78,9 @@ export function SidebarNav() {
           />
           <div className="mt-4 flex items-center justify-between">
             <div>
-              <span className="brand-pill border-white/15 bg-white/10 text-[#F9F8D1]">Service OS</span>
+              <span className="brand-pill border-white/15 bg-white/10 text-[#F9F8D1]">
+                Service OS
+              </span>
             </div>
             <span className="text-xs uppercase tracking-[0.2em] text-white/45">ERP</span>
           </div>
@@ -152,31 +90,34 @@ export function SidebarNav() {
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         {NAV_SECTIONS.map((section) => {
-          const Icon = section.icon;
-          const isActive = pathname === section.href || pathname.startsWith(section.href + '/');
+          const Icon = ICON_BY_MODULE[section.icon];
+          const children = section.links.filter((child) => child.status === 'live');
+          const isActive = sectionRouteIsActive(pathname, section.route);
           return (
-            <div key={section.href} className="mb-1.5">
+            <div key={section.route} className="mb-1.5">
               <Link
-                href={section.href}
+                href={section.route}
                 className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-colors ${
                   isActive
                     ? 'bg-[#E37125] text-white shadow-lg shadow-[#E37125]/20'
                     : 'text-white/72 hover:bg-white/8 hover:text-white'
                 }`}
               >
-                <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${isActive ? 'bg-white/18' : 'bg-white/8'}`}>
+                <span
+                  className={`flex h-9 w-9 items-center justify-center rounded-xl ${isActive ? 'bg-white/18' : 'bg-white/8'}`}
+                >
                   <Icon size={17} strokeWidth={isActive ? 2.5 : 2} className="flex-shrink-0" />
                 </span>
                 <span className="flex-1">{section.label}</span>
               </Link>
-              {isActive && section.children.length > 0 && (
+              {isActive && children.length > 0 && (
                 <div className="ml-12 mt-2 space-y-1">
-                  {section.children.map((child) => {
-                    const isChildActive = pathname === child.href;
+                  {children.map((child) => {
+                    const isChildActive = childRouteIsActive(pathname, searchParams, child.route);
                     return (
                       <Link
-                        key={child.href}
-                        href={child.href}
+                        key={child.route}
+                        href={child.route}
                         className={`block px-3 py-2 text-xs rounded-xl transition-colors ${
                           isChildActive
                             ? 'text-[#F9F8D1] bg-white/10 font-semibold'

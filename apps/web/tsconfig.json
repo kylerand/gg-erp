@@ -15,6 +15,7 @@
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./src/*"],
+      "@gg-erp/domain": ["../../packages/domain/src/index.ts"],
       "@gg-erp/ui": ["../../packages/ui/src/index.ts"]
     }
   },

@@ -10,6 +10,7 @@ import {
   type QbInvoiceSummary,
   type QbOverview,
 } from '@/lib/api-client';
+import { erpRoute } from '@/lib/erp-routes';
 
 type QuickBooksView = 'customers' | 'accounts' | 'invoices';
 
@@ -24,24 +25,30 @@ interface QbState {
   overview?: QbOverview;
 }
 
-const VIEW_COPY: Record<QuickBooksView, { title: string; description: string; emptyTitle: string; emptyDescription: string }> = {
+const VIEW_COPY: Record<
+  QuickBooksView,
+  { title: string; description: string; emptyTitle: string; emptyDescription: string }
+> = {
   customers: {
     title: 'QuickBooks Customers',
     description: 'Live read-only customer list from QuickBooks.',
     emptyTitle: 'No QuickBooks customers returned',
-    emptyDescription: 'QuickBooks is connected, but the latest overview did not include customer rows.',
+    emptyDescription:
+      'QuickBooks is connected, but the latest overview did not include customer rows.',
   },
   accounts: {
     title: 'QuickBooks Chart of Accounts',
     description: 'Live read-only chart of accounts from QuickBooks.',
     emptyTitle: 'No QuickBooks accounts returned',
-    emptyDescription: 'QuickBooks is connected, but the latest overview did not include chart-of-accounts rows.',
+    emptyDescription:
+      'QuickBooks is connected, but the latest overview did not include chart-of-accounts rows.',
   },
   invoices: {
     title: 'QuickBooks Invoices',
     description: 'Live read-only invoice activity and open AR summary from QuickBooks.',
     emptyTitle: 'No QuickBooks invoices returned',
-    emptyDescription: 'QuickBooks is connected, but the latest overview did not include invoice rows.',
+    emptyDescription:
+      'QuickBooks is connected, but the latest overview did not include invoice rows.',
   },
 };
 
@@ -116,19 +123,25 @@ export function QuickBooksDataView({ view }: QuickBooksDataViewProps) {
   }, [filter, overview?.recentInvoices, query]);
 
   const accountTypeFilters = useMemo(() => {
-    const types = new Set((overview?.accounts ?? []).map((account) => account.accountType).filter(Boolean));
+    const types = new Set(
+      (overview?.accounts ?? []).map((account) => account.accountType).filter(Boolean),
+    );
     return ['ALL', ...Array.from(types).sort()];
   }, [overview?.accounts]);
 
   const filterOptions =
-    view === 'customers' ? ['ALL', 'ACTIVE', 'INACTIVE']
-    : view === 'invoices' ? ['ALL', 'OPEN', 'PAID']
-    : accountTypeFilters;
+    view === 'customers'
+      ? ['ALL', 'ACTIVE', 'INACTIVE']
+      : view === 'invoices'
+        ? ['ALL', 'OPEN', 'PAID']
+        : accountTypeFilters;
 
   const visibleCount =
-    view === 'customers' ? customerRows.length
-    : view === 'accounts' ? accountRows.length
-    : invoiceRows.length;
+    view === 'customers'
+      ? customerRows.length
+      : view === 'accounts'
+        ? accountRows.length
+        : invoiceRows.length;
 
   return (
     <div>
@@ -136,18 +149,31 @@ export function QuickBooksDataView({ view }: QuickBooksDataViewProps) {
         title={copy.title}
         description={copy.description}
         action={
-          <Link href="/accounting" className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:border-yellow-400">
+          <Link
+            href={erpRoute('accounting')}
+            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:border-yellow-400"
+          >
             Accounting home
           </Link>
         }
       />
 
       <nav className="mb-5 flex flex-wrap gap-2" aria-label="QuickBooks accounting data">
-        <NavPill href="/accounting/quickbooks/customers" active={view === 'customers'}>Customers</NavPill>
-        <NavPill href="/accounting/quickbooks/invoices" active={view === 'invoices'}>Invoices</NavPill>
-        <NavPill href="/accounting/quickbooks/chart-of-accounts" active={view === 'accounts'}>Chart of accounts</NavPill>
-        <NavPill href="/accounting/sync?view=failures" active={false}>Sync monitor</NavPill>
-        <NavPill href="/accounting/reconciliation" active={false}>Reconciliation</NavPill>
+        <NavPill href={erpRoute('quickbooks-customer')} active={view === 'customers'}>
+          Customers
+        </NavPill>
+        <NavPill href={erpRoute('quickbooks-invoice')} active={view === 'invoices'}>
+          Invoices
+        </NavPill>
+        <NavPill href={erpRoute('quickbooks-chart-of-accounts')} active={view === 'accounts'}>
+          Chart of accounts
+        </NavPill>
+        <NavPill href={erpRoute('accounting-sync', { view: 'failures' })} active={false}>
+          Sync monitor
+        </NavPill>
+        <NavPill href={erpRoute('accounting-reconciliation')} active={false}>
+          Reconciliation
+        </NavPill>
       </nav>
 
       {loading ? (
@@ -162,8 +188,16 @@ export function QuickBooksDataView({ view }: QuickBooksDataViewProps) {
             <div className="text-sm font-semibold text-green-900">
               Connected to QuickBooks{qb.companyName ? `: ${qb.companyName}` : ''}
             </div>
-            {qb.realmId && <div className="mt-1 text-xs text-green-800">Realm ID: <code>{qb.realmId}</code></div>}
-            {overview?.error && <div className="mt-2 text-sm text-yellow-800">QuickBooks overview warning: {overview.error}</div>}
+            {qb.realmId && (
+              <div className="mt-1 text-xs text-green-800">
+                Realm ID: <code>{qb.realmId}</code>
+              </div>
+            )}
+            {overview?.error && (
+              <div className="mt-2 text-sm text-yellow-800">
+                QuickBooks overview warning: {overview.error}
+              </div>
+            )}
           </div>
 
           {view === 'invoices' && (
@@ -200,11 +234,23 @@ export function QuickBooksDataView({ view }: QuickBooksDataViewProps) {
           </div>
 
           {view === 'customers' ? (
-            <CustomersTable rows={customerRows} emptyTitle={copy.emptyTitle} emptyDescription={copy.emptyDescription} />
+            <CustomersTable
+              rows={customerRows}
+              emptyTitle={copy.emptyTitle}
+              emptyDescription={copy.emptyDescription}
+            />
           ) : view === 'accounts' ? (
-            <AccountsTable rows={accountRows} emptyTitle={copy.emptyTitle} emptyDescription={copy.emptyDescription} />
+            <AccountsTable
+              rows={accountRows}
+              emptyTitle={copy.emptyTitle}
+              emptyDescription={copy.emptyDescription}
+            />
           ) : (
-            <InvoicesTable rows={invoiceRows} emptyTitle={copy.emptyTitle} emptyDescription={copy.emptyDescription} />
+            <InvoicesTable
+              rows={invoiceRows}
+              emptyTitle={copy.emptyTitle}
+              emptyDescription={copy.emptyDescription}
+            />
           )}
         </>
       )}
@@ -264,7 +310,8 @@ function CustomersTable({
   emptyTitle: string;
   emptyDescription: string;
 }) {
-  if (rows.length === 0) return <EmptyState icon="QB" title={emptyTitle} description={emptyDescription} />;
+  if (rows.length === 0)
+    return <EmptyState icon="QB" title={emptyTitle} description={emptyDescription} />;
   return (
     <Table>
       <thead className="bg-gray-50 text-xs uppercase text-gray-500">
@@ -281,7 +328,9 @@ function CustomersTable({
             <Td strong>{customer.displayName}</Td>
             <Td>{customer.companyName ?? '-'}</Td>
             <Td mono>{customer.id}</Td>
-            <Td align="right"><Status active={customer.active} /></Td>
+            <Td align="right">
+              <Status active={customer.active} />
+            </Td>
           </tr>
         ))}
       </tbody>
@@ -298,7 +347,8 @@ function AccountsTable({
   emptyTitle: string;
   emptyDescription: string;
 }) {
-  if (rows.length === 0) return <EmptyState icon="QB" title={emptyTitle} description={emptyDescription} />;
+  if (rows.length === 0)
+    return <EmptyState icon="QB" title={emptyTitle} description={emptyDescription} />;
   return (
     <Table>
       <thead className="bg-gray-50 text-xs uppercase text-gray-500">
@@ -317,7 +367,9 @@ function AccountsTable({
             <Td>{account.accountType}</Td>
             <Td>{account.accountSubType ?? '-'}</Td>
             <Td mono>{account.id}</Td>
-            <Td align="right"><Status active={account.active} /></Td>
+            <Td align="right">
+              <Status active={account.active} />
+            </Td>
           </tr>
         ))}
       </tbody>
@@ -334,7 +386,8 @@ function InvoicesTable({
   emptyTitle: string;
   emptyDescription: string;
 }) {
-  if (rows.length === 0) return <EmptyState icon="QB" title={emptyTitle} description={emptyDescription} />;
+  if (rows.length === 0)
+    return <EmptyState icon="QB" title={emptyTitle} description={emptyDescription} />;
   return (
     <Table>
       <thead className="bg-gray-50 text-xs uppercase text-gray-500">
@@ -380,7 +433,11 @@ function Table({ children }: { children: ReactNode }) {
 }
 
 function Th({ children, align = 'left' }: { children: string; align?: 'left' | 'right' }) {
-  return <th className={`px-4 py-3 font-medium ${align === 'right' ? 'text-right' : 'text-left'}`}>{children}</th>;
+  return (
+    <th className={`px-4 py-3 font-medium ${align === 'right' ? 'text-right' : 'text-left'}`}>
+      {children}
+    </th>
+  );
 }
 
 function Td({
@@ -407,7 +464,9 @@ function Td({
 
 function Status({ active }: { active: boolean }) {
   return (
-    <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+    <span
+      className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'}`}
+    >
       {active ? 'Active' : 'Inactive'}
     </span>
   );

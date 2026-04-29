@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createQuote } from '@/lib/api-client';
+import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 import { PageHeader } from '@gg-erp/ui';
 import PricingIntelligence from '@/components/sales/PricingIntelligence';
 
@@ -13,7 +14,12 @@ interface LineItem {
   discountPercent: number;
 }
 
-const emptyLine = (): LineItem => ({ description: '', quantity: 1, unitPrice: 0, discountPercent: 0 });
+const emptyLine = (): LineItem => ({
+  description: '',
+  quantity: 1,
+  unitPrice: 0,
+  discountPercent: 0,
+});
 
 export default function NewQuotePage() {
   const router = useRouter();
@@ -69,7 +75,7 @@ export default function NewQuotePage() {
             discountPercent: l.discountPercent || undefined,
           })),
       });
-      router.push(`/sales/quotes/${quote.id}`);
+      router.push(erpRecordRoute('quote', quote.id));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create quote.');
     } finally {
@@ -81,9 +87,13 @@ export default function NewQuotePage() {
     <div>
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
-        <Link href="/sales" className="hover:text-yellow-600">Sales</Link>
+        <Link href={erpRoute('sales')} className="hover:text-yellow-600">
+          Sales
+        </Link>
         <span>/</span>
-        <Link href="/sales/quotes" className="hover:text-yellow-600">Quotes</Link>
+        <Link href={erpRoute('quote')} className="hover:text-yellow-600">
+          Quotes
+        </Link>
         <span>/</span>
         <span className="text-gray-900 font-medium">New Quote</span>
       </div>
@@ -209,7 +219,11 @@ export default function NewQuotePage() {
                     />
                   </td>
                   <td className="px-4 py-2 text-right font-mono text-gray-900">
-                    ${lineTotal(line).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    $
+                    {lineTotal(line).toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
                   </td>
                   <td className="px-4 py-2 text-center">
                     {lines.length > 1 && (
@@ -230,7 +244,14 @@ export default function NewQuotePage() {
         {/* Quote total */}
         <div className="flex justify-end mt-3">
           <div className="text-sm font-bold text-gray-900">
-            Total: <span className="font-mono">${quoteTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            Total:{' '}
+            <span className="font-mono">
+              $
+              {quoteTotal.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </span>
           </div>
         </div>
       </div>
@@ -258,10 +279,7 @@ export default function NewQuotePage() {
         >
           {submitting ? 'Creating...' : 'Create Quote'}
         </button>
-        <Link
-          href="/sales/quotes"
-          className="text-sm text-gray-500 hover:text-gray-700"
-        >
+        <Link href={erpRoute('quote')} className="text-sm text-gray-500 hover:text-gray-700">
           Cancel
         </Link>
       </div>

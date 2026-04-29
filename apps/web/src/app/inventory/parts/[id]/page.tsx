@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { PageHeader, LoadingSkeleton, EmptyState, StatusBadge } from '@gg-erp/ui';
 import { getPartChain, type Part, type PartChain, type PartChainNode } from '@/lib/api-client';
+import { erpRecordRoute } from '@/lib/erp-routes';
 
 function formatEnum(value: string | undefined): string {
   if (!value) return '—';
@@ -17,7 +18,9 @@ function DetailField({ label, value }: { label: string; value: string | number |
   return (
     <div>
       <dt className="text-xs font-medium uppercase text-gray-500">{label}</dt>
-      <dd className="mt-0.5 text-sm text-gray-900">{value === undefined || value === '' ? '—' : value}</dd>
+      <dd className="mt-0.5 text-sm text-gray-900">
+        {value === undefined || value === '' ? '—' : value}
+      </dd>
     </div>
   );
 }
@@ -29,7 +32,10 @@ function ChainLink({ node, current }: { node: PartChainNode; current?: boolean }
       className={`rounded-md border ${current ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'} px-3 py-2`}
     >
       <div className="text-xs uppercase text-gray-500">{formatEnum(part.lifecycleLevel)}</div>
-      <Link href={`/inventory/parts/${part.id}`} className="font-mono text-xs text-gray-800 hover:underline">
+      <Link
+        href={erpRecordRoute('part', part.id)}
+        className="font-mono text-xs text-gray-800 hover:underline"
+      >
         {part.sku}
       </Link>
       <div className="text-sm text-gray-900">

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { listQuotes, type Quote } from '@/lib/api-client';
 import { PageHeader, LoadingSkeleton } from '@gg-erp/ui';
 import { Pagination } from '@/components/ui/pagination';
+import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 
 const PAGE_SIZE = 25;
 
@@ -50,7 +51,7 @@ export default function QuotesListPage() {
       <div className="flex items-center justify-between mb-6">
         <PageHeader title="Quotes" />
         <Link
-          href="/sales/quotes/new"
+          href={erpRoute('create-quote')}
           className="bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-semibold px-4 py-2 rounded-lg text-sm transition-colors"
         >
           + New Quote
@@ -62,7 +63,10 @@ export default function QuotesListPage() {
         {STATUS_TABS.map((tab) => (
           <button
             key={tab}
-            onClick={() => { setStatusFilter(tab); setPage(1); }}
+            onClick={() => {
+              setStatusFilter(tab);
+              setPage(1);
+            }}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
               statusFilter === tab
                 ? 'bg-gray-900 text-white'
@@ -97,7 +101,7 @@ export default function QuotesListPage() {
                   <tr key={q.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
                       <Link
-                        href={`/sales/quotes/${q.id}`}
+                        href={erpRecordRoute('quote', q.id)}
                         className="font-mono font-medium text-gray-900 hover:text-yellow-600"
                       >
                         {q.quoteNumber}
@@ -111,7 +115,9 @@ export default function QuotesListPage() {
                         {q.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 font-mono text-gray-700">${q.total.toLocaleString()}</td>
+                    <td className="px-4 py-3 font-mono text-gray-700">
+                      ${q.total.toLocaleString()}
+                    </td>
                     <td className="px-4 py-3 text-gray-500">
                       {new Date(q.createdAt).toLocaleDateString()}
                     </td>
@@ -128,7 +134,10 @@ export default function QuotesListPage() {
             pageSize={pageSize}
             total={total}
             onPageChange={setPage}
-            onPageSizeChange={(ps) => { setPageSize(ps); setPage(1); }}
+            onPageSizeChange={(ps) => {
+              setPageSize(ps);
+              setPage(1);
+            }}
           />
         </>
       )}

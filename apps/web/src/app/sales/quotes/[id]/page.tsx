@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { getQuote, sendQuote, acceptQuote, rejectQuote, type Quote } from '@/lib/api-client';
+import { erpRoute } from '@/lib/erp-routes';
 import { PageHeader, LoadingSkeleton } from '@gg-erp/ui';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -90,9 +91,13 @@ export default function QuoteDetailPage() {
     <div>
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
-        <Link href="/sales" className="hover:text-yellow-600">Sales</Link>
+        <Link href={erpRoute('sales')} className="hover:text-yellow-600">
+          Sales
+        </Link>
         <span>/</span>
-        <Link href="/sales/quotes" className="hover:text-yellow-600">Quotes</Link>
+        <Link href={erpRoute('quote')} className="hover:text-yellow-600">
+          Quotes
+        </Link>
         <span>/</span>
         <span className="text-gray-900 font-medium">{quote.quoteNumber}</span>
       </div>
@@ -103,10 +108,13 @@ export default function QuoteDetailPage() {
           <h1 className="text-2xl font-bold text-gray-900 font-mono">{quote.quoteNumber}</h1>
           <div className="text-sm text-gray-500 mt-1">
             Created {new Date(quote.createdAt).toLocaleDateString()}
-            {quote.validUntil && ` · Valid until ${new Date(quote.validUntil).toLocaleDateString()}`}
+            {quote.validUntil &&
+              ` · Valid until ${new Date(quote.validUntil).toLocaleDateString()}`}
           </div>
         </div>
-        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${statusColor}`}>
+        <span
+          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${statusColor}`}
+        >
           {quote.status}
         </span>
       </div>
@@ -156,7 +164,9 @@ export default function QuoteDetailPage() {
                 {lines.map((line) => (
                   <tr key={line.id}>
                     <td className="px-4 py-3 text-gray-900">{line.description}</td>
-                    <td className="px-4 py-3 text-right font-mono text-gray-700">{line.quantity}</td>
+                    <td className="px-4 py-3 text-right font-mono text-gray-700">
+                      {line.quantity}
+                    </td>
                     <td className="px-4 py-3 text-right font-mono text-gray-700">
                       ${line.unitPrice.toLocaleString()}
                     </td>

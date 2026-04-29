@@ -3,11 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Bell } from 'lucide-react';
-import {
-  type AppNotification,
-  listNotifications,
-  markNotificationsRead,
-} from '@/lib/api-client';
+import { type AppNotification, listNotifications, markNotificationsRead } from '@/lib/api-client';
+import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 
 const POLL_INTERVAL_MS = 30_000;
 const MAX_DISPLAY = 20;
@@ -178,17 +175,17 @@ function getNotificationHref(notification: AppNotification): string | null {
 
   switch (notification.referenceType) {
     case 'channel':
-      return `/messages?channel=${encodeURIComponent(notification.referenceId)}`;
+      return erpRoute('message-thread', { channel: notification.referenceId });
     case 'work_order':
     case 'wo_order':
-      return `/work-orders/${encodeURIComponent(notification.referenceId)}`;
+      return erpRecordRoute('work-order', notification.referenceId);
     case 'customer':
-      return `/customer-dealers/customers?search=${encodeURIComponent(notification.referenceId)}`;
+      return erpRoute('customer', { search: notification.referenceId });
     case 'quote':
-      return `/sales/quotes/${encodeURIComponent(notification.referenceId)}`;
+      return erpRecordRoute('quote', notification.referenceId);
     case 'opportunity':
-      return `/sales/opportunities/${encodeURIComponent(notification.referenceId)}`;
+      return erpRecordRoute('sales-opportunity', notification.referenceId);
     default:
-      return '/messages';
+      return erpRoute('messages');
   }
 }

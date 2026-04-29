@@ -7,6 +7,8 @@ import { PageHeader, StatusBadge, LoadingSkeleton } from '@gg-erp/ui';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Pagination } from '@/components/ui/pagination';
+import { WorkspaceLinkGrid } from '@/components/WorkspaceLinkGrid';
+import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 
 const PAGE_SIZE = 25;
 const STATUS_FILTERS: Array<{ label: string; value: WoOrder['status'] | 'ALL' }> = [
@@ -37,21 +39,24 @@ export default function WorkOrdersPage() {
   const [searchText, setSearchText] = useState(activeSearch);
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({ ALL: 0 });
 
-  const load = useCallback(async (p: number, ps: number, status?: WoOrder['status'], search?: string) => {
-    setLoading(true);
-    try {
-      const r = await listWoOrders({
-        status,
-        search: search || undefined,
-        limit: ps,
-        offset: (p - 1) * ps,
-      });
-      setItems(r.items);
-      setTotal(r.total);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const load = useCallback(
+    async (p: number, ps: number, status?: WoOrder['status'], search?: string) => {
+      setLoading(true);
+      try {
+        const r = await listWoOrders({
+          status,
+          search: search || undefined,
+          limit: ps,
+          offset: (p - 1) * ps,
+        });
+        setItems(r.items);
+        setTotal(r.total);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
 
   const loadCounts = useCallback(async () => {
     const countEntries = await Promise.all(
@@ -67,17 +72,26 @@ export default function WorkOrdersPage() {
     setStatusCounts(Object.fromEntries(countEntries));
   }, []);
 
-  useEffect(() => { setSearchText(activeSearch); }, [activeSearch]);
-  useEffect(() => { setPage(1); }, [activeSearch, activeStatus]);
-  useEffect(() => { void load(page, pageSize, activeStatus, activeSearch); }, [activeSearch, activeStatus, page, pageSize, load]);
-  useEffect(() => { void loadCounts(); }, [loadCounts]);
+  useEffect(() => {
+    setSearchText(activeSearch);
+  }, [activeSearch]);
+  useEffect(() => {
+    setPage(1);
+  }, [activeSearch, activeStatus]);
+  useEffect(() => {
+    void load(page, pageSize, activeStatus, activeSearch);
+  }, [activeSearch, activeStatus, page, pageSize, load]);
+  useEffect(() => {
+    void loadCounts();
+  }, [loadCounts]);
 
   function buildFilterHref(status?: WoOrder['status'], search = activeSearch): string {
     const params = new URLSearchParams();
     if (status) params.set('status', status);
     if (search.trim()) params.set('search', search.trim());
     const qs = params.toString();
-    return qs ? `/work-orders?${qs}` : '/work-orders';
+    const baseRoute = erpRoute('work-order');
+    return qs ? `${baseRoute}?${qs}` : baseRoute;
   }
 
   function applySearch(event: React.FormEvent<HTMLFormElement>) {
@@ -85,8 +99,8 @@ export default function WorkOrdersPage() {
     router.push(buildFilterHref(activeStatus, searchText));
   }
 
-  const blocked = items.filter(w => w.status === 'BLOCKED').length;
-  const inProgress = items.filter(w => w.status === 'IN_PROGRESS').length;
+  const blocked = items.filter((w) => w.status === 'BLOCKED').length;
+  const inProgress = items.filter((w) => w.status === 'IN_PROGRESS').length;
 
   return (
     <div>
@@ -94,32 +108,43 @@ export default function WorkOrdersPage() {
 
       <div className="grid grid-cols-2 gap-4 mb-8 sm:grid-cols-4">
         {[
-          { label: 'In Progress', value: statusCounts.IN_PROGRESS ?? inProgress, color: 'text-yellow-700', href: buildFilterHref('IN_PROGRESS', '') },
-          { label: 'Blocked', value: statusCounts.BLOCKED ?? blocked, color: 'text-red-600', href: buildFilterHref('BLOCKED', '') },
-          { label: 'Total', value: statusCounts.ALL ?? total, color: 'text-gray-700', href: '/work-orders' },
-          { label: 'Dispatch', value: '—', color: 'text-purple-700', href: '/work-orders/dispatch' },
-        ].map(stat => (
-          <Link key={stat.label} href={stat.href} className="bg-white rounded-lg border border-gray-200 p-4 hover:border-yellow-400 transition-colors">
+          {
+            label: 'In Progress',
+            value: statusCounts.IN_PROGRESS ?? inProgress,
+            color: 'text-yellow-700',
+            href: buildFilterHref('IN_PROGRESS', ''),
+          },
+          {
+            label: 'Blocked',
+            value: statusCounts.BLOCKED ?? blocked,
+            color: 'text-red-600',
+            href: buildFilterHref('BLOCKED', ''),
+          },
+          {
+            label: 'Total',
+            value: statusCounts.ALL ?? total,
+            color: 'text-gray-700',
+            href: erpRoute('work-order'),
+          },
+          {
+            label: 'Dispatch',
+            value: '—',
+            color: 'text-purple-700',
+            href: erpRoute('dispatch-board'),
+          },
+        ].map((stat) => (
+          <Link
+            key={stat.label}
+            href={stat.href}
+            className="bg-white rounded-lg border border-gray-200 p-4 hover:border-yellow-400 transition-colors"
+          >
             <div className={`text-2xl font-bold ${stat.color}`}>{stat.value}</div>
             <div className="text-xs text-gray-500 mt-1">{stat.label}</div>
           </Link>
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {[
-          { label: 'My Queue', description: 'Your assigned work', href: '/work-orders/my-queue', icon: '📋' },
-          { label: 'Dispatch Board', description: 'Assign & balance load', href: '/work-orders/dispatch', icon: '🗂️' },
-          { label: 'Open / Blocked', description: 'Triage stalled work', href: '/work-orders/open', icon: '🚧' },
-          { label: 'New Work Order', description: 'Create a build job', href: '/work-orders/new', icon: '➕' },
-        ].map(item => (
-          <Link key={item.href} href={item.href} className="bg-white rounded-lg border border-gray-200 p-5 hover:border-yellow-400 hover:shadow-sm transition-all">
-            <div className="text-2xl mb-2">{item.icon}</div>
-            <div className="font-semibold text-sm text-gray-900">{item.label}</div>
-            <div className="text-xs text-gray-500 mt-0.5">{item.description}</div>
-          </Link>
-        ))}
-      </div>
+      <WorkspaceLinkGrid moduleKey="work-orders" />
 
       <div className="mt-8">
         <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -146,7 +171,8 @@ export default function WorkOrdersPage() {
         <div className="mb-4 flex flex-wrap gap-2">
           {STATUS_FILTERS.map((filter) => {
             const status = filter.value === 'ALL' ? undefined : filter.value;
-            const active = (filter.value === 'ALL' && !activeStatus) || activeStatus === filter.value;
+            const active =
+              (filter.value === 'ALL' && !activeStatus) || activeStatus === filter.value;
             return (
               <Link
                 key={filter.value}
@@ -182,26 +208,45 @@ export default function WorkOrdersPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {items.map(wo => (
+                  {items.map((wo) => (
                     <tr key={wo.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 font-mono font-medium text-gray-900">
-                        <Link href={`/work-orders/${wo.id}`} className="hover:text-[#B1581B] hover:underline">
+                        <Link
+                          href={erpRecordRoute('work-order', wo.id)}
+                          className="hover:text-[#B1581B] hover:underline"
+                        >
                           {wo.workOrderNumber}
                         </Link>
                       </td>
                       <td className="px-4 py-3 text-gray-700 truncate max-w-xs">
-                        <Link href={`/work-orders/${wo.id}`} className="hover:text-[#B1581B] hover:underline">
+                        <Link
+                          href={erpRecordRoute('work-order', wo.id)}
+                          className="hover:text-[#B1581B] hover:underline"
+                        >
                           {wo.title}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-gray-500 truncate max-w-xs">{wo.customerReference ?? '—'}</td>
-                      <td className="px-4 py-3"><StatusBadge status={wo.status} /></td>
+                      <td className="px-4 py-3 text-gray-500 truncate max-w-xs">
+                        {wo.customerReference ?? '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={wo.status} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={ps => { setPageSize(ps); setPage(1); }} />
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={(ps) => {
+                setPageSize(ps);
+                setPage(1);
+              }}
+            />
           </>
         )}
       </div>

@@ -17,17 +17,9 @@ import {
   Timer,
   Wrench,
 } from 'lucide-react';
-import {
-  getWoOrder,
-  type WoOrderDetail,
-  type WoOrderPartLine,
-} from '@/lib/api-client';
-import {
-  MaterialReadinessBadge,
-  PageHeader,
-  StatusBadge,
-  SyncStatusBadge,
-} from '@gg-erp/ui';
+import { getWoOrder, type WoOrderDetail, type WoOrderPartLine } from '@/lib/api-client';
+import { erpRoute } from '@/lib/erp-routes';
+import { MaterialReadinessBadge, PageHeader, StatusBadge, SyncStatusBadge } from '@gg-erp/ui';
 import { Button } from '@/components/ui/button';
 
 const ORDER_TABS = [
@@ -88,7 +80,10 @@ export default function WorkOrderDetailPage() {
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {error ?? 'Work order not found.'}
         </div>
-        <Link href="/work-orders" className="mt-4 inline-block text-sm font-semibold text-[#B1581B] hover:underline">
+        <Link
+          href={erpRoute('work-order')}
+          className="mt-4 inline-block text-sm font-semibold text-[#B1581B] hover:underline"
+        >
           Back to work orders
         </Link>
       </div>
@@ -97,24 +92,25 @@ export default function WorkOrderDetailPage() {
 
   const doneCount = workOrder.checklist.filter((item) => item.done).length;
   const serviceProgress =
-    workOrder.checklist.length > 0
-      ? Math.round((doneCount / workOrder.checklist.length) * 100)
-      : 0;
+    workOrder.checklist.length > 0 ? Math.round((doneCount / workOrder.checklist.length) * 100) : 0;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <PageHeader title={`${workOrder.number}: ${workOrder.title}`} description={`${workOrder.customer} · ${workOrder.cart}`} />
+        <PageHeader
+          title={`${workOrder.number}: ${workOrder.title}`}
+          description={`${workOrder.customer} · ${workOrder.cart}`}
+        />
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" onClick={() => window.print()}>
             <Printer size={15} />
             Print
           </Button>
-          <LinkButton href={`/messages?workOrder=${encodeURIComponent(workOrder.id)}`}>
+          <LinkButton href={erpRoute('message-thread', { workOrder: workOrder.id })}>
             <Send size={15} />
             Send
           </LinkButton>
-          <LinkButton href={`/messages?workOrder=${encodeURIComponent(workOrder.id)}`}>
+          <LinkButton href={erpRoute('message-thread', { workOrder: workOrder.id })}>
             <MessageCircle size={15} />
             Message
           </LinkButton>
@@ -123,9 +119,18 @@ export default function WorkOrderDetailPage() {
 
       <section className="rounded-lg border border-[#D9CCBE] bg-white p-4">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-          <SummaryItem label="Status"><StatusBadge status={workOrder.status} /></SummaryItem>
-          <SummaryItem label="Material"><MaterialReadinessBadge status={workOrder.materialReadiness} shortageCount={workOrder.shortageCount} /></SummaryItem>
-          <SummaryItem label="Accounting"><SyncStatusBadge status={workOrder.syncStatus} /></SummaryItem>
+          <SummaryItem label="Status">
+            <StatusBadge status={workOrder.status} />
+          </SummaryItem>
+          <SummaryItem label="Material">
+            <MaterialReadinessBadge
+              status={workOrder.materialReadiness}
+              shortageCount={workOrder.shortageCount}
+            />
+          </SummaryItem>
+          <SummaryItem label="Accounting">
+            <SyncStatusBadge status={workOrder.syncStatus} />
+          </SummaryItem>
           <SummaryItem label="Bay" value={workOrder.bay} />
           <SummaryItem label="Due" value={workOrder.eta} />
           <SummaryItem label="Service Progress" value={`${serviceProgress}%`} />
@@ -154,7 +159,7 @@ export default function WorkOrderDetailPage() {
             <SectionHeader
               icon={Wrench}
               title="Services"
-              actionHref={`/work-orders/sop-runner?workOrderId=${encodeURIComponent(workOrder.id)}`}
+              actionHref={erpRoute('sop-runner', { workOrderId: workOrder.id })}
               actionLabel="Open SOP Runner"
             />
             <div className="divide-y divide-gray-100">
@@ -181,7 +186,7 @@ export default function WorkOrderDetailPage() {
             <SectionHeader
               icon={Package}
               title="Parts and Reservations"
-              actionHref={`/inventory/reservations?workOrderId=${encodeURIComponent(workOrder.id)}`}
+              actionHref={erpRoute('inventory-reservation', { workOrderId: workOrder.id })}
               actionLabel="Manage Reservations"
             />
             {workOrder.parts.length > 0 ? (
@@ -210,7 +215,7 @@ export default function WorkOrderDetailPage() {
             <SectionHeader
               icon={Timer}
               title="Time"
-              actionHref={`/work-orders/time-logging?workOrderId=${encodeURIComponent(workOrder.id)}`}
+              actionHref={erpRoute('time-logging', { workOrderId: workOrder.id })}
               actionLabel="Log Time"
             />
             <EmptyPanel text="Time entries will appear here after technicians clock time to this work order." />
@@ -220,7 +225,7 @@ export default function WorkOrderDetailPage() {
             <SectionHeader
               icon={ShieldCheck}
               title="Quality Control"
-              actionHref={`/work-orders/qc-checklists?workOrderId=${encodeURIComponent(workOrder.id)}`}
+              actionHref={erpRoute('qc-checklist', { workOrderId: workOrder.id })}
               actionLabel="Open QC"
             />
             <EmptyPanel text="QC gates and inspection results will appear here as the build progresses." />
@@ -246,7 +251,10 @@ export default function WorkOrderDetailPage() {
             <div className="mt-4 space-y-3">
               {workOrder.notes.length > 0 ? (
                 workOrder.notes.map((note) => (
-                  <div key={note.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-sm">
+                  <div
+                    key={note.id}
+                    className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-sm"
+                  >
                     <div className="font-semibold text-gray-800">{note.author}</div>
                     <p className="mt-1 text-gray-600">{note.message}</p>
                   </div>
@@ -254,7 +262,10 @@ export default function WorkOrderDetailPage() {
               ) : (
                 <p className="text-sm text-gray-500">No notes yet.</p>
               )}
-              <Link href={`/messages?workOrder=${encodeURIComponent(workOrder.id)}`} className="inline-flex text-sm font-semibold text-[#B1581B] hover:underline">
+              <Link
+                href={erpRoute('message-thread', { workOrder: workOrder.id })}
+                className="inline-flex text-sm font-semibold text-[#B1581B] hover:underline"
+              >
                 Open message thread
               </Link>
             </div>
@@ -266,11 +277,17 @@ export default function WorkOrderDetailPage() {
               Accounting
             </h2>
             <div className="mt-4 space-y-3 text-sm">
-              <Link href="/accounting/sync?view=invoices" className="flex items-center gap-2 text-[#B1581B] hover:underline">
+              <Link
+                href={erpRoute('accounting-sync', { view: 'invoices' })}
+                className="flex items-center gap-2 text-[#B1581B] hover:underline"
+              >
                 <FileText size={14} />
                 Invoice sync history
               </Link>
-              <Link href="/accounting/reconciliation" className="flex items-center gap-2 text-[#B1581B] hover:underline">
+              <Link
+                href={erpRoute('accounting-reconciliation')}
+                className="flex items-center gap-2 text-[#B1581B] hover:underline"
+              >
                 <ClipboardCheck size={14} />
                 Reconciliation runs
               </Link>
@@ -283,7 +300,8 @@ export default function WorkOrderDetailPage() {
               Activity
             </h2>
             <p className="mt-3 text-sm text-gray-500">
-              Activity events will appear here once the work-order event stream is exposed to the web app.
+              Activity events will appear here once the work-order event stream is exposed to the
+              web app.
             </p>
           </section>
         </aside>
@@ -303,7 +321,15 @@ function LinkButton({ href, children }: { href: string; children: React.ReactNod
   );
 }
 
-function SummaryItem({ label, value, children }: { label: string; value?: string; children?: React.ReactNode }) {
+function SummaryItem({
+  label,
+  value,
+  children,
+}: {
+  label: string;
+  value?: string;
+  children?: React.ReactNode;
+}) {
   return (
     <div>
       <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</div>

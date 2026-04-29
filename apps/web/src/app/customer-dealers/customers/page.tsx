@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import { PageHeader, LoadingSkeleton, EmptyState, StatusBadge } from '@gg-erp/ui';
 import { listCustomers, transitionCustomerState, type Customer } from '@/lib/api-client';
+import { erpRoute } from '@/lib/erp-routes';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Pagination } from '@/components/ui/pagination';
@@ -42,7 +43,7 @@ export default function CustomersPage() {
   async function transition(id: string, toState: Customer['state']) {
     try {
       const updated = await transitionCustomerState(id, toState);
-      setCustomers(prev => prev.map(c => c.id === id ? updated : c));
+      setCustomers((prev) => prev.map((c) => (c.id === id ? updated : c)));
       toast.success(`Customer lifecycle updated to ${toState}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Customer lifecycle update failed');
@@ -51,18 +52,33 @@ export default function CustomersPage() {
 
   return (
     <div>
-      <PageHeader title="Customers" description={`${total} total`}
-        action={(
-          <Link href="/customers">
-            <Button className="bg-yellow-400 hover:bg-yellow-300 text-gray-900">+ New Customer</Button>
+      <PageHeader
+        title="Customers"
+        description={`${total} total`}
+        action={
+          <Link href={erpRoute('create-customer')}>
+            <Button className="bg-yellow-400 hover:bg-yellow-300 text-gray-900">
+              + New Customer
+            </Button>
           </Link>
-        )}
+        }
       />
       <div className="mb-4">
-        <Input placeholder="Search name or email…" value={search} onChange={e => handleSearch(e.target.value)} className="max-w-sm" />
+        <Input
+          placeholder="Search name or email…"
+          value={search}
+          onChange={(e) => handleSearch(e.target.value)}
+          className="max-w-sm"
+        />
       </div>
-      {loading ? <LoadingSkeleton rows={5} cols={4} /> : customers.length === 0 ? (
-        <EmptyState icon="👥" title="No customers" description={search ? `No match for "${search}"` : 'Add your first customer.'} />
+      {loading ? (
+        <LoadingSkeleton rows={5} cols={4} />
+      ) : customers.length === 0 ? (
+        <EmptyState
+          icon="👥"
+          title="No customers"
+          description={search ? `No match for "${search}"` : 'Add your first customer.'}
+        />
       ) : (
         <>
           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -76,22 +92,57 @@ export default function CustomersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {customers.map(c => (
+                {customers.map((c) => (
                   <tr key={c.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium text-gray-900">{c.fullName}</td>
                     <td className="px-4 py-3 text-gray-500">{c.email ?? '—'}</td>
-                    <td className="px-4 py-3"><StatusBadge status={c.state} /></td>
                     <td className="px-4 py-3">
-                      {c.state === 'LEAD' && <Button size="sm" variant="outline" onClick={() => void transition(c.id, 'ACTIVE')}>Activate</Button>}
-                      {c.state === 'ACTIVE' && <Button size="sm" variant="outline" onClick={() => void transition(c.id, 'INACTIVE')}>Deactivate</Button>}
-                      {c.state === 'INACTIVE' && <Button size="sm" variant="outline" onClick={() => void transition(c.id, 'ACTIVE')}>Re-activate</Button>}
+                      <StatusBadge status={c.state} />
+                    </td>
+                    <td className="px-4 py-3">
+                      {c.state === 'LEAD' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void transition(c.id, 'ACTIVE')}
+                        >
+                          Activate
+                        </Button>
+                      )}
+                      {c.state === 'ACTIVE' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void transition(c.id, 'INACTIVE')}
+                        >
+                          Deactivate
+                        </Button>
+                      )}
+                      {c.state === 'INACTIVE' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void transition(c.id, 'ACTIVE')}
+                        >
+                          Re-activate
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={ps => { setPageSize(ps); setPage(1); }} />
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+            onPageSizeChange={(ps) => {
+              setPageSize(ps);
+              setPage(1);
+            }}
+          />
         </>
       )}
     </div>

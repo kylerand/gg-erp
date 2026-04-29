@@ -7,6 +7,7 @@ import {
   type SalesForecastMonth,
   type PipelineStats,
 } from '@/lib/api-client';
+import { erpRoute } from '@/lib/erp-routes';
 import { PageHeader, LoadingSkeleton } from '@gg-erp/ui';
 
 export default function ForecastPage() {
@@ -49,7 +50,9 @@ export default function ForecastPage() {
     <div>
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
-        <Link href="/sales" className="hover:text-yellow-600">Sales</Link>
+        <Link href={erpRoute('sales')} className="hover:text-yellow-600">
+          Sales
+        </Link>
         <span>/</span>
         <span className="text-gray-900 font-medium">Forecast</span>
       </div>
@@ -67,11 +70,27 @@ export default function ForecastPage() {
           {/* Pipeline summary stats */}
           <div className="grid grid-cols-2 gap-4 mb-8 sm:grid-cols-5">
             {[
-              { label: 'Total Opportunities', value: stats?.totalOpportunities ?? 0, color: 'text-gray-700' },
-              { label: 'Total Pipeline Value', value: `$${(stats?.totalValue ?? 0).toLocaleString()}`, color: 'text-gray-700' },
-              { label: 'Weighted Forecast', value: `$${(stats?.weightedForecast ?? 0).toLocaleString()}`, color: 'text-green-700' },
+              {
+                label: 'Total Opportunities',
+                value: stats?.totalOpportunities ?? 0,
+                color: 'text-gray-700',
+              },
+              {
+                label: 'Total Pipeline Value',
+                value: `$${(stats?.totalValue ?? 0).toLocaleString()}`,
+                color: 'text-gray-700',
+              },
+              {
+                label: 'Weighted Forecast',
+                value: `$${(stats?.weightedForecast ?? 0).toLocaleString()}`,
+                color: 'text-green-700',
+              },
               { label: 'Win Rate', value: `${winRatePercent.toFixed(1)}%`, color: 'text-blue-700' },
-              { label: 'Avg Deal Size', value: `$${(stats?.avgDealSize ?? 0).toLocaleString()}`, color: 'text-purple-700' },
+              {
+                label: 'Avg Deal Size',
+                value: `$${(stats?.avgDealSize ?? 0).toLocaleString()}`,
+                color: 'text-purple-700',
+              },
             ].map((stat) => (
               <div key={stat.label} className="bg-white rounded-lg border border-gray-200 p-4">
                 <div className={`text-2xl font-bold ${stat.color}`}>{stat.value}</div>

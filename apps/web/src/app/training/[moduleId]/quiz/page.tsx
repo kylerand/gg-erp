@@ -11,6 +11,7 @@ import {
   type OjtKnowledgeCheck,
   type QuizSubmitResult,
 } from '@/lib/api-client';
+import { erpNestedRoute, erpRoute } from '@/lib/erp-routes';
 import { useRole } from '@/lib/role-context';
 
 export default function QuizPage() {
@@ -43,13 +44,13 @@ export default function QuizPage() {
 
   function handleNext() {
     if (currentIndex < questions.length - 1) {
-      setCurrentIndex(i => i + 1);
+      setCurrentIndex((i) => i + 1);
     }
   }
 
   function handlePrev() {
     if (currentIndex > 0) {
-      setCurrentIndex(i => i - 1);
+      setCurrentIndex((i) => i - 1);
     }
   }
 
@@ -79,7 +80,10 @@ export default function QuizPage() {
     return (
       <div className="text-center py-16">
         <p className="text-gray-500 text-sm">No quiz available for this module.</p>
-        <Link href={`/training/${moduleId}`} className="text-yellow-600 hover:underline text-sm">
+        <Link
+          href={erpNestedRoute('training', moduleId)}
+          className="text-yellow-600 hover:underline text-sm"
+        >
           Back to module
         </Link>
       </div>
@@ -105,15 +109,19 @@ export default function QuizPage() {
 
   const q = questions[currentIndex];
   const selectedAnswer = answers[currentIndex] ?? -1;
-  const allAnswered = answers.length === questions.length && answers.every(a => a >= 0);
+  const allAnswered = answers.length === questions.length && answers.every((a) => a >= 0);
 
   return (
     <div className="max-w-2xl mx-auto py-8">
       {/* Header */}
       <nav className="text-xs text-gray-500 mb-6 flex items-center gap-1.5">
-        <Link href="/training" className="hover:text-yellow-600">Training</Link>
+        <Link href={erpRoute('training')} className="hover:text-yellow-600">
+          Training
+        </Link>
         <span>/</span>
-        <Link href={`/training/${moduleId}`} className="hover:text-yellow-600">{module.moduleName}</Link>
+        <Link href={erpNestedRoute('training', moduleId)} className="hover:text-yellow-600">
+          {module.moduleName}
+        </Link>
         <span>/</span>
         <span className="text-gray-800 font-medium">Knowledge Check</span>
       </nav>
@@ -133,9 +141,11 @@ export default function QuizPage() {
               key={i}
               onClick={() => setCurrentIndex(i)}
               className={`h-2 flex-1 rounded-full transition-colors ${
-                i === currentIndex ? 'bg-yellow-400' :
-                answers[i] !== undefined && answers[i] >= 0 ? 'bg-green-400' :
-                'bg-gray-200'
+                i === currentIndex
+                  ? 'bg-yellow-400'
+                  : answers[i] !== undefined && answers[i] >= 0
+                    ? 'bg-green-400'
+                    : 'bg-gray-200'
               }`}
             />
           ))}

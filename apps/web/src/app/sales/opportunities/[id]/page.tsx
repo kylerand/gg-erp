@@ -9,6 +9,7 @@ import {
   type Quote,
   type SalesActivity,
 } from '@/lib/api-client';
+import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 import { PageHeader, LoadingSkeleton, StatusBadge } from '@gg-erp/ui';
 import OpportunityInsights from '@/components/sales/OpportunityInsights';
 import FollowUpSuggestions from '@/components/sales/FollowUpSuggestions';
@@ -25,7 +26,9 @@ const STAGE_COLORS: Record<string, string> = {
 
 export default function OpportunityDetailPage() {
   const params = useParams<{ id: string }>();
-  const [opportunity, setOpportunity] = useState<(SalesOpportunity & { quotes: Quote[]; activities: SalesActivity[] }) | null>(null);
+  const [opportunity, setOpportunity] = useState<
+    (SalesOpportunity & { quotes: Quote[]; activities: SalesActivity[] }) | null
+  >(null);
   const [loading, setLoading] = useState(true);
   const [showActivityForm, setShowActivityForm] = useState(false);
   const [activityType, setActivityType] = useState('NOTE');
@@ -80,7 +83,9 @@ export default function OpportunityDetailPage() {
     return (
       <div>
         <PageHeader title="Opportunity Not Found" />
-        <p className="text-sm text-gray-400 py-8 text-center">This opportunity could not be loaded.</p>
+        <p className="text-sm text-gray-400 py-8 text-center">
+          This opportunity could not be loaded.
+        </p>
       </div>
     );
   }
@@ -91,9 +96,13 @@ export default function OpportunityDetailPage() {
     <div>
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
-        <Link href="/sales" className="hover:text-yellow-600">Sales</Link>
+        <Link href={erpRoute('sales')} className="hover:text-yellow-600">
+          Sales
+        </Link>
         <span>/</span>
-        <Link href="/sales/pipeline" className="hover:text-yellow-600">Pipeline</Link>
+        <Link href={erpRoute('sales-pipeline')} className="hover:text-yellow-600">
+          Pipeline
+        </Link>
         <span>/</span>
         <span className="text-gray-900 font-medium">{opportunity.title}</span>
       </div>
@@ -107,7 +116,9 @@ export default function OpportunityDetailPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${stageColor}`}>
+          <span
+            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${stageColor}`}
+          >
             {opportunity.stage.replace(/_/g, ' ')}
           </span>
           <span className="text-sm text-gray-500">{opportunity.probability}%</span>
@@ -119,8 +130,19 @@ export default function OpportunityDetailPage() {
         {[
           { label: 'Customer', value: opportunity.customerId },
           { label: 'Source', value: opportunity.source },
-          { label: 'Estimated Value', value: opportunity.estimatedValue != null ? `$${opportunity.estimatedValue.toLocaleString()}` : '—' },
-          { label: 'Expected Close', value: opportunity.expectedCloseDate ? new Date(opportunity.expectedCloseDate).toLocaleDateString() : '—' },
+          {
+            label: 'Estimated Value',
+            value:
+              opportunity.estimatedValue != null
+                ? `$${opportunity.estimatedValue.toLocaleString()}`
+                : '—',
+          },
+          {
+            label: 'Expected Close',
+            value: opportunity.expectedCloseDate
+              ? new Date(opportunity.expectedCloseDate).toLocaleDateString()
+              : '—',
+          },
           { label: 'Assigned To', value: opportunity.assignedToUserId ?? 'Unassigned' },
         ].map((item) => (
           <div key={item.label} className="bg-white rounded-lg border border-gray-200 p-3">
@@ -171,13 +193,22 @@ export default function OpportunityDetailPage() {
                 {opportunity.quotes.map((q) => (
                   <tr key={q.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
-                      <Link href={`/sales/quotes/${q.id}`} className="font-mono font-medium text-gray-900 hover:text-yellow-600">
+                      <Link
+                        href={erpRecordRoute('quote', q.id)}
+                        className="font-mono font-medium text-gray-900 hover:text-yellow-600"
+                      >
                         {q.quoteNumber}
                       </Link>
                     </td>
-                    <td className="px-4 py-3"><StatusBadge status={q.status} /></td>
-                    <td className="px-4 py-3 font-mono text-gray-700">${q.total.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-gray-500">{new Date(q.createdAt).toLocaleDateString()}</td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={q.status} />
+                    </td>
+                    <td className="px-4 py-3 font-mono text-gray-700">
+                      ${q.total.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-gray-500">
+                      {new Date(q.createdAt).toLocaleDateString()}
+                    </td>
                   </tr>
                 ))}
               </tbody>

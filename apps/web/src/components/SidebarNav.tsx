@@ -152,3 +152,8 @@ export function SidebarNav() {
     </aside>
   );
 }
+
+function isHrefActive(pathname: string, href: string): boolean {
+  const path = href.split(/[?#]/)[0] || href;
+  return pathname === path || pathname.startsWith(`${path}/`);
+}

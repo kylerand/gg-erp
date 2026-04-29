@@ -48,10 +48,10 @@ const ACCOUNTING_LINKS = {
   queue: '/accounting/sync?view=queue',
   invoices: '/accounting/sync?view=invoices',
   invoicesSyncedToday: '/accounting/sync?view=invoices&state=SYNCED&period=today',
-  customers: '/accounting#quickbooks-customers',
+  customers: '/accounting/quickbooks/customers',
   customersSynced: '/accounting/sync?view=customers&state=SYNCED',
-  accounts: '/accounting#chart-of-accounts',
-  recentInvoices: '/accounting#recent-invoices',
+  accounts: '/accounting/quickbooks/chart-of-accounts',
+  recentInvoices: '/accounting/quickbooks/invoices',
 };
 
 export default function AccountingPage() {
@@ -398,6 +398,9 @@ export default function AccountingPage() {
       {/* Sub-page navigation tiles */}
       <div className="grid grid-cols-2 gap-4 mt-6 max-w-2xl">
         {[
+          { label: 'QB Customers', description: 'Live QuickBooks customer list', href: ACCOUNTING_LINKS.customers, icon: 'QB' },
+          { label: 'QB Invoices', description: 'Live invoice activity and AR', href: ACCOUNTING_LINKS.recentInvoices, icon: 'INV' },
+          { label: 'Chart of Accounts', description: 'Live QuickBooks accounts', href: ACCOUNTING_LINKS.accounts, icon: 'COA' },
           { label: 'Sync Monitor', description: 'Per-record sync status and retry', href: ACCOUNTING_LINKS.failures, icon: '🔄' },
           { label: 'Reconciliation', description: 'Mismatch resolution history', href: '/accounting/reconciliation', icon: '⚖️' },
         ].map((item) => (
@@ -406,7 +409,7 @@ export default function AccountingPage() {
             href={item.href}
             className="bg-white rounded-lg border border-gray-200 p-5 hover:border-yellow-400 hover:shadow-sm transition-all"
           >
-            <div className="text-2xl mb-2">{item.icon}</div>
+            <div className="mb-2 text-sm font-bold text-[#B1581B]">{item.icon}</div>
             <div className="font-semibold text-sm text-gray-900">{item.label}</div>
             <div className="text-xs text-gray-500 mt-0.5">{item.description}</div>
           </Link>

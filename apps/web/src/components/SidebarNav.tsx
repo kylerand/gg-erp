@@ -93,6 +93,9 @@ const NAV_SECTIONS: NavSection[] = [
     href: '/accounting',
     icon: Receipt,
     children: [
+      { label: 'QB Customers', href: '/accounting/quickbooks/customers' },
+      { label: 'QB Invoices', href: '/accounting/quickbooks/invoices' },
+      { label: 'Chart of Accounts', href: '/accounting/quickbooks/chart-of-accounts' },
       { label: 'Sync Monitor', href: '/accounting/sync?view=failures' },
       { label: 'Reconciliation', href: '/accounting/reconciliation' },
     ],
@@ -153,7 +156,7 @@ export function SidebarNav() {
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         {NAV_SECTIONS.map((section) => {
           const Icon = section.icon;
-          const isActive = pathname === section.href || pathname.startsWith(section.href + '/');
+          const isActive = isHrefActive(pathname, section.href);
           return (
             <div key={section.href} className="mb-1.5">
               <Link
@@ -172,7 +175,7 @@ export function SidebarNav() {
               {isActive && section.children.length > 0 && (
                 <div className="ml-12 mt-2 space-y-1">
                   {section.children.map((child) => {
-                    const isChildActive = pathname === child.href;
+                    const isChildActive = isHrefActive(pathname, child.href);
                     return (
                       <Link
                         key={child.href}
@@ -210,4 +213,9 @@ export function SidebarNav() {
       </div>
     </aside>
   );
+}
+
+function isHrefActive(pathname: string, href: string): boolean {
+  const path = href.split(/[?#]/)[0] || href;
+  return pathname === path || pathname.startsWith(`${path}/`);
 }

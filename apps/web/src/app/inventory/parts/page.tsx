@@ -9,6 +9,7 @@ import {
   type Part,
   type PartCategory,
 } from '@/lib/api-client';
+import { erpRecordRoute } from '@/lib/erp-routes';
 import { Input } from '@/components/ui/input';
 import { Pagination } from '@/components/ui/pagination';
 
@@ -110,7 +111,9 @@ export default function PartsPage() {
         />
         <select
           value={category}
-          onChange={(e) => handleFilterChange<PartCategory | ''>(setCategory, e.target.value as PartCategory | '')}
+          onChange={(e) =>
+            handleFilterChange<PartCategory | ''>(setCategory, e.target.value as PartCategory | '')
+          }
           className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm"
         >
           <option value="">All categories</option>
@@ -122,7 +125,12 @@ export default function PartsPage() {
         </select>
         <select
           value={installStage}
-          onChange={(e) => handleFilterChange<InstallStage | ''>(setInstallStage, e.target.value as InstallStage | '')}
+          onChange={(e) =>
+            handleFilterChange<InstallStage | ''>(
+              setInstallStage,
+              e.target.value as InstallStage | '',
+            )
+          }
           className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm"
         >
           <option value="">All stages</option>
@@ -134,7 +142,12 @@ export default function PartsPage() {
         </select>
         <select
           value={lifecycleLevel}
-          onChange={(e) => handleFilterChange<LifecycleLevel | ''>(setLifecycleLevel, e.target.value as LifecycleLevel | '')}
+          onChange={(e) =>
+            handleFilterChange<LifecycleLevel | ''>(
+              setLifecycleLevel,
+              e.target.value as LifecycleLevel | '',
+            )
+          }
           className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm"
         >
           <option value="">All lifecycle levels</option>
@@ -177,7 +190,7 @@ export default function PartsPage() {
                 {parts.map((p) => (
                   <tr key={p.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-mono text-xs text-gray-700 font-medium">
-                      <Link href={`/inventory/parts/${p.id}`} className="hover:underline">
+                      <Link href={erpRecordRoute('part', p.id)} className="hover:underline">
                         {p.sku}
                       </Link>
                     </td>

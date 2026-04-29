@@ -8,6 +8,7 @@ import {
   type StageMaterialPlanLine,
   type StageMaterialPlanResponse,
 } from '@/lib/api-client';
+import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 
 function formatStage(value: string): string {
   return value
@@ -45,7 +46,7 @@ function StageCard({ group }: { group: StageMaterialPlanGroup }) {
           {group.lines.map((line) => (
             <tr key={line.part.id} className={line.shortfall > 0 ? 'bg-amber-50/30' : ''}>
               <td className="px-4 py-2 font-mono text-xs text-gray-700">
-                <Link href={`/inventory/parts/${line.part.id}`} className="hover:underline">
+                <Link href={erpRecordRoute('part', line.part.id)} className="hover:underline">
                   {line.part.sku}
                 </Link>
               </td>
@@ -99,7 +100,9 @@ export default function PlanningPage() {
       <PageHeader
         title="Material planning by stage"
         description={
-          plan?.generatedAt ? `Snapshot at ${new Date(plan.generatedAt).toLocaleString()}` : 'Loading…'
+          plan?.generatedAt
+            ? `Snapshot at ${new Date(plan.generatedAt).toLocaleString()}`
+            : 'Loading…'
         }
       />
       <TodayBanner state={todayState} loading={loading} />
@@ -115,7 +118,9 @@ export default function PlanningPage() {
       ) : (
         <details className="mb-2">
           <summary className="cursor-pointer text-sm font-semibold text-gray-700 hover:text-gray-900 py-2">
-            Reference: full inventory by stage ({plan.groups.length} stage{plan.groups.length === 1 ? '' : 's'}{plan.unassigned.length ? `, ${plan.unassigned.length} unassigned` : ''})
+            Reference: full inventory by stage ({plan.groups.length} stage
+            {plan.groups.length === 1 ? '' : 's'}
+            {plan.unassigned.length ? `, ${plan.unassigned.length} unassigned` : ''})
           </summary>
           <div className="space-y-6 mt-4">
             {plan.groups.map((group) => (
@@ -131,9 +136,12 @@ export default function PlanningPage() {
                 </header>
                 <ul className="divide-y divide-gray-100">
                   {plan.unassigned.map((line) => (
-                    <li key={line.part.id} className="flex items-center justify-between px-4 py-2 text-sm">
+                    <li
+                      key={line.part.id}
+                      className="flex items-center justify-between px-4 py-2 text-sm"
+                    >
                       <Link
-                        href={`/inventory/parts/${line.part.id}`}
+                        href={erpRecordRoute('part', line.part.id)}
                         className="font-mono text-xs text-gray-700 hover:underline"
                       >
                         {line.part.sku}
@@ -167,7 +175,13 @@ interface PlanSummary {
 
 function summarizePlan(plan: StageMaterialPlanResponse | null): PlanSummary {
   if (!plan) {
-    return { totalShortageParts: 0, totalShortfallUnits: 0, stagesWithShortage: 0, unassignedShortageParts: 0, worstStage: null };
+    return {
+      totalShortageParts: 0,
+      totalShortfallUnits: 0,
+      stagesWithShortage: 0,
+      unassignedShortageParts: 0,
+      worstStage: null,
+    };
   }
   let totalShortageParts = 0;
   let totalShortfallUnits = 0;
@@ -185,7 +199,13 @@ function summarizePlan(plan: StageMaterialPlanResponse | null): PlanSummary {
   }
   const unassignedShortageParts = plan.unassigned.filter((l) => l.shortfall > 0).length;
   totalShortageParts += unassignedShortageParts;
-  return { totalShortageParts, totalShortfallUnits, stagesWithShortage, unassignedShortageParts, worstStage };
+  return {
+    totalShortageParts,
+    totalShortfallUnits,
+    stagesWithShortage,
+    unassignedShortageParts,
+    worstStage,
+  };
 }
 
 interface QueuedAction {
@@ -215,16 +235,17 @@ function buildActionQueue(plan: StageMaterialPlanResponse | null): QueuedAction[
       title: `${line.part.name}${line.part.variant ? ` (${line.part.variant})` : ''} — short ${line.shortfall}`,
       detail: `${stage} · on hand ${line.onHand} / min ${line.reorderPoint} · SKU ${line.part.sku}. Open the part to adjust on-hand or kick off a reorder.`,
       cta: 'Open part →',
-      href: `/inventory/parts/${line.part.id}`,
+      href: erpRecordRoute('part', line.part.id),
     });
   }
   if (allShort.length > TOP_SHORTAGE_LIMIT) {
     out.push({
       severity: 'low',
       title: `${allShort.length - TOP_SHORTAGE_LIMIT} more part${allShort.length - TOP_SHORTAGE_LIMIT === 1 ? '' : 's'} short below the cutoff`,
-      detail: 'Smaller shortages are listed in the reference table. Reorder when convenient — they aren\'t blocking today\'s builds.',
+      detail:
+        "Smaller shortages are listed in the reference table. Reorder when convenient — they aren't blocking today's builds.",
       cta: 'Browse parts →',
-      href: '/inventory/parts',
+      href: erpRoute('part'),
     });
   }
   return out;
@@ -245,7 +266,9 @@ function summarizeState(s: PlanSummary, actionCount: number): TodayState {
     };
   }
   if (s.stagesWithShortage >= 2 || s.totalShortfallUnits >= 20) {
-    const worst = s.worstStage ? ` Worst: ${formatStage(s.worstStage.stage)} (${s.worstStage.shortfall} units).` : '';
+    const worst = s.worstStage
+      ? ` Worst: ${formatStage(s.worstStage.stage)} (${s.worstStage.shortfall} units).`
+      : '';
     return {
       tone: 'red',
       headline: `${s.totalShortageParts} part${s.totalShortageParts === 1 ? '' : 's'} short across ${s.stagesWithShortage} stage${s.stagesWithShortage === 1 ? '' : 's'}.`,

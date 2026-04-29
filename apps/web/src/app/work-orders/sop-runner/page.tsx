@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { apiFetch, uploadAttachment } from '@/lib/api-client';
+import { erpRoute } from '@/lib/erp-routes';
 import { useRole } from '@/lib/role-context';
 
 interface SopStep {
@@ -54,14 +55,18 @@ function toSopStep(step: RoutingStepApi): SopStep {
 
 const TTL_MS = 30 * 60 * 1000;
 
-function lsTimerKey(taskId: string) { return `sop_timer_startedAt_${taskId}`; }
-function lsStepKey(taskId: string) { return `sop_runner_${taskId}`; }
+function lsTimerKey(taskId: string) {
+  return `sop_timer_startedAt_${taskId}`;
+}
+function lsStepKey(taskId: string) {
+  return `sop_runner_${taskId}`;
+}
 
 function formatElapsed(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = seconds % 60;
-  return [h, m, s].map(v => String(v).padStart(2, '0')).join(':');
+  return [h, m, s].map((v) => String(v).padStart(2, '0')).join(':');
 }
 
 function SOPRunnerContent() {
@@ -103,7 +108,9 @@ function SOPRunnerContent() {
     } else {
       if (intervalRef.current) clearInterval(intervalRef.current);
     }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
   }, [timerStartedAt]);
 
   function startTimer() {
@@ -153,13 +160,15 @@ function SOPRunnerContent() {
     }
   }, [taskId, workOrderId]);
 
-  useEffect(() => { void loadSteps(); }, [loadSteps]);
+  useEffect(() => {
+    void loadSteps();
+  }, [loadSteps]);
 
   // Autosave active step index on each change
   useEffect(() => {
     if (!taskId || steps.length === 0) return;
     const activeIdx = steps.findIndex(
-      s => s.executionState === 'IN_PROGRESS' || (s.executionState === 'PENDING' && s.canStart),
+      (s) => s.executionState === 'IN_PROGRESS' || (s.executionState === 'PENDING' && s.canStart),
     );
     localStorage.setItem(lsStepKey(taskId), JSON.stringify({ activeIdx, savedAt: Date.now() }));
   }, [steps, taskId]);
@@ -175,7 +184,9 @@ function SOPRunnerContent() {
         { method: 'PATCH', body: JSON.stringify({ state: 'IN_PROGRESS', technicianId }) },
         {},
       );
-      setSteps(prev => prev.map(s => s.id === stepId ? { ...s, executionState: 'IN_PROGRESS' } : s));
+      setSteps((prev) =>
+        prev.map((s) => (s.id === stepId ? { ...s, executionState: 'IN_PROGRESS' } : s)),
+      );
       if (timerStartedAt === null) startTimer();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to start step');
@@ -187,20 +198,27 @@ function SOPRunnerContent() {
       toast.error('Sign in required to complete a step');
       return;
     }
-    const step = steps.find(s => s.id === stepId);
+    const step = steps.find((s) => s.id === stepId);
     const files = evidenceMap[stepId] ?? [];
-    const evidenceAttachmentIds = files.filter(f => f.uploadState === 'done').map(f => f.id);
+    const evidenceAttachmentIds = files.filter((f) => f.uploadState === 'done').map((f) => f.id);
     try {
       await apiFetch(
         `/planning/routing-steps/${stepId}/state`,
-        { method: 'PATCH', body: JSON.stringify({ state: 'COMPLETE', technicianId, evidenceAttachmentIds }) },
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ state: 'COMPLETE', technicianId, evidenceAttachmentIds }),
+        },
         {},
       );
-      setSteps(prev => {
-        const updated = prev.map(s => s.id === stepId ? { ...s, executionState: 'COMPLETE' as const } : s);
+      setSteps((prev) => {
+        const updated = prev.map((s) =>
+          s.id === stepId ? { ...s, executionState: 'COMPLETE' as const } : s,
+        );
         const completedSeq = step?.sequence ?? 0;
-        return updated.map(s =>
-          s.sequence === completedSeq + 1 && s.executionState === 'PENDING' ? { ...s, canStart: true } : s,
+        return updated.map((s) =>
+          s.sequence === completedSeq + 1 && s.executionState === 'PENDING'
+            ? { ...s, canStart: true }
+            : s,
         );
       });
       toast.success('Step completed');
@@ -215,15 +233,25 @@ function SOPRunnerContent() {
       return;
     }
     const reason = failReasonMap[stepId] ?? '';
-    if (!reason.trim()) { toast.error('Enter a failure reason'); return; }
+    if (!reason.trim()) {
+      toast.error('Enter a failure reason');
+      return;
+    }
     try {
       await apiFetch(
         `/planning/routing-steps/${stepId}/state`,
-        { method: 'PATCH', body: JSON.stringify({ state: 'FAILED', technicianId, failedReason: reason }) },
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ state: 'FAILED', technicianId, failedReason: reason }),
+        },
         {},
       );
-      setSteps(prev => prev.map(s => s.id === stepId ? { ...s, executionState: 'FAILED', failedReason: reason } : s));
-      setShowFailInput(prev => ({ ...prev, [stepId]: false }));
+      setSteps((prev) =>
+        prev.map((s) =>
+          s.id === stepId ? { ...s, executionState: 'FAILED', failedReason: reason } : s,
+        ),
+      );
+      setShowFailInput((prev) => ({ ...prev, [stepId]: false }));
       toast.success('Step marked as failed');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to update step');
@@ -231,22 +259,22 @@ function SOPRunnerContent() {
   }
 
   function handleFilesSelected(stepId: string, files: File[]) {
-    const newFiles: EvidenceFile[] = files.map(f => ({
+    const newFiles: EvidenceFile[] = files.map((f) => ({
       id: `${stepId}-${Date.now()}-${f.name}`,
       fileName: f.name,
       uploadState: 'uploading' as const,
       progress: 0,
     }));
-    setEvidenceMap(prev => ({ ...prev, [stepId]: [...(prev[stepId] ?? []), ...newFiles] }));
+    setEvidenceMap((prev) => ({ ...prev, [stepId]: [...(prev[stepId] ?? []), ...newFiles] }));
 
     files.forEach((file, index) => {
       const pending = newFiles[index];
       if (!pending) return;
       void uploadAttachment({ entityType: 'routing-step', entityId: stepId, file })
         .then((uploaded) => {
-          setEvidenceMap(prev => ({
+          setEvidenceMap((prev) => ({
             ...prev,
-            [stepId]: (prev[stepId] ?? []).map(f =>
+            [stepId]: (prev[stepId] ?? []).map((f) =>
               f.id === pending.id
                 ? { ...f, id: uploaded.attachmentId, uploadState: 'done' as const, progress: 100 }
                 : f,
@@ -254,9 +282,9 @@ function SOPRunnerContent() {
           }));
         })
         .catch((err) => {
-          setEvidenceMap(prev => ({
+          setEvidenceMap((prev) => ({
             ...prev,
-            [stepId]: (prev[stepId] ?? []).map(f =>
+            [stepId]: (prev[stepId] ?? []).map((f) =>
               f.id === pending.id
                 ? {
                     ...f,
@@ -271,13 +299,16 @@ function SOPRunnerContent() {
   }
 
   function removeFile(stepId: string, fileId: string) {
-    setEvidenceMap(prev => ({ ...prev, [stepId]: (prev[stepId] ?? []).filter(f => f.id !== fileId) }));
+    setEvidenceMap((prev) => ({
+      ...prev,
+      [stepId]: (prev[stepId] ?? []).filter((f) => f.id !== fileId),
+    }));
   }
 
-  const completedCount = steps.filter(s => s.executionState === 'COMPLETE').length;
+  const completedCount = steps.filter((s) => s.executionState === 'COMPLETE').length;
   const totalCount = steps.length;
   const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-  const allComplete = steps.length > 0 && steps.every(s => s.executionState === 'COMPLETE');
+  const allComplete = steps.length > 0 && steps.every((s) => s.executionState === 'COMPLETE');
 
   if (!taskId) {
     return (
@@ -297,7 +328,9 @@ function SOPRunnerContent() {
       <div className="max-w-2xl space-y-4">
         <PageHeader title="SOP Runner" description="Loading…" />
         <div className="animate-pulse space-y-3">
-          {[1, 2, 3].map(i => <div key={i} className="h-20 bg-gray-100 rounded-lg" />)}
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-20 bg-gray-100 rounded-lg" />
+          ))}
         </div>
       </div>
     );
@@ -330,7 +363,9 @@ function SOPRunnerContent() {
         <Card className="border-red-300 bg-red-50">
           <CardContent className="pt-4 flex items-center gap-3">
             <span className="text-red-600 text-sm flex-1">{error}</span>
-            <Button size="sm" variant="outline" onClick={() => void loadSteps()}>Retry</Button>
+            <Button size="sm" variant="outline" onClick={() => void loadSteps()}>
+              Retry
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -349,11 +384,19 @@ function SOPRunnerContent() {
         <>
           {/* Timer */}
           <Card>
-            <CardHeader><CardTitle className="text-sm">Elapsed Time</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-sm">Elapsed Time</CardTitle>
+            </CardHeader>
             <CardContent className="flex items-center gap-4">
-              <div className="font-mono text-2xl text-gray-900 tabular-nums">{formatElapsed(elapsed)}</div>
+              <div className="font-mono text-2xl text-gray-900 tabular-nums">
+                {formatElapsed(elapsed)}
+              </div>
               {timerStartedAt === null ? (
-                <Button size="sm" onClick={startTimer} className="bg-yellow-400 hover:bg-yellow-300 text-gray-900 min-h-[48px]">
+                <Button
+                  size="sm"
+                  onClick={startTimer}
+                  className="bg-yellow-400 hover:bg-yellow-300 text-gray-900 min-h-[48px]"
+                >
                   ▶ Start Timer
                 </Button>
               ) : (
@@ -366,123 +409,143 @@ function SOPRunnerContent() {
           <Card>
             <CardContent className="pt-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-600">{completedCount} / {totalCount} steps complete</span>
+                <span className="text-sm text-gray-600">
+                  {completedCount} / {totalCount} steps complete
+                </span>
                 <span className="text-sm font-semibold text-gray-900">{progress}%</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
-                <div className="bg-yellow-400 h-2 rounded-full transition-all" style={{ width: `${progress}%` }} />
+                <div
+                  className="bg-yellow-400 h-2 rounded-full transition-all"
+                  style={{ width: `${progress}%` }}
+                />
               </div>
             </CardContent>
           </Card>
 
           {/* Steps */}
           <div className="space-y-3">
-        {steps.map(step => {
-          const isActive = step.executionState === 'IN_PROGRESS';
-          const isPending = step.executionState === 'PENDING';
-          const isComplete = step.executionState === 'COMPLETE';
-          const isFailed = step.executionState === 'FAILED';
-          const files = evidenceMap[step.id] ?? [];
-          const hasEvidence = files.some(f => f.uploadState === 'done');
+            {steps.map((step) => {
+              const isActive = step.executionState === 'IN_PROGRESS';
+              const isPending = step.executionState === 'PENDING';
+              const isComplete = step.executionState === 'COMPLETE';
+              const isFailed = step.executionState === 'FAILED';
+              const files = evidenceMap[step.id] ?? [];
+              const hasEvidence = files.some((f) => f.uploadState === 'done');
 
-          return (
-            <Card
-              key={step.id}
-              className={
-                isActive ? 'border-yellow-400 shadow-sm' :
-                isComplete ? 'border-green-300 bg-green-50/30' :
-                isFailed ? 'border-red-300 bg-red-50/30' :
-                !step.canStart ? 'opacity-60' : ''
-              }
-            >
-              <CardContent className="pt-4 space-y-3">
-                <div className="flex items-start gap-3">
-                  <span className="text-lg mt-0.5 flex-shrink-0">
-                    {isComplete ? '✅' : isFailed ? '❌' : isActive ? '🔄' : '⏳'}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs text-gray-400">Step {step.sequence}</span>
-                      {step.requiresEvidence && (
-                        <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Evidence required</span>
-                      )}
-                      {step.sopReference && (
-                        <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">{step.sopReference}</span>
-                      )}
+              return (
+                <Card
+                  key={step.id}
+                  className={
+                    isActive
+                      ? 'border-yellow-400 shadow-sm'
+                      : isComplete
+                        ? 'border-green-300 bg-green-50/30'
+                        : isFailed
+                          ? 'border-red-300 bg-red-50/30'
+                          : !step.canStart
+                            ? 'opacity-60'
+                            : ''
+                  }
+                >
+                  <CardContent className="pt-4 space-y-3">
+                    <div className="flex items-start gap-3">
+                      <span className="text-lg mt-0.5 flex-shrink-0">
+                        {isComplete ? '✅' : isFailed ? '❌' : isActive ? '🔄' : '⏳'}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs text-gray-400">Step {step.sequence}</span>
+                          {step.requiresEvidence && (
+                            <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
+                              Evidence required
+                            </span>
+                          )}
+                          {step.sopReference && (
+                            <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
+                              {step.sopReference}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm font-semibold text-gray-900 mt-0.5">{step.title}</p>
+                        <p className="text-xs text-gray-500 mt-1">{step.description}</p>
+                        {isPending && !step.canStart && (
+                          <p className="text-xs text-gray-400 mt-1 italic">
+                            Waiting for prerequisite steps
+                          </p>
+                        )}
+                        {isFailed && step.failedReason && (
+                          <p className="text-xs text-red-600 mt-1">Failure: {step.failedReason}</p>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-sm font-semibold text-gray-900 mt-0.5">{step.title}</p>
-                    <p className="text-xs text-gray-500 mt-1">{step.description}</p>
-                    {isPending && !step.canStart && (
-                      <p className="text-xs text-gray-400 mt-1 italic">Waiting for prerequisite steps</p>
-                    )}
-                    {isFailed && step.failedReason && (
-                      <p className="text-xs text-red-600 mt-1">Failure: {step.failedReason}</p>
-                    )}
-                  </div>
-                </div>
 
-                {isPending && step.canStart && (
-                  <Button
-                    size="sm"
-                    onClick={() => void startStep(step.id)}
-                    className="w-full bg-yellow-400 hover:bg-yellow-300 text-gray-900 min-h-[48px]"
-                  >
-                    ▶ Start Step
-                  </Button>
-                )}
-
-                {isActive && (
-                  <div className="space-y-3">
-                    {step.requiresEvidence && (
-                      <EvidenceUploadSlot
-                        label="Attach evidence photo"
-                        required
-                        files={files}
-                        onFilesSelected={f => handleFilesSelected(step.id, f)}
-                        onRemoveFile={id => removeFile(step.id, id)}
-                      />
-                    )}
-                    <div className="flex gap-2">
+                    {isPending && step.canStart && (
                       <Button
                         size="sm"
-                        onClick={() => void completeStep(step.id)}
-                        disabled={step.requiresEvidence && !hasEvidence}
-                        className="flex-1 bg-yellow-400 hover:bg-yellow-300 text-gray-900 min-h-[48px] disabled:opacity-50"
+                        onClick={() => void startStep(step.id)}
+                        className="w-full bg-yellow-400 hover:bg-yellow-300 text-gray-900 min-h-[48px]"
                       >
-                        ✓ Complete Step
+                        ▶ Start Step
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-red-600 border-red-300 hover:bg-red-50 min-h-[48px]"
-                        onClick={() => setShowFailInput(prev => ({ ...prev, [step.id]: !prev[step.id] }))}
-                      >
-                        ✕ Mark Failed
-                      </Button>
-                    </div>
-                    {showFailInput[step.id] && (
-                      <div className="space-y-2">
-                        <Textarea
-                          placeholder="Describe the failure reason…"
-                          value={failReasonMap[step.id] ?? ''}
-                          onChange={e => setFailReasonMap(prev => ({ ...prev, [step.id]: e.target.value }))}
-                        />
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => void failStep(step.id)}
-                          className="min-h-[48px]"
-                        >
-                          Confirm Failure
-                        </Button>
+                    )}
+
+                    {isActive && (
+                      <div className="space-y-3">
+                        {step.requiresEvidence && (
+                          <EvidenceUploadSlot
+                            label="Attach evidence photo"
+                            required
+                            files={files}
+                            onFilesSelected={(f) => handleFilesSelected(step.id, f)}
+                            onRemoveFile={(id) => removeFile(step.id, id)}
+                          />
+                        )}
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => void completeStep(step.id)}
+                            disabled={step.requiresEvidence && !hasEvidence}
+                            className="flex-1 bg-yellow-400 hover:bg-yellow-300 text-gray-900 min-h-[48px] disabled:opacity-50"
+                          >
+                            ✓ Complete Step
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-red-600 border-red-300 hover:bg-red-50 min-h-[48px]"
+                            onClick={() =>
+                              setShowFailInput((prev) => ({ ...prev, [step.id]: !prev[step.id] }))
+                            }
+                          >
+                            ✕ Mark Failed
+                          </Button>
+                        </div>
+                        {showFailInput[step.id] && (
+                          <div className="space-y-2">
+                            <Textarea
+                              placeholder="Describe the failure reason…"
+                              value={failReasonMap[step.id] ?? ''}
+                              onChange={(e) =>
+                                setFailReasonMap((prev) => ({ ...prev, [step.id]: e.target.value }))
+                              }
+                            />
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => void failStep(step.id)}
+                              className="min-h-[48px]"
+                            >
+                              Confirm Failure
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </>
       )}
@@ -495,8 +558,11 @@ function SOPRunnerContent() {
               <p className="text-sm font-semibold text-green-800">All steps complete!</p>
               <p className="text-xs text-green-600 mt-0.5">Ready for quality control review.</p>
             </div>
-            <Link href={`/work-orders/qc-checklists?taskId=${taskId}&workOrderId=${workOrderId}`}>
-              <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white min-h-[48px] whitespace-nowrap">
+            <Link href={erpRoute('qc-checklist', { taskId, workOrderId })}>
+              <Button
+                size="sm"
+                className="bg-green-600 hover:bg-green-700 text-white min-h-[48px] whitespace-nowrap"
+              >
                 View QC Checklist →
               </Button>
             </Link>
@@ -509,11 +575,15 @@ function SOPRunnerContent() {
 
 export default function SOPRunnerPage() {
   return (
-    <Suspense fallback={
-      <div className="max-w-2xl animate-pulse space-y-3 pt-4">
-        {[1, 2, 3].map(i => <div key={i} className="h-20 bg-gray-100 rounded-lg" />)}
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="max-w-2xl animate-pulse space-y-3 pt-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-20 bg-gray-100 rounded-lg" />
+          ))}
+        </div>
+      }
+    >
       <SOPRunnerContent />
     </Suspense>
   );

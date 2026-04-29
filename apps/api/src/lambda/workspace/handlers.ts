@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { getRequiredErpRecordRoute, getRequiredErpRoute } from '@gg-erp/domain';
 import { jsonResponse, wrapHandler, type RequestContext } from '../../shared/lambda/index.js';
 
 const prisma = new PrismaClient();
@@ -261,65 +262,80 @@ export const workspaceTodayQueries = {
   },
 };
 
-export const getWorkspaceTodayHandler = wrapHandler(async (ctx) => {
-  const role = resolveWorkspaceRole(ctx);
-  const generatedAt = new Date();
-  const warnings: WorkspaceTodayResponse['warnings'] = [];
+export const getWorkspaceTodayHandler = wrapHandler(
+  async (ctx) => {
+    const role = resolveWorkspaceRole(ctx);
+    const generatedAt = new Date();
+    const warnings: WorkspaceTodayResponse['warnings'] = [];
 
-  const [
-    blockedWork,
-    unassignedTasks,
-    shortages,
-    purchaseOrders,
-    failedSyncs,
-    pendingSyncs,
-    reworkIssues,
-    trainingAssignments,
-    auditEvents,
-  ] = await Promise.all([
-    safeLoad('work_orders.blocked', warnings, () => workspaceTodayQueries.listBlockedWorkOrders(8)),
-    safeLoad('tickets.unassigned_tasks', warnings, () => workspaceTodayQueries.listUnassignedReadyTasks(8)),
-    safeLoad('inventory.shortages', warnings, () => workspaceTodayQueries.listShortageParts(8)),
-    safeLoad('purchasing.open_orders', warnings, () => workspaceTodayQueries.listOpenPurchaseOrders(8)),
-    safeLoad('accounting.failed_syncs', warnings, () => workspaceTodayQueries.listFailedInvoiceSyncs(8)),
-    safeLoad('accounting.pending_syncs', warnings, () => workspaceTodayQueries.listPendingInvoiceSyncs(8)),
-    safeLoad('tickets.rework', warnings, () => workspaceTodayQueries.listOpenReworkIssues(8)),
-    safeLoad('training.overdue', warnings, () => workspaceTodayQueries.listOverdueTrainingAssignments(8, generatedAt)),
-    safeLoad('admin.audit', warnings, () => workspaceTodayQueries.listRecentAuditEvents(5)),
-  ]);
+    const [
+      blockedWork,
+      unassignedTasks,
+      shortages,
+      purchaseOrders,
+      failedSyncs,
+      pendingSyncs,
+      reworkIssues,
+      trainingAssignments,
+      auditEvents,
+    ] = await Promise.all([
+      safeLoad('work_orders.blocked', warnings, () =>
+        workspaceTodayQueries.listBlockedWorkOrders(8),
+      ),
+      safeLoad('tickets.unassigned_tasks', warnings, () =>
+        workspaceTodayQueries.listUnassignedReadyTasks(8),
+      ),
+      safeLoad('inventory.shortages', warnings, () => workspaceTodayQueries.listShortageParts(8)),
+      safeLoad('purchasing.open_orders', warnings, () =>
+        workspaceTodayQueries.listOpenPurchaseOrders(8),
+      ),
+      safeLoad('accounting.failed_syncs', warnings, () =>
+        workspaceTodayQueries.listFailedInvoiceSyncs(8),
+      ),
+      safeLoad('accounting.pending_syncs', warnings, () =>
+        workspaceTodayQueries.listPendingInvoiceSyncs(8),
+      ),
+      safeLoad('tickets.rework', warnings, () => workspaceTodayQueries.listOpenReworkIssues(8)),
+      safeLoad('training.overdue', warnings, () =>
+        workspaceTodayQueries.listOverdueTrainingAssignments(8, generatedAt),
+      ),
+      safeLoad('admin.audit', warnings, () => workspaceTodayQueries.listRecentAuditEvents(5)),
+    ]);
 
-  const allItems = [
-    ...blockedWork.map(toBlockedWorkItem),
-    ...unassignedTasks.map(toUnassignedTaskItem),
-    ...shortages.map(toShortageItem),
-    ...purchaseOrders.map(toPurchaseOrderItem),
-    ...failedSyncs.map(toFailedSyncItem),
-    ...pendingSyncs.map(toPendingSyncItem),
-    ...reworkIssues.map(toReworkItem),
-    ...trainingAssignments.map(toTrainingItem),
-    ...auditEvents.map(toAuditItem),
-  ];
+    const allItems = [
+      ...blockedWork.map(toBlockedWorkItem),
+      ...unassignedTasks.map(toUnassignedTaskItem),
+      ...shortages.map(toShortageItem),
+      ...purchaseOrders.map(toPurchaseOrderItem),
+      ...failedSyncs.map(toFailedSyncItem),
+      ...pendingSyncs.map(toPendingSyncItem),
+      ...reworkIssues.map(toReworkItem),
+      ...trainingAssignments.map(toTrainingItem),
+      ...auditEvents.map(toAuditItem),
+    ];
 
-  const items = allItems
-    .filter((item) => isVisibleForRole(item, role))
-    .sort(sortTodayItems)
-    .slice(0, 12);
+    const items = allItems
+      .filter((item) => isVisibleForRole(item, role))
+      .sort(sortTodayItems)
+      .slice(0, 12);
 
-  const response: WorkspaceTodayResponse = {
-    generatedAt: generatedAt.toISOString(),
-    role,
-    summary: {
-      p1: items.filter((item) => item.severity === 'P1').length,
-      p2: items.filter((item) => item.severity === 'P2').length,
-      p3: items.filter((item) => item.severity === 'P3').length,
-      total: items.length,
-    },
-    items,
-    warnings,
-  };
+    const response: WorkspaceTodayResponse = {
+      generatedAt: generatedAt.toISOString(),
+      role,
+      summary: {
+        p1: items.filter((item) => item.severity === 'P1').length,
+        p2: items.filter((item) => item.severity === 'P2').length,
+        p3: items.filter((item) => item.severity === 'P3').length,
+        total: items.length,
+      },
+      items,
+      warnings,
+    };
 
-  return jsonResponse(200, response);
-}, { requireAuth: false });
+    return jsonResponse(200, response);
+  },
+  { requireAuth: false },
+);
 
 async function safeLoad<T>(
   source: string,
@@ -351,12 +367,14 @@ function resolveWorkspaceRole(ctx: RequestContext): WorkspaceRole {
 }
 
 function isWorkspaceRole(value: string | undefined): value is WorkspaceRole {
-  return value === 'technician'
-    || value === 'manager'
-    || value === 'parts'
-    || value === 'trainer'
-    || value === 'accounting'
-    || value === 'admin';
+  return (
+    value === 'technician' ||
+    value === 'manager' ||
+    value === 'parts' ||
+    value === 'trainer' ||
+    value === 'accounting' ||
+    value === 'admin'
+  );
 }
 
 function toBlockedWorkItem(row: BlockedWorkOrderRow): WorkspaceTodayItem {
@@ -366,7 +384,7 @@ function toBlockedWorkItem(row: BlockedWorkOrderRow): WorkspaceTodayItem {
     severity: 'P1',
     title: `${row.workOrderNumber} is blocked`,
     description: row.title,
-    primaryHref: '/work-orders/open',
+    primaryHref: getRequiredErpRoute('blocked-work'),
     primaryAction: 'Review blocker',
     ownerRole: 'manager',
     dueAt: row.dueAt?.toISOString(),
@@ -383,7 +401,7 @@ function toUnassignedTaskItem(row: UnassignedTaskRow): WorkspaceTodayItem {
     severity: 'P2',
     title: 'Task waiting for assignment',
     description: `Routing step ${row.routingStepId} is ready but has no technician.`,
-    primaryHref: '/work-orders/dispatch',
+    primaryHref: getRequiredErpRoute('dispatch-board'),
     primaryAction: 'Assign task',
     ownerRole: 'manager',
     sourceType: 'technician_task',
@@ -404,7 +422,7 @@ function toShortageItem(row: ShortagePartRow): WorkspaceTodayItem {
     severity: shortfall >= Math.max(2, reorderPoint / 2) ? 'P1' : 'P2',
     title: `${row.sku} below minimum`,
     description: `${name}: ${onHand} on hand, ${reorderPoint} minimum.`,
-    primaryHref: `/inventory/parts/${row.id}`,
+    primaryHref: getRequiredErpRecordRoute('part', row.id),
     primaryAction: 'Review part',
     ownerRole: 'parts',
     sourceType: 'part',
@@ -420,7 +438,7 @@ function toPurchaseOrderItem(row: PurchaseOrderRow): WorkspaceTodayItem {
     severity: row.expectedAt && row.expectedAt.getTime() < Date.now() ? 'P1' : 'P2',
     title: `${row.poNumber} needs receiving follow-up`,
     description: `${row.vendor.vendorName} order is ${row.purchaseOrderState.toLowerCase().replace(/_/g, ' ')}.`,
-    primaryHref: '/inventory/receiving',
+    primaryHref: getRequiredErpRoute('receiving'),
     primaryAction: 'Open receiving',
     ownerRole: 'parts',
     dueAt: row.expectedAt?.toISOString(),
@@ -437,7 +455,7 @@ function toFailedSyncItem(row: InvoiceSyncRow): WorkspaceTodayItem {
     severity: row.attemptCount >= 3 ? 'P1' : 'P2',
     title: `${row.invoiceNumber} failed QuickBooks sync`,
     description: row.lastErrorMessage ?? `${row.attemptCount} sync attempt(s) failed.`,
-    primaryHref: '/accounting/sync?view=failures',
+    primaryHref: getRequiredErpRoute('accounting-sync', { view: 'failures' }),
     primaryAction: 'Review sync',
     ownerRole: 'accounting',
     sourceType: 'invoice_sync',
@@ -453,7 +471,7 @@ function toPendingSyncItem(row: InvoiceSyncRow): WorkspaceTodayItem {
     severity: 'P3',
     title: `${row.invoiceNumber} is queued for QuickBooks`,
     description: `Current state: ${row.state.toLowerCase().replace(/_/g, ' ')}.`,
-    primaryHref: '/accounting/sync?view=queue',
+    primaryHref: getRequiredErpRoute('accounting-sync', { view: 'queue' }),
     primaryAction: 'Open sync monitor',
     ownerRole: 'accounting',
     sourceType: 'invoice_sync',
@@ -469,7 +487,7 @@ function toReworkItem(row: ReworkIssueRow): WorkspaceTodayItem {
     severity: row.severity === 'CRITICAL' || row.severity === 'HIGH' ? 'P1' : 'P2',
     title: row.title,
     description: `Rework is ${row.state.toLowerCase().replace(/_/g, ' ')} for a work order.`,
-    primaryHref: '/work-orders/open',
+    primaryHref: getRequiredErpRoute('blocked-work'),
     primaryAction: 'Review rework',
     ownerRole: 'manager',
     sourceType: 'rework_issue',
@@ -485,7 +503,7 @@ function toTrainingItem(row: TrainingAssignmentRow): WorkspaceTodayItem {
     severity: 'P2',
     title: `${row.module.moduleName} is overdue`,
     description: `Assignment is still ${row.assignmentStatus.toLowerCase().replace(/_/g, ' ')}.`,
-    primaryHref: '/training/assignments',
+    primaryHref: getRequiredErpRoute('training-assignment'),
     primaryAction: 'Review assignment',
     ownerRole: 'trainer',
     dueAt: row.dueAt?.toISOString(),
@@ -502,7 +520,7 @@ function toAuditItem(row: AuditEventRow): WorkspaceTodayItem {
     severity: 'P3',
     title: `${row.entityType} activity logged`,
     description: row.action,
-    primaryHref: '/admin/audit',
+    primaryHref: getRequiredErpRoute('audit-trail'),
     primaryAction: 'Open audit trail',
     ownerRole: 'admin',
     sourceType: 'audit_event',
@@ -518,10 +536,12 @@ function isVisibleForRole(item: WorkspaceTodayItem, role: WorkspaceRole): boolea
     return item.module === 'work_orders' && item.severity !== 'P3';
   }
   if (role === 'manager') {
-    return item.module === 'work_orders'
-      || item.module === 'inventory'
-      || item.module === 'purchasing'
-      || item.module === 'training';
+    return (
+      item.module === 'work_orders' ||
+      item.module === 'inventory' ||
+      item.module === 'purchasing' ||
+      item.module === 'training'
+    );
   }
   return false;
 }

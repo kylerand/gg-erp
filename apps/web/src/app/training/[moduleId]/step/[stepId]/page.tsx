@@ -26,6 +26,7 @@ import {
   type ModuleProgressData,
   type OjtNote,
 } from '@/lib/api-client';
+import { erpNestedRoute, erpRoute } from '@/lib/erp-routes';
 import { useRole } from '@/lib/role-context';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -57,7 +58,7 @@ export default function StepPage() {
   const [loading, setLoading] = useState(true);
 
   const steps = (module?.steps as OjtStep[] | undefined) ?? [];
-  const stepIndex = steps.findIndex(s => s.id === stepId);
+  const stepIndex = steps.findIndex((s) => s.id === stepId);
   const step = steps[stepIndex] ?? null;
   const prevStep = stepIndex > 0 ? steps[stepIndex - 1] : null;
   const nextStep = stepIndex < steps.length - 1 ? steps[stepIndex + 1] : null;
@@ -86,8 +87,8 @@ export default function StepPage() {
         if (!cancelled) {
           setModule(mod);
           setProgress(prog);
-          setNotes(notesList.filter(n => n.stepId === stepId));
-          setBookmarked(bookmarksList.some(b => b.stepId === stepId));
+          setNotes(notesList.filter((n) => n.stepId === stepId));
+          setBookmarked(bookmarksList.some((b) => b.stepId === stepId));
         }
       } catch (err) {
         console.error('Error loading step', err);
@@ -96,11 +97,15 @@ export default function StepPage() {
       }
     }
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [canTrackProgress, employeeId, moduleId, stepId]);
 
-  const stepStatus = progress?.steps.find(s => s.stepId === stepId);
-  const completedStepIds = new Set(progress?.steps.filter(s => s.status === 'completed').map(s => s.stepId) ?? []);
+  const stepStatus = progress?.steps.find((s) => s.stepId === stepId);
+  const completedStepIds = new Set(
+    progress?.steps.filter((s) => s.status === 'completed').map((s) => s.stepId) ?? [],
+  );
 
   function handleVideoProgress(pct: number) {
     if (!canTrackProgress) return;
@@ -143,7 +148,7 @@ export default function StepPage() {
     if (!module || !canTrackProgress) return;
     await saveNote(employeeId, module.id, content, stepId);
     const updatedNotes = await listNotes(employeeId, module.id);
-    setNotes(updatedNotes.filter(n => n.stepId === stepId));
+    setNotes(updatedNotes.filter((n) => n.stepId === stepId));
   }
 
   if (loading) {
@@ -158,7 +163,10 @@ export default function StepPage() {
     return (
       <div className="text-center py-16 text-gray-500">
         <p>Step not found.</p>
-        <Link href={`/training/${moduleId}`} className="text-yellow-600 hover:underline text-sm">
+        <Link
+          href={erpNestedRoute('training', moduleId)}
+          className="text-yellow-600 hover:underline text-sm"
+        >
           Back to module
         </Link>
       </div>
@@ -182,9 +190,13 @@ export default function StepPage() {
       <div className="flex-1 min-w-0">
         {/* Breadcrumb */}
         <nav className="text-xs text-gray-500 mb-4 flex items-center gap-1.5">
-          <Link href="/training" className="hover:text-yellow-600">Training</Link>
+          <Link href={erpRoute('training')} className="hover:text-yellow-600">
+            Training
+          </Link>
           <span>/</span>
-          <Link href={`/training/${moduleId}`} className="hover:text-yellow-600">{module.moduleName}</Link>
+          <Link href={erpNestedRoute('training', moduleId)} className="hover:text-yellow-600">
+            {module.moduleName}
+          </Link>
           <span>/</span>
           <span className="text-gray-800 font-medium">{step.title}</span>
         </nav>
@@ -218,7 +230,9 @@ export default function StepPage() {
         {step.instructions && (
           <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
             <h2 className="font-semibold text-gray-800 mb-3">Instructions</h2>
-            <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{step.instructions}</div>
+            <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+              {step.instructions}
+            </div>
           </div>
         )}
 
@@ -229,10 +243,7 @@ export default function StepPage() {
 
         {/* Key takeaways */}
         {(step.whyItMatters || (step.commonMistakes?.length ?? 0) > 0) && (
-          <KeyTakeaways
-            whyItMatters={step.whyItMatters}
-            commonMistakes={step.commonMistakes}
-          />
+          <KeyTakeaways whyItMatters={step.whyItMatters} commonMistakes={step.commonMistakes} />
         )}
 
         {/* Notes */}

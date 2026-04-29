@@ -1,7 +1,10 @@
 import {
+  getErpObjectByKey,
   getLiveErpQuickActions,
+  getLiveErpObjects,
   type ErpCommandDestinationDescriptor,
   type ErpModuleKey,
+  type ErpObjectQuickActionDescriptor,
   type ErpRouteStatus,
 } from './erp-object-registry.js';
 
@@ -25,6 +28,21 @@ export interface ErpWorkspaceDescriptor {
   status: ErpRouteStatus;
   keywords: readonly string[];
   links: readonly ErpWorkspaceLinkDescriptor[];
+}
+
+export type ErpRouteQueryValue = string | number | boolean | null | undefined;
+
+export interface ErpWorkspaceNavigationItemDescriptor {
+  key: string;
+  label: string;
+  description: string;
+  route: string;
+  status: ErpRouteStatus;
+  module: ErpModuleKey;
+  objectKey?: string;
+  itemType: 'workspace-link' | 'quick-action';
+  action?: ErpObjectQuickActionDescriptor['action'];
+  keywords: readonly string[];
 }
 
 export const ERP_WORKSPACES = [
@@ -261,6 +279,15 @@ export const ERP_WORKSPACES = [
         objectKey: 'sop-library',
         keywords: ['sop', 'procedure', 'knowledge'],
       },
+      {
+        key: 'training-admin',
+        label: 'Admin',
+        description: 'Manage training modules, assignments, and publish workflow.',
+        route: '/training/admin',
+        status: 'live',
+        objectKey: 'training-admin',
+        keywords: ['training', 'admin', 'module', 'publish'],
+      },
     ],
   },
   {
@@ -309,6 +336,33 @@ export const ERP_WORKSPACES = [
         status: 'live',
         objectKey: 'accounting-reconciliation',
         keywords: ['reconcile', 'quickbooks', 'accounting'],
+      },
+      {
+        key: 'quickbooks-customer',
+        label: 'QB Customers',
+        description: 'Live read-only QuickBooks customer list.',
+        route: '/accounting/quickbooks/customers',
+        status: 'live',
+        objectKey: 'quickbooks-customer',
+        keywords: ['quickbooks', 'qb', 'customer', 'customers'],
+      },
+      {
+        key: 'quickbooks-invoice',
+        label: 'QB Invoices',
+        description: 'Live invoice activity and AR from QuickBooks.',
+        route: '/accounting/quickbooks/invoices',
+        status: 'live',
+        objectKey: 'quickbooks-invoice',
+        keywords: ['quickbooks', 'qb', 'invoice', 'ar'],
+      },
+      {
+        key: 'quickbooks-chart-of-accounts',
+        label: 'Chart of Accounts',
+        description: 'Live read-only QuickBooks accounts.',
+        route: '/accounting/quickbooks/chart-of-accounts',
+        status: 'live',
+        objectKey: 'quickbooks-chart-of-accounts',
+        keywords: ['quickbooks', 'qb', 'chart', 'accounts', 'coa'],
       },
     ],
   },
@@ -428,10 +482,63 @@ export function getLiveErpWorkspaces(): readonly ErpWorkspaceDescriptor[] {
   return ERP_WORKSPACES.filter((workspace) => workspace.status === 'live');
 }
 
+export function getErpWorkspaceByKey(key: ErpModuleKey): ErpWorkspaceDescriptor | undefined {
+  return ERP_WORKSPACES.find((workspace) => workspace.key === key);
+}
+
+export function getLiveErpWorkspaceByKey(key: ErpModuleKey): ErpWorkspaceDescriptor | undefined {
+  const workspace = getErpWorkspaceByKey(key);
+  return workspace?.status === 'live' ? workspace : undefined;
+}
+
 export function getLiveErpWorkspaceLinks(): readonly ErpWorkspaceLinkDescriptor[] {
   return getLiveErpWorkspaces().flatMap((workspace) =>
     workspace.links.filter((link) => link.status === 'live'),
   );
+}
+
+export function getLiveErpWorkspaceLinksByModule(
+  module: ErpModuleKey,
+): readonly ErpWorkspaceLinkDescriptor[] {
+  return getLiveErpWorkspaceByKey(module)?.links.filter((link) => link.status === 'live') ?? [];
+}
+
+export function getErpWorkspaceNavigationItems(
+  module: ErpModuleKey,
+): readonly ErpWorkspaceNavigationItemDescriptor[] {
+  const workspace = getLiveErpWorkspaceByKey(module);
+  if (!workspace) return [];
+
+  const linkItems = workspace.links
+    .filter((link) => link.status === 'live')
+    .map((link) => ({
+      key: link.key,
+      label: link.label,
+      description: link.description,
+      route: link.route,
+      status: link.status,
+      module,
+      objectKey: link.objectKey,
+      itemType: 'workspace-link' as const,
+      keywords: link.keywords,
+    }));
+
+  const quickActionItems = getLiveErpQuickActions()
+    .filter((action) => action.module === module)
+    .map((action) => ({
+      key: action.key,
+      label: action.label,
+      description: action.description,
+      route: action.route,
+      status: action.status,
+      module,
+      objectKey: action.objectKey,
+      itemType: 'quick-action' as const,
+      action: action.action,
+      keywords: action.keywords,
+    }));
+
+  return [...linkItems, ...quickActionItems];
 }
 
 export function getErpCommandDestinations(): readonly ErpCommandDestinationDescriptor[] {
@@ -459,4 +566,102 @@ export function getErpCommandDestinations(): readonly ErpCommandDestinationDescr
 
 export function getErpQuickCreateDestinations(): readonly ErpCommandDestinationDescriptor[] {
   return getErpCommandDestinations().filter((destination) => destination.group === 'Create');
+}
+
+export function appendErpRouteQuery(
+  route: string,
+  query?: Record<string, ErpRouteQueryValue>,
+): string {
+  if (!query) return route;
+
+  const [withoutHash, hash] = route.split('#');
+  const [path, existingQuery] = withoutHash.split('?');
+  const params = new URLSearchParams(existingQuery);
+
+  for (const [key, value] of Object.entries(query)) {
+    if (value === null || value === undefined || value === '') {
+      params.delete(key);
+    } else {
+      params.set(key, String(value));
+    }
+  }
+
+  const nextQuery = params.toString();
+  return `${path}${nextQuery ? `?${nextQuery}` : ''}${hash ? `#${hash}` : ''}`;
+}
+
+export function appendErpRouteSegment(route: string, segment: string | number): string {
+  const [withoutHash, hash] = route.split('#');
+  const [path, existingQuery] = withoutHash.split('?');
+  const pathPrefix = path.endsWith('/') ? path.slice(0, -1) : path;
+  const encodedSegment = encodeURIComponent(String(segment));
+  const nextPath = `${pathPrefix || ''}/${encodedSegment}`;
+
+  return `${nextPath}${existingQuery ? `?${existingQuery}` : ''}${hash ? `#${hash}` : ''}`;
+}
+
+function applyErpRecordId(route: string, id: string | number): string {
+  const encodedId = encodeURIComponent(String(id));
+  return route.includes(':id')
+    ? route.replace(/:id\b/g, encodedId)
+    : appendErpRouteSegment(route, id);
+}
+
+export function getErpRouteByKey(
+  key: string,
+  query?: Record<string, ErpRouteQueryValue>,
+): string | undefined {
+  const workspace = ERP_WORKSPACES.find((item) => item.key === key);
+  const workspaceLinks: readonly ErpWorkspaceLinkDescriptor[] = ERP_WORKSPACES.flatMap((item) => [
+    ...item.links,
+  ]);
+  const workspaceLink = workspaceLinks.find((item) => item.key === key);
+  const quickAction = getLiveErpQuickActions().find((item) => item.key === key);
+  const object = getErpObjectByKey(key);
+  const route = workspace?.route ?? workspaceLink?.route ?? quickAction?.route ?? object?.route;
+
+  return route ? appendErpRouteQuery(route, query) : undefined;
+}
+
+export function getErpRecordRouteByKey(
+  key: string,
+  id: string | number,
+  query?: Record<string, ErpRouteQueryValue>,
+): string | undefined {
+  const object = getErpObjectByKey(key);
+  if (!object) return undefined;
+
+  return appendErpRouteQuery(applyErpRecordId(object.detailRoute ?? object.route, id), query);
+}
+
+export function getRequiredErpRoute(
+  key: string,
+  query?: Record<string, ErpRouteQueryValue>,
+): string {
+  const route = getErpRouteByKey(key, query);
+  if (!route) {
+    throw new Error(`Unknown ERP registry route key: ${key}`);
+  }
+  return route;
+}
+
+export function getRequiredErpRecordRoute(
+  key: string,
+  id: string | number,
+  query?: Record<string, ErpRouteQueryValue>,
+): string {
+  const route = getErpRecordRouteByKey(key, id, query);
+  if (!route) {
+    throw new Error(`Unknown ERP registry record route key: ${key}`);
+  }
+  return route;
+}
+
+export function getLiveErpRoutes(): readonly string[] {
+  return [
+    ...getLiveErpWorkspaces().map((workspace) => workspace.route),
+    ...getLiveErpWorkspaceLinks().map((link) => link.route),
+    ...getLiveErpQuickActions().map((action) => action.route),
+    ...getLiveErpObjects().map((object) => object.route),
+  ];
 }

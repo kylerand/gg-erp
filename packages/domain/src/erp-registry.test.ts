@@ -4,6 +4,9 @@ import {
   ERP_OBJECTS,
   getErpCommandDestinations,
   getErpQuickCreateDestinations,
+  getRequiredErpRecordRoute,
+  getErpWorkspaceNavigationItems,
+  getRequiredErpRoute,
   getLiveErpWorkspaceLinks,
   getLiveErpWorkspaces,
   normalizeErpRoute,
@@ -28,6 +31,51 @@ test('ERP object registry exposes unique live route metadata', () => {
     assert.notEqual(object.label.trim(), '', `${object.key} label should be present`);
     assert.notEqual(object.ownerContext.trim(), '', `${object.key} owner should be present`);
   }
+});
+
+test('registry route helper resolves module links and filtered routes', () => {
+  assert.equal(getRequiredErpRoute('work-order'), '/work-orders');
+  assert.equal(getRequiredErpRoute('create-work-order'), '/work-orders/new');
+  assert.equal(getRequiredErpRoute('create-sales-opportunity'), '/sales/opportunities/new');
+  assert.equal(getRequiredErpRoute('quickbooks-customer'), '/accounting/quickbooks/customers');
+  assert.equal(
+    getRequiredErpRoute('accounting-sync', { view: 'queue' }),
+    '/accounting/sync?view=queue',
+  );
+  assert.equal(
+    getRequiredErpRoute('accounting-sync', {
+      view: 'invoices',
+      state: 'SYNCED',
+      period: 'today',
+    }),
+    '/accounting/sync?view=invoices&state=SYNCED&period=today',
+  );
+  assert.equal(getRequiredErpRecordRoute('work-order', 'wo-1'), '/work-orders/wo-1');
+  assert.equal(
+    getRequiredErpRecordRoute('sales-opportunity', 'opp 1'),
+    '/sales/opportunities/opp%201',
+  );
+  assert.equal(
+    getRequiredErpRecordRoute('quote', 'qt-1', { tab: 'lines' }),
+    '/sales/quotes/qt-1?tab=lines',
+  );
+});
+
+test('workspace navigation items include live links and quick actions', () => {
+  const workOrderItems = getErpWorkspaceNavigationItems('work-orders');
+  const salesItems = getErpWorkspaceNavigationItems('sales');
+  const accountingItems = getErpWorkspaceNavigationItems('accounting');
+  const trainingItems = getErpWorkspaceNavigationItems('training');
+
+  assert.ok(workOrderItems.some((item) => item.key === 'create-work-order'));
+  assert.ok(salesItems.some((item) => item.key === 'create-sales-opportunity'));
+  assert.ok(
+    getErpWorkspaceNavigationItems('customers').some((item) => item.key === 'create-customer'),
+  );
+  assert.ok(accountingItems.some((item) => item.key === 'quickbooks-customer'));
+  assert.ok(accountingItems.some((item) => item.key === 'quickbooks-invoice'));
+  assert.ok(accountingItems.some((item) => item.key === 'quickbooks-chart-of-accounts'));
+  assert.ok(trainingItems.some((item) => item.key === 'training-admin'));
 });
 
 test('live workspace links reference live registry objects', () => {

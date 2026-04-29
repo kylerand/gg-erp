@@ -2,13 +2,18 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { listOpportunities, type SalesOpportunity } from '@/lib/api-client';
+import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 import { PageHeader, LoadingSkeleton } from '@gg-erp/ui';
 
 const STAGES = [
   { key: 'PROSPECT', label: 'Prospect', color: 'bg-blue-50 border-blue-300 text-blue-800' },
   { key: 'QUALIFIED', label: 'Qualified', color: 'bg-yellow-50 border-yellow-300 text-yellow-800' },
   { key: 'PROPOSAL', label: 'Proposal', color: 'bg-orange-50 border-orange-300 text-orange-800' },
-  { key: 'NEGOTIATION', label: 'Negotiation', color: 'bg-purple-50 border-purple-300 text-purple-800' },
+  {
+    key: 'NEGOTIATION',
+    label: 'Negotiation',
+    color: 'bg-purple-50 border-purple-300 text-purple-800',
+  },
   { key: 'CLOSED_WON', label: 'Closed Won', color: 'bg-green-50 border-green-300 text-green-800' },
   { key: 'CLOSED_LOST', label: 'Closed Lost', color: 'bg-red-50 border-red-300 text-red-800' },
 ] as const;
@@ -42,7 +47,7 @@ export default function PipelinePage() {
       <div className="flex items-center justify-between mb-6">
         <PageHeader title="Pipeline" description="Sales opportunities by stage" />
         <Link
-          href="/sales/quotes/new"
+          href={erpRoute('create-sales-opportunity')}
           className="bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-semibold px-4 py-2 rounded-lg text-sm transition-colors"
         >
           + New Opportunity
@@ -74,12 +79,10 @@ export default function PipelinePage() {
                   stage.items.map((opp) => (
                     <Link
                       key={opp.id}
-                      href={`/sales/opportunities/${opp.id}`}
+                      href={erpRecordRoute('sales-opportunity', opp.id)}
                       className="block bg-white rounded-lg border border-gray-200 p-3 hover:border-yellow-400 hover:shadow-sm transition-all"
                     >
-                      <div className="text-sm font-medium text-gray-900 truncate">
-                        {opp.title}
-                      </div>
+                      <div className="text-sm font-medium text-gray-900 truncate">{opp.title}</div>
                       {opp.estimatedValue != null && (
                         <div className="text-xs font-mono text-green-700 mt-1">
                           ${opp.estimatedValue.toLocaleString()}

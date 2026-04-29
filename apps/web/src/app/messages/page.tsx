@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { PageHeader, LoadingSkeleton, EmptyState } from '@gg-erp/ui';
 import { useRole } from '@/lib/role-context';
@@ -79,6 +80,7 @@ function isImageFile(file: File): boolean {
 
 export default function MessagesPage() {
   const { user } = useRole();
+  const searchParams = useSearchParams();
   const userId = user?.userId ?? null;
 
   // Channels
@@ -120,6 +122,8 @@ export default function MessagesPage() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
   const selectedChannel = channels.find((c) => c.id === selectedChannelId) ?? null;
+  const requestedChannelId = searchParams.get('channel');
+  const requestedType = searchParams.get('type');
 
   // ─── Load Channels ────────────────────────────────────────────────────────
 
@@ -139,6 +143,34 @@ export default function MessagesPage() {
     const interval = setInterval(() => void loadChannels(), 15_000);
     return () => clearInterval(interval);
   }, [loadChannels]);
+
+  useEffect(() => {
+    if (
+      requestedType === 'TEAM' ||
+      requestedType === 'WORK_ORDER' ||
+      requestedType === 'CUSTOMER' ||
+      requestedType === 'DIRECT'
+    ) {
+      setChannelFilter(requestedType);
+    }
+  }, [requestedType]);
+
+  useEffect(() => {
+    if (channels.length === 0) return;
+
+    if (requestedChannelId && channels.some((channel) => channel.id === requestedChannelId)) {
+      if (selectedChannelId !== requestedChannelId) setSelectedChannelId(requestedChannelId);
+      return;
+    }
+
+    if (!selectedChannelId) {
+      const firstMatchingChannel =
+        channelFilter === 'ALL'
+          ? channels[0]
+          : channels.find((channel) => channel.type === channelFilter);
+      setSelectedChannelId(firstMatchingChannel?.id ?? null);
+    }
+  }, [channelFilter, channels, requestedChannelId, selectedChannelId]);
 
   // ─── Load Messages ────────────────────────────────────────────────────────
 

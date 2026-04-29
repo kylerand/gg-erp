@@ -1,19 +1,6 @@
 {
   "_doc": "Routes with an expected non-healthy API smoke status in the currently deployed QA API. Smoke fails when this list drifts in EITHER direction — a new bug joins, OR an existing bug gets fixed/deployed (so we know to remove the entry). File a Linear ticket when adding long-lived handler bugs; remove pending-deploy entries after the route is live.",
   "broken": [
-    { "method": "POST", "path": "/accounting/webhook", "expectStatus": 500, "note": "Webhook signature validation throws when no body/headers; needs explicit 400 path for unsigned probes." },
-    { "method": "GET", "path": "/hr/employees", "expectStatus": 404, "note": "Pending live API Gateway deploy for PR #39 route wiring." },
-    { "method": "GET", "path": "/inventory/purchase-orders", "expectStatus": 404, "note": "Pending live API Gateway deploy for PR #39 route wiring." },
-    { "method": "GET", "path": "/tickets/work-orders/{workOrderId}/qc-gates", "expectStatus": 404, "note": "Pending live API Gateway deploy for PR #39 route wiring." },
-    { "method": "POST", "path": "/tickets/work-orders/{workOrderId}/qc-gates/batch-submit", "expectStatus": 404, "note": "Pending live API Gateway deploy for PR #39 route wiring." },
-    { "method": "GET", "path": "/tickets/work-orders/{workOrderId}/time-entries", "expectStatus": 404, "note": "Pending live API Gateway deploy for PR #39 route wiring." },
-    { "method": "POST", "path": "/tickets/time-entries", "expectStatus": 404, "note": "Pending live API Gateway deploy for PR #39 route wiring." },
-    { "method": "POST", "path": "/tickets/work-orders/{workOrderId}/time-entries", "expectStatus": 404, "note": "Pending live API Gateway deploy for PR #39 route wiring." },
-    { "method": "PATCH", "path": "/tickets/time-entries/{id}", "expectStatus": 404, "note": "Pending live API Gateway deploy for PR #39 route wiring." },
-    { "method": "PATCH", "path": "/tickets/work-orders/{workOrderId}/time-entries/{id}", "expectStatus": 404, "note": "Pending live API Gateway deploy for PR #39 route wiring." },
-    { "method": "DELETE", "path": "/tickets/time-entries/{id}", "expectStatus": 404, "note": "Pending live API Gateway deploy for PR #39 route wiring." },
-    { "method": "DELETE", "path": "/tickets/work-orders/{workOrderId}/time-entries/{id}", "expectStatus": 404, "note": "Pending live API Gateway deploy for PR #39 route wiring." },
-    { "method": "GET", "path": "/planning/routing-steps", "expectStatus": 404, "note": "Pending live API Gateway deploy for PR #39 route wiring." },
-    { "method": "PATCH", "path": "/planning/routing-steps/{id}/state", "expectStatus": 404, "note": "Pending live API Gateway deploy for PR #39 route wiring." }
+    { "method": "POST", "path": "/accounting/webhook", "expectStatus": 500, "note": "Webhook signature validation throws when no body/headers; needs explicit 400 path for unsigned probes." }
   ]
 }

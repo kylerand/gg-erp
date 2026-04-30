@@ -4,8 +4,48 @@ import { listWoOrders } from '@/lib/api-client';
 import { erpRoute } from '@/lib/erp-routes';
 
 export default async function ReportingPage() {
-  const { items, total } = await listWoOrders({ limit: 100 });
-  const blocked = items.filter((w) => w.status === 'BLOCKED');
+  const ordersResult = await listWoOrders({ limit: 100 }, { allowMockFallback: false })
+    .then((data) => ({ status: 'ready' as const, data }))
+    .catch(() => ({ status: 'unavailable' as const }));
+  const blocked =
+    ordersResult.status === 'ready'
+      ? ordersResult.data.items.filter((w) => w.status === 'BLOCKED')
+      : [];
+
+  const stats =
+    ordersResult.status === 'ready'
+      ? [
+          {
+            label: 'Work Orders',
+            value: ordersResult.data.total,
+            sub: `${blocked.length} blocked`,
+            href: erpRoute('work-order'),
+            color: blocked.length > 0 ? 'text-red-600' : 'text-gray-900',
+          },
+          {
+            label: 'In Progress',
+            value: ordersResult.data.items.filter((w) => w.status === 'IN_PROGRESS').length,
+            sub: 'active builds',
+            href: erpRoute('dispatch-board'),
+            color: 'text-yellow-700',
+          },
+          {
+            label: 'Completed',
+            value: ordersResult.data.items.filter((w) => w.status === 'COMPLETED').length,
+            sub: 'returned records',
+            href: erpRoute('work-order'),
+            color: 'text-green-700',
+          },
+        ]
+      : [
+          {
+            label: 'Work Orders',
+            value: 'Unavailable',
+            sub: 'API did not return data',
+            href: erpRoute('work-order'),
+            color: 'text-red-600',
+          },
+        ];
 
   return (
     <div>
@@ -31,30 +71,8 @@ export default async function ReportingPage() {
           </div>
         </div>
       )}
-      <div className="grid grid-cols-3 gap-4">
-        {[
-          {
-            label: 'Work Orders',
-            value: total,
-            sub: `${blocked.length} blocked`,
-            href: erpRoute('work-order'),
-            color: blocked.length > 0 ? 'text-red-600' : 'text-gray-900',
-          },
-          {
-            label: 'In Progress',
-            value: items.filter((w) => w.status === 'IN_PROGRESS').length,
-            sub: 'active builds',
-            href: erpRoute('dispatch-board'),
-            color: 'text-yellow-700',
-          },
-          {
-            label: 'Completed',
-            value: items.filter((w) => w.status === 'COMPLETED').length,
-            sub: 'this period',
-            href: erpRoute('work-order'),
-            color: 'text-green-700',
-          },
-        ].map((stat) => (
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {stats.map((stat) => (
           <Link
             key={stat.label}
             href={stat.href}

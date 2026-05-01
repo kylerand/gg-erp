@@ -5,35 +5,46 @@ import { WorkspaceLinkGrid } from '@/components/WorkspaceLinkGrid';
 import { erpRoute } from '@/lib/erp-routes';
 
 export default async function InventoryPage() {
-  const res = await listParts({ limit: 500, offset: 0 });
-  const lowStock = res.items.filter((p) => (p.quantityOnHand ?? 0) === 0).length;
-  const activeCount = res.items.filter((p) => p.partState === 'ACTIVE').length;
+  const partsResult = await listParts({ limit: 500, offset: 0 }, { allowMockFallback: false })
+    .then((data) => ({ status: 'ready' as const, data }))
+    .catch(() => ({ status: 'unavailable' as const }));
 
-  return (
-    <div>
-      <PageHeader title="Inventory" description="Parts, reservations, and receiving" />
-      <div className="grid grid-cols-4 gap-4 mb-8">
-        {[
+  const stats =
+    partsResult.status === 'ready'
+      ? [
           {
             label: 'Total Parts',
-            value: res.total,
+            value: partsResult.data.total,
             color: 'text-gray-700',
             href: erpRoute('part'),
           },
           {
             label: 'Active Parts',
-            value: activeCount,
+            value: partsResult.data.items.filter((p) => p.partState === 'ACTIVE').length,
             color: 'text-green-700',
             href: erpRoute('part'),
           },
-          { label: 'Out of Stock', value: lowStock, color: 'text-red-600', href: erpRoute('part') },
           {
-            label: 'Reservations',
-            value: '—',
-            color: 'text-yellow-700',
-            href: erpRoute('inventory-reservation'),
+            label: 'Out of Stock',
+            value: partsResult.data.items.filter((p) => (p.quantityOnHand ?? 0) === 0).length,
+            color: 'text-red-600',
+            href: erpRoute('part'),
           },
-        ].map((stat) => (
+        ]
+      : [
+          {
+            label: 'Parts Feed',
+            value: 'Unavailable',
+            color: 'text-red-600',
+            href: erpRoute('part'),
+          },
+        ];
+
+  return (
+    <div>
+      <PageHeader title="Inventory" description="Parts, reservations, and receiving" />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+        {stats.map((stat) => (
           <Link
             key={stat.label}
             href={stat.href}

@@ -87,6 +87,7 @@ import { adminListUsersHandler } from './lambda/identity/admin-list-users.handle
 import { adminCreateUserHandler } from './lambda/identity/admin-create-user.handler.js';
 import { adminUpdateUserHandler } from './lambda/identity/admin-update-user.handler.js';
 import { adminDeleteUserHandler } from './lambda/identity/admin-delete-user.handler.js';
+import { handler as listDealersHandler } from './lambda/identity/list-dealers.handler.js';
 import {
   listChannelsHandler,
   createChannelHandler,
@@ -273,6 +274,8 @@ async function route(
   // ── Customers ─────────────────────────────────────────────────────────────
   } else if (pathname === '/identity/customers' && method === 'GET') {
     result = await listCustomersHandler(event);
+  } else if (pathname === '/identity/dealers' && method === 'GET') {
+    result = await listDealersHandler(event);
   } else if (pathname === '/identity/customers' && method === 'POST') {
     result = await createCustomerHandler(event);
   } else if (customerMatch && method === 'GET') {

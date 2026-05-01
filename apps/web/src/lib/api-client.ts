@@ -24,17 +24,27 @@ type ApiFetchInit = RequestInit & {
   _skipQueue?: boolean;
 };
 
-function shouldUseFallback<T>(fallback: T | undefined): fallback is T {
-  return fallback !== undefined && ALLOW_MOCK_FALLBACK;
+export interface ApiDataOptions {
+  allowMockFallback?: boolean;
 }
 
-function warnFallback(path: string, reason: string): void {
+function shouldUseFallback<T>(fallback: T | undefined, options?: ApiDataOptions): fallback is T {
+  return fallback !== undefined && ALLOW_MOCK_FALLBACK && options?.allowMockFallback !== false;
+}
+
+function warnFallback(path: string, reason: string, options?: ApiDataOptions): void {
+  if (options?.allowMockFallback === false) return;
   if (typeof console !== 'undefined') {
     console.warn(`[api-client] Using mock fallback for ${path} (${reason}). Fix the API route.`);
   }
 }
 
-export async function apiFetch<T>(path: string, init?: ApiFetchInit, fallback?: T): Promise<T> {
+export async function apiFetch<T>(
+  path: string,
+  init?: ApiFetchInit,
+  fallback?: T,
+  options?: ApiDataOptions,
+): Promise<T> {
   const { ifMatch, _skipQueue, ...fetchInit } = init ?? {};
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (_authToken) headers['authorization'] = `Bearer ${_authToken}`;
@@ -49,8 +59,8 @@ export async function apiFetch<T>(path: string, init?: ApiFetchInit, fallback?: 
     if (res.ok) return parseApiResponse<T>(res);
 
     if (res.status === 401 && IS_AUTH_MOCK) {
-      if (shouldUseFallback(fallback)) {
-        warnFallback(path, 'mock auth token rejected by local API');
+      if (shouldUseFallback(fallback, options)) {
+        warnFallback(path, 'mock auth token rejected by local API', options);
         return fallback;
       }
       throw new Error(`Mock auth token rejected by local API: ${path}`);
@@ -70,15 +80,15 @@ export async function apiFetch<T>(path: string, init?: ApiFetchInit, fallback?: 
       }
       // Refresh failed — redirect to login
       redirectToLogin();
-      if (shouldUseFallback(fallback)) {
-        warnFallback(path, 'auth refresh failed');
+      if (shouldUseFallback(fallback, options)) {
+        warnFallback(path, 'auth refresh failed', options);
         return fallback;
       }
       throw new Error('Session expired. Redirecting to login.');
     }
 
-    if (shouldUseFallback(fallback)) {
-      warnFallback(path, `HTTP ${res.status}`);
+    if (shouldUseFallback(fallback, options)) {
+      warnFallback(path, `HTTP ${res.status}`, options);
       return fallback;
     }
     const errBody = (await res.json().catch(() => ({}))) as { message?: string };
@@ -98,8 +108,8 @@ export async function apiFetch<T>(path: string, init?: ApiFetchInit, fallback?: 
       queueMutation(path, method, fetchInit.body as string | undefined, idempotencyKey);
       return { _queued: true } as unknown as T;
     }
-    if (shouldUseFallback(fallback)) {
-      warnFallback(path, err instanceof Error ? err.message : 'network error');
+    if (shouldUseFallback(fallback, options)) {
+      warnFallback(path, err instanceof Error ? err.message : 'network error', options);
       return fallback;
     }
     if (err instanceof Error) throw err;
@@ -512,21 +522,29 @@ export const MOCK_WO_ORDER_DETAIL: WoOrderDetail = {
   notes: [],
 };
 
-export async function listWoOrders(params?: {
-  status?: string;
-  search?: string;
-  limit?: number;
-  offset?: number;
-}): Promise<{ items: WoOrder[]; total: number }> {
+export async function listWoOrders(
+  params?: {
+    status?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<{ items: WoOrder[]; total: number }> {
   const qs = new URLSearchParams();
   if (params?.status) qs.set('status', params.status);
   if (params?.search) qs.set('search', params.search);
   if (params?.limit) qs.set('limit', String(params.limit));
   if (params?.offset) qs.set('offset', String(params.offset));
-  return apiFetch(`/tickets/work-orders${qs.size ? `?${qs}` : ''}`, undefined, {
-    items: MOCK_WO_ORDERS,
-    total: MOCK_WO_ORDERS.length,
-  });
+  return apiFetch(
+    `/tickets/work-orders${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    {
+      items: MOCK_WO_ORDERS,
+      total: MOCK_WO_ORDERS.length,
+    },
+    options,
+  );
 }
 
 export async function getWoOrder(id: string): Promise<WoOrderDetail | null> {
@@ -590,21 +608,29 @@ export const MOCK_CUSTOMERS: Customer[] = [
   },
 ];
 
-export async function listCustomers(params?: {
-  state?: string;
-  search?: string;
-  limit?: number;
-  offset?: number;
-}): Promise<{ items: Customer[]; total: number }> {
+export async function listCustomers(
+  params?: {
+    state?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<{ items: Customer[]; total: number }> {
   const qs = new URLSearchParams();
   if (params?.state) qs.set('state', params.state);
   if (params?.search) qs.set('search', params.search);
   qs.set('limit', String(params?.limit ?? 25));
   if (params?.offset) qs.set('offset', String(params.offset));
-  return apiFetch(`/identity/customers${qs.size ? `?${qs}` : ''}`, undefined, {
-    items: MOCK_CUSTOMERS,
-    total: MOCK_CUSTOMERS.length,
-  });
+  return apiFetch(
+    `/identity/customers${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    {
+      items: MOCK_CUSTOMERS,
+      total: MOCK_CUSTOMERS.length,
+    },
+    options,
+  );
 }
 
 export async function createCustomer(input: CreateCustomerInput): Promise<Customer> {
@@ -764,6 +790,7 @@ export interface ListPartsParams {
 
 export async function listParts(
   params?: ListPartsParams,
+  options?: ApiDataOptions,
 ): Promise<{ items: Part[]; total: number }> {
   const qs = new URLSearchParams();
   if (params?.search) qs.set('search', params.search);
@@ -775,10 +802,15 @@ export async function listParts(
   if (params?.defaultVendorId) qs.set('defaultVendorId', params.defaultVendorId);
   qs.set('limit', String(params?.limit ?? 25));
   if (params?.offset) qs.set('offset', String(params.offset));
-  return apiFetch(`/inventory/parts${qs.size ? `?${qs}` : ''}`, undefined, {
-    items: MOCK_PARTS,
-    total: MOCK_PARTS.length,
-  });
+  return apiFetch(
+    `/inventory/parts${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    {
+      items: MOCK_PARTS,
+      total: MOCK_PARTS.length,
+    },
+    options,
+  );
 }
 
 export async function getPart(id: string): Promise<Part | undefined> {
@@ -1360,11 +1392,12 @@ export interface Dealer {
   territory?: string;
 }
 
-export async function listDealers(): Promise<Dealer[]> {
+export async function listDealers(options?: ApiDataOptions): Promise<Dealer[]> {
   const res = await apiFetch<{ items: Dealer[]; total: number } | Dealer[]>(
     '/identity/dealers',
     undefined,
     { items: [], total: 0 },
+    options,
   );
   return Array.isArray(res) ? res : (res.items ?? []);
 }
@@ -1465,12 +1498,20 @@ export interface TrainingModule {
   updatedAt: string;
 }
 
-export async function listTrainingModules(params?: {
-  status?: string;
-}): Promise<{ items: TrainingModule[]; total: number }> {
+export async function listTrainingModules(
+  params?: {
+    status?: string;
+  },
+  options?: ApiDataOptions,
+): Promise<{ items: TrainingModule[]; total: number }> {
   const qs = new URLSearchParams();
   if (params?.status) qs.set('status', params.status);
-  return apiFetch(`/sop/modules${qs.size ? `?${qs}` : ''}`, undefined, { items: [], total: 0 });
+  return apiFetch(
+    `/sop/modules${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    { items: [], total: 0 },
+    options,
+  );
 }
 
 export async function getTrainingModule(idOrCode: string): Promise<TrainingModule> {

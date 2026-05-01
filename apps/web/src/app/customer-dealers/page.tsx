@@ -5,10 +5,13 @@ import { WorkspaceLinkGrid } from '@/components/WorkspaceLinkGrid';
 import { erpRoute } from '@/lib/erp-routes';
 
 export default async function CustomerDealersPage() {
-  const [customers, dealers] = await Promise.all([
-    listCustomers({ limit: 1, offset: 0 }),
-    listDealers(),
+  const strictApiOptions = { allowMockFallback: false } as const;
+  const [customersResult, dealersResult] = await Promise.allSettled([
+    listCustomers({ limit: 1, offset: 0 }, strictApiOptions),
+    listDealers(strictApiOptions),
   ]);
+  const customerTotal = customersResult.status === 'fulfilled' ? customersResult.value.total : null;
+  const dealerTotal = dealersResult.status === 'fulfilled' ? dealersResult.value.length : null;
 
   return (
     <div>
@@ -21,14 +24,18 @@ export default async function CustomerDealersPage() {
           href={erpRoute('customer')}
           className="bg-white rounded-lg border border-gray-200 p-4 hover:border-yellow-400 transition-colors"
         >
-          <div className="text-2xl font-bold text-gray-900">{customers.total}</div>
+          <div className="text-2xl font-bold text-gray-900">
+            {customerTotal === null ? 'Unavailable' : customerTotal}
+          </div>
           <div className="text-xs text-gray-500 mt-1">Total Customers</div>
         </Link>
         <Link
           href={erpRoute('dealer')}
           className="bg-white rounded-lg border border-gray-200 p-4 hover:border-yellow-400 transition-colors"
         >
-          <div className="text-2xl font-bold text-gray-900">{dealers.length}</div>
+          <div className="text-2xl font-bold text-gray-900">
+            {dealerTotal === null ? 'Unavailable' : dealerTotal}
+          </div>
           <div className="text-xs text-gray-500 mt-1">Dealers</div>
         </Link>
       </div>

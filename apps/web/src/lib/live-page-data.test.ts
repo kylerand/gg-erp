@@ -10,6 +10,7 @@ const WEB_SRC_DIR = path.resolve(__dirname, '..');
 const truthCriticalPages = [
   'app/customer-dealers/page.tsx',
   'app/inventory/page.tsx',
+  'app/inventory/reservations/page.tsx',
   'app/reporting/page.tsx',
   'app/training/page.tsx',
   'app/training/admin/page.tsx',
@@ -33,6 +34,8 @@ test('truth-critical pages do not render placeholder stat values', () => {
     /value:\s*['"`]\u2014['"`]/,
     /value:\s*['"`]TBD['"`]/i,
     /value:\s*['"`]N\/A['"`]/i,
+    /not connected/i,
+    /placeholder\s+(data|values?|content|screen)/i,
   ];
 
   const placeholderUses = truthCriticalPages.flatMap((relativePath) => {

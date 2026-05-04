@@ -888,6 +888,166 @@ export async function getMaterialPlanByStage(): Promise<StageMaterialPlanRespons
   });
 }
 
+// ─── Inventory Lots & Reservations ──────────────────────────────────────────
+
+export interface InventoryLot {
+  id: string;
+  lotNumber: string;
+  serialNumber?: string;
+  lotState: 'AVAILABLE' | 'QUARANTINED' | 'CONSUMED' | 'CLOSED';
+  partSku: string;
+  partName: string;
+  locationName: string;
+  quantityOnHand: number;
+  quantityReserved: number;
+  quantityAllocated: number;
+  quantityConsumed: number;
+  quantityAvailable: number;
+  receivedAt: string;
+  expiresAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ListInventoryLotsParams {
+  partNumber?: string;
+  warehouseId?: string;
+  status?: InventoryLot['lotState'];
+  page?: number;
+  pageSize?: number;
+}
+
+export async function listInventoryLots(
+  params?: ListInventoryLotsParams,
+  options?: ApiDataOptions,
+): Promise<{ items: InventoryLot[]; total: number; page: number; pageSize: number }> {
+  const qs = new URLSearchParams();
+  if (params?.partNumber) qs.set('partNumber', params.partNumber);
+  if (params?.warehouseId) qs.set('warehouseId', params.warehouseId);
+  if (params?.status) qs.set('status', params.status);
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
+  return apiFetch(
+    `/inventory/lots${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    { items: [], total: 0, page: params?.page ?? 1, pageSize: params?.pageSize ?? 50 },
+    options,
+  );
+}
+
+export type InventoryReservationStatus =
+  | 'ACTIVE'
+  | 'PARTIALLY_CONSUMED'
+  | 'CONSUMED'
+  | 'RELEASED'
+  | 'CANCELLED'
+  | 'EXPIRED';
+
+export interface InventoryReservation {
+  id: string;
+  status: InventoryReservationStatus;
+  reservedQuantity: number;
+  consumedQuantity: number;
+  allocatedQuantity: number;
+  openQuantity: number;
+  reservationPriority: number;
+  shortageReason?: string;
+  expiresAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  partId: string;
+  partSku: string;
+  partName: string;
+  unitOfMeasure: string;
+  stockLocationId: string;
+  locationName: string;
+  stockLotId?: string;
+  lotNumber?: string;
+  serialNumber?: string;
+  workOrderId?: string;
+  workOrderNumber?: string;
+  workOrderTitle?: string;
+  workOrderPartId?: string;
+}
+
+export interface ListInventoryReservationsParams {
+  status?: InventoryReservationStatus | 'OPEN' | 'ALL';
+  workOrderId?: string;
+  partId?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export async function listInventoryReservations(
+  params?: ListInventoryReservationsParams,
+  options?: ApiDataOptions,
+): Promise<{ items: InventoryReservation[]; total: number; page: number; pageSize: number }> {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  if (params?.workOrderId) qs.set('workOrderId', params.workOrderId);
+  if (params?.partId) qs.set('partId', params.partId);
+  if (params?.search) qs.set('search', params.search);
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
+  return apiFetch(
+    `/inventory/reservations${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    { items: [], total: 0, page: params?.page ?? 1, pageSize: params?.pageSize ?? 50 },
+    options,
+  );
+}
+
+export interface CreateInventoryReservationInput {
+  stockLotId: string;
+  quantity: number;
+  workOrderId?: string;
+  workOrderPartId?: string;
+  expiresAt?: string;
+  priority?: number;
+}
+
+export async function createInventoryReservation(
+  input: CreateInventoryReservationInput,
+): Promise<InventoryReservation> {
+  const data = await apiFetch<{ reservation: InventoryReservation }>('/inventory/reservations', {
+    method: 'POST',
+    headers: mutationHeaders(),
+    body: JSON.stringify(input),
+  });
+  return data.reservation;
+}
+
+export async function releaseInventoryReservation(
+  id: string,
+  quantity?: number,
+): Promise<InventoryReservation> {
+  const data = await apiFetch<{ reservation: InventoryReservation }>(
+    `/inventory/reservations/${id}/release`,
+    {
+      method: 'PATCH',
+      headers: mutationHeaders(),
+      body: JSON.stringify(quantity === undefined ? {} : { quantity }),
+    },
+  );
+  return data.reservation;
+}
+
+export async function consumeInventoryReservation(
+  id: string,
+  quantity?: number,
+): Promise<InventoryReservation> {
+  const data = await apiFetch<{ reservation: InventoryReservation }>(
+    `/inventory/reservations/${id}/consume`,
+    {
+      method: 'PATCH',
+      headers: mutationHeaders(),
+      body: JSON.stringify(quantity === undefined ? {} : { quantity }),
+    },
+  );
+  return data.reservation;
+}
+
 // ─── Manufacturers ────────────────────────────────────────────────────────────
 
 export interface Manufacturer {

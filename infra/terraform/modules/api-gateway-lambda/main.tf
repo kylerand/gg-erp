@@ -793,6 +793,82 @@ resource "aws_lambda_function" "inventory_list_lots" {
   }
 }
 
+resource "aws_lambda_function" "inventory_list_reservations" {
+  function_name    = "${var.name_prefix}-inventory-list-reservations"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-reservations.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "inventory_create_reservation" {
+  function_name    = "${var.name_prefix}-inventory-create-reservation"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "create-reservation.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "inventory_release_reservation" {
+  function_name    = "${var.name_prefix}-inventory-release-reservation"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "release-reservation.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "inventory_consume_reservation" {
+  function_name    = "${var.name_prefix}-inventory-consume-reservation"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "consume-reservation.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
 resource "aws_lambda_function" "inventory_get_part_chain" {
   function_name    = "${var.name_prefix}-inventory-get-part-chain"
   role             = aws_iam_role.erp_lambda.arn
@@ -1597,6 +1673,65 @@ resource "aws_apigatewayv2_route" "inventory_list_lots" {
   route_key          = "GET /inventory/lots"
   target             = "integrations/${aws_apigatewayv2_integration.inventory_list_lots.id}"
   authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "inventory_list_reservations" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.inventory_list_reservations.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "inventory_list_reservations" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /inventory/reservations"
+  target             = "integrations/${aws_apigatewayv2_integration.inventory_list_reservations.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "inventory_create_reservation" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.inventory_create_reservation.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "inventory_create_reservation" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /inventory/reservations"
+  target             = "integrations/${aws_apigatewayv2_integration.inventory_create_reservation.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "inventory_release_reservation" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.inventory_release_reservation.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "inventory_release_reservation" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /inventory/reservations/{id}/release"
+  target             = "integrations/${aws_apigatewayv2_integration.inventory_release_reservation.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "inventory_consume_reservation" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.inventory_consume_reservation.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "inventory_consume_reservation" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /inventory/reservations/{id}/consume"
+  target             = "integrations/${aws_apigatewayv2_integration.inventory_consume_reservation.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "inventory_get_part_chain" {
@@ -3978,6 +4113,10 @@ locals {
     inventory_list_vendors                = aws_lambda_function.inventory_list_vendors
     inventory_list_purchase_orders        = aws_lambda_function.inventory_list_purchase_orders
     inventory_list_lots                   = aws_lambda_function.inventory_list_lots
+    inventory_list_reservations           = aws_lambda_function.inventory_list_reservations
+    inventory_create_reservation          = aws_lambda_function.inventory_create_reservation
+    inventory_release_reservation         = aws_lambda_function.inventory_release_reservation
+    inventory_consume_reservation         = aws_lambda_function.inventory_consume_reservation
     inventory_list_manufacturers          = aws_lambda_function.inventory_list_manufacturers
     inventory_create_manufacturer         = aws_lambda_function.inventory_create_manufacturer
     inventory_plan_material_by_stage      = aws_lambda_function.inventory_plan_material_by_stage

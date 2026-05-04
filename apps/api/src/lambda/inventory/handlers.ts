@@ -1,6 +1,11 @@
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
-import { wrapHandler, parseBody, jsonResponse } from '../../shared/lambda/index.js';
+import {
+  wrapHandler,
+  parseBody,
+  jsonResponse,
+  type LambdaEvent,
+} from '../../shared/lambda/index.js';
 
 let inventoryPrisma: PrismaClient | undefined;
 
@@ -11,12 +16,14 @@ function getInventoryPrisma(): PrismaClient {
 
 export const inventoryLotQueries = {
   listAvailableLots() {
-    return getInventoryPrisma().$queryRaw<Array<{
-      id: string;
-      lotNumber: string | null;
-      quantityOnHand: number | string;
-      quantityReserved: number | string;
-    }>>`
+    return getInventoryPrisma().$queryRaw<
+      Array<{
+        id: string;
+        lotNumber: string | null;
+        quantityOnHand: number | string;
+        quantityReserved: number | string;
+      }>
+    >`
       SELECT
         lots.id::text AS "id",
         lots.lot_number AS "lotNumber",
@@ -67,7 +74,28 @@ export const inventoryLotQueries = {
       prisma.stockLot.count({ where }),
     ]);
 
-    return { items, total, page, pageSize };
+    const balanceRows =
+      items.length > 0
+        ? await prisma.$queryRaw<InventoryLotBalanceRow[]>`
+            SELECT
+              stock_lot_id::text AS "stockLotId",
+              COALESCE(SUM(quantity_on_hand), 0) AS "quantityOnHand",
+              COALESCE(SUM(quantity_reserved), 0) AS "quantityReserved",
+              COALESCE(SUM(quantity_allocated), 0) AS "quantityAllocated",
+              COALESCE(SUM(quantity_consumed), 0) AS "quantityConsumed"
+            FROM inventory.inventory_balances
+            WHERE stock_lot_id IN (${Prisma.join(items.map((item) => Prisma.sql`${item.id}::uuid`))})
+            GROUP BY stock_lot_id
+          `
+        : [];
+    const balancesByLot = new Map(balanceRows.map((row) => [row.stockLotId, row]));
+
+    return {
+      items: items.map((item) => ({ ...item, balance: balancesByLot.get(item.id) })),
+      total,
+      page,
+      pageSize,
+    };
   },
 };
 
@@ -116,6 +144,596 @@ export const inventoryPurchaseOrderQueries = {
   },
 };
 
+const RESERVATION_STATUSES = [
+  'ACTIVE',
+  'PARTIALLY_CONSUMED',
+  'CONSUMED',
+  'RELEASED',
+  'CANCELLED',
+  'EXPIRED',
+] as const;
+
+type ReservationStatus = (typeof RESERVATION_STATUSES)[number];
+type ReservationStatusFilter = ReservationStatus | 'OPEN' | 'ALL';
+
+interface ListReservationsFilters {
+  status?: ReservationStatusFilter;
+  workOrderId?: string;
+  partId?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+interface InventoryReservationRow {
+  id: string;
+  status: ReservationStatus;
+  reservedQuantity: unknown;
+  consumedQuantity: unknown;
+  allocatedQuantity: unknown;
+  reservationPriority: number;
+  shortageReason: string | null;
+  expiresAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  partId: string;
+  partSku: string;
+  partName: string;
+  unitOfMeasure: string;
+  stockLocationId: string;
+  locationName: string;
+  stockLotId: string | null;
+  lotNumber: string | null;
+  serialNumber: string | null;
+  workOrderId: string | null;
+  workOrderNumber: string | null;
+  workOrderTitle: string | null;
+  workOrderPartId: string | null;
+}
+
+interface CountRow {
+  total: number | bigint | string;
+}
+
+interface InventoryLotBalanceRow {
+  stockLotId: string;
+  quantityOnHand: unknown;
+  quantityReserved: unknown;
+  quantityAllocated: unknown;
+  quantityConsumed: unknown;
+}
+
+interface CreateReservationInput {
+  stockLotId: string;
+  quantity: number;
+  workOrderId?: string;
+  workOrderPartId?: string;
+  expiresAt?: string;
+  priority?: number;
+}
+
+interface AdjustReservationInput {
+  quantity?: number;
+}
+
+class ReservationCommandError extends Error {
+  constructor(
+    readonly statusCode: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+export const inventoryReservationQueries = {
+  async listReservations(filters?: ListReservationsFilters) {
+    const page = Math.max(filters?.page ?? 1, 1);
+    const pageSize = Math.min(Math.max(filters?.pageSize ?? 50, 1), 200);
+    const offset = (page - 1) * pageSize;
+    const status = filters?.status && filters.status !== 'ALL' ? filters.status : undefined;
+    const openOnly = status === 'OPEN';
+    const exactStatus = status && status !== 'OPEN' ? status : undefined;
+    const search = filters?.search?.trim() || undefined;
+
+    const prisma = getInventoryPrisma();
+    const [items, countRows] = await Promise.all([
+      prisma.$queryRaw<InventoryReservationRow[]>`
+        SELECT
+          r.id::text AS "id",
+          r.reservation_status AS "status",
+          r.reserved_quantity AS "reservedQuantity",
+          r.consumed_quantity AS "consumedQuantity",
+          COALESCE(r.allocated_quantity, 0) AS "allocatedQuantity",
+          r.reservation_priority AS "reservationPriority",
+          r.shortage_reason AS "shortageReason",
+          r.expires_at AS "expiresAt",
+          r.created_at AS "createdAt",
+          r.updated_at AS "updatedAt",
+          p.id::text AS "partId",
+          p.sku AS "partSku",
+          p.name AS "partName",
+          p.unit_of_measure AS "unitOfMeasure",
+          loc.id::text AS "stockLocationId",
+          loc.location_name AS "locationName",
+          lot.id::text AS "stockLotId",
+          lot.lot_number AS "lotNumber",
+          lot.serial_number AS "serialNumber",
+          wo.id::text AS "workOrderId",
+          wo.work_order_number AS "workOrderNumber",
+          wo.title AS "workOrderTitle",
+          wop.id::text AS "workOrderPartId"
+        FROM inventory.inventory_reservations r
+        JOIN inventory.parts p ON p.id = r.part_id
+        JOIN inventory.stock_locations loc ON loc.id = r.stock_location_id
+        LEFT JOIN inventory.stock_lots lot ON lot.id = r.stock_lot_id
+        LEFT JOIN work_orders.work_orders wo ON wo.id = r.work_order_id
+        LEFT JOIN work_orders.work_order_parts wop ON wop.id = r.work_order_part_id
+        WHERE (${exactStatus ?? null}::text IS NULL OR r.reservation_status = ${exactStatus ?? null})
+          AND (${openOnly}::boolean = false OR r.reservation_status IN ('ACTIVE', 'PARTIALLY_CONSUMED'))
+          AND (${filters?.workOrderId ?? null}::uuid IS NULL OR r.work_order_id = ${filters?.workOrderId ?? null}::uuid)
+          AND (${filters?.partId ?? null}::uuid IS NULL OR r.part_id = ${filters?.partId ?? null}::uuid)
+          AND (
+            ${search ?? null}::text IS NULL
+            OR p.sku ILIKE '%' || ${search ?? null}::text || '%'
+            OR p.name ILIKE '%' || ${search ?? null}::text || '%'
+            OR lot.lot_number ILIKE '%' || ${search ?? null}::text || '%'
+            OR wo.work_order_number ILIKE '%' || ${search ?? null}::text || '%'
+          )
+        ORDER BY
+          CASE WHEN r.reservation_status IN ('ACTIVE', 'PARTIALLY_CONSUMED') THEN 0 ELSE 1 END,
+          r.reservation_priority ASC,
+          r.created_at DESC
+        LIMIT ${pageSize} OFFSET ${offset}
+      `,
+      prisma.$queryRaw<CountRow[]>`
+        SELECT COUNT(*) AS "total"
+        FROM inventory.inventory_reservations r
+        JOIN inventory.parts p ON p.id = r.part_id
+        JOIN inventory.stock_locations loc ON loc.id = r.stock_location_id
+        LEFT JOIN inventory.stock_lots lot ON lot.id = r.stock_lot_id
+        LEFT JOIN work_orders.work_orders wo ON wo.id = r.work_order_id
+        WHERE (${exactStatus ?? null}::text IS NULL OR r.reservation_status = ${exactStatus ?? null})
+          AND (${openOnly}::boolean = false OR r.reservation_status IN ('ACTIVE', 'PARTIALLY_CONSUMED'))
+          AND (${filters?.workOrderId ?? null}::uuid IS NULL OR r.work_order_id = ${filters?.workOrderId ?? null}::uuid)
+          AND (${filters?.partId ?? null}::uuid IS NULL OR r.part_id = ${filters?.partId ?? null}::uuid)
+          AND (
+            ${search ?? null}::text IS NULL
+            OR p.sku ILIKE '%' || ${search ?? null}::text || '%'
+            OR p.name ILIKE '%' || ${search ?? null}::text || '%'
+            OR lot.lot_number ILIKE '%' || ${search ?? null}::text || '%'
+            OR wo.work_order_number ILIKE '%' || ${search ?? null}::text || '%'
+          )
+      `,
+    ]);
+
+    return {
+      items: items.map(toReservationResponse),
+      total: Number(countRows[0]?.total ?? 0),
+      page,
+      pageSize,
+    };
+  },
+
+  async createReservation(input: CreateReservationInput, correlationId: string) {
+    const id = randomUUID();
+    const priority = input.priority ?? 100;
+    return getInventoryPrisma().$transaction(async (tx) => {
+      const lots = await tx.$queryRaw<
+        Array<{
+          id: string;
+          partId: string;
+          stockLocationId: string;
+          lotState: string;
+        }>
+      >`
+        SELECT
+          id::text AS "id",
+          part_id::text AS "partId",
+          stock_location_id::text AS "stockLocationId",
+          lot_state AS "lotState"
+        FROM inventory.stock_lots
+        WHERE id = ${input.stockLotId}::uuid
+        FOR UPDATE
+      `;
+      const lot = lots[0];
+      if (!lot) {
+        throw new ReservationCommandError(404, `Stock lot not found: ${input.stockLotId}`);
+      }
+      if (lot.lotState !== 'AVAILABLE') {
+        throw new ReservationCommandError(409, `Stock lot is not available: ${input.stockLotId}`);
+      }
+
+      const updatedBalances = await tx.$queryRaw<Array<{ id: string }>>`
+        UPDATE inventory.inventory_balances
+        SET
+          quantity_reserved = quantity_reserved + ${input.quantity},
+          updated_at = now(),
+          last_correlation_id = ${correlationId},
+          version = version + 1
+        WHERE stock_lot_id = ${input.stockLotId}::uuid
+          AND quantity_on_hand - quantity_reserved >= ${input.quantity}
+        RETURNING id::text AS "id"
+      `;
+      if (updatedBalances.length === 0) {
+        throw new ReservationCommandError(
+          409,
+          `Insufficient available inventory for lot ${input.stockLotId}.`,
+        );
+      }
+
+      await tx.$executeRaw`
+        INSERT INTO inventory.inventory_reservations (
+          id,
+          part_id,
+          stock_location_id,
+          stock_lot_id,
+          work_order_id,
+          work_order_part_id,
+          reservation_status,
+          reserved_quantity,
+          consumed_quantity,
+          reservation_priority,
+          expires_at,
+          correlation_id
+        )
+        VALUES (
+          ${id}::uuid,
+          ${lot.partId}::uuid,
+          ${lot.stockLocationId}::uuid,
+          ${input.stockLotId}::uuid,
+          ${input.workOrderId ?? null}::uuid,
+          ${input.workOrderPartId ?? null}::uuid,
+          'ACTIVE',
+          ${input.quantity},
+          0,
+          ${priority},
+          ${input.expiresAt ? new Date(input.expiresAt) : null},
+          ${correlationId}
+        )
+      `;
+
+      if (input.workOrderPartId) {
+        await tx.$executeRaw`
+          UPDATE work_orders.work_order_parts
+          SET
+            reserved_quantity = reserved_quantity + ${input.quantity},
+            part_status = 'RESERVED',
+            updated_at = now(),
+            version = version + 1
+          WHERE id = ${input.workOrderPartId}::uuid
+        `;
+      }
+
+      const rows = await queryReservationById(tx, id);
+      return toReservationResponse(rows[0]);
+    });
+  },
+
+  async releaseReservation(id: string, input: AdjustReservationInput, correlationId: string) {
+    return getInventoryPrisma().$transaction(async (tx) => {
+      const reservation = await lockReservationForAction(tx, id);
+      const openQuantity = reservationOpenQuantity(reservation);
+      const quantity = input.quantity ?? openQuantity;
+      validateActionQuantity(quantity, openQuantity, 'release');
+
+      const updatedBalances = await tx.$queryRaw<Array<{ id: string }>>`
+        UPDATE inventory.inventory_balances
+        SET
+          quantity_reserved = quantity_reserved - ${quantity},
+          updated_at = now(),
+          last_correlation_id = ${correlationId},
+          version = version + 1
+        WHERE stock_lot_id = ${reservation.stockLotId}::uuid
+          AND quantity_reserved >= ${quantity}
+        RETURNING id::text AS "id"
+      `;
+      if (updatedBalances.length === 0) {
+        throw new ReservationCommandError(409, 'Inventory balance cannot release that quantity.');
+      }
+
+      const fullRelease = quantity === openQuantity;
+      await tx.$executeRaw`
+        UPDATE inventory.inventory_reservations
+        SET
+          reservation_status = ${
+            fullRelease
+              ? 'RELEASED'
+              : reservation.consumedQuantity > 0
+                ? 'PARTIALLY_CONSUMED'
+                : 'ACTIVE'
+          },
+          reserved_quantity = CASE
+            WHEN ${fullRelease}::boolean THEN reserved_quantity
+            ELSE reserved_quantity - ${quantity}
+          END,
+          updated_at = now(),
+          version = version + 1
+        WHERE id = ${id}::uuid
+      `;
+
+      if (reservation.workOrderPartId) {
+        await tx.$executeRaw`
+          UPDATE work_orders.work_order_parts
+          SET
+            reserved_quantity = GREATEST(reserved_quantity - ${quantity}, 0),
+            part_status = CASE
+              WHEN GREATEST(reserved_quantity - ${quantity}, 0) = 0 THEN 'REQUESTED'
+              ELSE part_status
+            END,
+            updated_at = now(),
+            version = version + 1
+          WHERE id = ${reservation.workOrderPartId}::uuid
+        `;
+      }
+
+      const rows = await queryReservationById(tx, id);
+      return toReservationResponse(rows[0]);
+    });
+  },
+
+  async consumeReservation(id: string, input: AdjustReservationInput, correlationId: string) {
+    return getInventoryPrisma().$transaction(async (tx) => {
+      const reservation = await lockReservationForAction(tx, id);
+      const openQuantity = reservationOpenQuantity(reservation);
+      const quantity = input.quantity ?? openQuantity;
+      validateActionQuantity(quantity, openQuantity, 'consume');
+
+      const updatedBalances = await tx.$queryRaw<Array<{ id: string }>>`
+        UPDATE inventory.inventory_balances
+        SET
+          quantity_on_hand = quantity_on_hand - ${quantity},
+          quantity_reserved = quantity_reserved - ${quantity},
+          quantity_consumed = COALESCE(quantity_consumed, 0) + ${quantity},
+          updated_at = now(),
+          last_correlation_id = ${correlationId},
+          version = version + 1
+        WHERE stock_lot_id = ${reservation.stockLotId}::uuid
+          AND quantity_on_hand >= ${quantity}
+          AND quantity_reserved >= ${quantity}
+        RETURNING id::text AS "id"
+      `;
+      if (updatedBalances.length === 0) {
+        throw new ReservationCommandError(409, 'Inventory balance cannot fulfill that quantity.');
+      }
+
+      const nextConsumed = reservation.consumedQuantity + quantity;
+      const nextStatus =
+        nextConsumed >= reservation.reservedQuantity ? 'CONSUMED' : 'PARTIALLY_CONSUMED';
+      await tx.$executeRaw`
+        UPDATE inventory.inventory_reservations
+        SET
+          consumed_quantity = consumed_quantity + ${quantity},
+          reservation_status = ${nextStatus},
+          updated_at = now(),
+          version = version + 1
+        WHERE id = ${id}::uuid
+      `;
+
+      if (reservation.workOrderPartId) {
+        await tx.$executeRaw`
+          UPDATE work_orders.work_order_parts
+          SET
+            reserved_quantity = GREATEST(reserved_quantity - ${quantity}, 0),
+            consumed_quantity = consumed_quantity + ${quantity},
+            part_status = CASE
+              WHEN consumed_quantity + ${quantity} >= requested_quantity THEN 'CONSUMED'
+              ELSE 'PARTIALLY_CONSUMED'
+            END,
+            updated_at = now(),
+            version = version + 1
+          WHERE id = ${reservation.workOrderPartId}::uuid
+        `;
+      }
+
+      const rows = await queryReservationById(tx, id);
+      return toReservationResponse(rows[0]);
+    });
+  },
+};
+
+type InventorySqlClient = Prisma.TransactionClient | PrismaClient;
+
+interface ActionReservation {
+  id: string;
+  status: ReservationStatus;
+  reservedQuantity: number;
+  consumedQuantity: number;
+  allocatedQuantity: number;
+  stockLotId: string;
+  workOrderPartId: string | null;
+}
+
+async function queryReservationById(
+  db: InventorySqlClient,
+  id: string,
+): Promise<InventoryReservationRow[]> {
+  return db.$queryRaw<InventoryReservationRow[]>`
+    SELECT
+      r.id::text AS "id",
+      r.reservation_status AS "status",
+      r.reserved_quantity AS "reservedQuantity",
+      r.consumed_quantity AS "consumedQuantity",
+      COALESCE(r.allocated_quantity, 0) AS "allocatedQuantity",
+      r.reservation_priority AS "reservationPriority",
+      r.shortage_reason AS "shortageReason",
+      r.expires_at AS "expiresAt",
+      r.created_at AS "createdAt",
+      r.updated_at AS "updatedAt",
+      p.id::text AS "partId",
+      p.sku AS "partSku",
+      p.name AS "partName",
+      p.unit_of_measure AS "unitOfMeasure",
+      loc.id::text AS "stockLocationId",
+      loc.location_name AS "locationName",
+      lot.id::text AS "stockLotId",
+      lot.lot_number AS "lotNumber",
+      lot.serial_number AS "serialNumber",
+      wo.id::text AS "workOrderId",
+      wo.work_order_number AS "workOrderNumber",
+      wo.title AS "workOrderTitle",
+      wop.id::text AS "workOrderPartId"
+    FROM inventory.inventory_reservations r
+    JOIN inventory.parts p ON p.id = r.part_id
+    JOIN inventory.stock_locations loc ON loc.id = r.stock_location_id
+    LEFT JOIN inventory.stock_lots lot ON lot.id = r.stock_lot_id
+    LEFT JOIN work_orders.work_orders wo ON wo.id = r.work_order_id
+    LEFT JOIN work_orders.work_order_parts wop ON wop.id = r.work_order_part_id
+    WHERE r.id = ${id}::uuid
+  `;
+}
+
+async function lockReservationForAction(
+  tx: Prisma.TransactionClient,
+  id: string,
+): Promise<ActionReservation> {
+  const rows = await tx.$queryRaw<
+    Array<{
+      id: string;
+      status: ReservationStatus;
+      reservedQuantity: unknown;
+      consumedQuantity: unknown;
+      allocatedQuantity: unknown;
+      stockLotId: string | null;
+      workOrderPartId: string | null;
+    }>
+  >`
+    SELECT
+      id::text AS "id",
+      reservation_status AS "status",
+      reserved_quantity AS "reservedQuantity",
+      consumed_quantity AS "consumedQuantity",
+      COALESCE(allocated_quantity, 0) AS "allocatedQuantity",
+      stock_lot_id::text AS "stockLotId",
+      work_order_part_id::text AS "workOrderPartId"
+    FROM inventory.inventory_reservations
+    WHERE id = ${id}::uuid
+    FOR UPDATE
+  `;
+  const row = rows[0];
+  if (!row) {
+    throw new ReservationCommandError(404, `Reservation not found: ${id}`);
+  }
+  if (!row.stockLotId) {
+    throw new ReservationCommandError(409, 'Reservation is not tied to a stock lot.');
+  }
+
+  return {
+    id: row.id,
+    status: row.status,
+    reservedQuantity: numberFromDb(row.reservedQuantity),
+    consumedQuantity: numberFromDb(row.consumedQuantity),
+    allocatedQuantity: numberFromDb(row.allocatedQuantity),
+    stockLotId: row.stockLotId,
+    workOrderPartId: row.workOrderPartId,
+  };
+}
+
+function reservationOpenQuantity(reservation: ActionReservation): number {
+  if (reservation.status !== 'ACTIVE' && reservation.status !== 'PARTIALLY_CONSUMED') return 0;
+  return Math.max(
+    reservation.reservedQuantity - reservation.consumedQuantity - reservation.allocatedQuantity,
+    0,
+  );
+}
+
+function validateActionQuantity(quantity: number, openQuantity: number, verb: string): void {
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    throw new ReservationCommandError(
+      422,
+      `Reservation ${verb} quantity must be greater than zero.`,
+    );
+  }
+  if (openQuantity <= 0) {
+    throw new ReservationCommandError(409, 'Reservation has no open quantity.');
+  }
+  if (quantity > openQuantity) {
+    throw new ReservationCommandError(
+      409,
+      `Reservation ${verb} quantity exceeds open quantity (${openQuantity}).`,
+    );
+  }
+}
+
+async function handleReservationCommand(
+  command: Promise<ReturnType<typeof toReservationResponse>>,
+  successStatus = 200,
+) {
+  try {
+    const reservation = await command;
+    return jsonResponse(successStatus, { reservation });
+  } catch (error) {
+    if (error instanceof ReservationCommandError) {
+      return jsonResponse(error.statusCode, { message: error.message });
+    }
+    throw error;
+  }
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function parseOptionalUuid(
+  value: string | undefined,
+  field: string,
+): { value?: string; error?: string } {
+  if (!value?.trim()) return {};
+  const trimmed = value.trim();
+  if (!UUID_PATTERN.test(trimmed)) return { error: `${field} must be a UUID.` };
+  return { value: trimmed };
+}
+
+function parseReservationStatusFilter(value: string | undefined): {
+  value?: ReservationStatusFilter;
+  error?: string;
+} {
+  if (!value?.trim()) return { value: 'OPEN' };
+  const normalized = value.trim().toUpperCase();
+  if (normalized === 'OPEN' || normalized === 'ALL') return { value: normalized };
+  if (RESERVATION_STATUSES.includes(normalized as ReservationStatus)) {
+    return { value: normalized as ReservationStatus };
+  }
+  return { error: `Unsupported reservation status: ${value}` };
+}
+
+function parsePositiveInteger(value: string | undefined, fallback: number): number {
+  if (!value?.trim()) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function parseOptionalAdjustmentBody(
+  event: LambdaEvent,
+): { ok: true; value: AdjustReservationInput } | { ok: false; error: string } {
+  if (!event.body?.trim()) return { ok: true, value: {} };
+  return parseBody<AdjustReservationInput>(event);
+}
+
+function validateCreateReservationInput(input: CreateReservationInput): string | undefined {
+  const stockLotId = parseOptionalUuid(input.stockLotId, 'stockLotId');
+  if (stockLotId.error || !stockLotId.value) return stockLotId.error ?? 'stockLotId is required.';
+  if (!Number.isFinite(input.quantity) || input.quantity <= 0) {
+    return 'quantity must be greater than zero.';
+  }
+  const workOrderId = parseOptionalUuid(input.workOrderId, 'workOrderId');
+  if (workOrderId.error) return workOrderId.error;
+  const workOrderPartId = parseOptionalUuid(input.workOrderPartId, 'workOrderPartId');
+  if (workOrderPartId.error) return workOrderPartId.error;
+  if (input.priority !== undefined && (!Number.isInteger(input.priority) || input.priority < 0)) {
+    return 'priority must be a non-negative integer.';
+  }
+  if (input.expiresAt && Number.isNaN(new Date(input.expiresAt).getTime())) {
+    return 'expiresAt must be a valid date.';
+  }
+  return undefined;
+}
+
+function validateAdjustmentInput(input: AdjustReservationInput, verb: string): string | undefined {
+  if (input.quantity === undefined) return undefined;
+  if (!Number.isFinite(input.quantity) || input.quantity <= 0) {
+    return `Reservation ${verb} quantity must be greater than zero.`;
+  }
+  return undefined;
+}
+
 // ─── List Parts ───────────────────────────────────────────────────────────────
 
 const PART_INCLUDE = {
@@ -128,189 +746,221 @@ const PART_INCLUDE = {
   defaultLocation: { select: { locationName: true } },
 } as const;
 
-export const listPartsHandler = wrapHandler(async (ctx) => {
-  const qs = ctx.event.queryStringParameters ?? {};
-  const search = qs.search;
-  const partState = qs.partState as string | undefined;
-  const category = qs.category as string | undefined;
-  const installStage = qs.installStage as string | undefined;
-  const lifecycleLevel = qs.lifecycleLevel as string | undefined;
-  const manufacturerId = qs.manufacturerId as string | undefined;
-  const defaultVendorId = qs.defaultVendorId as string | undefined;
-  const limit = Math.min(parseInt(qs.limit ?? '100', 10), 1000);
-  const offset = parseInt(qs.offset ?? '0', 10);
+export const listPartsHandler = wrapHandler(
+  async (ctx) => {
+    const qs = ctx.event.queryStringParameters ?? {};
+    const search = qs.search;
+    const partState = qs.partState as string | undefined;
+    const category = qs.category as string | undefined;
+    const installStage = qs.installStage as string | undefined;
+    const lifecycleLevel = qs.lifecycleLevel as string | undefined;
+    const manufacturerId = qs.manufacturerId as string | undefined;
+    const defaultVendorId = qs.defaultVendorId as string | undefined;
+    const limit = Math.min(parseInt(qs.limit ?? '100', 10), 1000);
+    const offset = parseInt(qs.offset ?? '0', 10);
 
-  const where = {
-    ...(partState ? { partState: partState as 'ACTIVE' | 'INACTIVE' | 'DISCONTINUED' } : {}),
-    ...(category
-      ? {
-          category: category as
-            | 'ELECTRONICS' | 'AUDIO' | 'FABRICATION' | 'HARDWARE' | 'SMALL_PARTS' | 'DRIVE_TRAIN',
-        }
-      : {}),
-    ...(installStage
-      ? {
-          installStage: installStage as
-            | 'FABRICATION' | 'FRAME' | 'WIRING' | 'PARTS_PREP' | 'FINAL_ASSEMBLY',
-        }
-      : {}),
-    ...(lifecycleLevel
-      ? {
-          lifecycleLevel: lifecycleLevel as
-            | 'RAW_MATERIAL' | 'RAW_COMPONENT' | 'PREPARED_COMPONENT' | 'ASSEMBLED_COMPONENT',
-        }
-      : {}),
-    ...(manufacturerId ? { manufacturerId } : {}),
-    ...(defaultVendorId ? { defaultVendorId } : {}),
-    ...(search
-      ? {
-          OR: [
-            { sku: { contains: search, mode: 'insensitive' as const } },
-            { name: { contains: search, mode: 'insensitive' as const } },
-            { variant: { contains: search, mode: 'insensitive' as const } },
-            { description: { contains: search, mode: 'insensitive' as const } },
-            { manufacturerPartNumber: { contains: search, mode: 'insensitive' as const } },
-          ],
-        }
-      : {}),
-    deletedAt: null,
-  };
+    const where = {
+      ...(partState ? { partState: partState as 'ACTIVE' | 'INACTIVE' | 'DISCONTINUED' } : {}),
+      ...(category
+        ? {
+            category: category as
+              | 'ELECTRONICS'
+              | 'AUDIO'
+              | 'FABRICATION'
+              | 'HARDWARE'
+              | 'SMALL_PARTS'
+              | 'DRIVE_TRAIN',
+          }
+        : {}),
+      ...(installStage
+        ? {
+            installStage: installStage as
+              | 'FABRICATION'
+              | 'FRAME'
+              | 'WIRING'
+              | 'PARTS_PREP'
+              | 'FINAL_ASSEMBLY',
+          }
+        : {}),
+      ...(lifecycleLevel
+        ? {
+            lifecycleLevel: lifecycleLevel as
+              | 'RAW_MATERIAL'
+              | 'RAW_COMPONENT'
+              | 'PREPARED_COMPONENT'
+              | 'ASSEMBLED_COMPONENT',
+          }
+        : {}),
+      ...(manufacturerId ? { manufacturerId } : {}),
+      ...(defaultVendorId ? { defaultVendorId } : {}),
+      ...(search
+        ? {
+            OR: [
+              { sku: { contains: search, mode: 'insensitive' as const } },
+              { name: { contains: search, mode: 'insensitive' as const } },
+              { variant: { contains: search, mode: 'insensitive' as const } },
+              { description: { contains: search, mode: 'insensitive' as const } },
+              { manufacturerPartNumber: { contains: search, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+      deletedAt: null,
+    };
 
-  const [items, total] = await Promise.all([
-    getInventoryPrisma().part.findMany({
-      where,
-      orderBy: { sku: 'asc' },
-      take: limit,
-      skip: offset,
-      include: PART_INCLUDE,
-    }),
-    getInventoryPrisma().part.count({ where }),
-  ]);
+    const [items, total] = await Promise.all([
+      getInventoryPrisma().part.findMany({
+        where,
+        orderBy: { sku: 'asc' },
+        take: limit,
+        skip: offset,
+        include: PART_INCLUDE,
+      }),
+      getInventoryPrisma().part.count({ where }),
+    ]);
 
-  return jsonResponse(200, { items: items.map(toPartResponse), total, limit, offset });
-}, { requireAuth: false });
+    return jsonResponse(200, { items: items.map(toPartResponse), total, limit, offset });
+  },
+  { requireAuth: false },
+);
 
 // ─── Get Part Transformation Chain ───────────────────────────────────────────
 
-export const getPartChainHandler = wrapHandler(async (ctx) => {
-  const id = ctx.event.pathParameters?.id;
-  if (!id) return jsonResponse(400, { message: 'Part ID is required.' });
+export const getPartChainHandler = wrapHandler(
+  async (ctx) => {
+    const id = ctx.event.pathParameters?.id;
+    if (!id) return jsonResponse(400, { message: 'Part ID is required.' });
 
-  const prisma = getInventoryPrisma();
-  const part = await prisma.part.findFirst({
-    where: { id, deletedAt: null },
-    include: PART_INCLUDE,
-  });
-  if (!part) return jsonResponse(404, { message: `Part not found: ${id}` });
-
-  const ancestors: Array<typeof part> = [];
-  let cursorId = part.producedFromPartId;
-  while (cursorId) {
-    const next = await prisma.part.findFirst({
-      where: { id: cursorId, deletedAt: null },
+    const prisma = getInventoryPrisma();
+    const part = await prisma.part.findFirst({
+      where: { id, deletedAt: null },
       include: PART_INCLUDE,
     });
-    if (!next) break;
-    ancestors.unshift(next);
-    cursorId = next.producedFromPartId;
-  }
+    if (!part) return jsonResponse(404, { message: `Part not found: ${id}` });
 
-  const descendants: Array<typeof part> = [];
-  const toVisit: string[] = [part.id];
-  while (toVisit.length > 0) {
-    const currentId = toVisit.shift()!;
-    const children = await prisma.part.findMany({
-      where: { producedFromPartId: currentId, deletedAt: null },
-      include: PART_INCLUDE,
-      orderBy: { lifecycleLevel: 'asc' },
-    });
-    for (const child of children) {
-      descendants.push(child);
-      toVisit.push(child.id);
+    const ancestors: Array<typeof part> = [];
+    let cursorId = part.producedFromPartId;
+    while (cursorId) {
+      const next = await prisma.part.findFirst({
+        where: { id: cursorId, deletedAt: null },
+        include: PART_INCLUDE,
+      });
+      if (!next) break;
+      ancestors.unshift(next);
+      cursorId = next.producedFromPartId;
     }
-  }
 
-  return jsonResponse(200, {
-    ancestors: ancestors.map((p) => ({ part: toPartResponse(p), producedViaStage: p.producedViaStage ?? undefined })),
-    part: toPartResponse(part),
-    descendants: descendants.map((p) => ({ part: toPartResponse(p), producedViaStage: p.producedViaStage ?? undefined })),
-  });
-}, { requireAuth: false });
+    const descendants: Array<typeof part> = [];
+    const toVisit: string[] = [part.id];
+    while (toVisit.length > 0) {
+      const currentId = toVisit.shift()!;
+      const children = await prisma.part.findMany({
+        where: { producedFromPartId: currentId, deletedAt: null },
+        include: PART_INCLUDE,
+        orderBy: { lifecycleLevel: 'asc' },
+      });
+      for (const child of children) {
+        descendants.push(child);
+        toVisit.push(child.id);
+      }
+    }
+
+    return jsonResponse(200, {
+      ancestors: ancestors.map((p) => ({
+        part: toPartResponse(p),
+        producedViaStage: p.producedViaStage ?? undefined,
+      })),
+      part: toPartResponse(part),
+      descendants: descendants.map((p) => ({
+        part: toPartResponse(p),
+        producedViaStage: p.producedViaStage ?? undefined,
+      })),
+    });
+  },
+  { requireAuth: false },
+);
 
 // ─── Material Plan by Install Stage ──────────────────────────────────────────
 
-export const planMaterialByStageHandler = wrapHandler(async () => {
-  const prisma = getInventoryPrisma();
-  const parts = await prisma.part.findMany({
-    where: { deletedAt: null, partState: 'ACTIVE' },
-    orderBy: { sku: 'asc' },
-    include: PART_INCLUDE,
-  });
+export const planMaterialByStageHandler = wrapHandler(
+  async () => {
+    const prisma = getInventoryPrisma();
+    const parts = await prisma.part.findMany({
+      where: { deletedAt: null, partState: 'ACTIVE' },
+      orderBy: { sku: 'asc' },
+      include: PART_INCLUDE,
+    });
 
-  const STAGE_ORDER = ['FABRICATION', 'FRAME', 'WIRING', 'PARTS_PREP', 'FINAL_ASSEMBLY'] as const;
-  type Stage = (typeof STAGE_ORDER)[number];
+    const STAGE_ORDER = ['FABRICATION', 'FRAME', 'WIRING', 'PARTS_PREP', 'FINAL_ASSEMBLY'] as const;
+    type Stage = (typeof STAGE_ORDER)[number];
 
-  const toLine = (part: (typeof parts)[number]) => {
-    const onHand = (part.stockLots ?? []).length;
-    const reorderPoint = Number(part.reorderPoint);
-    return {
-      part: toPartResponse(part),
-      onHand,
-      reorderPoint,
-      shortfall: Math.max(reorderPoint - onHand, 0),
+    const toLine = (part: (typeof parts)[number]) => {
+      const onHand = (part.stockLots ?? []).length;
+      const reorderPoint = Number(part.reorderPoint);
+      return {
+        part: toPartResponse(part),
+        onHand,
+        reorderPoint,
+        shortfall: Math.max(reorderPoint - onHand, 0),
+      };
     };
-  };
 
-  const byStage = new Map<Stage, ReturnType<typeof toLine>[]>();
-  const unassigned: ReturnType<typeof toLine>[] = [];
-  for (const p of parts) {
-    const line = toLine(p);
-    if (!p.installStage) {
-      unassigned.push(line);
-      continue;
+    const byStage = new Map<Stage, ReturnType<typeof toLine>[]>();
+    const unassigned: ReturnType<typeof toLine>[] = [];
+    for (const p of parts) {
+      const line = toLine(p);
+      if (!p.installStage) {
+        unassigned.push(line);
+        continue;
+      }
+      const arr = byStage.get(p.installStage as Stage) ?? [];
+      arr.push(line);
+      byStage.set(p.installStage as Stage, arr);
     }
-    const arr = byStage.get(p.installStage as Stage) ?? [];
-    arr.push(line);
-    byStage.set(p.installStage as Stage, arr);
-  }
 
-  const groups = STAGE_ORDER.filter((s) => byStage.has(s)).map((stage) => {
-    const lines = (byStage.get(stage) ?? []).sort((a, b) => b.shortfall - a.shortfall || a.part.sku.localeCompare(b.part.sku));
-    return {
-      installStage: stage,
-      lines,
-      totalShortfall: lines.reduce((sum, l) => sum + l.shortfall, 0),
-    };
-  });
+    const groups = STAGE_ORDER.filter((s) => byStage.has(s)).map((stage) => {
+      const lines = (byStage.get(stage) ?? []).sort(
+        (a, b) => b.shortfall - a.shortfall || a.part.sku.localeCompare(b.part.sku),
+      );
+      return {
+        installStage: stage,
+        lines,
+        totalShortfall: lines.reduce((sum, l) => sum + l.shortfall, 0),
+      };
+    });
 
-  return jsonResponse(200, { generatedAt: new Date().toISOString(), groups, unassigned });
-}, { requireAuth: false });
+    return jsonResponse(200, { generatedAt: new Date().toISOString(), groups, unassigned });
+  },
+  { requireAuth: false },
+);
 
 // ─── List Manufacturers ──────────────────────────────────────────────────────
 
-export const listManufacturersHandler = wrapHandler(async (ctx) => {
-  const qs = ctx.event.queryStringParameters ?? {};
-  const state = qs.state as string | undefined;
-  const limit = Math.min(parseInt(qs.limit ?? '200', 10), 500);
-  const offset = parseInt(qs.offset ?? '0', 10);
+export const listManufacturersHandler = wrapHandler(
+  async (ctx) => {
+    const qs = ctx.event.queryStringParameters ?? {};
+    const state = qs.state as string | undefined;
+    const limit = Math.min(parseInt(qs.limit ?? '200', 10), 500);
+    const offset = parseInt(qs.offset ?? '0', 10);
 
-  const where = {
-    ...(state ? { manufacturerState: state as 'ACTIVE' | 'INACTIVE' } : {}),
-    deletedAt: null,
-  };
+    const where = {
+      ...(state ? { manufacturerState: state as 'ACTIVE' | 'INACTIVE' } : {}),
+      deletedAt: null,
+    };
 
-  const [items, total] = await Promise.all([
-    getInventoryPrisma().manufacturer.findMany({
-      where,
-      orderBy: { manufacturerName: 'asc' },
-      take: limit,
-      skip: offset,
-    }),
-    getInventoryPrisma().manufacturer.count({ where }),
-  ]);
+    const [items, total] = await Promise.all([
+      getInventoryPrisma().manufacturer.findMany({
+        where,
+        orderBy: { manufacturerName: 'asc' },
+        take: limit,
+        skip: offset,
+      }),
+      getInventoryPrisma().manufacturer.count({ where }),
+    ]);
 
-  return jsonResponse(200, { items: items.map(toManufacturerResponse), total, limit, offset });
-}, { requireAuth: false });
+    return jsonResponse(200, { items: items.map(toManufacturerResponse), total, limit, offset });
+  },
+  { requireAuth: false },
+);
 
 // ─── Create Manufacturer ─────────────────────────────────────────────────────
 
@@ -321,105 +971,197 @@ interface CreateManufacturerBody {
   notes?: string;
 }
 
-export const createManufacturerHandler = wrapHandler(async (ctx) => {
-  const body = parseBody<CreateManufacturerBody>(ctx.event);
-  if (!body.ok) return jsonResponse(400, { message: body.error });
+export const createManufacturerHandler = wrapHandler(
+  async (ctx) => {
+    const body = parseBody<CreateManufacturerBody>(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
 
-  const { manufacturerCode, name, website, notes } = body.value;
-  if (!manufacturerCode?.trim()) return jsonResponse(422, { message: 'manufacturerCode is required.' });
-  if (!name?.trim()) return jsonResponse(422, { message: 'name is required.' });
+    const { manufacturerCode, name, website, notes } = body.value;
+    if (!manufacturerCode?.trim())
+      return jsonResponse(422, { message: 'manufacturerCode is required.' });
+    if (!name?.trim()) return jsonResponse(422, { message: 'name is required.' });
 
-  const code = manufacturerCode.trim().toUpperCase();
-  const prisma = getInventoryPrisma();
-  const duplicate = await prisma.manufacturer.findFirst({
-    where: {
-      deletedAt: null,
-      OR: [
-        { manufacturerCode: code },
-        { manufacturerName: { equals: name.trim(), mode: 'insensitive' } },
-      ],
-    },
-  });
-  if (duplicate) {
-    return jsonResponse(409, { message: `Manufacturer already exists: ${duplicate.manufacturerName}` });
-  }
+    const code = manufacturerCode.trim().toUpperCase();
+    const prisma = getInventoryPrisma();
+    const duplicate = await prisma.manufacturer.findFirst({
+      where: {
+        deletedAt: null,
+        OR: [
+          { manufacturerCode: code },
+          { manufacturerName: { equals: name.trim(), mode: 'insensitive' } },
+        ],
+      },
+    });
+    if (duplicate) {
+      return jsonResponse(409, {
+        message: `Manufacturer already exists: ${duplicate.manufacturerName}`,
+      });
+    }
 
-  const now = new Date();
-  const created = await prisma.manufacturer.create({
-    data: {
-      id: randomUUID(),
-      manufacturerCode: code,
-      manufacturerName: name.trim(),
-      manufacturerState: 'ACTIVE',
-      website: website?.trim() || null,
-      notes: notes?.trim() || null,
-      createdAt: now,
-      updatedAt: now,
-    },
-  });
+    const now = new Date();
+    const created = await prisma.manufacturer.create({
+      data: {
+        id: randomUUID(),
+        manufacturerCode: code,
+        manufacturerName: name.trim(),
+        manufacturerState: 'ACTIVE',
+        website: website?.trim() || null,
+        notes: notes?.trim() || null,
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
 
-  return jsonResponse(201, { manufacturer: toManufacturerResponse(created) });
-}, { requireAuth: false });
+    return jsonResponse(201, { manufacturer: toManufacturerResponse(created) });
+  },
+  { requireAuth: false },
+);
 
 // ─── List Inventory Lots ─────────────────────────────────────────────────────
 
-export const listLotsHandler = wrapHandler(async (ctx) => {
-  const qs = ctx.event.queryStringParameters ?? {};
-  const page = parseInt(qs.page ?? '1', 10);
-  const pageSize = parseInt(qs.pageSize ?? '50', 10);
+export const listLotsHandler = wrapHandler(
+  async (ctx) => {
+    const qs = ctx.event.queryStringParameters ?? {};
+    const page = parseInt(qs.page ?? '1', 10);
+    const pageSize = parseInt(qs.pageSize ?? '50', 10);
 
-  const result = await inventoryLotQueries.listLots({
-    partNumber: qs.partNumber,
-    warehouseId: qs.warehouseId,
-    status: qs.status,
-    page,
-    pageSize,
-  });
+    const result = await inventoryLotQueries.listLots({
+      partNumber: qs.partNumber,
+      warehouseId: qs.warehouseId,
+      status: qs.status,
+      page,
+      pageSize,
+    });
 
-  return jsonResponse(200, {
-    items: result.items.map(toLotDetailResponse),
-    total: result.total,
-    page: result.page,
-    pageSize: result.pageSize,
-  });
-}, { requireAuth: false });
+    return jsonResponse(200, {
+      items: result.items.map(toLotDetailResponse),
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize,
+    });
+  },
+  { requireAuth: false },
+);
+
+// ─── Inventory Reservations ─────────────────────────────────────────────────
+
+export const listReservationsHandler = wrapHandler(
+  async (ctx) => {
+    const qs = ctx.event.queryStringParameters ?? {};
+    const status = parseReservationStatusFilter(qs.status);
+    if (status.error) return jsonResponse(422, { message: status.error });
+
+    const workOrderId = parseOptionalUuid(qs.workOrderId, 'workOrderId');
+    if (workOrderId.error) return jsonResponse(422, { message: workOrderId.error });
+    const partId = parseOptionalUuid(qs.partId, 'partId');
+    if (partId.error) return jsonResponse(422, { message: partId.error });
+
+    const page = parsePositiveInteger(qs.page, 1);
+    const pageSize = parsePositiveInteger(qs.pageSize, 50);
+    const result = await inventoryReservationQueries.listReservations({
+      status: status.value,
+      workOrderId: workOrderId.value,
+      partId: partId.value,
+      search: qs.search,
+      page,
+      pageSize,
+    });
+
+    return jsonResponse(200, result);
+  },
+  { requireAuth: false },
+);
+
+export const createReservationHandler = wrapHandler(
+  async (ctx) => {
+    const body = parseBody<CreateReservationInput>(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
+
+    const validation = validateCreateReservationInput(body.value);
+    if (validation) return jsonResponse(422, { message: validation });
+
+    return handleReservationCommand(
+      inventoryReservationQueries.createReservation(body.value, ctx.correlationId),
+      201,
+    );
+  },
+  { requireAuth: false },
+);
+
+export const releaseReservationHandler = wrapHandler(
+  async (ctx) => {
+    const id = parseOptionalUuid(ctx.event.pathParameters?.id, 'id');
+    if (id.error || !id.value) return jsonResponse(422, { message: id.error ?? 'id is required.' });
+    const body = parseOptionalAdjustmentBody(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
+    const validation = validateAdjustmentInput(body.value, 'release');
+    if (validation) return jsonResponse(422, { message: validation });
+
+    return handleReservationCommand(
+      inventoryReservationQueries.releaseReservation(id.value, body.value, ctx.correlationId),
+    );
+  },
+  { requireAuth: false },
+);
+
+export const consumeReservationHandler = wrapHandler(
+  async (ctx) => {
+    const id = parseOptionalUuid(ctx.event.pathParameters?.id, 'id');
+    if (id.error || !id.value) return jsonResponse(422, { message: id.error ?? 'id is required.' });
+    const body = parseOptionalAdjustmentBody(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
+    const validation = validateAdjustmentInput(body.value, 'fulfill');
+    if (validation) return jsonResponse(422, { message: validation });
+
+    return handleReservationCommand(
+      inventoryReservationQueries.consumeReservation(id.value, body.value, ctx.correlationId),
+    );
+  },
+  { requireAuth: false },
+);
 
 // ─── List Purchase Orders ────────────────────────────────────────────────────
 
-export const listPurchaseOrdersHandler = wrapHandler(async (ctx) => {
-  const qs = ctx.event.queryStringParameters ?? {};
-  const page = parseInt(qs.page ?? '1', 10);
-  const pageSize = parseInt(qs.pageSize ?? '50', 10);
+export const listPurchaseOrdersHandler = wrapHandler(
+  async (ctx) => {
+    const qs = ctx.event.queryStringParameters ?? {};
+    const page = parseInt(qs.page ?? '1', 10);
+    const pageSize = parseInt(qs.pageSize ?? '50', 10);
 
-  const result = await inventoryPurchaseOrderQueries.listPurchaseOrders({
-    status: qs.status,
-    supplierId: qs.supplierId,
-    page,
-    pageSize,
-  });
+    const result = await inventoryPurchaseOrderQueries.listPurchaseOrders({
+      status: qs.status,
+      supplierId: qs.supplierId,
+      page,
+      pageSize,
+    });
 
-  return jsonResponse(200, {
-    items: result.items.map(toPurchaseOrderResponse),
-    total: result.total,
-    page: result.page,
-    pageSize: result.pageSize,
-  });
-}, { requireAuth: false });
+    return jsonResponse(200, {
+      items: result.items.map(toPurchaseOrderResponse),
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize,
+    });
+  },
+  { requireAuth: false },
+);
 
 // ─── Get Part ─────────────────────────────────────────────────────────────────
 
-export const getPartHandler = wrapHandler(async (ctx) => {
-  const id = ctx.event.pathParameters?.id;
-  if (!id) return jsonResponse(400, { message: 'Part ID is required.' });
+export const getPartHandler = wrapHandler(
+  async (ctx) => {
+    const id = ctx.event.pathParameters?.id;
+    if (!id) return jsonResponse(400, { message: 'Part ID is required.' });
 
-  const part = await getInventoryPrisma().part.findFirst({
-    where: { id, deletedAt: null },
-    include: PART_INCLUDE,
-  });
-  if (!part) return jsonResponse(404, { message: `Part not found: ${id}` });
+    const part = await getInventoryPrisma().part.findFirst({
+      where: { id, deletedAt: null },
+      include: PART_INCLUDE,
+    });
+    if (!part) return jsonResponse(404, { message: `Part not found: ${id}` });
 
-  return jsonResponse(200, { part: toPartResponse(part) });
-}, { requireAuth: false });
+    return jsonResponse(200, { part: toPartResponse(part) });
+  },
+  { requireAuth: false },
+);
 
 // ─── Create Part SKU ──────────────────────────────────────────────────────────
 
@@ -431,65 +1173,128 @@ interface CreatePartBody {
   reorderPoint?: number;
 }
 
-export const createPartHandler = wrapHandler(async (ctx) => {
-  const body = parseBody<CreatePartBody>(ctx.event);
-  if (!body.ok) return jsonResponse(400, { message: body.error });
+export const createPartHandler = wrapHandler(
+  async (ctx) => {
+    const body = parseBody<CreatePartBody>(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
 
-  const { sku, name, description, unitOfMeasure, reorderPoint } = body.value;
+    const { sku, name, description, unitOfMeasure, reorderPoint } = body.value;
 
-  if (!sku?.trim()) return jsonResponse(422, { message: 'sku is required.' });
-  if (!name?.trim()) return jsonResponse(422, { message: 'name is required.' });
-  if (!unitOfMeasure?.trim()) return jsonResponse(422, { message: 'unitOfMeasure is required.' });
+    if (!sku?.trim()) return jsonResponse(422, { message: 'sku is required.' });
+    if (!name?.trim()) return jsonResponse(422, { message: 'name is required.' });
+    if (!unitOfMeasure?.trim()) return jsonResponse(422, { message: 'unitOfMeasure is required.' });
 
-  const normalizedSku = sku.trim().toUpperCase();
-  const existing = await getInventoryPrisma().part.findFirst({ where: { sku: normalizedSku, deletedAt: null } });
-  if (existing) {
-    return jsonResponse(409, { message: `Part SKU already exists: ${normalizedSku}` });
-  }
+    const normalizedSku = sku.trim().toUpperCase();
+    const existing = await getInventoryPrisma().part.findFirst({
+      where: { sku: normalizedSku, deletedAt: null },
+    });
+    if (existing) {
+      return jsonResponse(409, { message: `Part SKU already exists: ${normalizedSku}` });
+    }
 
-  const now = new Date();
-  const part = await getInventoryPrisma().part.create({
-    data: {
-      id: randomUUID(),
-      sku: normalizedSku,
-      name: name.trim(),
-      description: description?.trim() ?? null,
-      unitOfMeasure: unitOfMeasure.trim(),
-      partState: 'ACTIVE',
-      reorderPoint: reorderPoint ?? 0,
-      createdAt: now,
-      updatedAt: now,
-    },
-  });
+    const now = new Date();
+    const part = await getInventoryPrisma().part.create({
+      data: {
+        id: randomUUID(),
+        sku: normalizedSku,
+        name: name.trim(),
+        description: description?.trim() ?? null,
+        unitOfMeasure: unitOfMeasure.trim(),
+        partState: 'ACTIVE',
+        reorderPoint: reorderPoint ?? 0,
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
 
-  return jsonResponse(201, { part: toPartResponse(part) });
-}, { requireAuth: false });
+    return jsonResponse(201, { part: toPartResponse(part) });
+  },
+  { requireAuth: false },
+);
 
 // ─── List Vendors ─────────────────────────────────────────────────────────────
 
-export const listVendorsHandler = wrapHandler(async (ctx) => {
-  const qs = ctx.event.queryStringParameters ?? {};
-  const vendorState = qs.state as string | undefined;
-  const limit = Math.min(parseInt(qs.limit ?? '100', 10), 200);
-  const offset = parseInt(qs.offset ?? '0', 10);
+export const listVendorsHandler = wrapHandler(
+  async (ctx) => {
+    const qs = ctx.event.queryStringParameters ?? {};
+    const vendorState = qs.state as string | undefined;
+    const limit = Math.min(parseInt(qs.limit ?? '100', 10), 200);
+    const offset = parseInt(qs.offset ?? '0', 10);
 
-  const where = {
-    ...(vendorState ? { state: vendorState as 'ACTIVE' | 'ON_HOLD' | 'INACTIVE' } : {}),
-    deletedAt: null,
-  };
+    const where = {
+      ...(vendorState ? { state: vendorState as 'ACTIVE' | 'ON_HOLD' | 'INACTIVE' } : {}),
+      deletedAt: null,
+    };
 
-  const [items, total] = await Promise.all([
-    getInventoryPrisma().vendor.findMany({ where, orderBy: { vendorName: 'asc' }, take: limit, skip: offset }),
-    getInventoryPrisma().vendor.count({ where }),
-  ]);
+    const [items, total] = await Promise.all([
+      getInventoryPrisma().vendor.findMany({
+        where,
+        orderBy: { vendorName: 'asc' },
+        take: limit,
+        skip: offset,
+      }),
+      getInventoryPrisma().vendor.count({ where }),
+    ]);
 
-  return jsonResponse(200, { items: items.map(toVendorResponse), total, limit, offset });
-}, { requireAuth: false });
+    return jsonResponse(200, { items: items.map(toVendorResponse), total, limit, offset });
+  },
+  { requireAuth: false },
+);
 
 // ─── Response mappers ─────────────────────────────────────────────────────────
 
+function numberFromDb(value: unknown): number {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'bigint') return Number(value);
+  if (typeof value === 'string') return Number(value);
+  if (value && typeof value === 'object' && 'toNumber' in value) {
+    return (value as { toNumber(): number }).toNumber();
+  }
+  return 0;
+}
+
+function toReservationResponse(r: InventoryReservationRow) {
+  const reservedQuantity = numberFromDb(r.reservedQuantity);
+  const consumedQuantity = numberFromDb(r.consumedQuantity);
+  const allocatedQuantity = numberFromDb(r.allocatedQuantity);
+  const isOpen = r.status === 'ACTIVE' || r.status === 'PARTIALLY_CONSUMED';
+  const openQuantity = isOpen
+    ? Math.max(reservedQuantity - consumedQuantity - allocatedQuantity, 0)
+    : 0;
+
+  return {
+    id: r.id,
+    status: r.status,
+    reservedQuantity,
+    consumedQuantity,
+    allocatedQuantity,
+    openQuantity,
+    reservationPriority: r.reservationPriority,
+    shortageReason: r.shortageReason ?? undefined,
+    expiresAt: r.expiresAt?.toISOString(),
+    createdAt: r.createdAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
+    partId: r.partId,
+    partSku: r.partSku,
+    partName: r.partName,
+    unitOfMeasure: r.unitOfMeasure,
+    stockLocationId: r.stockLocationId,
+    locationName: r.locationName,
+    stockLotId: r.stockLotId ?? undefined,
+    lotNumber: r.lotNumber ?? r.stockLotId ?? undefined,
+    serialNumber: r.serialNumber ?? undefined,
+    workOrderId: r.workOrderId ?? undefined,
+    workOrderNumber: r.workOrderNumber ?? undefined,
+    workOrderTitle: r.workOrderTitle ?? undefined,
+    workOrderPartId: r.workOrderPartId ?? undefined,
+  };
+}
+
 function toPartResponse(r: {
-  id: string; sku: string; name: string; description: string | null;
+  id: string;
+  sku: string;
+  name: string;
+  description: string | null;
   variant?: string | null;
   color?: string | null;
   category?: string | null;
@@ -501,15 +1306,19 @@ function toPartResponse(r: {
   defaultLocationId?: string | null;
   producedFromPartId?: string | null;
   producedViaStage?: string | null;
-  unitOfMeasure: string; partState: string; reorderPoint: unknown;
-  createdAt: Date; updatedAt: Date;
+  unitOfMeasure: string;
+  partState: string;
+  reorderPoint: unknown;
+  createdAt: Date;
+  updatedAt: Date;
   stockLots?: Array<{ lotState: string; stockLocation?: { locationName: string } | null }>;
   manufacturer?: { manufacturerName: string } | null;
   defaultVendor?: { vendorName: string } | null;
   defaultLocation?: { locationName: string } | null;
 }) {
-  const availableLots = r.stockLots?.filter(l => l.lotState === 'AVAILABLE') ?? [];
-  const location = r.defaultLocation?.locationName ?? availableLots[0]?.stockLocation?.locationName ?? undefined;
+  const availableLots = r.stockLots?.filter((l) => l.lotState === 'AVAILABLE') ?? [];
+  const location =
+    r.defaultLocation?.locationName ?? availableLots[0]?.stockLocation?.locationName ?? undefined;
   return {
     id: r.id,
     sku: r.sku,
@@ -562,9 +1371,16 @@ function toManufacturerResponse(r: {
 }
 
 function toVendorResponse(r: {
-  id: string; vendorCode: string; vendorName: string; vendorState: string;
-  email: string | null; phone: string | null; leadTimeDays: number | null;
-  paymentTerms: string | null; createdAt: Date; updatedAt: Date;
+  id: string;
+  vendorCode: string;
+  vendorName: string;
+  vendorState: string;
+  email: string | null;
+  phone: string | null;
+  leadTimeDays: number | null;
+  paymentTerms: string | null;
+  createdAt: Date;
+  updatedAt: Date;
 }) {
   return {
     id: r.id,
@@ -591,7 +1407,13 @@ function toLotDetailResponse(r: {
   updatedAt: Date;
   part: { sku: string; name: string };
   stockLocation: { locationName: string };
+  balance?: InventoryLotBalanceRow;
 }) {
+  const quantityOnHand = numberFromDb(r.balance?.quantityOnHand);
+  const quantityReserved = numberFromDb(r.balance?.quantityReserved);
+  const quantityAllocated = numberFromDb(r.balance?.quantityAllocated);
+  const quantityConsumed = numberFromDb(r.balance?.quantityConsumed);
+
   return {
     id: r.id,
     lotNumber: r.lotNumber ?? r.id,
@@ -600,6 +1422,11 @@ function toLotDetailResponse(r: {
     partSku: r.part.sku,
     partName: r.part.name,
     locationName: r.stockLocation.locationName,
+    quantityOnHand,
+    quantityReserved,
+    quantityAllocated,
+    quantityConsumed,
+    quantityAvailable: Math.max(quantityOnHand - quantityReserved, 0),
     receivedAt: r.receivedAt.toISOString(),
     expiresAt: r.expiresAt?.toISOString(),
     createdAt: r.createdAt.toISOString(),

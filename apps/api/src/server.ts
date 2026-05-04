@@ -36,6 +36,10 @@ import {
   listPurchaseOrdersHandler,
   createManufacturerHandler,
   planMaterialByStageHandler,
+  listReservationsHandler,
+  createReservationHandler,
+  releaseReservationHandler,
+  consumeReservationHandler,
 } from './lambda/inventory/handlers.js';
 import {
   listTasksHandler,
@@ -224,6 +228,7 @@ async function route(
   const migrationBatchMatch = pathname.match(/^\/migration\/batches\/([^/]+)/);
   const customerMatch = pathname.match(/^\/identity\/customers\/([^/]+)/);
   const partMatch = pathname.match(/^\/inventory\/parts\/([^/]+)(?:\/([^/]+))?/);
+  const inventoryReservationMatch = pathname.match(/^\/inventory\/reservations\/([^/]+)\/([^/]+)$/);
   const taskMatch = pathname.match(/^\/tickets\/work-orders\/([^/]+)\/tasks(?:\/([^/]+))?/);
   const reworkMatch = pathname.match(/^\/tickets\/work-orders\/([^/]+)\/rework/);
   const qcMatch = pathname.match(/^\/tickets\/work-orders\/([^/]+)\/qc-gates/);
@@ -291,6 +296,14 @@ async function route(
     result = await listPartsHandler(event);
   } else if (pathname === '/inventory/lots' && method === 'GET') {
     result = await listLotsHandler(event);
+  } else if (pathname === '/inventory/reservations' && method === 'GET') {
+    result = await listReservationsHandler(event);
+  } else if (pathname === '/inventory/reservations' && method === 'POST') {
+    result = await createReservationHandler(event);
+  } else if (inventoryReservationMatch && inventoryReservationMatch[2] === 'release' && method === 'PATCH') {
+    result = await releaseReservationHandler({ ...event, pathParameters: { id: inventoryReservationMatch[1] } });
+  } else if (inventoryReservationMatch && inventoryReservationMatch[2] === 'consume' && method === 'PATCH') {
+    result = await consumeReservationHandler({ ...event, pathParameters: { id: inventoryReservationMatch[1] } });
   } else if (pathname === '/inventory/parts' && method === 'POST') {
     result = await createPartHandler(event);
   } else if (pathname === '/inventory/planning/material-by-stage' && method === 'GET') {

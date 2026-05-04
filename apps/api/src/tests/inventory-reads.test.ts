@@ -1,11 +1,45 @@
 import assert from 'node:assert/strict';
 import test, { mock } from 'node:test';
 import {
+  consumeReservationHandler,
+  createReservationHandler,
   inventoryLotQueries,
   inventoryPurchaseOrderQueries,
+  inventoryReservationQueries,
   listLotsHandler,
   listPurchaseOrdersHandler,
+  listReservationsHandler,
+  releaseReservationHandler,
 } from '../lambda/inventory/handlers.js';
+
+const STOCK_LOT_ID = '00000000-0000-4000-8000-000000000001';
+const WORK_ORDER_ID = '00000000-0000-4000-8000-000000000002';
+const WORK_ORDER_PART_ID = '00000000-0000-4000-8000-000000000003';
+const RESERVATION_ID = '00000000-0000-4000-8000-000000000004';
+const PART_ID = '00000000-0000-4000-8000-000000000005';
+
+const reservationPayload = {
+  id: RESERVATION_ID,
+  status: 'ACTIVE' as const,
+  reservedQuantity: 2,
+  consumedQuantity: 0,
+  allocatedQuantity: 0,
+  openQuantity: 2,
+  reservationPriority: 100,
+  createdAt: '2026-05-01T12:00:00.000Z',
+  updatedAt: '2026-05-01T12:00:00.000Z',
+  partId: PART_ID,
+  partSku: 'BRK-001',
+  partName: 'Brake Pad',
+  unitOfMeasure: 'EA',
+  stockLocationId: '00000000-0000-4000-8000-000000000006',
+  locationName: 'Main Warehouse',
+  stockLotId: STOCK_LOT_ID,
+  lotNumber: 'LOT-100',
+  workOrderId: WORK_ORDER_ID,
+  workOrderNumber: 'WO-100',
+  workOrderPartId: WORK_ORDER_PART_ID,
+};
 
 // ─── List Lots ────────────────────────────────────────────────────────────────
 
@@ -100,46 +134,201 @@ test('listLotsHandler defaults pagination when no query params provided', async 
   }
 });
 
+// ─── Inventory Reservations ─────────────────────────────────────────────────
+
+test('listReservationsHandler forwards filters to the reservation query layer', async () => {
+  const listReservationsMock = mock.method(
+    inventoryReservationQueries,
+    'listReservations',
+    async () => ({
+      items: [reservationPayload],
+      total: 1,
+      page: 2,
+      pageSize: 25,
+    }),
+  );
+
+  try {
+    const response = await listReservationsHandler({
+      httpMethod: 'GET',
+      queryStringParameters: {
+        status: 'ALL',
+        workOrderId: WORK_ORDER_ID,
+        partId: PART_ID,
+        search: 'BRK',
+        page: '2',
+        pageSize: '25',
+      },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(listReservationsMock.mock.calls.length, 1);
+
+    const callArgs = listReservationsMock.mock.calls[0].arguments[0] as {
+      status?: string;
+      workOrderId?: string;
+      partId?: string;
+      search?: string;
+      page?: number;
+      pageSize?: number;
+    };
+    assert.equal(callArgs.status, 'ALL');
+    assert.equal(callArgs.workOrderId, WORK_ORDER_ID);
+    assert.equal(callArgs.partId, PART_ID);
+    assert.equal(callArgs.search, 'BRK');
+    assert.equal(callArgs.page, 2);
+    assert.equal(callArgs.pageSize, 25);
+
+    const payload = JSON.parse(response.body) as {
+      items: Array<{ id: string; partSku: string; openQuantity: number }>;
+      total: number;
+    };
+    assert.equal(payload.total, 1);
+    assert.equal(payload.items[0].id, RESERVATION_ID);
+    assert.equal(payload.items[0].partSku, 'BRK-001');
+    assert.equal(payload.items[0].openQuantity, 2);
+  } finally {
+    listReservationsMock.mock.restore();
+  }
+});
+
+test('createReservationHandler validates and creates a reservation', async () => {
+  const createReservationMock = mock.method(
+    inventoryReservationQueries,
+    'createReservation',
+    async () => reservationPayload,
+  );
+
+  try {
+    const response = await createReservationHandler({
+      httpMethod: 'POST',
+      headers: { 'x-correlation-id': 'test-correlation' },
+      body: JSON.stringify({
+        stockLotId: STOCK_LOT_ID,
+        quantity: 2,
+        workOrderId: WORK_ORDER_ID,
+        workOrderPartId: WORK_ORDER_PART_ID,
+      }),
+    });
+
+    assert.equal(response.statusCode, 201);
+    assert.equal(createReservationMock.mock.calls.length, 1);
+    assert.deepEqual(createReservationMock.mock.calls[0].arguments[0], {
+      stockLotId: STOCK_LOT_ID,
+      quantity: 2,
+      workOrderId: WORK_ORDER_ID,
+      workOrderPartId: WORK_ORDER_PART_ID,
+    });
+    assert.equal(createReservationMock.mock.calls[0].arguments[1], 'test-correlation');
+
+    const payload = JSON.parse(response.body) as { reservation: { id: string; status: string } };
+    assert.equal(payload.reservation.id, RESERVATION_ID);
+    assert.equal(payload.reservation.status, 'ACTIVE');
+  } finally {
+    createReservationMock.mock.restore();
+  }
+});
+
+test('createReservationHandler rejects invalid reservation quantities', async () => {
+  const createReservationMock = mock.method(
+    inventoryReservationQueries,
+    'createReservation',
+    async () => reservationPayload,
+  );
+
+  try {
+    const response = await createReservationHandler({
+      httpMethod: 'POST',
+      body: JSON.stringify({ stockLotId: STOCK_LOT_ID, quantity: 0 }),
+    });
+
+    assert.equal(response.statusCode, 422);
+    assert.equal(createReservationMock.mock.calls.length, 0);
+  } finally {
+    createReservationMock.mock.restore();
+  }
+});
+
+test('releaseReservationHandler and consumeReservationHandler dispatch reservation actions', async () => {
+  const releaseReservationMock = mock.method(
+    inventoryReservationQueries,
+    'releaseReservation',
+    async () => ({ ...reservationPayload, status: 'RELEASED' as const, openQuantity: 0 }),
+  );
+  const consumeReservationMock = mock.method(
+    inventoryReservationQueries,
+    'consumeReservation',
+    async () => ({
+      ...reservationPayload,
+      status: 'CONSUMED' as const,
+      consumedQuantity: 2,
+      openQuantity: 0,
+    }),
+  );
+
+  try {
+    const releaseResponse = await releaseReservationHandler({
+      httpMethod: 'PATCH',
+      headers: { 'x-correlation-id': 'release-correlation' },
+      pathParameters: { id: RESERVATION_ID },
+      body: JSON.stringify({ quantity: 1 }),
+    });
+    const consumeResponse = await consumeReservationHandler({
+      httpMethod: 'PATCH',
+      headers: { 'x-correlation-id': 'consume-correlation' },
+      pathParameters: { id: RESERVATION_ID },
+    });
+
+    assert.equal(releaseResponse.statusCode, 200);
+    assert.equal(consumeResponse.statusCode, 200);
+    assert.equal(releaseReservationMock.mock.calls[0].arguments[0], RESERVATION_ID);
+    assert.deepEqual(releaseReservationMock.mock.calls[0].arguments[1], { quantity: 1 });
+    assert.equal(releaseReservationMock.mock.calls[0].arguments[2], 'release-correlation');
+    assert.equal(consumeReservationMock.mock.calls[0].arguments[0], RESERVATION_ID);
+    assert.deepEqual(consumeReservationMock.mock.calls[0].arguments[1], {});
+    assert.equal(consumeReservationMock.mock.calls[0].arguments[2], 'consume-correlation');
+  } finally {
+    releaseReservationMock.mock.restore();
+    consumeReservationMock.mock.restore();
+  }
+});
+
 // ─── List Purchase Orders ─────────────────────────────────────────────────────
 
 test('listPurchaseOrdersHandler returns paginated purchase orders', async () => {
-  const listPoMock = mock.method(
-    inventoryPurchaseOrderQueries,
-    'listPurchaseOrders',
-    async () => ({
-      items: [
-        {
-          id: 'po-1',
-          poNumber: 'PO-2026-001',
-          vendorId: 'vendor-1',
-          purchaseOrderState: 'SENT',
-          orderedAt: new Date('2026-03-01T12:00:00.000Z'),
-          expectedAt: new Date('2026-03-15T12:00:00.000Z'),
-          sentAt: new Date('2026-03-02T10:00:00.000Z'),
-          closedAt: null,
-          notes: 'Urgent order',
-          createdAt: new Date('2026-03-01T12:00:00.000Z'),
-          updatedAt: new Date('2026-03-02T10:00:00.000Z'),
-          vendor: { vendorName: 'Acme Parts', vendorCode: 'ACME' },
-          lines: [
-            {
-              id: 'line-1',
-              lineNumber: 1,
-              partId: 'part-1',
-              orderedQuantity: '10.000',
-              receivedQuantity: '0.000',
-              rejectedQuantity: '0.000',
-              unitCost: '25.5000',
-              lineState: 'OPEN',
-            },
-          ],
-        },
-      ],
-      total: 1,
-      page: 1,
-      pageSize: 50,
-    }),
-  );
+  const listPoMock = mock.method(inventoryPurchaseOrderQueries, 'listPurchaseOrders', async () => ({
+    items: [
+      {
+        id: 'po-1',
+        poNumber: 'PO-2026-001',
+        vendorId: 'vendor-1',
+        purchaseOrderState: 'SENT',
+        orderedAt: new Date('2026-03-01T12:00:00.000Z'),
+        expectedAt: new Date('2026-03-15T12:00:00.000Z'),
+        sentAt: new Date('2026-03-02T10:00:00.000Z'),
+        closedAt: null,
+        notes: 'Urgent order',
+        createdAt: new Date('2026-03-01T12:00:00.000Z'),
+        updatedAt: new Date('2026-03-02T10:00:00.000Z'),
+        vendor: { vendorName: 'Acme Parts', vendorCode: 'ACME' },
+        lines: [
+          {
+            id: 'line-1',
+            lineNumber: 1,
+            partId: 'part-1',
+            orderedQuantity: '10.000',
+            receivedQuantity: '0.000',
+            rejectedQuantity: '0.000',
+            unitCost: '25.5000',
+            lineState: 'OPEN',
+          },
+        ],
+      },
+    ],
+    total: 1,
+    page: 1,
+    pageSize: 50,
+  }));
 
   try {
     const response = await listPurchaseOrdersHandler({
@@ -189,16 +378,12 @@ test('listPurchaseOrdersHandler returns paginated purchase orders', async () => 
 });
 
 test('listPurchaseOrdersHandler returns empty page when no orders match', async () => {
-  const listPoMock = mock.method(
-    inventoryPurchaseOrderQueries,
-    'listPurchaseOrders',
-    async () => ({
-      items: [],
-      total: 0,
-      page: 1,
-      pageSize: 50,
-    }),
-  );
+  const listPoMock = mock.method(inventoryPurchaseOrderQueries, 'listPurchaseOrders', async () => ({
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 50,
+  }));
 
   try {
     const response = await listPurchaseOrdersHandler({ httpMethod: 'GET' });

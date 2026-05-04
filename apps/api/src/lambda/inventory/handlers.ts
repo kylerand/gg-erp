@@ -97,6 +97,275 @@ export const inventoryLotQueries = {
       pageSize,
     };
   },
+
+  async receivePurchaseOrderLine(input: ReceiveInventoryLotInput, correlationId: string) {
+    const acceptedQuantity = input.quantity;
+    const rejectedQuantity = input.rejectedQuantity ?? 0;
+    const receivedAt = input.receivedAt ? new Date(input.receivedAt) : new Date();
+    const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null;
+    const lotId = randomUUID();
+    const ledgerEntryId = randomUUID();
+
+    return getInventoryPrisma().$transaction(async (tx) => {
+      const lines = await tx.$queryRaw<PurchaseOrderReceiptLineRow[]>`
+        SELECT
+          pol.id::text AS "id",
+          pol.purchase_order_id::text AS "purchaseOrderId",
+          pol.part_id::text AS "partId",
+          pol.ordered_quantity AS "orderedQuantity",
+          pol.received_quantity AS "receivedQuantity",
+          pol.rejected_quantity AS "rejectedQuantity",
+          pol.unit_cost AS "unitCost",
+          pol.line_state AS "lineState",
+          po.purchase_order_state AS "purchaseOrderState",
+          p.sku AS "partSku",
+          p.name AS "partName",
+          p.default_location_id::text AS "partDefaultLocationId"
+        FROM inventory.purchase_order_lines pol
+        JOIN inventory.purchase_orders po ON po.id = pol.purchase_order_id
+        JOIN inventory.parts p ON p.id = pol.part_id
+        WHERE pol.id = ${input.purchaseOrderLineId}::uuid
+        FOR UPDATE OF pol, po
+      `;
+      const line = lines[0];
+      if (!line) {
+        throw new ReceivingCommandError(
+          404,
+          `Purchase order line not found: ${input.purchaseOrderLineId}`,
+        );
+      }
+
+      if (!['APPROVED', 'SENT', 'PARTIALLY_RECEIVED'].includes(line.purchaseOrderState)) {
+        throw new ReceivingCommandError(
+          409,
+          `Purchase order is not receivable in ${line.purchaseOrderState} state.`,
+        );
+      }
+
+      const openQuantity = Math.max(
+        numberFromDb(line.orderedQuantity) -
+          numberFromDb(line.receivedQuantity) -
+          numberFromDb(line.rejectedQuantity),
+        0,
+      );
+      if (openQuantity <= 0) {
+        throw new ReceivingCommandError(409, 'Purchase order line has no open quantity.');
+      }
+      if (acceptedQuantity + rejectedQuantity > openQuantity) {
+        throw new ReceivingCommandError(
+          409,
+          `Receipt quantity exceeds open quantity (${openQuantity}).`,
+        );
+      }
+
+      const stockLocation = await resolveReceiptStockLocation(
+        tx,
+        input.stockLocationId ?? line.partDefaultLocationId ?? undefined,
+      );
+      if (!stockLocation) {
+        throw new ReceivingCommandError(
+          409,
+          'No active stock location is available for receiving.',
+        );
+      }
+
+      const lotNumber =
+        input.lotNumber?.trim() ||
+        `RCV-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${lotId.slice(0, 8)}`;
+      const metadata = {
+        source: 'purchase_order_receipt',
+        purchaseOrderId: line.purchaseOrderId,
+        purchaseOrderLineId: line.id,
+      };
+
+      await tx.$executeRaw`
+        INSERT INTO inventory.stock_lots (
+          id,
+          part_id,
+          stock_location_id,
+          lot_number,
+          serial_number,
+          lot_state,
+          received_at,
+          expires_at,
+          metadata,
+          created_at,
+          updated_at,
+          version
+        )
+        VALUES (
+          ${lotId}::uuid,
+          ${line.partId}::uuid,
+          ${stockLocation.id}::uuid,
+          ${lotNumber},
+          ${input.serialNumber?.trim() || null},
+          'AVAILABLE',
+          ${receivedAt},
+          ${expiresAt}::date,
+          ${JSON.stringify(metadata)}::jsonb,
+          now(),
+          now(),
+          0
+        )
+      `;
+
+      await tx.$executeRaw`
+        INSERT INTO inventory.inventory_ledger_entries (
+          id,
+          part_id,
+          stock_location_id,
+          stock_lot_id,
+          movement_type,
+          quantity_delta,
+          unit_cost,
+          value_delta,
+          reason_code,
+          source_document_type,
+          source_document_id,
+          correlation_id,
+          created_at
+        )
+        VALUES (
+          ${ledgerEntryId}::uuid,
+          ${line.partId}::uuid,
+          ${stockLocation.id}::uuid,
+          ${lotId}::uuid,
+          'RECEIPT',
+          ${acceptedQuantity},
+          ${numberFromDb(line.unitCost)},
+          ${acceptedQuantity * numberFromDb(line.unitCost)},
+          'PURCHASE_ORDER_RECEIPT',
+          'PURCHASE_ORDER_LINE',
+          ${line.id},
+          ${correlationId},
+          now()
+        )
+      `;
+
+      await tx.$executeRaw`
+        INSERT INTO inventory.inventory_balances (
+          id,
+          part_id,
+          stock_location_id,
+          stock_lot_id,
+          quantity_on_hand,
+          quantity_reserved,
+          quantity_allocated,
+          quantity_consumed,
+          last_ledger_entry_id,
+          updated_at,
+          last_correlation_id,
+          version
+        )
+        VALUES (
+          ${randomUUID()}::uuid,
+          ${line.partId}::uuid,
+          ${stockLocation.id}::uuid,
+          ${lotId}::uuid,
+          ${acceptedQuantity},
+          0,
+          0,
+          0,
+          ${ledgerEntryId}::uuid,
+          now(),
+          ${correlationId},
+          0
+        )
+      `;
+
+      await tx.$executeRaw`
+        UPDATE inventory.purchase_order_lines
+        SET
+          received_quantity = received_quantity + ${acceptedQuantity},
+          rejected_quantity = rejected_quantity + ${rejectedQuantity},
+          line_state = CASE
+            WHEN received_quantity + rejected_quantity + ${acceptedQuantity + rejectedQuantity} >= ordered_quantity
+              THEN 'RECEIVED'
+            ELSE 'PARTIALLY_RECEIVED'
+          END,
+          updated_at = now(),
+          correlation_id = ${correlationId},
+          version = version + 1
+        WHERE id = ${line.id}::uuid
+      `;
+
+      await tx.$executeRaw`
+        WITH line_rollup AS (
+          SELECT
+            bool_and(received_quantity + rejected_quantity >= ordered_quantity) AS all_complete,
+            bool_or(received_quantity + rejected_quantity > 0) AS any_received
+          FROM inventory.purchase_order_lines
+          WHERE purchase_order_id = ${line.purchaseOrderId}::uuid
+        )
+        UPDATE inventory.purchase_orders po
+        SET
+          purchase_order_state = CASE
+            WHEN line_rollup.all_complete THEN 'RECEIVED'::inventory."PurchaseOrderState"
+            WHEN line_rollup.any_received THEN 'PARTIALLY_RECEIVED'::inventory."PurchaseOrderState"
+            ELSE po.purchase_order_state
+          END,
+          closed_at = CASE WHEN line_rollup.all_complete THEN now() ELSE po.closed_at END,
+          updated_at = now(),
+          correlation_id = ${correlationId},
+          version = po.version + 1
+        FROM line_rollup
+        WHERE po.id = ${line.purchaseOrderId}::uuid
+      `;
+
+      const lot = await tx.stockLot.findUnique({
+        where: { id: lotId },
+        include: {
+          part: { select: { sku: true, name: true } },
+          stockLocation: { select: { locationName: true } },
+        },
+      });
+      if (!lot) {
+        throw new ReceivingCommandError(500, 'Received lot could not be reloaded.');
+      }
+
+      const balanceRows = await tx.$queryRaw<InventoryLotBalanceRow[]>`
+        SELECT
+          stock_lot_id::text AS "stockLotId",
+          COALESCE(SUM(quantity_on_hand), 0) AS "quantityOnHand",
+          COALESCE(SUM(quantity_reserved), 0) AS "quantityReserved",
+          COALESCE(SUM(quantity_allocated), 0) AS "quantityAllocated",
+          COALESCE(SUM(quantity_consumed), 0) AS "quantityConsumed"
+        FROM inventory.inventory_balances
+        WHERE stock_lot_id = ${lotId}::uuid
+        GROUP BY stock_lot_id
+      `;
+
+      const receiptRows = await tx.$queryRaw<
+        Array<{
+          purchaseOrderState: string;
+          lineState: string;
+          receivedQuantity: unknown;
+          rejectedQuantity: unknown;
+        }>
+      >`
+        SELECT
+          po.purchase_order_state AS "purchaseOrderState",
+          pol.line_state AS "lineState",
+          pol.received_quantity AS "receivedQuantity",
+          pol.rejected_quantity AS "rejectedQuantity"
+        FROM inventory.purchase_order_lines pol
+        JOIN inventory.purchase_orders po ON po.id = pol.purchase_order_id
+        WHERE pol.id = ${line.id}::uuid
+      `;
+      const receipt = receiptRows[0];
+
+      return {
+        lot: toLotDetailResponse({ ...lot, balance: balanceRows[0] }),
+        purchaseOrderLine: {
+          id: line.id,
+          lineState: receipt?.lineState ?? line.lineState,
+          receivedQuantity: numberFromDb(receipt?.receivedQuantity),
+          rejectedQuantity: numberFromDb(receipt?.rejectedQuantity),
+        },
+        purchaseOrderState: receipt?.purchaseOrderState ?? line.purchaseOrderState,
+      };
+    });
+  },
 };
 
 export const inventoryPurchaseOrderQueries = {
@@ -131,7 +400,19 @@ export const inventoryPurchaseOrderQueries = {
         where,
         include: {
           vendor: { select: { vendorName: true, vendorCode: true } },
-          lines: true,
+          lines: {
+            include: {
+              part: {
+                select: {
+                  sku: true,
+                  name: true,
+                  defaultLocationId: true,
+                  defaultLocation: { select: { locationName: true } },
+                },
+              },
+            },
+            orderBy: { lineNumber: 'asc' },
+          },
         },
         orderBy: { orderedAt: 'desc' },
         skip: (page - 1) * pageSize,
@@ -216,7 +497,42 @@ interface AdjustReservationInput {
   quantity?: number;
 }
 
+interface ReceiveInventoryLotInput {
+  purchaseOrderLineId: string;
+  quantity: number;
+  rejectedQuantity?: number;
+  stockLocationId?: string;
+  lotNumber?: string;
+  serialNumber?: string;
+  receivedAt?: string;
+  expiresAt?: string;
+}
+
+interface PurchaseOrderReceiptLineRow {
+  id: string;
+  purchaseOrderId: string;
+  partId: string;
+  orderedQuantity: unknown;
+  receivedQuantity: unknown;
+  rejectedQuantity: unknown;
+  unitCost: unknown;
+  lineState: string;
+  purchaseOrderState: string;
+  partSku: string;
+  partName: string;
+  partDefaultLocationId: string | null;
+}
+
 class ReservationCommandError extends Error {
+  constructor(
+    readonly statusCode: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+class ReceivingCommandError extends Error {
   constructor(
     readonly statusCode: number,
     message: string,
@@ -669,6 +985,54 @@ async function handleReservationCommand(
   }
 }
 
+async function handleReceivingCommand(
+  command: Promise<{
+    lot: ReturnType<typeof toLotDetailResponse>;
+    purchaseOrderLine: {
+      id: string;
+      lineState: string;
+      receivedQuantity: number;
+      rejectedQuantity: number;
+    };
+    purchaseOrderState: string;
+  }>,
+) {
+  try {
+    const receipt = await command;
+    return jsonResponse(201, receipt);
+  } catch (error) {
+    if (error instanceof ReceivingCommandError) {
+      return jsonResponse(error.statusCode, { message: error.message });
+    }
+    throw error;
+  }
+}
+
+async function resolveReceiptStockLocation(
+  db: InventorySqlClient,
+  preferredLocationId?: string,
+): Promise<{ id: string; locationName: string } | undefined> {
+  if (preferredLocationId) {
+    const rows = await db.$queryRaw<Array<{ id: string; locationName: string }>>`
+      SELECT id::text AS "id", location_name AS "locationName"
+      FROM inventory.stock_locations
+      WHERE id = ${preferredLocationId}::uuid
+        AND deleted_at IS NULL
+      LIMIT 1
+    `;
+    return rows[0];
+  }
+
+  const rows = await db.$queryRaw<Array<{ id: string; locationName: string }>>`
+    SELECT id::text AS "id", location_name AS "locationName"
+    FROM inventory.stock_locations
+    WHERE deleted_at IS NULL
+    ORDER BY is_pickable DESC, location_code ASC
+    LIMIT 1
+  `;
+  return rows[0];
+}
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function parseOptionalUuid(
@@ -719,6 +1083,31 @@ function validateCreateReservationInput(input: CreateReservationInput): string |
   if (workOrderPartId.error) return workOrderPartId.error;
   if (input.priority !== undefined && (!Number.isInteger(input.priority) || input.priority < 0)) {
     return 'priority must be a non-negative integer.';
+  }
+  if (input.expiresAt && Number.isNaN(new Date(input.expiresAt).getTime())) {
+    return 'expiresAt must be a valid date.';
+  }
+  return undefined;
+}
+
+function validateReceiveInventoryLotInput(input: ReceiveInventoryLotInput): string | undefined {
+  const purchaseOrderLineId = parseOptionalUuid(input.purchaseOrderLineId, 'purchaseOrderLineId');
+  if (purchaseOrderLineId.error || !purchaseOrderLineId.value) {
+    return purchaseOrderLineId.error ?? 'purchaseOrderLineId is required.';
+  }
+  const stockLocationId = parseOptionalUuid(input.stockLocationId, 'stockLocationId');
+  if (stockLocationId.error) return stockLocationId.error;
+  if (!Number.isFinite(input.quantity) || input.quantity <= 0) {
+    return 'quantity must be greater than zero.';
+  }
+  if (
+    input.rejectedQuantity !== undefined &&
+    (!Number.isFinite(input.rejectedQuantity) || input.rejectedQuantity < 0)
+  ) {
+    return 'rejectedQuantity must be zero or greater.';
+  }
+  if (input.receivedAt && Number.isNaN(new Date(input.receivedAt).getTime())) {
+    return 'receivedAt must be a valid date.';
   }
   if (input.expiresAt && Number.isNaN(new Date(input.expiresAt).getTime())) {
     return 'expiresAt must be a valid date.';
@@ -1039,6 +1428,21 @@ export const listLotsHandler = wrapHandler(
       page: result.page,
       pageSize: result.pageSize,
     });
+  },
+  { requireAuth: false },
+);
+
+export const receiveInventoryLotHandler = wrapHandler(
+  async (ctx) => {
+    const body = parseBody<ReceiveInventoryLotInput>(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
+
+    const validation = validateReceiveInventoryLotInput(body.value);
+    if (validation) return jsonResponse(422, { message: validation });
+
+    return handleReceivingCommand(
+      inventoryLotQueries.receivePurchaseOrderLine(body.value, ctx.correlationId),
+    );
   },
   { requireAuth: false },
 );
@@ -1451,6 +1855,12 @@ function toPurchaseOrderResponse(r: {
     id: string;
     lineNumber: number;
     partId: string;
+    part?: {
+      sku: string;
+      name: string;
+      defaultLocationId: string | null;
+      defaultLocation: { locationName: string } | null;
+    };
     orderedQuantity: unknown;
     receivedQuantity: unknown;
     rejectedQuantity: unknown;
@@ -1475,9 +1885,17 @@ function toPurchaseOrderResponse(r: {
       id: l.id,
       lineNumber: l.lineNumber,
       partId: l.partId,
+      partSku: l.part?.sku,
+      partName: l.part?.name,
+      defaultLocationId: l.part?.defaultLocationId ?? undefined,
+      defaultLocationName: l.part?.defaultLocation?.locationName ?? undefined,
       orderedQuantity: Number(l.orderedQuantity),
       receivedQuantity: Number(l.receivedQuantity),
       rejectedQuantity: Number(l.rejectedQuantity),
+      openQuantity: Math.max(
+        Number(l.orderedQuantity) - Number(l.receivedQuantity) - Number(l.rejectedQuantity),
+        0,
+      ),
       unitCost: Number(l.unitCost),
       lineState: l.lineState,
     })),

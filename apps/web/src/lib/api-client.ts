@@ -1123,9 +1123,14 @@ export interface PurchaseOrderLine {
   id: string;
   lineNumber: number;
   partId: string;
+  partSku?: string;
+  partName?: string;
+  defaultLocationId?: string;
+  defaultLocationName?: string;
   orderedQuantity: number;
   receivedQuantity: number;
   rejectedQuantity: number;
+  openQuantity: number;
   unitCost: number;
   lineState: string;
 }
@@ -1149,18 +1154,54 @@ export interface PurchaseOrder {
   lines: PurchaseOrderLine[];
 }
 
-export async function listPurchaseOrders(params?: {
-  status?: string;
-  page?: number;
-  pageSize?: number;
-}): Promise<{ items: PurchaseOrder[]; total: number }> {
+export async function listPurchaseOrders(
+  params?: {
+    status?: string;
+    page?: number;
+    pageSize?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<{ items: PurchaseOrder[]; total: number }> {
   const qs = new URLSearchParams();
   if (params?.status) qs.set('status', params.status);
   if (params?.page) qs.set('page', String(params.page));
   if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
-  return apiFetch(`/inventory/purchase-orders${qs.size ? `?${qs}` : ''}`, undefined, {
-    items: [],
-    total: 0,
+  return apiFetch(
+    `/inventory/purchase-orders${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    {
+      items: [],
+      total: 0,
+    },
+    options,
+  );
+}
+
+export interface ReceiveInventoryLotInput {
+  purchaseOrderLineId: string;
+  quantity: number;
+  rejectedQuantity?: number;
+  stockLocationId?: string;
+  lotNumber?: string;
+  serialNumber?: string;
+  receivedAt?: string;
+  expiresAt?: string;
+}
+
+export async function receiveInventoryLot(input: ReceiveInventoryLotInput): Promise<{
+  lot: InventoryLot;
+  purchaseOrderLine: {
+    id: string;
+    lineState: string;
+    receivedQuantity: number;
+    rejectedQuantity: number;
+  };
+  purchaseOrderState: PurchaseOrder['purchaseOrderState'];
+}> {
+  return apiFetch('/inventory/lots', {
+    method: 'POST',
+    headers: mutationHeaders(),
+    body: JSON.stringify(input),
   });
 }
 

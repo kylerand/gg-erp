@@ -10,6 +10,7 @@ const WEB_SRC_DIR = path.resolve(__dirname, '..');
 const truthCriticalPages = [
   'app/customer-dealers/page.tsx',
   'app/inventory/page.tsx',
+  'app/inventory/receiving/page.tsx',
   'app/inventory/reservations/page.tsx',
   'app/reporting/page.tsx',
   'app/training/page.tsx',

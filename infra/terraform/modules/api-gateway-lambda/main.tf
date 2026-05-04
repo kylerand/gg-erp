@@ -793,6 +793,25 @@ resource "aws_lambda_function" "inventory_list_lots" {
   }
 }
 
+resource "aws_lambda_function" "inventory_receive_lot" {
+  function_name    = "${var.name_prefix}-inventory-receive-lot"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "receive-lot.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
 resource "aws_lambda_function" "inventory_list_reservations" {
   function_name    = "${var.name_prefix}-inventory-list-reservations"
   role             = aws_iam_role.erp_lambda.arn
@@ -1673,6 +1692,21 @@ resource "aws_apigatewayv2_route" "inventory_list_lots" {
   route_key          = "GET /inventory/lots"
   target             = "integrations/${aws_apigatewayv2_integration.inventory_list_lots.id}"
   authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "inventory_receive_lot" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.inventory_receive_lot.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "inventory_receive_lot" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /inventory/lots"
+  target             = "integrations/${aws_apigatewayv2_integration.inventory_receive_lot.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "inventory_list_reservations" {
@@ -4113,6 +4147,7 @@ locals {
     inventory_list_vendors                = aws_lambda_function.inventory_list_vendors
     inventory_list_purchase_orders        = aws_lambda_function.inventory_list_purchase_orders
     inventory_list_lots                   = aws_lambda_function.inventory_list_lots
+    inventory_receive_lot                 = aws_lambda_function.inventory_receive_lot
     inventory_list_reservations           = aws_lambda_function.inventory_list_reservations
     inventory_create_reservation          = aws_lambda_function.inventory_create_reservation
     inventory_release_reservation         = aws_lambda_function.inventory_release_reservation

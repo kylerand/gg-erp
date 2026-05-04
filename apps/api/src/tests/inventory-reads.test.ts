@@ -9,6 +9,7 @@ import {
   listLotsHandler,
   listPurchaseOrdersHandler,
   listReservationsHandler,
+  receiveInventoryLotHandler,
   releaseReservationHandler,
 } from '../lambda/inventory/handlers.js';
 
@@ -17,6 +18,7 @@ const WORK_ORDER_ID = '00000000-0000-4000-8000-000000000002';
 const WORK_ORDER_PART_ID = '00000000-0000-4000-8000-000000000003';
 const RESERVATION_ID = '00000000-0000-4000-8000-000000000004';
 const PART_ID = '00000000-0000-4000-8000-000000000005';
+const PURCHASE_ORDER_LINE_ID = '00000000-0000-4000-8000-000000000007';
 
 const reservationPayload = {
   id: RESERVATION_ID,
@@ -131,6 +133,86 @@ test('listLotsHandler defaults pagination when no query params provided', async 
     assert.equal(callArgs.pageSize, 50);
   } finally {
     listLotsMock.mock.restore();
+  }
+});
+
+test('receiveInventoryLotHandler validates and receives a purchase order line', async () => {
+  const receiveLotMock = mock.method(inventoryLotQueries, 'receivePurchaseOrderLine', async () => ({
+    lot: {
+      id: STOCK_LOT_ID,
+      lotNumber: 'LOT-RCV-1',
+      lotState: 'AVAILABLE',
+      partSku: 'BRK-001',
+      partName: 'Brake Pad',
+      locationName: 'Main Warehouse',
+      quantityOnHand: 4,
+      quantityReserved: 0,
+      quantityAllocated: 0,
+      quantityConsumed: 0,
+      quantityAvailable: 4,
+      receivedAt: '2026-05-04T12:00:00.000Z',
+      createdAt: '2026-05-04T12:00:00.000Z',
+      updatedAt: '2026-05-04T12:00:00.000Z',
+    },
+    purchaseOrderLine: {
+      id: PURCHASE_ORDER_LINE_ID,
+      lineState: 'PARTIALLY_RECEIVED',
+      receivedQuantity: 4,
+      rejectedQuantity: 0,
+    },
+    purchaseOrderState: 'PARTIALLY_RECEIVED',
+  }));
+
+  try {
+    const response = await receiveInventoryLotHandler({
+      httpMethod: 'POST',
+      headers: { 'x-correlation-id': 'receive-correlation' },
+      body: JSON.stringify({
+        purchaseOrderLineId: PURCHASE_ORDER_LINE_ID,
+        quantity: 4,
+        lotNumber: 'LOT-RCV-1',
+      }),
+    });
+
+    assert.equal(response.statusCode, 201);
+    assert.equal(receiveLotMock.mock.calls.length, 1);
+    assert.deepEqual(receiveLotMock.mock.calls[0].arguments[0], {
+      purchaseOrderLineId: PURCHASE_ORDER_LINE_ID,
+      quantity: 4,
+      lotNumber: 'LOT-RCV-1',
+    });
+    assert.equal(receiveLotMock.mock.calls[0].arguments[1], 'receive-correlation');
+
+    const payload = JSON.parse(response.body) as {
+      lot: { id: string; quantityOnHand: number };
+      purchaseOrderLine: { id: string; lineState: string };
+      purchaseOrderState: string;
+    };
+    assert.equal(payload.lot.id, STOCK_LOT_ID);
+    assert.equal(payload.lot.quantityOnHand, 4);
+    assert.equal(payload.purchaseOrderLine.id, PURCHASE_ORDER_LINE_ID);
+    assert.equal(payload.purchaseOrderLine.lineState, 'PARTIALLY_RECEIVED');
+    assert.equal(payload.purchaseOrderState, 'PARTIALLY_RECEIVED');
+  } finally {
+    receiveLotMock.mock.restore();
+  }
+});
+
+test('receiveInventoryLotHandler rejects invalid receipt quantities', async () => {
+  const receiveLotMock = mock.method(inventoryLotQueries, 'receivePurchaseOrderLine', async () => {
+    throw new Error('should not be called');
+  });
+
+  try {
+    const response = await receiveInventoryLotHandler({
+      httpMethod: 'POST',
+      body: JSON.stringify({ purchaseOrderLineId: PURCHASE_ORDER_LINE_ID, quantity: 0 }),
+    });
+
+    assert.equal(response.statusCode, 422);
+    assert.equal(receiveLotMock.mock.calls.length, 0);
+  } finally {
+    receiveLotMock.mock.restore();
   }
 });
 

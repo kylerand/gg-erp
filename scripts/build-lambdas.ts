@@ -53,6 +53,7 @@ const lambdas: LambdaEntry[] = [
   { context: 'inventory', handler: 'get-part',                  entry: 'apps/api/src/lambda/inventory/get-part.handler.ts' },
   { context: 'inventory', handler: 'get-part-chain',            entry: 'apps/api/src/lambda/inventory/get-part-chain.handler.ts' },
   { context: 'inventory', handler: 'list-lots',                 entry: 'apps/api/src/lambda/inventory/list-lots.handler.ts' },
+  { context: 'inventory', handler: 'receive-lot',               entry: 'apps/api/src/lambda/inventory/receive-lot.handler.ts' },
   { context: 'inventory', handler: 'list-parts',                entry: 'apps/api/src/lambda/inventory/list-parts.handler.ts' },
   { context: 'inventory', handler: 'list-reservations',         entry: 'apps/api/src/lambda/inventory/list-reservations.handler.ts' },
   { context: 'inventory', handler: 'create-reservation',        entry: 'apps/api/src/lambda/inventory/create-reservation.handler.ts' },

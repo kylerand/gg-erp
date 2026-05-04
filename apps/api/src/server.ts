@@ -27,6 +27,7 @@ import {
 } from './lambda/customers/handlers.js';
 import {
   listLotsHandler,
+  receiveInventoryLotHandler,
   listPartsHandler,
   getPartHandler,
   getPartChainHandler,
@@ -296,6 +297,8 @@ async function route(
     result = await listPartsHandler(event);
   } else if (pathname === '/inventory/lots' && method === 'GET') {
     result = await listLotsHandler(event);
+  } else if (pathname === '/inventory/lots' && method === 'POST') {
+    result = await receiveInventoryLotHandler(event);
   } else if (pathname === '/inventory/reservations' && method === 'GET') {
     result = await listReservationsHandler(event);
   } else if (pathname === '/inventory/reservations' && method === 'POST') {

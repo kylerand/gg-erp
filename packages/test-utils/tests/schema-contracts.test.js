@@ -3,16 +3,23 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const migrationArtifactsPromise = (async () => {
-  const [canonical, prismaInit, identityAuthz] = await Promise.all([
+  const [canonical, prismaInit, identityAuthz, reservationStorage] = await Promise.all([
     readFile(new URL('../../../apps/api/src/migrations/0002_canonical_erp_domain.sql', import.meta.url), 'utf8'),
     readFile(new URL('../../../packages/db/prisma/migrations/0001_init/migration.sql', import.meta.url), 'utf8'),
     readFile(
       new URL('../../../apps/api/src/migrations/0003_identity_authn_authz_rbac.sql', import.meta.url),
       'utf8'
+    ),
+    readFile(
+      new URL(
+        '../../../packages/db/prisma/migrations/20260504020000_add_inventory_reservation_storage/migration.sql',
+        import.meta.url
+      ),
+      'utf8'
     )
   ]);
 
-  return { canonical, prismaInit, identityAuthz };
+  return { canonical, prismaInit, identityAuthz, reservationStorage };
 })();
 
 function escapeRegex(value) {
@@ -121,6 +128,26 @@ test('inventory ledger remains immutable append-only', async () => {
     canonical,
     /create trigger\s+trg_inventory_ledger_entries_immutable\s+before update or delete on inventory\.inventory_ledger_entries\s+for each row execute function ops\.prevent_append_only_mutation\(\);/i
   );
+});
+
+test('deploy migrations include inventory reservation storage used by runtime handlers', async () => {
+  const { reservationStorage } = await migrationArtifactsPromise;
+
+  for (const tableName of [
+    'inventory.inventory_reservations',
+    'inventory.inventory_ledger_entries',
+    'inventory.inventory_balances'
+  ]) {
+    findTableDefinition(reservationStorage, tableName);
+  }
+
+  const reservations = findTableDefinition(reservationStorage, 'inventory.inventory_reservations');
+  assert.match(reservations, /allocated_quantity\s+numeric\(14,3\)\s+not null\s+default\s+0/i);
+  assert.match(reservations, /work_order_operation_id\s+uuid/i);
+
+  const balances = findTableDefinition(reservationStorage, 'inventory.inventory_balances');
+  assert.match(balances, /quantity_allocated\s+numeric\(14,3\)\s+not null\s+default\s+0/i);
+  assert.match(balances, /quantity_consumed\s+numeric\(14,3\)\s+not null\s+default\s+0/i);
 });
 
 test('audit tables are present for traceability', async () => {

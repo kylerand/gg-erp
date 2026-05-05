@@ -452,11 +452,26 @@ export interface WoOrderChecklistItem {
   done: boolean;
 }
 
+export type WoOrderPartStatus =
+  | 'REQUESTED'
+  | 'RESERVED'
+  | 'PARTIALLY_CONSUMED'
+  | 'CONSUMED'
+  | 'SHORT'
+  | 'CANCELLED';
+
 export interface WoOrderPartLine {
   id: string;
+  partId: string;
+  partSku: string;
   name: string;
   qty: number;
-  state: 'READY' | 'RESERVED' | 'SHORT' | 'REQUESTED';
+  requestedQuantity: number;
+  reservedQuantity: number;
+  consumedQuantity: number;
+  openQuantity: number;
+  state: WoOrderPartStatus;
+  reservations: InventoryReservation[];
 }
 
 export interface WoOrderNote {
@@ -481,6 +496,7 @@ export interface WoOrderDetail {
   reworkLoop: number;
   checklist: WoOrderChecklistItem[];
   parts: WoOrderPartLine[];
+  reservations: InventoryReservation[];
   notes: WoOrderNote[];
 }
 
@@ -516,9 +532,34 @@ export const MOCK_WO_ORDER_DETAIL: WoOrderDetail = {
     { id: 'op-3', label: 'Final QC', done: false },
   ],
   parts: [
-    { id: 'part-1', name: 'Lift kit', qty: 1, state: 'READY' },
-    { id: 'part-2', name: 'Wheel set', qty: 1, state: 'RESERVED' },
+    {
+      id: 'part-1',
+      partId: 'part-1',
+      partSku: 'LIFT-KIT',
+      name: 'Lift kit',
+      qty: 1,
+      requestedQuantity: 1,
+      reservedQuantity: 0,
+      consumedQuantity: 0,
+      openQuantity: 1,
+      state: 'REQUESTED',
+      reservations: [],
+    },
+    {
+      id: 'part-2',
+      partId: 'part-2',
+      partSku: 'WHEEL-SET',
+      name: 'Wheel set',
+      qty: 1,
+      requestedQuantity: 1,
+      reservedQuantity: 1,
+      consumedQuantity: 0,
+      openQuantity: 0,
+      state: 'RESERVED',
+      reservations: [],
+    },
   ],
+  reservations: [],
   notes: [],
 };
 
@@ -547,10 +588,18 @@ export async function listWoOrders(
   );
 }
 
-export async function getWoOrder(id: string): Promise<WoOrderDetail | null> {
-  const data = await apiFetch<{ workOrder: WoOrderDetail }>(`/tickets/wo-queue/${id}`, undefined, {
-    workOrder: { ...MOCK_WO_ORDER_DETAIL, id },
-  });
+export async function getWoOrder(
+  id: string,
+  options?: ApiDataOptions,
+): Promise<WoOrderDetail | null> {
+  const data = await apiFetch<{ workOrder: WoOrderDetail }>(
+    `/tickets/wo-queue/${id}`,
+    undefined,
+    {
+      workOrder: { ...MOCK_WO_ORDER_DETAIL, id },
+    },
+    options,
+  );
   return data.workOrder;
 }
 

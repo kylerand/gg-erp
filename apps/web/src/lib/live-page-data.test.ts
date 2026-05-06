@@ -75,3 +75,20 @@ test('apiFetch can reject local mock fallback data for truth-critical calls', as
     console.warn = originalWarn;
   }
 });
+
+test('work-order detail page wires live execution panels', () => {
+  const source = readSource('app/work-orders/[id]/page.tsx');
+  const requiredCalls = [
+    'listWorkOrderTimeEntries',
+    'createLaborTimeEntry',
+    'listWorkOrderQcGates',
+    'submitWorkOrderQcGates',
+    'allowMockFallback: false',
+  ];
+
+  assert.deepEqual(
+    requiredCalls.filter((call) => !source.includes(call)),
+    [],
+  );
+  assert.equal(/will appear here/i.test(source), false);
+});

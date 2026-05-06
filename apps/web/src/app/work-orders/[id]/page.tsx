@@ -8,10 +8,12 @@ import {
   ClipboardCheck,
   Clock,
   FileText,
+  Info,
   MessageCircle,
   Package,
   PackageCheck,
   Printer,
+  RefreshCw,
   Receipt,
   Send,
   ShieldCheck,
@@ -21,19 +23,29 @@ import {
 } from 'lucide-react';
 import {
   consumeInventoryReservation,
+  createLaborTimeEntry,
   createInventoryReservation,
   getWoOrder,
+  listWorkOrderQcGates,
+  listWorkOrderTimeEntries,
   listInventoryLots,
   releaseInventoryReservation,
+  submitWorkOrderQcGates,
   type InventoryLot,
   type InventoryReservation,
+  type LaborTimeEntry,
+  type QcGateResult,
+  type SubmitWorkOrderQcResponse,
   type WoOrderDetail,
   type WoOrderPartLine,
+  type WorkOrderQcGate,
 } from '@/lib/api-client';
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
+import { useRole } from '@/lib/role-context';
 import { MaterialReadinessBadge, PageHeader, StatusBadge, SyncStatusBadge } from '@gg-erp/ui';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 
 const ORDER_TABS = [
   { id: 'services', label: 'Services', icon: Wrench },
@@ -49,12 +61,44 @@ interface MaterialDraft {
   quantity: string;
 }
 
+interface TimeDraft {
+  hours: string;
+  description: string;
+}
+
+interface ExecutionErrors {
+  time?: string;
+  qc?: string;
+}
+
+type QcOutcome =
+  | { status: 'PASSED' }
+  | { status: 'FAILED'; openReworkCount: number; reworkLoopCount: number };
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Request failed.';
 }
 
 function formatQuantity(value: number): string {
   return value.toLocaleString(undefined, { maximumFractionDigits: 3 });
+}
+
+function formatHours(value: number): string {
+  return value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+}
+
+function formatDateTime(value?: string): string {
+  if (!value) return 'Not recorded';
+  return new Date(value).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function qcStatusFromResponse(response: SubmitWorkOrderQcResponse): 'PASSED' | 'FAILED' {
+  return response.status ?? response.overallResult ?? 'FAILED';
 }
 
 function createDrafts(parts: WoOrderPartLine[], lotsByPartLine: Record<string, InventoryLot[]>) {
@@ -75,9 +119,15 @@ function createDrafts(parts: WoOrderPartLine[], lotsByPartLine: Record<string, I
 export default function WorkOrderDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
+  const { user, loading: roleLoading } = useRole();
   const [workOrder, setWorkOrder] = useState<WoOrderDetail | null>(null);
   const [availableLots, setAvailableLots] = useState<Record<string, InventoryLot[]>>({});
   const [drafts, setDrafts] = useState<Record<string, MaterialDraft>>({});
+  const [timeEntries, setTimeEntries] = useState<LaborTimeEntry[]>([]);
+  const [qcGates, setQcGates] = useState<WorkOrderQcGate[]>([]);
+  const [timeDraft, setTimeDraft] = useState<TimeDraft>({ hours: '', description: '' });
+  const [qcOutcome, setQcOutcome] = useState<QcOutcome | null>(null);
+  const [executionErrors, setExecutionErrors] = useState<ExecutionErrors>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -92,31 +142,58 @@ export default function WorkOrderDetailPage() {
         setWorkOrder(null);
         setAvailableLots({});
         setDrafts({});
+        setTimeEntries([]);
+        setQcGates([]);
+        setQcOutcome(null);
+        setExecutionErrors({});
         return;
       }
 
-      const lotEntries = await Promise.all(
-        nextWorkOrder.parts.map(async (part) => {
-          if (!part.partSku) return [part.id, []] as const;
-          const result = await listInventoryLots(
-            { partNumber: part.partSku, status: 'AVAILABLE', pageSize: 50 },
-            { allowMockFallback: false },
-          );
-          return [
-            part.id,
-            result.items.filter((lot) => lot.quantityAvailable > 0 && lot.partSku === part.partSku),
-          ] as const;
-        }),
-      );
+      const [lotEntries, timeResult, qcResult] = await Promise.all([
+        Promise.all(
+          nextWorkOrder.parts.map(async (part) => {
+            if (!part.partSku) return [part.id, []] as const;
+            const result = await listInventoryLots(
+              { partNumber: part.partSku, status: 'AVAILABLE', pageSize: 50 },
+              { allowMockFallback: false },
+            );
+            return [
+              part.id,
+              result.items.filter(
+                (lot) => lot.quantityAvailable > 0 && lot.partSku === part.partSku,
+              ),
+            ] as const;
+          }),
+        ),
+        listWorkOrderTimeEntries(nextWorkOrder.id, { allowMockFallback: false }).then(
+          (entries) => ({ ok: true as const, entries }),
+          (err: unknown) => ({ ok: false as const, error: errorMessage(err) }),
+        ),
+        listWorkOrderQcGates(nextWorkOrder.id, undefined, { allowMockFallback: false }).then(
+          (gates) => ({ ok: true as const, gates }),
+          (err: unknown) => ({ ok: false as const, error: errorMessage(err) }),
+        ),
+      ]);
       const lotsByPartLine = Object.fromEntries(lotEntries);
 
       setWorkOrder(nextWorkOrder);
       setAvailableLots(lotsByPartLine);
       setDrafts(createDrafts(nextWorkOrder.parts, lotsByPartLine));
+      setTimeEntries(timeResult.ok ? timeResult.entries : []);
+      setQcGates(qcResult.ok ? qcResult.gates : []);
+      setQcOutcome(null);
+      setExecutionErrors({
+        ...(timeResult.ok ? {} : { time: timeResult.error }),
+        ...(qcResult.ok ? {} : { qc: qcResult.error }),
+      });
     } catch (err) {
       setWorkOrder(null);
       setAvailableLots({});
       setDrafts({});
+      setTimeEntries([]);
+      setQcGates([]);
+      setQcOutcome(null);
+      setExecutionErrors({});
       setError(errorMessage(err));
     } finally {
       setLoading(false);
@@ -189,6 +266,119 @@ export default function WorkOrderDetailPage() {
         await consumeInventoryReservation(reservation.id);
       }
       await load();
+    } catch (err) {
+      setActionError(errorMessage(err));
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  async function handleLogTime() {
+    if (!workOrder) return;
+    const technicianId = user?.userId;
+    const hours = Number(timeDraft.hours);
+    const description = timeDraft.description.trim();
+
+    if (!technicianId) {
+      setActionError('Sign in before logging labor time.');
+      return;
+    }
+    if (!Number.isFinite(hours) || hours <= 0 || hours > 24) {
+      setActionError('Log time must be greater than 0 and no more than 24 hours.');
+      return;
+    }
+    if (!description) {
+      setActionError('Add a short labor note before logging time.');
+      return;
+    }
+
+    setActionBusy('time:create');
+    setActionError(null);
+    try {
+      await createLaborTimeEntry({
+        workOrderId: workOrder.id,
+        technicianId,
+        manualHours: hours,
+        description,
+        source: 'MANUAL',
+        startedAt: new Date(Date.now() - hours * 3_600_000).toISOString(),
+      });
+      setTimeDraft({ hours: '', description: '' });
+      await load();
+    } catch (err) {
+      setActionError(errorMessage(err));
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  function setQcResult(gateId: string, result: QcGateResult) {
+    setQcOutcome(null);
+    setQcGates((current) =>
+      current.map((gate) =>
+        gate.id === gateId
+          ? { ...gate, result, failureNote: result === 'FAIL' ? gate.failureNote : undefined }
+          : gate,
+      ),
+    );
+  }
+
+  function setQcFailureNote(gateId: string, failureNote: string) {
+    setQcOutcome(null);
+    setQcGates((current) =>
+      current.map((gate) => (gate.id === gateId ? { ...gate, failureNote } : gate)),
+    );
+  }
+
+  async function handleSubmitQc() {
+    if (!workOrder) return;
+    const reviewedBy = user?.userId;
+    if (!reviewedBy) {
+      setActionError('Sign in before submitting QC.');
+      return;
+    }
+
+    const criticalPending = qcGates.filter((gate) => gate.isCritical && !gate.result);
+    const criticalFailMissingNote = qcGates.filter(
+      (gate) => gate.isCritical && gate.result === 'FAIL' && !gate.failureNote?.trim(),
+    );
+    if (criticalPending.length > 0) {
+      setActionError('All critical QC gates need a pass, fail, or N/A result before submit.');
+      return;
+    }
+    if (criticalFailMissingNote.length > 0) {
+      setActionError('Critical QC failures need a failure note before submit.');
+      return;
+    }
+
+    setActionBusy('qc:submit');
+    setActionError(null);
+    try {
+      const response = await submitWorkOrderQcGates(workOrder.id, {
+        reviewedBy,
+        results: qcGates.map((gate) => ({
+          gateLabel: gate.gateLabel,
+          isCritical: gate.isCritical,
+          result: gate.result ?? 'NA',
+          failureNote: gate.failureNote,
+        })),
+      });
+      const status = qcStatusFromResponse(response);
+      const reworkLoopCount = response.activeReworkLoopCount ?? 0;
+      setQcOutcome(
+        status === 'PASSED'
+          ? { status: 'PASSED' }
+          : {
+              status: 'FAILED',
+              openReworkCount: response.openReworkCount ?? response.reworkIssuesCreated ?? 0,
+              reworkLoopCount,
+            },
+      );
+      const refreshedGates = await listWorkOrderQcGates(workOrder.id, undefined, {
+        allowMockFallback: false,
+      });
+      setQcGates(refreshedGates);
+      setExecutionErrors((current) => ({ ...current, qc: undefined }));
     } catch (err) {
       setActionError(errorMessage(err));
     } finally {
@@ -378,11 +568,21 @@ export default function WorkOrderDetailPage() {
           <section id="time" className="rounded-lg border border-gray-200 bg-white">
             <SectionHeader
               icon={Timer}
-              title="Time"
+              title="Labor Time"
               actionHref={erpRoute('time-logging', { workOrderId: workOrder.id })}
-              actionLabel="Log Time"
+              actionLabel="Open Time Page"
             />
-            <EmptyPanel text="Time entries will appear here after technicians clock time to this work order." />
+            <TimeExecutionPanel
+              entries={timeEntries}
+              draft={timeDraft}
+              actionBusy={actionBusy}
+              error={executionErrors.time}
+              roleLoading={roleLoading}
+              signedIn={Boolean(user?.userId)}
+              onDraftChange={(patch) => setTimeDraft((current) => ({ ...current, ...patch }))}
+              onLogTime={() => void handleLogTime()}
+              onRetry={() => void load()}
+            />
           </section>
 
           <section id="qc" className="rounded-lg border border-gray-200 bg-white">
@@ -390,9 +590,20 @@ export default function WorkOrderDetailPage() {
               icon={ShieldCheck}
               title="Quality Control"
               actionHref={erpRoute('qc-checklist', { workOrderId: workOrder.id })}
-              actionLabel="Open QC"
+              actionLabel="Open QC Page"
             />
-            <EmptyPanel text="QC gates and inspection results will appear here as the build progresses." />
+            <QcExecutionPanel
+              gates={qcGates}
+              outcome={qcOutcome}
+              actionBusy={actionBusy}
+              error={executionErrors.qc}
+              roleLoading={roleLoading}
+              signedIn={Boolean(user?.userId)}
+              onResult={setQcResult}
+              onFailureNote={setQcFailureNote}
+              onSubmit={() => void handleSubmitQc()}
+              onRetry={() => void load()}
+            />
           </section>
         </div>
 
@@ -463,10 +674,7 @@ export default function WorkOrderDetailPage() {
               <Clock size={15} />
               Activity
             </h2>
-            <p className="mt-3 text-sm text-gray-500">
-              Activity events will appear here once the work-order event stream is exposed to the
-              web app.
-            </p>
+            <ActivityPanel workOrder={workOrder} timeEntries={timeEntries} qcGates={qcGates} />
           </section>
         </aside>
       </div>
@@ -528,6 +736,317 @@ function SectionHeader({
 
 function EmptyPanel({ text }: { text: string }) {
   return <div className="px-4 py-8 text-sm text-gray-500">{text}</div>;
+}
+
+function PanelError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="m-4 flex flex-wrap items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+      <span className="flex-1">{message}</span>
+      <Button type="button" size="sm" variant="outline" onClick={onRetry}>
+        <RefreshCw data-icon="inline-start" />
+        Retry
+      </Button>
+    </div>
+  );
+}
+
+function TimeExecutionPanel({
+  entries,
+  draft,
+  actionBusy,
+  error,
+  roleLoading,
+  signedIn,
+  onDraftChange,
+  onLogTime,
+  onRetry,
+}: {
+  entries: LaborTimeEntry[];
+  draft: TimeDraft;
+  actionBusy: string | null;
+  error?: string;
+  roleLoading: boolean;
+  signedIn: boolean;
+  onDraftChange: (patch: Partial<TimeDraft>) => void;
+  onLogTime: () => void;
+  onRetry: () => void;
+}) {
+  const totalHours = entries.reduce((sum, entry) => sum + Number(entry.computedHours ?? 0), 0);
+  const hours = Number(draft.hours);
+  const canSubmit =
+    signedIn &&
+    !roleLoading &&
+    !actionBusy &&
+    Number.isFinite(hours) &&
+    hours > 0 &&
+    hours <= 24 &&
+    draft.description.trim().length > 0;
+
+  return (
+    <div>
+      {error && <PanelError message={error} onRetry={onRetry} />}
+      <div className="grid gap-4 p-4 lg:grid-cols-[1fr_18rem]">
+        <div>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="text-sm font-semibold text-gray-900">
+              {formatHours(totalHours)}h logged
+            </div>
+            <div className="text-xs text-gray-500">
+              {entries.length} entr{entries.length === 1 ? 'y' : 'ies'}
+            </div>
+          </div>
+          {entries.length > 0 ? (
+            <div className="divide-y divide-gray-100 rounded-lg border border-gray-200">
+              {entries.slice(0, 5).map((entry) => (
+                <div key={entry.id} className="grid gap-2 px-3 py-2 sm:grid-cols-[5rem_1fr]">
+                  <div className="font-semibold tabular-nums text-amber-700">
+                    {formatHours(Number(entry.computedHours ?? 0))}h
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">
+                      {entry.description ?? 'Labor entry'}
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
+                      <span>{formatDateTime(entry.startedAt)}</span>
+                      <span>{entry.source.replace(/_/g, ' ')}</span>
+                      <span>{entry.technicianId}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyPanel text="No labor time has been logged for this work order. Add a manual entry when a technician completes shop work." />
+          )}
+        </div>
+
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+          <h3 className="text-sm font-semibold text-gray-900">Log Manual Time</h3>
+          <div className="mt-3 grid gap-2">
+            <Input
+              type="number"
+              min="0.25"
+              max="24"
+              step="0.25"
+              value={draft.hours}
+              disabled={Boolean(actionBusy) || roleLoading}
+              onChange={(event) => onDraftChange({ hours: event.target.value })}
+              placeholder="Hours"
+            />
+            <Input
+              value={draft.description}
+              disabled={Boolean(actionBusy) || roleLoading}
+              onChange={(event) => onDraftChange({ description: event.target.value })}
+              placeholder="Labor note"
+            />
+            {!signedIn && !roleLoading && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800">
+                Sign in to log labor.
+              </div>
+            )}
+            <Button type="button" disabled={!canSubmit} onClick={onLogTime}>
+              <Timer data-icon="inline-start" />
+              {actionBusy === 'time:create' ? 'Logging' : 'Log Time'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QcExecutionPanel({
+  gates,
+  outcome,
+  actionBusy,
+  error,
+  roleLoading,
+  signedIn,
+  onResult,
+  onFailureNote,
+  onSubmit,
+  onRetry,
+}: {
+  gates: WorkOrderQcGate[];
+  outcome: QcOutcome | null;
+  actionBusy: string | null;
+  error?: string;
+  roleLoading: boolean;
+  signedIn: boolean;
+  onResult: (gateId: string, result: QcGateResult) => void;
+  onFailureNote: (gateId: string, failureNote: string) => void;
+  onSubmit: () => void;
+  onRetry: () => void;
+}) {
+  const criticalPending = gates.filter((gate) => gate.isCritical && !gate.result);
+  const criticalFailMissingNote = gates.filter(
+    (gate) => gate.isCritical && gate.result === 'FAIL' && !gate.failureNote?.trim(),
+  );
+  const canSubmit =
+    signedIn &&
+    !roleLoading &&
+    !actionBusy &&
+    gates.length > 0 &&
+    criticalPending.length === 0 &&
+    criticalFailMissingNote.length === 0;
+
+  return (
+    <div>
+      {error && <PanelError message={error} onRetry={onRetry} />}
+      <div className="space-y-4 p-4">
+        {outcome?.status === 'PASSED' && (
+          <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm font-semibold text-green-800">
+            QC passed. This work order can proceed to close once other required work is complete.
+          </div>
+        )}
+        {outcome?.status === 'FAILED' && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+            <strong>QC failed.</strong> {outcome.openReworkCount} rework issue
+            {outcome.openReworkCount === 1 ? '' : 's'} created. Rework loop{' '}
+            {outcome.reworkLoopCount}.
+          </div>
+        )}
+
+        {gates.length > 0 ? (
+          <div className="space-y-3">
+            {gates.map((gate) => (
+              <div key={gate.id} className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-sm font-semibold text-gray-900">{gate.gateLabel}</div>
+                      {gate.isCritical && (
+                        <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">
+                          Critical
+                        </span>
+                      )}
+                      {gate.reviewedAt && (
+                        <span className="text-xs text-gray-500">
+                          Reviewed {formatDateTime(gate.reviewedAt)}
+                        </span>
+                      )}
+                    </div>
+                    {gate.failureNote && (
+                      <p className="mt-1 text-xs text-red-700">{gate.failureNote}</p>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(['PASS', 'FAIL', 'NA'] as const).map((result) => (
+                      <button
+                        key={result}
+                        type="button"
+                        disabled={Boolean(actionBusy) || roleLoading}
+                        onClick={() => onResult(gate.id, result)}
+                        className={`h-8 rounded-md border px-2 text-xs font-semibold transition-colors ${
+                          gate.result === result
+                            ? result === 'PASS'
+                              ? 'border-green-600 bg-green-600 text-white'
+                              : result === 'FAIL'
+                                ? 'border-red-600 bg-red-600 text-white'
+                                : 'border-gray-600 bg-gray-600 text-white'
+                            : 'border-gray-300 bg-white text-gray-600 hover:border-gray-500'
+                        }`}
+                      >
+                        {result}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {gate.isCritical && gate.result === 'FAIL' && (
+                  <Textarea
+                    value={gate.failureNote ?? ''}
+                    disabled={Boolean(actionBusy) || roleLoading}
+                    onChange={(event) => onFailureNote(gate.id, event.target.value)}
+                    placeholder="Failure note required for critical failures"
+                    className="mt-3 min-h-20 text-sm"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyPanel text="No QC gates are configured for this work order. Open the QC page after gates are generated from the active service plan." />
+        )}
+
+        {!signedIn && !roleLoading && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Sign in to submit QC results.
+          </div>
+        )}
+        {criticalPending.length > 0 && (
+          <div className="flex items-start gap-2 text-xs text-amber-700">
+            <Info size={14} />
+            {criticalPending.length} critical gate{criticalPending.length === 1 ? '' : 's'} still
+            need a result.
+          </div>
+        )}
+        {criticalFailMissingNote.length > 0 && (
+          <div className="text-xs text-red-700">
+            Critical failures require a note before submission.
+          </div>
+        )}
+        <Button type="button" disabled={!canSubmit} onClick={onSubmit}>
+          <ShieldCheck data-icon="inline-start" />
+          {actionBusy === 'qc:submit' ? 'Submitting' : 'Submit QC'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ActivityPanel({
+  workOrder,
+  timeEntries,
+  qcGates,
+}: {
+  workOrder: WoOrderDetail;
+  timeEntries: LaborTimeEntry[];
+  qcGates: WorkOrderQcGate[];
+}) {
+  const items = [
+    ...workOrder.reservations.map((reservation) => ({
+      id: `reservation:${reservation.id}`,
+      at: reservation.updatedAt,
+      title: `${reservation.status.replace(/_/g, ' ')} reservation`,
+      detail: `${reservation.partSku} · ${reservation.lotNumber ?? reservation.stockLotId ?? 'No lot'}`,
+    })),
+    ...timeEntries.map((entry) => ({
+      id: `time:${entry.id}`,
+      at: entry.startedAt,
+      title: `${formatHours(Number(entry.computedHours ?? 0))}h labor logged`,
+      detail: entry.description ?? entry.technicianId,
+    })),
+    ...qcGates
+      .filter((gate) => gate.result)
+      .map((gate) => ({
+        id: `qc:${gate.id}`,
+        at: gate.reviewedAt ?? gate.createdAt,
+        title: `QC ${gate.result}`,
+        detail: gate.gateLabel,
+      })),
+  ]
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+    .slice(0, 6);
+
+  if (items.length === 0) {
+    return (
+      <p className="mt-3 text-sm text-gray-500">
+        No material, labor, or QC activity has been recorded for this work order.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-4 space-y-3">
+      {items.map((item) => (
+        <div key={item.id} className="border-l-2 border-[#E37125] pl-3">
+          <div className="text-sm font-semibold text-gray-900">{item.title}</div>
+          <div className="mt-0.5 text-xs text-gray-500">{item.detail}</div>
+          <div className="mt-0.5 text-xs text-gray-400">{formatDateTime(item.at)}</div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function PartRow({

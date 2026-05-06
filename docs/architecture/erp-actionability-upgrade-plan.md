@@ -25,11 +25,11 @@ This plan tracks the UAT remediation work needed to move the ERP from polished s
 |---|---|---|---|
 | Progress dashboard | Done | `docs/operations/erp-uat-progress.html` | Update after each implementation slice |
 | Global shell actionability | In Progress | Command search, quick-create, recent routes, floor-app return link, notification deep links | Add true SSO handoff for floor tech app |
-| Unified work-order command center | In Progress | `/work-orders/[id]` route with services, parts, time, QC, SOP, messages, accounting links | Add editable services, customer/cart profile drawers, quote conversion |
+| Unified work-order command center | In Progress | `/work-orders/[id]` route with services, parts, time, QC, SOP, messages, accounting links, live material quantities, and inline reserve/release/fulfill actions | Add editable services, customer/cart profile drawers, quote conversion, and time/QC activity feeds |
 | Dashboard and KPI deep links | In Progress | Work-order status filters are URL-backed | Extend to every role dashboard, accounting card, reporting card, and inventory KPI |
 | Forms and selectors | Not Started | Raw-ID forms remain in work-order create and quote create | Add customer/cart/part/BOM/technician selectors with validation |
 | Training repair | In Progress | Step page now loads lesson content even if optional progress/notes/bookmarks fail; missing `/images/modules/*` assets have a fallback image route | Finish API-level notes/bookmarks hardening and verify seeded module media |
-| Inventory and purchasing workflows | Not Started | List routes exist; actions are incomplete | Add PO detail, receiving progression, reserve/reorder, import/export, row actions |
+| Inventory and purchasing workflows | In Progress | PO receiving and work-order reservation execution are wired to live inventory APIs | Add PO detail drill-in, reorder suggestions, import/export, and broader row actions |
 | Reporting catalog | Not Started | Reporting page exists but is shallow | Add named reports, filters, descriptions, and drill-through pages |
 | Admin configuration catalog | Not Started | Admin pages exist for access, audit, integrations | Add settings-style domains for roles, templates, API keys, webhooks, accounting config |
 

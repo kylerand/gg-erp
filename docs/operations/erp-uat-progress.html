@@ -223,23 +223,23 @@
           <p class="muted">Production readiness tracker</p>
           <h1>ERP Actionability UAT Progress</h1>
         </div>
-        <div class="stamp">Last updated: 2026-04-28</div>
+        <div class="stamp">Last updated: 2026-05-05</div>
       </header>
 
       <div class="summary">
         <div class="metric"><strong>9</strong><span>Tracked delivery slices</span></div>
         <div class="metric"><strong>1</strong><span>Done</span></div>
-        <div class="metric"><strong>4</strong><span>In progress</span></div>
-        <div class="metric"><strong>4</strong><span>Not started</span></div>
+        <div class="metric"><strong>5</strong><span>In progress</span></div>
+        <div class="metric"><strong>3</strong><span>Not started</span></div>
       </div>
 
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: make shell controls, work-order navigation, and status filters lead to useful
-          operational destinations.
+          Current focus: make work-order material requirements executable from the work-order
+          workspace while keeping inventory reservation and fulfillment data live.
         </p>
-        <div class="progress" aria-label="33 percent complete"><div></div></div>
+        <div class="progress" aria-label="39 percent complete"><div style="width: 39%"></div></div>
       </section>
 
       <section>
@@ -269,8 +269,8 @@
             <tr>
               <td>Unified work-order command center</td>
               <td><span class="pill doing">In progress</span></td>
-              <td>`/work-orders/[id]` detail workspace.</td>
-              <td>Add editable services, quote conversion, and customer/cart drawers.</td>
+              <td>`/work-orders/[id]` detail workspace with live material quantities and inline reserve/release/fulfill actions.</td>
+              <td>Add editable services, quote conversion, customer/cart drawers, and time/QC activity feeds.</td>
             </tr>
             <tr>
               <td>Dashboard and KPI deep links</td>
@@ -292,9 +292,9 @@
             </tr>
             <tr>
               <td>Inventory and purchasing</td>
-              <td><span class="pill todo">Not started</span></td>
-              <td>List pages exist.</td>
-              <td>Add PO detail, receiving progression, reserve/reorder, row actions.</td>
+              <td><span class="pill doing">In progress</span></td>
+              <td>PO receiving and work-order reservation execution are wired to live inventory APIs.</td>
+              <td>Add PO detail drill-in, reorder suggestions, import/export, and broader row actions.</td>
             </tr>
             <tr>
               <td>Reporting catalog</td>

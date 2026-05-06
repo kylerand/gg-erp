@@ -15,6 +15,7 @@ const truthCriticalPages = [
   'app/reporting/page.tsx',
   'app/training/page.tsx',
   'app/training/admin/page.tsx',
+  'app/work-orders/[id]/page.tsx',
 ] as const;
 
 function readSource(relativePath: string): string {

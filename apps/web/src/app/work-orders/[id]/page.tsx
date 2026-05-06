@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import {
@@ -10,17 +10,30 @@ import {
   FileText,
   MessageCircle,
   Package,
+  PackageCheck,
   Printer,
   Receipt,
   Send,
   ShieldCheck,
   Timer,
+  Undo2,
   Wrench,
 } from 'lucide-react';
-import { getWoOrder, type WoOrderDetail, type WoOrderPartLine } from '@/lib/api-client';
-import { erpRoute } from '@/lib/erp-routes';
+import {
+  consumeInventoryReservation,
+  createInventoryReservation,
+  getWoOrder,
+  listInventoryLots,
+  releaseInventoryReservation,
+  type InventoryLot,
+  type InventoryReservation,
+  type WoOrderDetail,
+  type WoOrderPartLine,
+} from '@/lib/api-client';
+import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 import { MaterialReadinessBadge, PageHeader, StatusBadge, SyncStatusBadge } from '@gg-erp/ui';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 const ORDER_TABS = [
   { id: 'services', label: 'Services', icon: Wrench },
@@ -31,34 +44,157 @@ const ORDER_TABS = [
   { id: 'accounting', label: 'Accounting', icon: Receipt },
 ];
 
+interface MaterialDraft {
+  stockLotId: string;
+  quantity: string;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Request failed.';
+}
+
+function formatQuantity(value: number): string {
+  return value.toLocaleString(undefined, { maximumFractionDigits: 3 });
+}
+
+function createDrafts(parts: WoOrderPartLine[], lotsByPartLine: Record<string, InventoryLot[]>) {
+  return parts.reduce<Record<string, MaterialDraft>>((acc, part) => {
+    const firstAvailableLot = lotsByPartLine[part.id]?.find((lot) => lot.quantityAvailable > 0);
+    const quantity =
+      firstAvailableLot && part.openQuantity > 0
+        ? Math.min(part.openQuantity, firstAvailableLot.quantityAvailable)
+        : part.openQuantity;
+    acc[part.id] = {
+      stockLotId: firstAvailableLot?.id ?? '',
+      quantity: quantity > 0 ? String(quantity) : '',
+    };
+    return acc;
+  }, {});
+}
+
 export default function WorkOrderDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const [workOrder, setWorkOrder] = useState<WoOrderDetail | null>(null);
+  const [availableLots, setAvailableLots] = useState<Record<string, InventoryLot[]>>({});
+  const [drafts, setDrafts] = useState<Record<string, MaterialDraft>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const nextWorkOrder = await getWoOrder(id, { allowMockFallback: false });
+      if (!nextWorkOrder) {
+        setWorkOrder(null);
+        setAvailableLots({});
+        setDrafts({});
+        return;
+      }
+
+      const lotEntries = await Promise.all(
+        nextWorkOrder.parts.map(async (part) => {
+          if (!part.partSku) return [part.id, []] as const;
+          const result = await listInventoryLots(
+            { partNumber: part.partSku, status: 'AVAILABLE', pageSize: 50 },
+            { allowMockFallback: false },
+          );
+          return [
+            part.id,
+            result.items.filter((lot) => lot.quantityAvailable > 0 && lot.partSku === part.partSku),
+          ] as const;
+        }),
+      );
+      const lotsByPartLine = Object.fromEntries(lotEntries);
+
+      setWorkOrder(nextWorkOrder);
+      setAvailableLots(lotsByPartLine);
+      setDrafts(createDrafts(nextWorkOrder.parts, lotsByPartLine));
+    } catch (err) {
+      setWorkOrder(null);
+      setAvailableLots({});
+      setDrafts({});
+      setError(errorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
 
   useEffect(() => {
-    let cancelled = false;
+    void load();
+  }, [load]);
 
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const nextWorkOrder = await getWoOrder(id);
-        if (!cancelled) setWorkOrder(nextWorkOrder);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load work order');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+  function updateDraft(partLineId: string, patch: Partial<MaterialDraft>) {
+    setDrafts((current) => ({
+      ...current,
+      [partLineId]: {
+        stockLotId: current[partLineId]?.stockLotId ?? '',
+        quantity: current[partLineId]?.quantity ?? '',
+        ...patch,
+      },
+    }));
+  }
+
+  async function handleReserve(part: WoOrderPartLine) {
+    if (!workOrder) return;
+    const draft = drafts[part.id];
+    const lot = availableLots[part.id]?.find((item) => item.id === draft?.stockLotId);
+    const quantity = Number(draft?.quantity);
+
+    if (!lot) {
+      setActionError('Select an available lot before reserving material.');
+      return;
+    }
+    if (!Number.isFinite(quantity) || quantity <= 0 || quantity > part.openQuantity) {
+      setActionError(
+        `Reserve quantity must be between 0 and ${formatQuantity(part.openQuantity)}.`,
+      );
+      return;
+    }
+    if (quantity > lot.quantityAvailable) {
+      setActionError(`Selected lot only has ${formatQuantity(lot.quantityAvailable)} available.`);
+      return;
     }
 
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
+    setActionBusy(`reserve:${part.id}`);
+    setActionError(null);
+    try {
+      await createInventoryReservation({
+        stockLotId: lot.id,
+        quantity,
+        workOrderId: workOrder.id,
+        workOrderPartId: part.id,
+      });
+      await load();
+    } catch (err) {
+      setActionError(errorMessage(err));
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  async function handleReservationAction(
+    reservation: InventoryReservation,
+    action: 'release' | 'consume',
+  ) {
+    setActionBusy(`${action}:${reservation.id}`);
+    setActionError(null);
+    try {
+      if (action === 'release') {
+        await releaseInventoryReservation(reservation.id);
+      } else {
+        await consumeInventoryReservation(reservation.id);
+      }
+      await load();
+    } catch (err) {
+      setActionError(errorMessage(err));
+    } finally {
+      setActionBusy(null);
+    }
+  }
 
   if (loading) {
     return (
@@ -137,6 +273,12 @@ export default function WorkOrderDetailPage() {
         </div>
       </section>
 
+      {actionError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {actionError}
+        </div>
+      )}
+
       <nav className="flex gap-2 overflow-x-auto border-b border-[#D9CCBE] pb-2">
         {ORDER_TABS.map((tab) => {
           const Icon = tab.icon;
@@ -195,13 +337,35 @@ export default function WorkOrderDetailPage() {
                   <thead className="border-b border-gray-200 bg-gray-50">
                     <tr>
                       <th className="px-4 py-3 text-left font-medium text-gray-600">Part</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-600">Qty</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-600">State</th>
+                      <th className="px-4 py-3 text-right font-medium text-gray-600">Requested</th>
+                      <th className="px-4 py-3 text-right font-medium text-gray-600">Reserved</th>
+                      <th className="px-4 py-3 text-right font-medium text-gray-600">Fulfilled</th>
+                      <th className="px-4 py-3 text-right font-medium text-gray-600">Open</th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-600">
+                        Reservations
+                      </th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-600">Reserve</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {workOrder.parts.map((part) => (
-                      <PartRow key={part.id} part={part} />
+                      <PartRow
+                        key={part.id}
+                        part={part}
+                        lots={availableLots[part.id] ?? []}
+                        draft={
+                          drafts[part.id] ?? {
+                            stockLotId: '',
+                            quantity: '',
+                          }
+                        }
+                        actionBusy={actionBusy}
+                        onDraftChange={(patch) => updateDraft(part.id, patch)}
+                        onReserve={() => void handleReserve(part)}
+                        onReservationAction={(reservation, action) =>
+                          void handleReservationAction(reservation, action)
+                        }
+                      />
                     ))}
                   </tbody>
                 </table>
@@ -366,13 +530,162 @@ function EmptyPanel({ text }: { text: string }) {
   return <div className="px-4 py-8 text-sm text-gray-500">{text}</div>;
 }
 
-function PartRow({ part }: { part: WoOrderPartLine }) {
+function PartRow({
+  part,
+  lots,
+  draft,
+  actionBusy,
+  onDraftChange,
+  onReserve,
+  onReservationAction,
+}: {
+  part: WoOrderPartLine;
+  lots: InventoryLot[];
+  draft: MaterialDraft;
+  actionBusy: string | null;
+  onDraftChange: (patch: Partial<MaterialDraft>) => void;
+  onReserve: () => void;
+  onReservationAction: (reservation: InventoryReservation, action: 'release' | 'consume') => void;
+}) {
+  const selectedLot = lots.find((lot) => lot.id === draft.stockLotId);
+  const quantity = Number(draft.quantity);
+  const reserveBusy = actionBusy === `reserve:${part.id}`;
+  const canReserve =
+    part.openQuantity > 0 &&
+    Boolean(selectedLot) &&
+    Number.isFinite(quantity) &&
+    quantity > 0 &&
+    quantity <= part.openQuantity &&
+    quantity <= (selectedLot?.quantityAvailable ?? 0) &&
+    !actionBusy;
+
   return (
-    <tr>
-      <td className="px-4 py-3 font-medium text-gray-900">{part.name}</td>
-      <td className="px-4 py-3 text-gray-600">{part.qty}</td>
+    <tr className="align-top">
       <td className="px-4 py-3">
-        <StatusBadge status={part.state}>{part.state.replace(/_/g, ' ')}</StatusBadge>
+        <Link
+          href={erpRecordRoute('part', part.partId)}
+          className="font-mono text-xs font-semibold text-gray-900 hover:underline"
+        >
+          {part.partSku}
+        </Link>
+        <div className="mt-1 font-medium text-gray-900">{part.name}</div>
+        <div className="mt-2">
+          <StatusBadge status={part.state}>{part.state.replace(/_/g, ' ')}</StatusBadge>
+        </div>
+      </td>
+      <td className="px-4 py-3 text-right tabular-nums text-gray-700">
+        {formatQuantity(part.requestedQuantity)}
+      </td>
+      <td className="px-4 py-3 text-right tabular-nums text-gray-700">
+        {formatQuantity(part.reservedQuantity)}
+      </td>
+      <td className="px-4 py-3 text-right tabular-nums text-gray-700">
+        {formatQuantity(part.consumedQuantity)}
+      </td>
+      <td className="px-4 py-3 text-right font-semibold tabular-nums text-amber-700">
+        {formatQuantity(part.openQuantity)}
+      </td>
+      <td className="min-w-[18rem] px-4 py-3">
+        {part.reservations.length > 0 ? (
+          <div className="space-y-2">
+            {part.reservations.map((reservation) => {
+              const releaseBusy = actionBusy === `release:${reservation.id}`;
+              const consumeBusy = actionBusy === `consume:${reservation.id}`;
+              const canAct = reservation.openQuantity > 0 && !actionBusy;
+
+              return (
+                <div
+                  key={reservation.id}
+                  className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="font-medium text-gray-900">
+                        {reservation.lotNumber ?? reservation.stockLotId}
+                      </div>
+                      <div className="text-xs text-gray-500">{reservation.locationName}</div>
+                    </div>
+                    <StatusBadge status={reservation.status}>
+                      {reservation.status.replace(/_/g, ' ')}
+                    </StatusBadge>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-600">
+                    <span>Open {formatQuantity(reservation.openQuantity)}</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={!canAct}
+                        onClick={() => onReservationAction(reservation, 'release')}
+                      >
+                        <Undo2 data-icon="inline-start" />
+                        {releaseBusy ? 'Releasing' : 'Release'}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={!canAct}
+                        onClick={() => onReservationAction(reservation, 'consume')}
+                      >
+                        <CheckCircle2 data-icon="inline-start" />
+                        {consumeBusy ? 'Fulfilling' : 'Fulfill'}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <span className="text-sm text-gray-500">No active reservations</span>
+        )}
+      </td>
+      <td className="min-w-[18rem] px-4 py-3">
+        <div className="grid gap-2">
+          <select
+            value={draft.stockLotId}
+            disabled={part.openQuantity <= 0 || Boolean(actionBusy)}
+            onChange={(event) => {
+              const nextLot = lots.find((lot) => lot.id === event.target.value);
+              onDraftChange({
+                stockLotId: event.target.value,
+                quantity: nextLot
+                  ? String(Math.min(part.openQuantity, nextLot.quantityAvailable))
+                  : draft.quantity,
+              });
+            }}
+            className="h-9 rounded-md border border-gray-200 bg-white px-2 text-sm text-gray-900"
+          >
+            <option value="">Select available lot</option>
+            {lots.map((lot) => (
+              <option key={lot.id} value={lot.id}>
+                {(lot.lotNumber ?? lot.id).slice(0, 28)} · {formatQuantity(lot.quantityAvailable)}{' '}
+                available
+              </option>
+            ))}
+          </select>
+          <div className="flex gap-2">
+            <Input
+              type="number"
+              min="0.001"
+              step="0.001"
+              value={draft.quantity}
+              disabled={part.openQuantity <= 0 || Boolean(actionBusy)}
+              onChange={(event) => onDraftChange({ quantity: event.target.value })}
+              className="h-9 text-right"
+            />
+            <Button type="button" disabled={!canReserve} onClick={onReserve}>
+              <PackageCheck data-icon="inline-start" />
+              {reserveBusy ? 'Reserving' : 'Reserve'}
+            </Button>
+          </div>
+          {part.openQuantity <= 0 ? (
+            <div className="text-xs text-green-700">Requested quantity is fully covered.</div>
+          ) : lots.length === 0 ? (
+            <div className="text-xs text-red-600">No available lots for this SKU.</div>
+          ) : null}
+        </div>
       </td>
     </tr>
   );

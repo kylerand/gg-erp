@@ -1749,15 +1749,23 @@ export interface ReconciliationRun {
   summary?: string;
 }
 
-export async function listReconciliationRuns(params?: {
-  limit?: number;
-}): Promise<{ items: ReconciliationRun[]; total: number }> {
+export async function listReconciliationRuns(
+  params?: {
+    limit?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<{ items: ReconciliationRun[]; total: number }> {
   const qs = new URLSearchParams();
   if (params?.limit) qs.set('limit', String(params.limit));
-  return apiFetch(`/accounting/reconciliation/runs${qs.size ? `?${qs}` : ''}`, undefined, {
-    items: [],
-    total: 0,
-  });
+  return apiFetch(
+    `/accounting/reconciliation/runs${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    {
+      items: [],
+      total: 0,
+    },
+    options,
+  );
 }
 
 export interface CustomerSyncRecord {
@@ -1773,17 +1781,25 @@ export interface CustomerSyncRecord {
   syncedAt?: string | null;
 }
 
-export async function listCustomerSyncs(params?: {
-  state?: string;
-  limit?: number;
-}): Promise<{ items: CustomerSyncRecord[]; total: number }> {
+export async function listCustomerSyncs(
+  params?: {
+    state?: string;
+    limit?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<{ items: CustomerSyncRecord[]; total: number }> {
   const qs = new URLSearchParams();
   if (params?.state) qs.set('state', params.state);
   if (params?.limit) qs.set('limit', String(params.limit));
-  return apiFetch(`/accounting/customers${qs.size ? `?${qs}` : ''}`, undefined, {
-    items: [],
-    total: 0,
-  });
+  return apiFetch(
+    `/accounting/customers${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    {
+      items: [],
+      total: 0,
+    },
+    options,
+  );
 }
 
 export interface IntegrationAccount {
@@ -1801,11 +1817,11 @@ export interface IntegrationAccount {
   qbId?: string;
 }
 
-export async function listIntegrationAccounts(): Promise<{
+export async function listIntegrationAccounts(options?: ApiDataOptions): Promise<{
   items: IntegrationAccount[];
   total: number;
 }> {
-  return apiFetch('/accounting/integration-accounts', undefined, { items: [], total: 0 });
+  return apiFetch('/accounting/integration-accounts', undefined, { items: [], total: 0 }, options);
 }
 
 export interface FailureSummary {

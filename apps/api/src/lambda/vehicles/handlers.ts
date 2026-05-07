@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { PrismaClient, CartVehicleStatus } from '@prisma/client';
 import { InvariantViolationError } from '../../../../../packages/domain/src/model/index.js';
 import { InMemoryAuditSink } from '../../audit/index.js';
 import { createVehicleRoutes } from '../../contexts/build-planning/vehicle.routes.js';
@@ -15,6 +16,7 @@ import { ConsoleObservabilityHooks } from '../../observability/index.js';
 export interface ApiGatewayProxyEventLike {
   body?: string | null;
   headers?: Record<string, string | undefined> | null;
+  queryStringParameters?: Record<string, string | undefined> | null;
   pathParameters?: Record<string, string | undefined> | null;
   requestContext?: {
     requestId?: string;
@@ -28,6 +30,12 @@ export interface ApiGatewayProxyResultLike {
 }
 
 const repository = new PrismaVehicleRepository();
+let prisma: PrismaClient | undefined;
+
+function getPrisma(): PrismaClient {
+  prisma ??= new PrismaClient();
+  return prisma;
+}
 
 const routes = createVehicleRoutes(
   new VehicleService({
@@ -85,6 +93,62 @@ export async function getVehicleHandler(
   return json(200, { vehicle: toVehicleResponse(vehicle) });
 }
 
+export async function listVehiclesHandler(
+  event: ApiGatewayProxyEventLike,
+): Promise<ApiGatewayProxyResultLike> {
+  const qs = event.queryStringParameters ?? {};
+  const search = qs.search?.trim();
+  const customerId = qs.customerId?.trim();
+  const state = qs.state?.trim();
+  const limit = Math.min(parsePositiveInteger(qs.limit, 25), 100);
+  const offset = parsePositiveInteger(qs.offset, 0);
+
+  if (state && !Object.values(CartVehicleStatus).includes(state as CartVehicleStatus)) {
+    return json(422, { message: `Invalid vehicle state: ${state}.` });
+  }
+
+  const where = {
+    ...(customerId ? { customerId } : {}),
+    ...(state ? { state: state as CartVehicleStatus } : {}),
+    ...(search
+      ? {
+          OR: [
+            { vin: { contains: search, mode: 'insensitive' as const } },
+            { serialNumber: { contains: search, mode: 'insensitive' as const } },
+            { modelCode: { contains: search, mode: 'insensitive' as const } },
+          ],
+        }
+      : {}),
+  };
+
+  const [items, total] = await Promise.all([
+    getPrisma().cartVehicle.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' },
+      take: limit,
+      skip: offset,
+    }),
+    getPrisma().cartVehicle.count({ where }),
+  ]);
+
+  return json(200, {
+    items: items.map((vehicle) => ({
+      id: vehicle.id,
+      vin: vehicle.vin,
+      serialNumber: vehicle.serialNumber,
+      modelCode: vehicle.modelCode,
+      modelYear: vehicle.modelYear,
+      customerId: vehicle.customerId,
+      state: vehicle.state,
+      createdAt: vehicle.createdAt.toISOString(),
+      updatedAt: vehicle.updatedAt.toISOString(),
+    })),
+    total,
+    limit,
+    offset,
+  });
+}
+
 function resolveCorrelationId(event: ApiGatewayProxyEventLike): string {
   return (
     event.headers?.['x-correlation-id'] ??
@@ -110,6 +174,12 @@ function parseJsonBody<TPayload>(
   } catch {
     return { ok: false };
   }
+}
+
+function parsePositiveInteger(value: string | undefined, fallback: number): number {
+  if (!value) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
 function json(statusCode: number, payload: unknown): ApiGatewayProxyResultLike {

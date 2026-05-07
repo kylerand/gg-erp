@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test, { mock } from 'node:test';
-import { inventoryLotQueries, listLotsHandler } from '../lambda/inventory/handlers.js';
+import {
+  inventoryLotQueries,
+  listLotsHandler,
+  listPartsHandler,
+} from '../lambda/inventory/handlers.js';
 
 test('listLotsHandler returns inventory lot details for the web contract', async () => {
   const listLotsMock = mock.method(inventoryLotQueries, 'listLots', async () => ({
@@ -88,4 +92,14 @@ test('listLotsHandler returns an empty page when no lots are available', async (
   } finally {
     listLotsMock.mock.restore();
   }
+});
+
+test('listPartsHandler returns 422 for invalid stock filter', async () => {
+  const response = await listPartsHandler({
+    httpMethod: 'GET',
+    queryStringParameters: { stock: 'LOW' },
+  });
+
+  assert.equal(response.statusCode, 422);
+  assert.match(response.body, /Invalid stock filter/);
 });

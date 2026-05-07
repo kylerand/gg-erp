@@ -60,8 +60,9 @@ export function QuickBooksDataView({ view }: QuickBooksDataViewProps) {
   const [filter, setFilter] = useState('ALL');
 
   useEffect(() => {
-    setQuery('');
-    setFilter('ALL');
+    const params = new URLSearchParams(window.location.search);
+    setQuery(params.get('query') ?? '');
+    setFilter(normalizeInitialFilter(view, params.get('filter')));
   }, [view]);
 
   useEffect(() => {
@@ -211,7 +212,11 @@ export function QuickBooksDataView({ view }: QuickBooksDataViewProps) {
           <div className="mb-4 flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-3 md:flex-row md:items-center md:justify-between">
             <input
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                const nextQuery = event.target.value;
+                setQuery(nextQuery);
+                replaceQuickBooksLocation(view, filter, nextQuery);
+              }}
               placeholder={`Search ${copy.title.toLowerCase()}`}
               className="min-h-10 rounded-md border border-gray-300 px-3 text-sm outline-none focus:border-yellow-400 md:w-80"
             />
@@ -220,7 +225,10 @@ export function QuickBooksDataView({ view }: QuickBooksDataViewProps) {
                 <button
                   key={option}
                   type="button"
-                  onClick={() => setFilter(option)}
+                  onClick={() => {
+                    setFilter(option);
+                    replaceQuickBooksLocation(view, option, query);
+                  }}
                   className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
                     filter === option
                       ? 'border-gray-900 bg-gray-900 text-white'
@@ -479,6 +487,31 @@ function formatFilterLabel(value: string): string {
     .split('_')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
+}
+
+function normalizeInitialFilter(view: QuickBooksView, value: string | null): string {
+  if (!value) return 'ALL';
+  if (view === 'customers' && (value === 'ACTIVE' || value === 'INACTIVE')) return value;
+  if (view === 'invoices' && (value === 'OPEN' || value === 'PAID')) return value;
+  if (view === 'accounts') return value;
+  return 'ALL';
+}
+
+function quickBooksRouteKey(view: QuickBooksView): string {
+  if (view === 'customers') return 'quickbooks-customer';
+  if (view === 'invoices') return 'quickbooks-invoice';
+  return 'quickbooks-chart-of-accounts';
+}
+
+function replaceQuickBooksLocation(view: QuickBooksView, filter: string, query: string): void {
+  window.history.replaceState(
+    null,
+    '',
+    erpRoute(quickBooksRouteKey(view), {
+      filter: filter === 'ALL' ? undefined : filter,
+      query: query.trim() || undefined,
+    }),
+  );
 }
 
 function matchesQuery(values: Array<string | undefined>, query: string): boolean {

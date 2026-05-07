@@ -5,8 +5,14 @@ import { WorkspaceLinkGrid } from '@/components/WorkspaceLinkGrid';
 import { erpRoute } from '@/lib/erp-routes';
 
 export default async function InventoryPage() {
-  const [partsResult, reservationsResult] = await Promise.all([
-    listParts({ limit: 500, offset: 0 }, { allowMockFallback: false })
+  const [partsResult, activePartsResult, outOfStockResult, reservationsResult] = await Promise.all([
+    listParts({ limit: 1, offset: 0 }, { allowMockFallback: false })
+      .then((data) => ({ status: 'ready' as const, data }))
+      .catch(() => ({ status: 'unavailable' as const })),
+    listParts({ partState: 'ACTIVE', limit: 1, offset: 0 }, { allowMockFallback: false })
+      .then((data) => ({ status: 'ready' as const, data }))
+      .catch(() => ({ status: 'unavailable' as const })),
+    listParts({ stock: 'OUT', limit: 1, offset: 0 }, { allowMockFallback: false })
       .then((data) => ({ status: 'ready' as const, data }))
       .catch(() => ({ status: 'unavailable' as const })),
     listInventoryReservations(
@@ -20,27 +26,37 @@ export default async function InventoryPage() {
   const stats: Array<{ label: string; value: number | string; color: string; href: string }> = [];
 
   if (partsResult.status === 'ready') {
-    stats.push(
-      {
-        label: 'Total Parts',
-        value: partsResult.data.total,
-        color: 'text-gray-700',
-        href: erpRoute('part'),
-      },
-      {
-        label: 'Active Parts',
-        value: partsResult.data.items.filter((p) => p.partState === 'ACTIVE').length,
-        color: 'text-green-700',
-        href: erpRoute('part'),
-      },
-      {
-        label: 'Out of Stock',
-        value: partsResult.data.items.filter((p) => (p.quantityOnHand ?? 0) === 0).length,
-        color: 'text-red-600',
-        href: erpRoute('part'),
-      },
-    );
-  } else {
+    stats.push({
+      label: 'Total Parts',
+      value: partsResult.data.total,
+      color: 'text-gray-700',
+      href: erpRoute('part'),
+    });
+  }
+
+  if (activePartsResult.status === 'ready') {
+    stats.push({
+      label: 'Active Parts',
+      value: activePartsResult.data.total,
+      color: 'text-green-700',
+      href: erpRoute('part', { partState: 'ACTIVE' }),
+    });
+  }
+
+  if (outOfStockResult.status === 'ready') {
+    stats.push({
+      label: 'Out of Stock',
+      value: outOfStockResult.data.total,
+      color: 'text-red-600',
+      href: erpRoute('part', { stock: 'OUT' }),
+    });
+  }
+
+  if (
+    partsResult.status === 'unavailable' ||
+    activePartsResult.status === 'unavailable' ||
+    outOfStockResult.status === 'unavailable'
+  ) {
     stats.push({
       label: 'Parts Feed',
       value: 'Unavailable',
@@ -55,7 +71,7 @@ export default async function InventoryPage() {
           label: 'Open Reservations',
           value: reservationsResult.data.total,
           color: reservationsResult.data.total > 0 ? 'text-amber-700' : 'text-green-700',
-          href: erpRoute('inventory-reservation'),
+          href: erpRoute('inventory-reservation', { status: 'OPEN' }),
         }
       : {
           label: 'Reservations Feed',

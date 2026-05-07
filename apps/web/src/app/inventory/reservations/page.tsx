@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { CheckCircle2, Plus, RefreshCw, RotateCcw } from 'lucide-react';
 import { EmptyState, LoadingSkeleton, PageHeader, StatusBadge } from '@gg-erp/ui';
 import {
@@ -15,7 +16,7 @@ import {
   type InventoryReservation,
   type InventoryReservationStatus,
 } from '@/lib/api-client';
-import { erpRecordRoute } from '@/lib/erp-routes';
+import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -31,6 +32,12 @@ const STATUS_OPTIONS: Array<{ value: ReservationFilter; label: string }> = [
   { value: 'EXPIRED', label: 'Expired' },
   { value: 'ALL', label: 'All' },
 ];
+
+function normalizeReservationFilter(value: string | null): ReservationFilter {
+  return STATUS_OPTIONS.some((option) => option.value === value)
+    ? (value as ReservationFilter)
+    : 'OPEN';
+}
 
 function formatQuantity(value: number): string {
   return value.toLocaleString(undefined, { maximumFractionDigits: 3 });
@@ -53,11 +60,14 @@ function errorMessage(error: unknown): string {
 }
 
 export default function ReservationsPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const statusFilter = normalizeReservationFilter(searchParams.get('status'));
+  const activeSearch = searchParams.get('search') ?? '';
   const [reservations, setReservations] = useState<InventoryReservation[]>([]);
   const [lots, setLots] = useState<InventoryLot[]>([]);
   const [total, setTotal] = useState(0);
-  const [statusFilter, setStatusFilter] = useState<ReservationFilter>('OPEN');
-  const [search, setSearch] = useState('');
+  const [searchText, setSearchText] = useState(activeSearch);
   const [selectedLotId, setSelectedLotId] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [workOrderId, setWorkOrderId] = useState('');
@@ -74,7 +84,7 @@ export default function ReservationsPage() {
 
     const [reservationResult, lotResult] = await Promise.allSettled([
       listInventoryReservations(
-        { status: statusFilter, search: search || undefined, page: 1, pageSize: 100 },
+        { status: statusFilter, search: activeSearch || undefined, page: 1, pageSize: 100 },
         { allowMockFallback: false },
       ),
       listInventoryLots(
@@ -100,12 +110,16 @@ export default function ReservationsPage() {
     }
 
     setLoading(false);
-  }, [search, statusFilter]);
+  }, [activeSearch, statusFilter]);
 
   useEffect(() => {
     const timeout = setTimeout(() => void load(), 250);
     return () => clearTimeout(timeout);
   }, [load]);
+
+  useEffect(() => {
+    setSearchText(activeSearch);
+  }, [activeSearch]);
 
   const availableLots = useMemo(
     () => lots.filter((lot) => lot.lotState === 'AVAILABLE' && lot.quantityAvailable > 0),
@@ -148,6 +162,20 @@ export default function ReservationsPage() {
     } finally {
       setActionBusy(null);
     }
+  }
+
+  function buildReservationsHref(next: { status?: ReservationFilter; search?: string }) {
+    const status = next.status ?? statusFilter;
+    const search = next.search !== undefined ? next.search : activeSearch;
+    return erpRoute('inventory-reservation', {
+      status: status === 'OPEN' ? 'OPEN' : status,
+      search: search.trim() || undefined,
+    });
+  }
+
+  function applyListSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    router.push(buildReservationsHref({ search: searchText }));
   }
 
   async function handleReservationAction(id: string, action: 'release' | 'consume') {
@@ -253,15 +281,22 @@ export default function ReservationsPage() {
       </form>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search SKU, lot, or work order"
-          className="max-w-sm"
-        />
+        <form onSubmit={applyListSearch} className="flex w-full gap-2 sm:max-w-md">
+          <Input
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
+            placeholder="Search SKU, lot, or work order"
+            className="h-9"
+          />
+          <Button type="submit" variant="outline">
+            Search
+          </Button>
+        </form>
         <select
           value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as ReservationFilter)}
+          onChange={(event) =>
+            router.push(buildReservationsHref({ status: event.target.value as ReservationFilter }))
+          }
           className="h-8 rounded-lg border border-gray-300 bg-white px-2.5 text-sm"
         >
           {STATUS_OPTIONS.map((option) => (

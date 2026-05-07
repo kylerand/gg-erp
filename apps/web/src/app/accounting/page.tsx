@@ -58,6 +58,7 @@ const ACCOUNTING_LINKS = {
   customersSynced: erpRoute('accounting-sync', { view: 'customers', state: 'SYNCED' }),
   accounts: erpRoute('quickbooks-chart-of-accounts'),
   recentInvoices: erpRoute('quickbooks-invoice'),
+  openInvoices: erpRoute('quickbooks-invoice', { filter: 'OPEN' }),
   reconciliation: erpRoute('accounting-reconciliation'),
 };
 
@@ -175,7 +176,7 @@ export default function AccountingPage() {
               value={ov?.openInvoiceBalance != null ? formatUsd(ov.openInvoiceBalance) : '—'}
               tone={ov?.openInvoiceBalance && ov.openInvoiceBalance > 0 ? 'amber' : 'neutral'}
               subline={`${ov?.openInvoiceCount ?? 0} unpaid invoice${ov?.openInvoiceCount === 1 ? '' : 's'}`}
-              href={ACCOUNTING_LINKS.recentInvoices}
+              href={ACCOUNTING_LINKS.openInvoices}
               loading={loading}
             />
             <KpiCard

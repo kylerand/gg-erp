@@ -19,21 +19,24 @@ export default async function ReportingPage() {
             label: 'Work Orders',
             value: ordersResult.data.total,
             sub: `${blocked.length} blocked`,
-            href: erpRoute('work-order'),
+            href:
+              blocked.length > 0
+                ? erpRoute('blocked-work', { status: 'BLOCKED' })
+                : erpRoute('work-order'),
             color: blocked.length > 0 ? 'text-red-600' : 'text-gray-900',
           },
           {
             label: 'In Progress',
             value: ordersResult.data.items.filter((w) => w.status === 'IN_PROGRESS').length,
             sub: 'active builds',
-            href: erpRoute('dispatch-board'),
+            href: erpRoute('work-order', { status: 'IN_PROGRESS' }),
             color: 'text-yellow-700',
           },
           {
             label: 'Completed',
             value: ordersResult.data.items.filter((w) => w.status === 'COMPLETED').length,
             sub: 'returned records',
-            href: erpRoute('work-order'),
+            href: erpRoute('work-order', { status: 'COMPLETED' }),
             color: 'text-green-700',
           },
         ]
@@ -61,7 +64,7 @@ export default async function ReportingPage() {
                 <span className="font-mono text-xs text-red-600">{wo.workOrderNumber}</span>
                 <span className="text-gray-700">{wo.title}</span>
                 <Link
-                  href={erpRoute('blocked-work')}
+                  href={erpRoute('blocked-work', { status: 'BLOCKED' })}
                   className="ml-auto text-xs text-red-600 hover:underline"
                 >
                   Triage →

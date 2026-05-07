@@ -603,6 +603,135 @@ export async function getWoOrder(
   return data.workOrder;
 }
 
+// ─── Work Order Labor + QC Execution ───────────────────────────────────────
+
+export type LaborTimeEntrySource = 'AUTO' | 'MANUAL' | 'ADJUSTED';
+
+export interface LaborTimeEntry {
+  id: string;
+  technicianTaskId?: string;
+  workOrderId: string;
+  technicianId: string;
+  startedAt: string;
+  endedAt?: string;
+  manualHours?: number;
+  description?: string;
+  source: LaborTimeEntrySource;
+  computedHours: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreateLaborTimeEntryInput {
+  technicianTaskId?: string;
+  workOrderId: string;
+  technicianId: string;
+  startedAt: string;
+  endedAt?: string;
+  manualHours?: number;
+  description?: string;
+  source?: LaborTimeEntrySource;
+}
+
+type TimeEntriesResponse = { items?: LaborTimeEntry[]; entries?: LaborTimeEntry[] };
+
+function normalizeTimeEntries(data: TimeEntriesResponse): LaborTimeEntry[] {
+  return Array.isArray(data.items) ? data.items : Array.isArray(data.entries) ? data.entries : [];
+}
+
+export async function listWorkOrderTimeEntries(
+  workOrderId: string,
+  options?: ApiDataOptions,
+): Promise<LaborTimeEntry[]> {
+  const qs = new URLSearchParams({ workOrderId });
+  const data = await apiFetch<TimeEntriesResponse>(
+    `/tickets/time-entries?${qs}`,
+    undefined,
+    { entries: [] },
+    options,
+  );
+  return normalizeTimeEntries(data);
+}
+
+export async function createLaborTimeEntry(
+  input: CreateLaborTimeEntryInput,
+): Promise<LaborTimeEntry> {
+  const data = await apiFetch<{ entry: LaborTimeEntry }>('/tickets/time-entries', {
+    method: 'POST',
+    headers: mutationHeaders(),
+    body: JSON.stringify(input),
+  });
+  return data.entry;
+}
+
+export type QcGateResult = 'PASS' | 'FAIL' | 'NA';
+export type QcOverallResult = 'PASSED' | 'FAILED';
+
+export interface WorkOrderQcGate {
+  id: string;
+  workOrderId: string;
+  taskId?: string;
+  gateLabel: string;
+  isCritical: boolean;
+  result: QcGateResult | null;
+  failureNote?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  createdAt: string;
+}
+
+export interface SubmitQcGateResultInput {
+  gateLabel: string;
+  isCritical: boolean;
+  result: QcGateResult;
+  failureNote?: string;
+}
+
+export interface SubmitWorkOrderQcInput {
+  taskId?: string;
+  reviewedBy: string;
+  results: SubmitQcGateResultInput[];
+}
+
+export interface SubmitWorkOrderQcResponse {
+  status?: QcOverallResult;
+  overallResult?: QcOverallResult;
+  openReworkCount?: number;
+  reworkIssuesCreated?: number;
+  activeReworkLoopCount?: number;
+  gates: WorkOrderQcGate[];
+}
+
+export async function listWorkOrderQcGates(
+  workOrderId: string,
+  params?: { taskId?: string },
+  options?: ApiDataOptions,
+): Promise<WorkOrderQcGate[]> {
+  const qs = new URLSearchParams();
+  if (params?.taskId) qs.set('taskId', params.taskId);
+  const data = await apiFetch<{ gates: WorkOrderQcGate[] }>(
+    `/tickets/work-orders/${workOrderId}/qc-gates${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    { gates: [] },
+    options,
+  );
+  return data.gates;
+}
+
+export async function submitWorkOrderQcGates(
+  workOrderId: string,
+  input: SubmitWorkOrderQcInput,
+): Promise<SubmitWorkOrderQcResponse> {
+  return apiFetch<SubmitWorkOrderQcResponse>(
+    `/tickets/work-orders/${workOrderId}/qc-gates/batch-submit`,
+    {
+      method: 'POST',
+      headers: mutationHeaders(),
+      body: JSON.stringify({ workOrderId, ...input }),
+    },
+  );
+}
+
 // ─── Customers ────────────────────────────────────────────────────────────────
 
 export interface Customer {

@@ -1140,6 +1140,7 @@ export const listPartsHandler = wrapHandler(
     const qs = ctx.event.queryStringParameters ?? {};
     const search = qs.search;
     const partState = qs.partState as string | undefined;
+    const stock = qs.stock as string | undefined;
     const category = qs.category as string | undefined;
     const installStage = qs.installStage as string | undefined;
     const lifecycleLevel = qs.lifecycleLevel as string | undefined;
@@ -1148,8 +1149,13 @@ export const listPartsHandler = wrapHandler(
     const limit = Math.min(parseInt(qs.limit ?? '100', 10), 1000);
     const offset = parseInt(qs.offset ?? '0', 10);
 
+    if (stock && stock !== 'OUT') {
+      return jsonResponse(422, { message: 'Invalid stock filter. Must be OUT.' });
+    }
+
     const where = {
       ...(partState ? { partState: partState as 'ACTIVE' | 'INACTIVE' | 'DISCONTINUED' } : {}),
+      ...(stock === 'OUT' ? { stockLots: { none: { lotState: 'AVAILABLE' as const } } } : {}),
       ...(category
         ? {
             category: category as

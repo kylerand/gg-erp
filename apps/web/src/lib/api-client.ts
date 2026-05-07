@@ -934,6 +934,9 @@ export interface Part {
   location?: string;
 }
 
+export type PartState = Part['partState'];
+export type PartStockFilter = 'OUT';
+
 export const MOCK_PARTS: Part[] = [
   {
     id: 'p-1',
@@ -1002,7 +1005,8 @@ export const MOCK_PARTS: Part[] = [
 
 export interface ListPartsParams {
   search?: string;
-  partState?: string;
+  partState?: PartState;
+  stock?: PartStockFilter;
   category?: PartCategory;
   installStage?: InstallStage;
   lifecycleLevel?: LifecycleLevel;
@@ -1019,6 +1023,7 @@ export async function listParts(
   const qs = new URLSearchParams();
   if (params?.search) qs.set('search', params.search);
   if (params?.partState) qs.set('partState', params.partState);
+  if (params?.stock) qs.set('stock', params.stock);
   if (params?.category) qs.set('category', params.category);
   if (params?.installStage) qs.set('installStage', params.installStage);
   if (params?.lifecycleLevel) qs.set('lifecycleLevel', params.lifecycleLevel);

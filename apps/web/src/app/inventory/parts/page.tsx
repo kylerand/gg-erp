@@ -1,6 +1,8 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
+import type { FormEvent } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { PageHeader, LoadingSkeleton, EmptyState, StatusBadge } from '@gg-erp/ui';
 import {
   listParts,
@@ -8,12 +10,21 @@ import {
   type LifecycleLevel,
   type Part,
   type PartCategory,
+  type PartState,
+  type PartStockFilter,
 } from '@/lib/api-client';
-import { erpRecordRoute } from '@/lib/erp-routes';
+import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 import { Input } from '@/components/ui/input';
 import { Pagination } from '@/components/ui/pagination';
 
 const PAGE_SIZE = 25;
+type StockFilter = PartStockFilter | '';
+
+const PART_STATE_OPTIONS: { value: PartState; label: string }[] = [
+  { value: 'ACTIVE', label: 'Active' },
+  { value: 'INACTIVE', label: 'Inactive' },
+  { value: 'DISCONTINUED', label: 'Discontinued' },
+];
 
 const CATEGORY_OPTIONS: { value: PartCategory; label: string }[] = [
   { value: 'ELECTRONICS', label: 'Electronics' },
@@ -39,6 +50,11 @@ const LIFECYCLE_OPTIONS: { value: LifecycleLevel; label: string }[] = [
   { value: 'ASSEMBLED_COMPONENT', label: 'Assembled' },
 ];
 
+const STOCK_OPTIONS: { value: StockFilter; label: string }[] = [
+  { value: '', label: 'All stock levels' },
+  { value: 'OUT', label: 'Out of stock' },
+];
+
 function formatEnum(value: string | undefined): string {
   if (!value) return '—';
   return value
@@ -47,13 +63,45 @@ function formatEnum(value: string | undefined): string {
     .join(' ');
 }
 
+function isOptionValue<T extends string>(
+  value: string | null,
+  options: ReadonlyArray<{ value: T; label: string }>,
+): value is T {
+  return options.some((option) => option.value === value);
+}
+
+function parsePartState(value: string | null): PartState | '' {
+  return isOptionValue(value, PART_STATE_OPTIONS) ? value : '';
+}
+
+function parseCategory(value: string | null): PartCategory | '' {
+  return isOptionValue(value, CATEGORY_OPTIONS) ? value : '';
+}
+
+function parseInstallStage(value: string | null): InstallStage | '' {
+  return isOptionValue(value, STAGE_OPTIONS) ? value : '';
+}
+
+function parseLifecycleLevel(value: string | null): LifecycleLevel | '' {
+  return isOptionValue(value, LIFECYCLE_OPTIONS) ? value : '';
+}
+
+function parseStock(value: string | null): StockFilter {
+  return value === 'OUT' ? 'OUT' : '';
+}
+
 export default function PartsPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const activeSearch = searchParams.get('search') ?? '';
+  const activePartState = parsePartState(searchParams.get('partState'));
+  const activeCategory = parseCategory(searchParams.get('category'));
+  const activeInstallStage = parseInstallStage(searchParams.get('installStage'));
+  const activeLifecycleLevel = parseLifecycleLevel(searchParams.get('lifecycleLevel'));
+  const activeStock = parseStock(searchParams.get('stock'));
   const [parts, setParts] = useState<Part[]>([]);
   const [total, setTotal] = useState(0);
-  const [search, setSearch] = useState('');
-  const [category, setCategory] = useState<PartCategory | ''>('');
-  const [installStage, setInstallStage] = useState<InstallStage | ''>('');
-  const [lifecycleLevel, setLifecycleLevel] = useState<LifecycleLevel | ''>('');
+  const [searchText, setSearchText] = useState(activeSearch);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(true);
@@ -61,6 +109,8 @@ export default function PartsPage() {
   const load = useCallback(
     async (
       s: string,
+      state: PartState | '',
+      stock: StockFilter,
       cat: PartCategory | '',
       stage: InstallStage | '',
       level: LifecycleLevel | '',
@@ -71,6 +121,8 @@ export default function PartsPage() {
       try {
         const r = await listParts({
           search: s || undefined,
+          partState: state || undefined,
+          stock: stock || undefined,
           category: cat || undefined,
           installStage: stage || undefined,
           lifecycleLevel: level || undefined,
@@ -87,33 +139,140 @@ export default function PartsPage() {
   );
 
   useEffect(() => {
+    setSearchText(activeSearch);
+  }, [activeSearch]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [
+    activeSearch,
+    activePartState,
+    activeCategory,
+    activeInstallStage,
+    activeLifecycleLevel,
+    activeStock,
+  ]);
+
+  useEffect(() => {
     const timeout = setTimeout(
-      () => void load(search, category, installStage, lifecycleLevel, page, pageSize),
+      () =>
+        void load(
+          activeSearch,
+          activePartState,
+          activeStock,
+          activeCategory,
+          activeInstallStage,
+          activeLifecycleLevel,
+          page,
+          pageSize,
+        ),
       300,
     );
     return () => clearTimeout(timeout);
-  }, [search, category, installStage, lifecycleLevel, page, pageSize, load]);
+  }, [
+    activeSearch,
+    activePartState,
+    activeCategory,
+    activeInstallStage,
+    activeLifecycleLevel,
+    activeStock,
+    page,
+    pageSize,
+    load,
+  ]);
 
-  function handleFilterChange<T>(setter: (v: T) => void, value: T) {
-    setter(value);
-    setPage(1);
+  function buildPartsHref(next: {
+    search?: string;
+    partState?: PartState | '';
+    stock?: StockFilter;
+    category?: PartCategory | '';
+    installStage?: InstallStage | '';
+    lifecycleLevel?: LifecycleLevel | '';
+  }) {
+    const search = next.search !== undefined ? next.search : activeSearch;
+    const partState = next.partState !== undefined ? next.partState : activePartState;
+    const stock = next.stock !== undefined ? next.stock : activeStock;
+    const category = next.category !== undefined ? next.category : activeCategory;
+    const installStage = next.installStage !== undefined ? next.installStage : activeInstallStage;
+    const lifecycleLevel =
+      next.lifecycleLevel !== undefined ? next.lifecycleLevel : activeLifecycleLevel;
+
+    return erpRoute('part', {
+      search: search.trim() || undefined,
+      partState: partState || undefined,
+      stock: stock || undefined,
+      category: category || undefined,
+      installStage: installStage || undefined,
+      lifecycleLevel: lifecycleLevel || undefined,
+    });
+  }
+
+  function applySearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    router.push(buildPartsHref({ search: searchText }));
+  }
+
+  const hasActiveFilters = Boolean(
+    activeSearch ||
+    activePartState ||
+    activeStock ||
+    activeCategory ||
+    activeInstallStage ||
+    activeLifecycleLevel,
+  );
+
+  const emptyDescription = hasActiveFilters
+    ? 'No parts match the active filters.'
+    : 'No parts have been loaded yet.';
+
+  function pushFilter(next: Parameters<typeof buildPartsHref>[0]) {
+    router.push(buildPartsHref(next));
   }
 
   return (
     <div>
-      <PageHeader title="Part Lookup" description={`${total} parts total`} />
+      <PageHeader title="Part Lookup" description={`${total} parts match the active filters`} />
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Input
-          placeholder="Search SKU, name, variant, MFR #…"
-          value={search}
-          onChange={(e) => handleFilterChange(setSearch, e.target.value)}
-          className="max-w-sm"
-        />
+        <form onSubmit={applySearch} className="flex w-full gap-2 sm:max-w-md">
+          <Input
+            placeholder="Search SKU, name, variant, MFR #…"
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
+            className="h-9"
+          />
+          <button
+            type="submit"
+            className="h-9 rounded-md bg-yellow-400 px-3 text-sm font-semibold text-gray-900 hover:bg-yellow-300"
+          >
+            Search
+          </button>
+        </form>
         <select
-          value={category}
-          onChange={(e) =>
-            handleFilterChange<PartCategory | ''>(setCategory, e.target.value as PartCategory | '')
-          }
+          value={activePartState}
+          onChange={(event) => pushFilter({ partState: event.target.value as PartState | '' })}
+          className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm"
+        >
+          <option value="">All states</option>
+          {PART_STATE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={activeStock}
+          onChange={(event) => pushFilter({ stock: event.target.value as StockFilter })}
+          className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm"
+        >
+          {STOCK_OPTIONS.map((o) => (
+            <option key={o.value || 'ALL'} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={activeCategory}
+          onChange={(event) => pushFilter({ category: event.target.value as PartCategory | '' })}
           className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm"
         >
           <option value="">All categories</option>
@@ -124,12 +283,9 @@ export default function PartsPage() {
           ))}
         </select>
         <select
-          value={installStage}
-          onChange={(e) =>
-            handleFilterChange<InstallStage | ''>(
-              setInstallStage,
-              e.target.value as InstallStage | '',
-            )
+          value={activeInstallStage}
+          onChange={(event) =>
+            pushFilter({ installStage: event.target.value as InstallStage | '' })
           }
           className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm"
         >
@@ -141,12 +297,9 @@ export default function PartsPage() {
           ))}
         </select>
         <select
-          value={lifecycleLevel}
-          onChange={(e) =>
-            handleFilterChange<LifecycleLevel | ''>(
-              setLifecycleLevel,
-              e.target.value as LifecycleLevel | '',
-            )
+          value={activeLifecycleLevel}
+          onChange={(event) =>
+            pushFilter({ lifecycleLevel: event.target.value as LifecycleLevel | '' })
           }
           className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm"
         >
@@ -157,6 +310,14 @@ export default function PartsPage() {
             </option>
           ))}
         </select>
+        {hasActiveFilters && (
+          <Link
+            href={erpRoute('part')}
+            className="text-xs font-semibold text-[#B1581B] hover:underline"
+          >
+            Reset filters
+          </Link>
+        )}
       </div>
       {loading ? (
         <LoadingSkeleton rows={6} cols={7} />
@@ -164,7 +325,7 @@ export default function PartsPage() {
         <EmptyState
           icon="🔍"
           title="No parts found"
-          description={search ? `No match for "${search}"` : 'No parts match the current filters.'}
+          description={activeSearch ? `No match for "${activeSearch}"` : emptyDescription}
         />
       ) : (
         <>

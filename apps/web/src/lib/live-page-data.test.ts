@@ -131,3 +131,66 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
 
   assert.deepEqual(rawIdUses, []);
 });
+
+test('dashboard KPI cards deep-link to filtered destination views', () => {
+  const roleDashboardSource = readSource('components/RoleDashboard.tsx');
+  const inventorySource = readSource('app/inventory/page.tsx');
+  const partsSource = readSource('app/inventory/parts/page.tsx');
+  const reservationsSource = readSource('app/inventory/reservations/page.tsx');
+  const reportingSource = readSource('app/reporting/page.tsx');
+  const quickBooksSource = readSource('app/accounting/quickbooks/QuickBooksDataView.tsx');
+
+  assert.deepEqual(
+    [
+      "erpRoute('blocked-work', { status: 'BLOCKED' })",
+      "erpRoute('work-order', { status: 'COMPLETED' })",
+      "erpRoute('part', { stock: 'OUT' })",
+      "erpRoute('inventory-reservation', { status: 'OPEN' })",
+    ].filter((snippet) => !roleDashboardSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      "listParts({ partState: 'ACTIVE'",
+      "listParts({ stock: 'OUT'",
+      "erpRoute('part', { partState: 'ACTIVE' })",
+      "erpRoute('part', { stock: 'OUT' })",
+      "erpRoute('inventory-reservation', { status: 'OPEN' })",
+    ].filter((snippet) => !inventorySource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      'useSearchParams',
+      "searchParams.get('partState')",
+      "searchParams.get('stock')",
+      'router.push(buildPartsHref',
+    ].filter((snippet) => !partsSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    ['useSearchParams', "searchParams.get('status')", 'router.push(buildReservationsHref'].filter(
+      (snippet) => !reservationsSource.includes(snippet),
+    ),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      "erpRoute('blocked-work', { status: 'BLOCKED' })",
+      "erpRoute('work-order', { status: 'IN_PROGRESS' })",
+      "erpRoute('work-order', { status: 'COMPLETED' })",
+    ].filter((snippet) => !reportingSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    ['normalizeInitialFilter', 'replaceQuickBooksLocation', "filter: filter === 'ALL'"].filter(
+      (snippet) => !quickBooksSource.includes(snippet),
+    ),
+    [],
+  );
+});

@@ -14,6 +14,7 @@ const truthCriticalPages = [
   'app/inventory/reservations/page.tsx',
   'app/reporting/page.tsx',
   'app/admin/audit/page.tsx',
+  'app/admin/integrations/page.tsx',
   'app/training/page.tsx',
   'app/training/admin/page.tsx',
   'app/training/assignments/page.tsx',
@@ -252,6 +253,30 @@ test('reporting catalog is registry-backed with filtered drill-through destinati
       'buildAuditHref',
       'allowMockFallback: false',
     ].filter((snippet) => !auditSource.includes(snippet)),
+    [],
+  );
+});
+
+test('admin integration health uses live strict sources instead of static connector fixtures', () => {
+  const integrationsSource = readSource('app/admin/integrations/page.tsx');
+
+  assert.deepEqual(
+    [
+      'getQbStatus',
+      'listIntegrationAccounts',
+      'listInvoiceSyncRecords',
+      'listCustomerSyncs',
+      'listReconciliationRuns',
+      'allowMockFallback: false',
+      "erpRoute('accounting-sync', { view: 'failures' })",
+    ].filter((snippet) => !integrationsSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    ['const INTEGRATIONS', '2026-03-10', 'ShopMonkey Migration', 'AWS EventBridge'].filter(
+      (snippet) => integrationsSource.includes(snippet),
+    ),
     [],
   );
 });

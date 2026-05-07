@@ -6,12 +6,6 @@
       "path": "/accounting/webhook",
       "expectStatus": 500,
       "note": "Webhook signature validation throws when no body/headers; needs explicit 400 path for unsigned probes."
-    },
-    {
-      "method": "GET",
-      "path": "/planning/vehicles",
-      "expectStatus": 404,
-      "note": "Pending deploy: PR 53 adds this API Gateway route; remove after the live QA API serves it."
     }
   ]
 }

@@ -7,6 +7,7 @@ import {
   getRequiredErpRecordRoute,
   getErpWorkspaceNavigationItems,
   getRequiredErpRoute,
+  getLiveErpReports,
   getLiveErpWorkspaceLinks,
   getLiveErpWorkspaces,
   normalizeErpRoute,
@@ -50,6 +51,14 @@ test('registry route helper resolves module links and filtered routes', () => {
     }),
     '/accounting/sync?view=invoices&state=SYNCED&period=today',
   );
+  assert.equal(
+    getRequiredErpRoute('report-work-order-blockers'),
+    '/work-orders/open?status=BLOCKED',
+  );
+  assert.equal(
+    getRequiredErpRoute('report-open-accounts-receivable', { query: 'Smith' }),
+    '/accounting/quickbooks/invoices?filter=OPEN&query=Smith',
+  );
   assert.equal(getRequiredErpRecordRoute('work-order', 'wo-1'), '/work-orders/wo-1');
   assert.equal(
     getRequiredErpRecordRoute('sales-opportunity', 'opp 1'),
@@ -76,6 +85,38 @@ test('workspace navigation items include live links and quick actions', () => {
   assert.ok(accountingItems.some((item) => item.key === 'quickbooks-invoice'));
   assert.ok(accountingItems.some((item) => item.key === 'quickbooks-chart-of-accounts'));
   assert.ok(trainingItems.some((item) => item.key === 'training-admin'));
+  assert.ok(
+    getErpWorkspaceNavigationItems('reporting').some(
+      (item) => item.key === 'report-work-order-blockers',
+    ),
+  );
+});
+
+test('live report catalog is routeable and references live registry sources', () => {
+  const liveObjectsByKey = new Set<string>(
+    ERP_OBJECTS.filter((object) => object.status === 'live').map((object) => object.key),
+  );
+  const reports = getLiveErpReports();
+
+  assert.ok(reports.length >= 8);
+
+  for (const report of reports) {
+    assert.ok(report.route.startsWith('/'), `${report.key} route should be app-relative`);
+    assert.notEqual(report.label.trim(), '', `${report.key} label should be present`);
+    assert.notEqual(report.description.trim(), '', `${report.key} description should be present`);
+    assert.notEqual(
+      report.drillThroughLabel.trim(),
+      '',
+      `${report.key} drill through should be present`,
+    );
+    assert.ok(report.sourceObjectKeys.length > 0, `${report.key} should declare data sources`);
+    for (const sourceObjectKey of report.sourceObjectKeys) {
+      assert.ok(
+        liveObjectsByKey.has(sourceObjectKey),
+        `${report.key} source ${sourceObjectKey} should be a live ERP object`,
+      );
+    }
+  }
 });
 
 test('live workspace links reference live registry objects', () => {

@@ -16,6 +16,8 @@ const truthCriticalPages = [
   'app/training/page.tsx',
   'app/training/admin/page.tsx',
   'app/work-orders/[id]/page.tsx',
+  'app/work-orders/new/page.tsx',
+  'app/sales/quotes/new/page.tsx',
 ] as const;
 
 function readSource(relativePath: string): string {
@@ -91,4 +93,41 @@ test('work-order detail page wires live execution panels', () => {
     [],
   );
   assert.equal(/will appear here/i.test(source), false);
+});
+
+test('create forms use live selectors instead of raw ID entry fields', () => {
+  const workOrderSource = readSource('app/work-orders/new/page.tsx');
+  const quoteSource = readSource('app/sales/quotes/new/page.tsx');
+
+  assert.deepEqual(
+    ['listCustomers', 'listCartVehicles', 'listWorkOrders', 'SearchableSelect'].filter(
+      (call) => !workOrderSource.includes(call),
+    ),
+    [],
+  );
+  assert.deepEqual(
+    ['listCustomers', 'listOpportunities', 'listParts', 'SearchableSelect'].filter(
+      (call) => !quoteSource.includes(call),
+    ),
+    [],
+  );
+
+  const rawIdLabels = [
+    /Customer ID/i,
+    /Vehicle ID/i,
+    /Build Config ID/i,
+    /BOM ID/i,
+    /Opportunity ID/i,
+    /Part ID/i,
+  ];
+  const rawIdUses = rawIdLabels.flatMap((pattern) =>
+    [
+      ['app/work-orders/new/page.tsx', workOrderSource] as const,
+      ['app/sales/quotes/new/page.tsx', quoteSource] as const,
+    ]
+      .filter(([, source]) => pattern.test(source))
+      .map(([page]) => ({ page, pattern: pattern.source })),
+  );
+
+  assert.deepEqual(rawIdUses, []);
 });

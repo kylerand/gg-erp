@@ -228,23 +228,23 @@
           <p class="muted">Production readiness tracker</p>
           <h1>ERP Actionability UAT Progress</h1>
         </div>
-        <div class="stamp">Last updated: 2026-05-06</div>
+        <div class="stamp">Last updated: 2026-05-07</div>
       </header>
 
       <div class="summary">
         <div class="metric"><strong>9</strong><span>Tracked delivery slices</span></div>
         <div class="metric"><strong>1</strong><span>Done</span></div>
-        <div class="metric"><strong>5</strong><span>In progress</span></div>
-        <div class="metric"><strong>3</strong><span>Not started</span></div>
+        <div class="metric"><strong>6</strong><span>In progress</span></div>
+        <div class="metric"><strong>2</strong><span>Not started</span></div>
       </div>
 
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: make the work-order workspace executable for material, labor, and QC
-          without leaving the job detail page.
+          Current focus: replace raw-ID creation paths with live selectors that make the next
+          operational action obvious.
         </p>
-        <div class="progress" aria-label="45 percent complete"><div style="width: 45%"></div></div>
+        <div class="progress" aria-label="50 percent complete"><div style="width: 50%"></div></div>
       </section>
 
       <section>
@@ -291,9 +291,15 @@
             </tr>
             <tr>
               <td>Forms and selectors</td>
-              <td><span class="pill todo">Not started</span></td>
-              <td>Raw ID forms remain.</td>
-              <td>Add customer, cart, BOM, part, vendor, and technician selectors.</td>
+              <td><span class="pill doing">In progress</span></td>
+              <td>
+                Work-order and quote create screens use live customer, cart, opportunity, part, and
+                recent build-package selectors with mock fallback disabled.
+              </td>
+              <td>
+                Add dedicated build configuration, BOM, vendor, and technician selectors once those
+                catalogs are exposed through stable APIs.
+              </td>
             </tr>
             <tr>
               <td>Training repair</td>

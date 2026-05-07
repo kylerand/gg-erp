@@ -45,6 +45,18 @@ const workOrder = z.object({
   updatedAt: isoDate,
 });
 
+const cartVehicle = z.object({
+  id: uuid,
+  vin: z.string(),
+  serialNumber: z.string(),
+  modelCode: z.string(),
+  modelYear: z.number().int(),
+  customerId: uuid,
+  state: z.enum(['REGISTERED', 'IN_BUILD', 'QUALITY_HOLD', 'COMPLETED', 'RETIRED']),
+  createdAt: isoDate,
+  updatedAt: isoDate,
+});
+
 // ─── Inventory ────────────────────────────────────────────────────────────
 
 const partLifecycleLevel = z.enum([
@@ -180,6 +192,7 @@ interface RouteEntry {
 const ROUTES: RouteEntry[] = [
   // Work Orders
   { method: 'GET', template: '/planning/work-orders', schema: paginated(workOrder) },
+  { method: 'GET', template: '/planning/vehicles', schema: paginated(cartVehicle) },
   { method: 'GET', template: '/work-orders/{id}', schema: z.object({ workOrder }) },
 
   // Tickets / tasks

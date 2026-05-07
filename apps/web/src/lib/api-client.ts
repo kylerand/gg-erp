@@ -359,6 +359,20 @@ export interface CreateWorkOrderInput {
   scheduledDate?: string;
 }
 
+export type CartVehicleState = 'REGISTERED' | 'IN_BUILD' | 'QUALITY_HOLD' | 'COMPLETED' | 'RETIRED';
+
+export interface CartVehicle {
+  id: string;
+  vin: string;
+  serialNumber: string;
+  modelCode: string;
+  modelYear: number;
+  customerId: string;
+  state: CartVehicleState;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const MOCK_WORK_ORDERS: WorkOrder[] = [
   {
     id: 'wo-1',
@@ -395,17 +409,25 @@ export const MOCK_WORK_ORDERS: WorkOrder[] = [
   },
 ];
 
-export async function listWorkOrders(params?: {
-  state?: string;
-  limit?: number;
-}): Promise<{ items: WorkOrder[]; total: number }> {
+export async function listWorkOrders(
+  params?: {
+    state?: string;
+    limit?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<{ items: WorkOrder[]; total: number }> {
   const qs = new URLSearchParams();
   if (params?.state) qs.set('state', params.state);
   if (params?.limit) qs.set('limit', String(params.limit));
-  return apiFetch(`/planning/work-orders${qs.size ? `?${qs}` : ''}`, undefined, {
-    items: MOCK_WORK_ORDERS,
-    total: MOCK_WORK_ORDERS.length,
-  });
+  return apiFetch(
+    `/planning/work-orders${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    {
+      items: MOCK_WORK_ORDERS,
+      total: MOCK_WORK_ORDERS.length,
+    },
+    options,
+  );
 }
 
 export async function createWorkOrder(input: CreateWorkOrderInput): Promise<WorkOrder> {
@@ -414,6 +436,30 @@ export async function createWorkOrder(input: CreateWorkOrderInput): Promise<Work
     body: JSON.stringify(input),
   });
   return data.workOrder;
+}
+
+export async function listCartVehicles(
+  params?: {
+    customerId?: string;
+    search?: string;
+    state?: CartVehicleState;
+    limit?: number;
+    offset?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<{ items: CartVehicle[]; total: number; limit?: number; offset?: number }> {
+  const qs = new URLSearchParams();
+  if (params?.customerId) qs.set('customerId', params.customerId);
+  if (params?.search) qs.set('search', params.search);
+  if (params?.state) qs.set('state', params.state);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  return apiFetch(
+    `/planning/vehicles${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    { items: [], total: 0, limit: params?.limit ?? 25, offset: params?.offset ?? 0 },
+    options,
+  );
 }
 
 export async function transitionWorkOrderState(
@@ -2438,23 +2484,31 @@ export interface SalesDashboard {
   topOpportunities: SalesOpportunity[];
 }
 
-export async function listOpportunities(params?: {
-  stage?: string;
-  customerId?: string;
-  search?: string;
-  limit?: number;
-  offset?: number;
-}): Promise<{ items: SalesOpportunity[]; total: number }> {
+export async function listOpportunities(
+  params?: {
+    stage?: string;
+    customerId?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<{ items: SalesOpportunity[]; total: number }> {
   const qs = new URLSearchParams();
   if (params?.stage) qs.set('stage', params.stage);
   if (params?.customerId) qs.set('customerId', params.customerId);
   if (params?.search) qs.set('search', params.search);
   if (params?.limit) qs.set('limit', String(params.limit));
   if (params?.offset) qs.set('offset', String(params.offset));
-  return apiFetch(`/sales/opportunities${qs.size ? `?${qs}` : ''}`, undefined, {
-    items: [],
-    total: 0,
-  });
+  return apiFetch(
+    `/sales/opportunities${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    {
+      items: [],
+      total: 0,
+    },
+    options,
+  );
 }
 
 export async function getOpportunity(

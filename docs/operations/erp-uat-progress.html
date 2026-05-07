@@ -241,10 +241,10 @@
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: make dashboard and KPI cards land on filtered, useful operational lists
-          instead of broad destination pages.
+          Current focus: convert reporting into a registry-backed catalog with filtered operational
+          drill-throughs.
         </p>
-        <div class="progress" aria-label="50 percent complete"><div style="width: 50%"></div></div>
+        <div class="progress" aria-label="55 percent complete"><div style="width: 55%"></div></div>
       </section>
 
       <section>
@@ -285,15 +285,13 @@
             </tr>
             <tr>
               <td>Dashboard and KPI deep links</td>
-              <td><span class="pill doing">In progress</span></td>
+              <td><span class="pill done">Done</span></td>
               <td>
                 Work-order, inventory parts/reservations, QuickBooks reference lists, reporting
-                cards, and role-dashboard KPI cards use URL-backed filtered destinations.
+                cards, role-dashboard KPI cards, training assignments, and audit search use
+                URL-backed filtered destinations.
               </td>
-              <td>
-                Extend the same pattern to training/admin filters and the upcoming named reporting
-                catalog.
-              </td>
+              <td>Keep the same pattern as new catalogs and filters become stable.</td>
             </tr>
             <tr>
               <td>Forms and selectors</td>
@@ -312,7 +310,7 @@
               <td><span class="pill doing">In progress</span></td>
               <td>
                 Lesson content loads when optional learner state fails; module image fallback route
-                exists.
+                exists; assignment status/search filters are URL-backed for report drill-throughs.
               </td>
               <td>Finish API-level notes/bookmarks hardening and verify seeded module media.</td>
             </tr>
@@ -328,9 +326,14 @@
             </tr>
             <tr>
               <td>Reporting catalog</td>
-              <td><span class="pill todo">Not started</span></td>
-              <td>Reporting route is shallow.</td>
-              <td>Add named reports, filters, descriptions, and drill-through pages.</td>
+              <td><span class="pill doing">In progress</span></td>
+              <td>
+                `ERP_REPORTS` now feeds named report cards, workspace navigation, command palette
+                entries, category/search filters, live signals, and filtered drill-through links.
+              </td>
+              <td>
+                Add saved report definitions, exports, trend history, and custom report scopes.
+              </td>
             </tr>
             <tr>
               <td>Admin configuration catalog</td>

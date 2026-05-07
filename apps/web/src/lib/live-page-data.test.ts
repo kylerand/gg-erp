@@ -13,8 +13,10 @@ const truthCriticalPages = [
   'app/inventory/receiving/page.tsx',
   'app/inventory/reservations/page.tsx',
   'app/reporting/page.tsx',
+  'app/admin/audit/page.tsx',
   'app/training/page.tsx',
   'app/training/admin/page.tsx',
+  'app/training/assignments/page.tsx',
   'app/work-orders/[id]/page.tsx',
   'app/work-orders/new/page.tsx',
   'app/sales/quotes/new/page.tsx',
@@ -180,9 +182,9 @@ test('dashboard KPI cards deep-link to filtered destination views', () => {
 
   assert.deepEqual(
     [
+      'getLiveErpReports',
+      'loadReportSignals',
       "erpRoute('blocked-work', { status: 'BLOCKED' })",
-      "erpRoute('work-order', { status: 'IN_PROGRESS' })",
-      "erpRoute('work-order', { status: 'COMPLETED' })",
     ].filter((snippet) => !reportingSource.includes(snippet)),
     [],
   );
@@ -191,6 +193,65 @@ test('dashboard KPI cards deep-link to filtered destination views', () => {
     ['normalizeInitialFilter', 'replaceQuickBooksLocation', "filter: filter === 'ALL'"].filter(
       (snippet) => !quickBooksSource.includes(snippet),
     ),
+    [],
+  );
+});
+
+test('reporting catalog is registry-backed with filtered drill-through destinations', () => {
+  const reportingSource = readSource('app/reporting/page.tsx');
+  const assignmentsSource = readSource('app/training/assignments/page.tsx');
+  const auditSource = readSource('app/admin/audit/page.tsx');
+  const reportRegistrySource = readFileSync(
+    path.resolve(WEB_SRC_DIR, '../../../packages/domain/src/erp-reports.ts'),
+    'utf8',
+  );
+
+  assert.deepEqual(
+    [
+      'ERP_REPORTS',
+      'report-work-order-blockers',
+      'report-material-shortages',
+      'report-open-accounts-receivable',
+      'report-overdue-training',
+      'report-audit-events',
+      '/training/assignments?status=OVERDUE',
+      '/admin/audit?search=DENIED',
+    ].filter((snippet) => !reportRegistrySource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      'getLiveErpReports',
+      'reportingHref',
+      'ReportCard',
+      'allowMockFallback: false',
+      'listParts({ stock: ',
+      "listInventoryReservations(\n        { status: 'OPEN'",
+      "listAuditEvents({ search: 'DENIED'",
+    ].filter((snippet) => !reportingSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      'useSearchParams',
+      "searchParams.get('status')",
+      "searchParams.get('search')",
+      'parseAssignmentFilter',
+      'buildAssignmentsHref',
+      'allowMockFallback: false',
+    ].filter((snippet) => !assignmentsSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      'useSearchParams',
+      "searchParams.get('search')",
+      'buildAuditHref',
+      'allowMockFallback: false',
+    ].filter((snippet) => !auditSource.includes(snippet)),
     [],
   );
 });

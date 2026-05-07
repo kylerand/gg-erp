@@ -7,6 +7,7 @@ import {
   type ErpObjectQuickActionDescriptor,
   type ErpRouteStatus,
 } from './erp-object-registry.js';
+import { getLiveErpReports } from './erp-reports.js';
 
 export interface ErpWorkspaceLinkDescriptor {
   key: string;
@@ -403,7 +404,14 @@ export const ERP_WORKSPACES = [
     icon: 'reporting',
     status: 'live',
     keywords: ['report', 'analytics', 'dashboard'],
-    links: [],
+    links: getLiveErpReports().map((report) => ({
+      key: report.key,
+      label: report.label,
+      description: report.description,
+      route: report.route,
+      status: report.status,
+      keywords: report.keywords,
+    })),
   },
   {
     key: 'admin',

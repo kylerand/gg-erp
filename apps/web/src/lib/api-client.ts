@@ -1660,17 +1660,23 @@ export const MOCK_SYNC_RECORDS: InvoiceSyncRecord[] = [
   },
 ];
 
-export async function listInvoiceSyncRecords(params?: {
-  state?: string;
-  workOrderId?: string;
-  limit?: number;
-}): Promise<{ items: InvoiceSyncRecord[] }> {
+export async function listInvoiceSyncRecords(
+  params?: {
+    state?: string;
+    workOrderId?: string;
+    limit?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<{ items: InvoiceSyncRecord[] }> {
   const qs = new URLSearchParams();
   if (params?.state) qs.set('state', params.state);
   if (params?.workOrderId) qs.set('workOrderId', params.workOrderId);
   if (params?.limit) qs.set('limit', String(params.limit));
   const res = await apiFetch<{ items: InvoiceSyncRecord[]; total: number }>(
     `/accounting/invoice-sync${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    undefined,
+    options,
   );
   return { items: res.items };
 }
@@ -1716,14 +1722,20 @@ export interface QbOverview {
   error?: string;
 }
 
-export async function getQbStatus(): Promise<{
+export async function getQbStatus(options?: ApiDataOptions): Promise<{
   connected: boolean;
   companyName?: string;
   realmId?: string;
   message?: string;
   overview?: QbOverview;
 }> {
-  return apiFetch('/accounting/status');
+  return apiFetch<{
+    connected: boolean;
+    companyName?: string;
+    realmId?: string;
+    message?: string;
+    overview?: QbOverview;
+  }>('/accounting/status', undefined, undefined, options);
 }
 
 // ─── Reconciliation ──────────────────────────────────────────────────────────
@@ -2113,11 +2125,17 @@ export interface TrainingAssignment {
 export async function listMyAssignments(
   employeeId?: string,
   params?: { status?: string },
+  options?: ApiDataOptions,
 ): Promise<{ items: TrainingAssignment[]; total: number }> {
   const qs = new URLSearchParams();
   if (employeeId) qs.set('employeeId', employeeId);
   if (params?.status) qs.set('status', params.status);
-  return apiFetch(`/ojt/assignments${qs.size ? `?${qs}` : ''}`, undefined, { items: [], total: 0 });
+  return apiFetch(
+    `/ojt/assignments${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    { items: [], total: 0 },
+    options,
+  );
 }
 
 export async function completeAssignment(id: string, score?: number): Promise<TrainingAssignment> {
@@ -2359,20 +2377,28 @@ export interface AuditEventRecord {
   createdAt: string;
 }
 
-export async function listAuditEvents(params?: {
-  search?: string;
-  action?: string;
-  entityType?: string;
-  limit?: number;
-  offset?: number;
-}): Promise<{ items: AuditEventRecord[]; total: number }> {
+export async function listAuditEvents(
+  params?: {
+    search?: string;
+    action?: string;
+    entityType?: string;
+    limit?: number;
+    offset?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<{ items: AuditEventRecord[]; total: number }> {
   const qs = new URLSearchParams();
   if (params?.search) qs.set('search', params.search);
   if (params?.action) qs.set('action', params.action);
   if (params?.entityType) qs.set('entityType', params.entityType);
   if (params?.limit) qs.set('limit', String(params.limit));
   if (params?.offset) qs.set('offset', String(params.offset));
-  return apiFetch(`/audit/events${qs.size ? `?${qs}` : ''}`, undefined, { items: [], total: 0 });
+  return apiFetch(
+    `/audit/events${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    { items: [], total: 0 },
+    options,
+  );
 }
 
 // ─── Build Slots (Scheduling) ──────────────────────────────────────────────────

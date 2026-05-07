@@ -13,6 +13,7 @@ const truthCriticalPages = [
   'app/inventory/receiving/page.tsx',
   'app/inventory/reservations/page.tsx',
   'app/reporting/page.tsx',
+  'app/admin/accounting/page.tsx',
   'app/admin/audit/page.tsx',
   'app/admin/integrations/page.tsx',
   'app/training/page.tsx',
@@ -277,6 +278,48 @@ test('admin integration health uses live strict sources instead of static connec
     ['const INTEGRATIONS', '2026-03-10', 'ShopMonkey Migration', 'AWS EventBridge'].filter(
       (snippet) => integrationsSource.includes(snippet),
     ),
+    [],
+  );
+});
+
+test('admin accounting settings expose live mapping configuration actions', () => {
+  const accountingSettingsSource = readSource('app/admin/accounting/page.tsx');
+  const adminWorkspaceSource = readFileSync(
+    path.resolve(WEB_SRC_DIR, '../../../packages/domain/src/erp-workspaces.ts'),
+    'utf8',
+  );
+  const apiClientSource = readSource('lib/api-client.ts');
+
+  assert.deepEqual(
+    [
+      'listIntegrationAccounts',
+      'listDimensionMappings',
+      'listTaxMappings',
+      'upsertDimensionMapping',
+      'upsertTaxMapping',
+      'allowMockFallback: false',
+      "erpRoute('accounting-settings'",
+      'Invoice Export Readiness',
+    ].filter((snippet) => !accountingSettingsSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      'accounting-settings',
+      '/admin/accounting',
+      'Configure QuickBooks export mappings and tax codes',
+    ].filter((snippet) => !adminWorkspaceSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      'export async function listDimensionMappings',
+      'export async function upsertDimensionMapping',
+      'export async function listTaxMappings',
+      'export async function upsertTaxMapping',
+    ].filter((snippet) => !apiClientSource.includes(snippet)),
     [],
   );
 });

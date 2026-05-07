@@ -633,6 +633,20 @@ export const ERP_OBJECTS = [
     listColumns: ['integrationName', 'provider', 'status', 'lastSyncAt'],
     keywords: ['integration', 'quickbooks', 'google', 'settings'],
   },
+  {
+    key: 'accounting-settings',
+    label: 'Accounting Settings',
+    pluralLabel: 'Accounting Settings',
+    description: 'Configure QuickBooks export dimensions, AR mappings, income mappings, and taxes.',
+    module: 'admin',
+    kind: 'settings',
+    ownerContext: 'accounting',
+    route: '/admin/accounting',
+    status: 'live',
+    searchFields: ['integrationAccount', 'mappingType', 'internalCode', 'externalId'],
+    listColumns: ['mappingType', 'internalCode', 'externalId', 'updatedAt'],
+    keywords: ['accounting', 'quickbooks', 'mapping', 'tax', 'settings'],
+  },
 ] as const satisfies readonly ErpObjectDescriptor[];
 
 export const ERP_OBJECTS_BY_KEY = Object.fromEntries(

@@ -449,6 +449,15 @@ export const ERP_WORKSPACES = [
         objectKey: 'integration-settings',
         keywords: ['integration', 'quickbooks', 'google', 'settings'],
       },
+      {
+        key: 'accounting-settings',
+        label: 'Accounting Settings',
+        description: 'Configure QuickBooks export mappings and tax codes.',
+        route: '/admin/accounting',
+        status: 'live',
+        objectKey: 'accounting-settings',
+        keywords: ['accounting', 'quickbooks', 'mapping', 'tax', 'settings'],
+      },
     ],
   },
 ] as const satisfies readonly ErpWorkspaceDescriptor[];

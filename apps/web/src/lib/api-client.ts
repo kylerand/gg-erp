@@ -1824,6 +1824,95 @@ export async function listIntegrationAccounts(options?: ApiDataOptions): Promise
   return apiFetch('/accounting/integration-accounts', undefined, { items: [], total: 0 }, options);
 }
 
+export type DimensionMappingType = 'ITEM' | 'INCOME_ACCOUNT' | 'AR_ACCOUNT' | 'PAYMENT_METHOD';
+
+export interface DimensionMapping {
+  id: string;
+  integrationAccountId: string;
+  mappingType: DimensionMappingType;
+  internalCode: string;
+  externalId: string;
+  displayName: string | null;
+  namespace: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaxMapping {
+  id: string;
+  integrationAccountId: string;
+  taxRegionCode: string;
+  internalTaxCode: string;
+  externalTaxCodeId: string;
+  externalRateName: string | null;
+  namespace: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpsertDimensionMappingInput {
+  integrationAccountId: string;
+  mappingType: DimensionMappingType;
+  internalCode: string;
+  externalId: string;
+  displayName?: string;
+  namespace?: string;
+}
+
+export interface UpsertTaxMappingInput {
+  integrationAccountId: string;
+  taxRegionCode: string;
+  internalTaxCode: string;
+  externalTaxCodeId: string;
+  externalRateName?: string;
+  namespace?: string;
+}
+
+export async function listDimensionMappings(
+  params: { integrationAccountId: string; namespace?: string },
+  options?: ApiDataOptions,
+): Promise<{ items: DimensionMapping[]; total: number }> {
+  const qs = new URLSearchParams();
+  qs.set('integrationAccountId', params.integrationAccountId);
+  if (params.namespace) qs.set('namespace', params.namespace);
+  return apiFetch(
+    `/accounting/mappings/dimensions?${qs}`,
+    undefined,
+    { items: [], total: 0 },
+    options,
+  );
+}
+
+export async function upsertDimensionMapping(
+  input: UpsertDimensionMappingInput,
+): Promise<DimensionMapping> {
+  return apiFetch('/accounting/mappings/dimensions', {
+    method: 'PUT',
+    headers: mutationHeaders(),
+    body: JSON.stringify(input),
+  });
+}
+
+export async function listTaxMappings(
+  params: { integrationAccountId: string; namespace?: string },
+  options?: ApiDataOptions,
+): Promise<{ items: TaxMapping[]; total: number }> {
+  const qs = new URLSearchParams();
+  qs.set('integrationAccountId', params.integrationAccountId);
+  if (params.namespace) qs.set('namespace', params.namespace);
+  return apiFetch(`/accounting/mappings/tax?${qs}`, undefined, { items: [], total: 0 }, options);
+}
+
+export async function upsertTaxMapping(input: UpsertTaxMappingInput): Promise<TaxMapping> {
+  return apiFetch('/accounting/mappings/tax', {
+    method: 'PUT',
+    headers: mutationHeaders(),
+    body: JSON.stringify(input),
+  });
+}
+
 export interface FailureSummary {
   invoice: number;
   customer: number;

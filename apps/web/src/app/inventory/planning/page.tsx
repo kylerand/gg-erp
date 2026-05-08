@@ -230,12 +230,17 @@ function buildActionQueue(plan: StageMaterialPlanResponse | null): QueuedAction[
   const out: QueuedAction[] = [];
   for (const line of allShort.slice(0, TOP_SHORTAGE_LIMIT)) {
     const stage = line.part.installStage ? formatStage(line.part.installStage) : 'Unassigned';
+    const hasVendor = Boolean(line.part.defaultVendorId);
     out.push({
       severity: line.shortfall >= line.reorderPoint ? 'high' : 'medium',
       title: `${line.part.name}${line.part.variant ? ` (${line.part.variant})` : ''} — short ${line.shortfall}`,
-      detail: `${stage} · on hand ${line.onHand} / min ${line.reorderPoint} · SKU ${line.part.sku}. Open the part to adjust on-hand or kick off a reorder.`,
-      cta: 'Open part →',
-      href: erpRecordRoute('part', line.part.id),
+      detail: `${stage} · on hand ${line.onHand} / min ${line.reorderPoint} · SKU ${line.part.sku}${
+        line.part.defaultVendorName ? ` · vendor ${line.part.defaultVendorName}` : ''
+      }.`,
+      cta: hasVendor ? 'Review vendor POs →' : 'Open part →',
+      href: hasVendor
+        ? erpRoute('purchase-order', { vendorId: line.part.defaultVendorId })
+        : erpRecordRoute('part', line.part.id),
     });
   }
   if (allShort.length > TOP_SHORTAGE_LIMIT) {

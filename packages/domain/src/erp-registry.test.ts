@@ -60,7 +60,15 @@ test('registry route helper resolves module links and filtered routes', () => {
     getRequiredErpRoute('report-open-accounts-receivable', { query: 'Smith' }),
     '/accounting/quickbooks/invoices?filter=OPEN&query=Smith',
   );
+  assert.equal(
+    getRequiredErpRoute('purchase-order', { status: 'SENT', vendorId: 'vendor-1' }),
+    '/inventory/purchase-orders?status=SENT&vendorId=vendor-1',
+  );
   assert.equal(getRequiredErpRecordRoute('work-order', 'wo-1'), '/work-orders/wo-1');
+  assert.equal(
+    getRequiredErpRecordRoute('purchase-order', 'po-1'),
+    '/inventory/purchase-orders/po-1',
+  );
   assert.equal(
     getRequiredErpRecordRoute('sales-opportunity', 'opp 1'),
     '/sales/opportunities/opp%201',
@@ -75,6 +83,7 @@ test('workspace navigation items include live links and quick actions', () => {
   const workOrderItems = getErpWorkspaceNavigationItems('work-orders');
   const salesItems = getErpWorkspaceNavigationItems('sales');
   const accountingItems = getErpWorkspaceNavigationItems('accounting');
+  const inventoryItems = getErpWorkspaceNavigationItems('inventory');
   const trainingItems = getErpWorkspaceNavigationItems('training');
 
   assert.ok(workOrderItems.some((item) => item.key === 'create-work-order'));
@@ -82,6 +91,7 @@ test('workspace navigation items include live links and quick actions', () => {
   assert.ok(
     getErpWorkspaceNavigationItems('customers').some((item) => item.key === 'create-customer'),
   );
+  assert.ok(inventoryItems.some((item) => item.key === 'purchase-order'));
   assert.ok(accountingItems.some((item) => item.key === 'quickbooks-customer'));
   assert.ok(accountingItems.some((item) => item.key === 'quickbooks-invoice'));
   assert.ok(accountingItems.some((item) => item.key === 'quickbooks-chart-of-accounts'));

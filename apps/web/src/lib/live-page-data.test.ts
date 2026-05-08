@@ -10,6 +10,8 @@ const WEB_SRC_DIR = path.resolve(__dirname, '..');
 const truthCriticalPages = [
   'app/customer-dealers/page.tsx',
   'app/inventory/page.tsx',
+  'app/inventory/purchase-orders/page.tsx',
+  'app/inventory/purchase-orders/[id]/page.tsx',
   'app/inventory/receiving/page.tsx',
   'app/inventory/reservations/page.tsx',
   'app/reporting/page.tsx',
@@ -324,6 +326,70 @@ test('admin accounting settings expose live mapping configuration actions', () =
       'export async function upsertDimensionMapping',
       'export async function listTaxMappings',
       'export async function upsertTaxMapping',
+    ].filter((snippet) => !apiClientSource.includes(snippet)),
+    [],
+  );
+});
+
+test('inventory procurement drill-in uses live PO/vendor reads and focused receiving links', () => {
+  const inventorySource = readSource('app/inventory/page.tsx');
+  const purchaseOrdersSource = readSource('app/inventory/purchase-orders/page.tsx');
+  const purchaseOrderDetailSource = readSource('app/inventory/purchase-orders/[id]/page.tsx');
+  const receivingSource = readSource('app/inventory/receiving/page.tsx');
+  const planningSource = readSource('app/inventory/planning/page.tsx');
+  const apiClientSource = readSource('lib/api-client.ts');
+
+  assert.deepEqual(
+    [
+      "listPurchaseOrders({ status: 'SENT'",
+      "erpRoute('purchase-order', { status: 'SENT' })",
+    ].filter((snippet) => !inventorySource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      'listPurchaseOrders(',
+      'listVendors(',
+      'useSearchParams',
+      "erpRecordRoute('purchase-order'",
+      'allowMockFallback: false',
+    ].filter((snippet) => !purchaseOrdersSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      'getPurchaseOrder',
+      'getVendor',
+      "erpRoute('receiving')",
+      'allowMockFallback: false',
+      "erpRecordRoute('part'",
+    ].filter((snippet) => !purchaseOrderDetailSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      "searchParams.get('purchaseOrderId')",
+      "searchParams.get('lineId')",
+      "erpRecordRoute('purchase-order'",
+    ].filter((snippet) => !receivingSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    ["erpRoute('purchase-order'", 'defaultVendorId'].filter(
+      (snippet) => !planningSource.includes(snippet),
+    ),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      'export async function getPurchaseOrder',
+      'export async function getVendor',
+      'vendorId',
     ].filter((snippet) => !apiClientSource.includes(snippet)),
     [],
   );

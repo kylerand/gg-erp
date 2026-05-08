@@ -1419,6 +1419,9 @@ export interface Vendor {
   phone?: string;
   leadTimeDays?: number;
   paymentTerms?: string;
+  purchaseOrderCount?: number;
+  openPurchaseOrderCount?: number;
+  nextExpectedAt?: string;
 }
 
 export const MOCK_VENDORS: Vendor[] = [
@@ -1433,11 +1436,33 @@ export const MOCK_VENDORS: Vendor[] = [
   },
 ];
 
-export async function listVendors(): Promise<{ items: Vendor[]; total: number }> {
-  return apiFetch('/inventory/vendors', undefined, {
-    items: MOCK_VENDORS,
-    total: MOCK_VENDORS.length,
-  });
+export async function listVendors(
+  params?: { state?: Vendor['vendorState']; limit?: number; offset?: number },
+  options?: ApiDataOptions,
+): Promise<{ items: Vendor[]; total: number }> {
+  const qs = new URLSearchParams();
+  if (params?.state) qs.set('state', params.state);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  return apiFetch(
+    `/inventory/vendors${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    {
+      items: MOCK_VENDORS,
+      total: MOCK_VENDORS.length,
+    },
+    options,
+  );
+}
+
+export async function getVendor(id: string, options?: ApiDataOptions): Promise<Vendor> {
+  const data = await apiFetch<{ vendor: Vendor }>(
+    `/inventory/vendors/${encodeURIComponent(id)}`,
+    undefined,
+    { vendor: MOCK_VENDORS[0] },
+    options,
+  );
+  return data.vendor;
 }
 
 export interface PurchaseOrderLine {
@@ -1452,7 +1477,11 @@ export interface PurchaseOrderLine {
   receivedQuantity: number;
   rejectedQuantity: number;
   openQuantity: number;
+  unitOfMeasure?: string;
+  unitOfMeasureName?: string;
   unitCost: number;
+  lineTotal?: number;
+  promisedAt?: string;
   lineState: string;
 }
 
@@ -1471,13 +1500,19 @@ export interface PurchaseOrder {
     | 'CANCELLED';
   orderedAt: string;
   expectedAt?: string;
+  sentAt?: string;
+  closedAt?: string;
+  notes?: string;
   lineCount: number;
   lines: PurchaseOrderLine[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export async function listPurchaseOrders(
   params?: {
     status?: string;
+    vendorId?: string;
     page?: number;
     pageSize?: number;
   },
@@ -1485,6 +1520,7 @@ export async function listPurchaseOrders(
 ): Promise<{ items: PurchaseOrder[]; total: number }> {
   const qs = new URLSearchParams();
   if (params?.status) qs.set('status', params.status);
+  if (params?.vendorId) qs.set('vendorId', params.vendorId);
   if (params?.page) qs.set('page', String(params.page));
   if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
   return apiFetch(
@@ -1496,6 +1532,19 @@ export async function listPurchaseOrders(
     },
     options,
   );
+}
+
+export async function getPurchaseOrder(
+  id: string,
+  options?: ApiDataOptions,
+): Promise<PurchaseOrder> {
+  const data = await apiFetch<{ purchaseOrder: PurchaseOrder }>(
+    `/inventory/purchase-orders/${encodeURIComponent(id)}`,
+    undefined,
+    undefined,
+    options,
+  );
+  return data.purchaseOrder;
 }
 
 export interface ReceiveInventoryLotInput {

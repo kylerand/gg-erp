@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   createQuote,
+  getCustomer,
   listCustomers,
   listOpportunities,
   listParts,
@@ -80,11 +81,17 @@ function filterOptions(options: SearchableSelectOption[], query: string): Search
 
 export default function NewQuotePage() {
   const router = useRouter();
-  const [customerId, setCustomerId] = useState('');
+  const searchParams = useSearchParams();
+  const initialCustomerId = searchParams.get('customerId') ?? '';
+  const initialOpportunityId = searchParams.get('opportunityId') ?? '';
+  const sourceWorkOrderId = searchParams.get('workOrderId') ?? '';
+  const [customerId, setCustomerId] = useState(initialCustomerId);
   const [customerSearch, setCustomerSearch] = useState('');
-  const [opportunityId, setOpportunityId] = useState('');
+  const [opportunityId, setOpportunityId] = useState(initialOpportunityId);
   const [opportunitySearch, setOpportunitySearch] = useState('');
-  const [notes, setNotes] = useState('');
+  const [notes, setNotes] = useState(
+    sourceWorkOrderId ? `Prepared from work order ${sourceWorkOrderId}.` : '',
+  );
   const [validUntil, setValidUntil] = useState('');
   const [lines, setLines] = useState<LineItem[]>(() => [emptyLine('quote-line-1')]);
   const [nextLineNumber, setNextLineNumber] = useState(2);
@@ -102,11 +109,19 @@ export default function NewQuotePage() {
     setReferenceLoading(true);
     setReferenceError(undefined);
 
+    const customerRequest =
+      customerId && !customerSearch
+        ? getCustomer(customerId, { allowMockFallback: false }).then((customer) => ({
+            items: [customer],
+            total: 1,
+          }))
+        : listCustomers(
+            { search: customerSearch || undefined, state: 'ACTIVE', limit: 25 },
+            { allowMockFallback: false },
+          );
+
     Promise.all([
-      listCustomers(
-        { search: customerSearch || undefined, state: 'ACTIVE', limit: 25 },
-        { allowMockFallback: false },
-      ),
+      customerRequest,
       listOpportunities(
         {
           customerId: customerId || undefined,
@@ -306,6 +321,11 @@ export default function NewQuotePage() {
             />
           </div>
         </div>
+        {sourceWorkOrderId && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+            Source work order: {sourceWorkOrderId}
+          </div>
+        )}
       </div>
 
       <div className="mb-6">

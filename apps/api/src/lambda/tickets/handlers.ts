@@ -512,8 +512,13 @@ function formatAge(date: Date | null): string {
 
 interface WoOperation {
   id: string;
+  operationCode?: string;
+  sequenceNo?: number;
   operationName: string;
   operationStatus: string;
+  requiredSkillCode?: string | null;
+  estimatedMinutes?: number;
+  blockingReason?: string | null;
 }
 
 interface WoPart {
@@ -525,6 +530,87 @@ interface WoPart {
   consumedQuantity?: unknown;
   part?: { name?: string; sku?: string } | null;
 }
+
+interface WoDetailOrder {
+  id: string;
+  workOrderNumber: string;
+  title: string;
+  customerReference?: string | null;
+  assetReference?: string | null;
+  stockLocation?: { locationName?: string | null } | null;
+  status: string;
+  dueAt?: Date | null;
+  operations?: WoOperation[];
+  parts?: WoPart[];
+  statusHistory?: WoStatusHistoryRecord[];
+}
+
+interface WoStatusHistoryRecord {
+  id: string;
+  fromStatus?: string | null;
+  toStatus: string;
+  reasonCode?: string | null;
+  reasonNote?: string | null;
+  actorUserId?: string | null;
+  correlationId: string;
+  createdAt: Date;
+}
+
+interface WorkOrderCommercialContext {
+  customerProfile?: {
+    id: string;
+    fullName: string;
+    companyName?: string;
+    email: string;
+    phone?: string;
+    state: string;
+    preferredContactMethod: string;
+    externalReference?: string;
+  };
+  cartProfile?: {
+    id: string;
+    vin: string;
+    serialNumber: string;
+    modelCode: string;
+    modelYear: number;
+    customerId: string;
+    state: string;
+  };
+  quotes: Array<{
+    id: string;
+    quoteNumber: string;
+    status: string;
+    total: number;
+    validUntil?: string;
+    convertedWoId?: string;
+    updatedAt: string;
+  }>;
+  opportunities: Array<{
+    id: string;
+    title: string;
+    stage: string;
+    probability: number;
+    estimatedValue?: number;
+    expectedCloseDate?: string;
+    wonWorkOrderId?: string;
+    updatedAt: string;
+  }>;
+  activities: Array<{
+    id: string;
+    activityType: string;
+    subject: string;
+    body?: string;
+    dueDate?: string;
+    completedAt?: string;
+    createdAt: string;
+  }>;
+}
+
+const EMPTY_COMMERCIAL_CONTEXT: WorkOrderCommercialContext = {
+  quotes: [],
+  opportunities: [],
+  activities: [],
+};
 
 interface WorkOrderReservationRow {
   id: string;
@@ -605,6 +691,216 @@ function toWorkOrderReservationResponse(r: WorkOrderReservationRow) {
   };
 }
 
+function optionalIso(value?: Date | null): string | undefined {
+  return value ? value.toISOString() : undefined;
+}
+
+function isUuid(value?: string | null): value is string {
+  return Boolean(value && UUID_RE.test(value));
+}
+
+function toCustomerProfileResponse(r: {
+  id: string;
+  fullName: string;
+  companyName?: string | null;
+  email: string;
+  phone?: string | null;
+  state: string;
+  preferredContactMethod: string;
+  externalReference?: string | null;
+}) {
+  return {
+    id: r.id,
+    fullName: r.fullName,
+    companyName: r.companyName ?? undefined,
+    email: r.email,
+    phone: r.phone ?? undefined,
+    state: r.state,
+    preferredContactMethod: r.preferredContactMethod,
+    externalReference: r.externalReference ?? undefined,
+  };
+}
+
+function toCartProfileResponse(r: {
+  id: string;
+  vin: string;
+  serialNumber: string;
+  modelCode: string;
+  modelYear: number;
+  customerId: string;
+  state: string;
+}) {
+  return {
+    id: r.id,
+    vin: r.vin,
+    serialNumber: r.serialNumber,
+    modelCode: r.modelCode,
+    modelYear: r.modelYear,
+    customerId: r.customerId,
+    state: r.state,
+  };
+}
+
+function toQuoteSummaryResponse(r: {
+  id: string;
+  quoteNumber: string;
+  status: string;
+  total: unknown;
+  validUntil?: Date | null;
+  convertedWoId?: string | null;
+  updatedAt: Date;
+}) {
+  return {
+    id: r.id,
+    quoteNumber: r.quoteNumber,
+    status: r.status,
+    total: numberFromDb(r.total),
+    validUntil: optionalIso(r.validUntil),
+    convertedWoId: r.convertedWoId ?? undefined,
+    updatedAt: r.updatedAt.toISOString(),
+  };
+}
+
+function toOpportunitySummaryResponse(r: {
+  id: string;
+  title: string;
+  stage: string;
+  probability: number;
+  estimatedValue?: unknown;
+  expectedCloseDate?: Date | null;
+  wonWorkOrderId?: string | null;
+  updatedAt: Date;
+}) {
+  return {
+    id: r.id,
+    title: r.title,
+    stage: r.stage,
+    probability: r.probability,
+    estimatedValue: r.estimatedValue == null ? undefined : numberFromDb(r.estimatedValue),
+    expectedCloseDate: optionalIso(r.expectedCloseDate),
+    wonWorkOrderId: r.wonWorkOrderId ?? undefined,
+    updatedAt: r.updatedAt.toISOString(),
+  };
+}
+
+function toSalesActivitySummaryResponse(r: {
+  id: string;
+  activityType: string;
+  subject: string;
+  body?: string | null;
+  dueDate?: Date | null;
+  completedAt?: Date | null;
+  createdAt: Date;
+}) {
+  return {
+    id: r.id,
+    activityType: r.activityType,
+    subject: r.subject,
+    body: r.body ?? undefined,
+    dueDate: optionalIso(r.dueDate),
+    completedAt: optionalIso(r.completedAt),
+    createdAt: r.createdAt.toISOString(),
+  };
+}
+
+function toStatusHistoryResponse(r: WoStatusHistoryRecord) {
+  return {
+    id: r.id,
+    fromStatus: r.fromStatus ?? undefined,
+    toStatus: r.toStatus,
+    reasonCode: r.reasonCode ?? undefined,
+    reasonNote: r.reasonNote ?? undefined,
+    actorUserId: r.actorUserId ?? undefined,
+    correlationId: r.correlationId,
+    createdAt: r.createdAt.toISOString(),
+  };
+}
+
+async function resolveCustomerProfile(reference?: string | null) {
+  if (!reference?.trim()) return undefined;
+  const value = reference.trim();
+  const customer = await getPrisma().customer.findFirst({
+    where: {
+      OR: [
+        ...(isUuid(value) ? [{ id: value }] : []),
+        { externalReference: value },
+        { fullName: { contains: value, mode: 'insensitive' as const } },
+        { companyName: { contains: value, mode: 'insensitive' as const } },
+        { email: { contains: value, mode: 'insensitive' as const } },
+      ],
+    },
+    orderBy: { updatedAt: 'desc' },
+  });
+
+  return customer ? toCustomerProfileResponse(customer) : undefined;
+}
+
+async function resolveCartProfile(reference?: string | null, customerId?: string) {
+  if (!reference?.trim() && !customerId) return undefined;
+  const value = reference?.trim();
+  const cart = await getPrisma().cartVehicle.findFirst({
+    where: {
+      ...(customerId ? { customerId } : {}),
+      ...(value
+        ? {
+            OR: [
+              ...(isUuid(value) ? [{ id: value }] : []),
+              { vin: { contains: value, mode: 'insensitive' as const } },
+              { serialNumber: { contains: value, mode: 'insensitive' as const } },
+              { modelCode: { contains: value, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+    },
+    orderBy: { updatedAt: 'desc' },
+  });
+
+  return cart ? toCartProfileResponse(cart) : undefined;
+}
+
+async function buildCommercialContext(order: {
+  id: string;
+  customerReference?: string | null;
+  assetReference?: string | null;
+}): Promise<WorkOrderCommercialContext> {
+  const customerProfile = await resolveCustomerProfile(order.customerReference);
+  const cartProfile = await resolveCartProfile(order.assetReference, customerProfile?.id);
+  const quoteWhere = customerProfile
+    ? { OR: [{ customerId: customerProfile.id }, { convertedWoId: order.id }] }
+    : { convertedWoId: order.id };
+  const opportunityWhere = customerProfile
+    ? { OR: [{ customerId: customerProfile.id }, { wonWorkOrderId: order.id }] }
+    : { wonWorkOrderId: order.id };
+
+  const [quotes, opportunities, activities] = await Promise.all([
+    getPrisma().quote.findMany({
+      where: quoteWhere,
+      orderBy: { updatedAt: 'desc' },
+      take: 5,
+    }),
+    getPrisma().salesOpportunity.findMany({
+      where: opportunityWhere,
+      orderBy: { updatedAt: 'desc' },
+      take: 5,
+    }),
+    customerProfile
+      ? getPrisma().salesActivity.findMany({
+          where: { customerId: customerProfile.id },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+        })
+      : Promise.resolve([]),
+  ]);
+
+  return {
+    customerProfile,
+    cartProfile,
+    quotes: quotes.map(toQuoteSummaryResponse),
+    opportunities: opportunities.map(toOpportunitySummaryResponse),
+    activities: activities.map(toSalesActivitySummaryResponse),
+  };
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toQueueItem(order: any) {
   const ops: WoOperation[] = order.operations ?? [];
@@ -643,8 +939,11 @@ function toQueueItem(order: any) {
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function toDetailItem(order: any, reservations: WorkOrderReservationRow[] = []) {
+function toDetailItem(
+  order: WoDetailOrder,
+  reservations: WorkOrderReservationRow[] = [],
+  commercialContext: WorkOrderCommercialContext = EMPTY_COMMERCIAL_CONTEXT,
+) {
   const ops: WoOperation[] = order.operations ?? [];
   const partLines: WoPart[] = order.parts ?? [];
   const reservationResponses = reservations.map(toWorkOrderReservationResponse);
@@ -669,8 +968,17 @@ function toDetailItem(order: any, reservations: WorkOrderReservationRow[] = []) 
     id: order.id,
     number: order.workOrderNumber,
     title: order.title,
+    customerReference: order.customerReference ?? undefined,
+    assetReference: order.assetReference ?? undefined,
     customer: order.customerReference ?? 'Unknown customer',
     cart: order.assetReference ?? '—',
+    customerProfile: commercialContext.customerProfile,
+    cartProfile: commercialContext.cartProfile,
+    commercialContext: {
+      quotes: commercialContext.quotes,
+      opportunities: commercialContext.opportunities,
+      activities: commercialContext.activities,
+    },
     bay: order.stockLocation?.locationName ?? '—',
     status: mapWoStatus(order.status),
     eta: order.dueAt ? new Date(order.dueAt).toLocaleDateString() : 'No due date',
@@ -682,6 +990,12 @@ function toDetailItem(order: any, reservations: WorkOrderReservationRow[] = []) 
       id: op.id,
       label: op.operationName,
       done: ['DONE', 'SKIPPED'].includes(op.operationStatus),
+      operationCode: op.operationCode,
+      sequenceNo: op.sequenceNo,
+      status: op.operationStatus,
+      requiredSkillCode: op.requiredSkillCode ?? undefined,
+      estimatedMinutes: op.estimatedMinutes,
+      blockingReason: op.blockingReason ?? undefined,
     })),
     parts: partLines.map((p) => {
       const requestedQuantity = numberFromDb(p.requestedQuantity);
@@ -703,6 +1017,9 @@ function toDetailItem(order: any, reservations: WorkOrderReservationRow[] = []) 
     }),
     reservations: reservationResponses,
     notes: [] as { id: string; author: string; message: string; createdAt: string }[],
+    statusHistory: ((order.statusHistory ?? []) as WoStatusHistoryRecord[]).map(
+      toStatusHistoryResponse,
+    ),
   };
 }
 
@@ -739,10 +1056,12 @@ export const getWoDetailHandler = wrapHandler(
         stockLocation: { select: { locationName: true } },
         operations: { orderBy: { sequenceNo: 'asc' } },
         parts: { include: { part: { select: { name: true, sku: true } } } },
+        statusHistory: { orderBy: { createdAt: 'desc' }, take: 10 },
       },
     });
 
     if (!order) return jsonResponse(404, { message: `Work order not found: ${id}` });
+    const commercialContext = await buildCommercialContext(order);
 
     const reservations = await getPrisma().$queryRaw<WorkOrderReservationRow[]>`
     SELECT
@@ -780,7 +1099,7 @@ export const getWoDetailHandler = wrapHandler(
       r.created_at DESC
   `;
 
-    return jsonResponse(200, { workOrder: toDetailItem(order, reservations) });
+    return jsonResponse(200, { workOrder: toDetailItem(order, reservations, commercialContext) });
   },
   { requireAuth: false },
 );

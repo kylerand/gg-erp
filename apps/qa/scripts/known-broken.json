@@ -6,20 +6,6 @@
       "path": "/accounting/webhook",
       "expectStatus": 500,
       "note": "Webhook signature validation throws when no body/headers; needs explicit 400 path for unsigned probes."
-    },
-    {
-      "method": "GET",
-      "path": "/inventory/vendors/{id}",
-      "expectStatus": 404,
-      "expectRouteMiss": true,
-      "note": "Pending deploy of PR #61 vendor detail route; remove after QA API includes the new Lambda integration."
-    },
-    {
-      "method": "GET",
-      "path": "/inventory/purchase-orders/{id}",
-      "expectStatus": 404,
-      "expectRouteMiss": true,
-      "note": "Pending deploy of PR #61 purchase-order detail route; remove after QA API includes the new Lambda integration."
     }
   ]
 }

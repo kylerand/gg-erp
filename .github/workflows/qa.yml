@@ -22,7 +22,7 @@ jobs:
     name: QA smoke
     runs-on: ubuntu-latest
     # Always runs on PR/push. Nightly + dispatch may run higher tiers.
-    if: github.event_name == 'pull_request' || github.event_name == 'push' || github.event.inputs.tier == 'smoke' || github.event_name == 'schedule'
+    if: github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'schedule' || github.event.inputs.tier == 'smoke' || github.event.inputs.tier == 'coverage' || github.event.inputs.tier == 'deep'
     timeout-minutes: 15
     env:
       QA_API_BASE_URL: ${{ vars.QA_API_BASE_URL || 'https://xvkc7v8hue.execute-api.us-east-2.amazonaws.com' }}
@@ -102,7 +102,7 @@ jobs:
     runs-on: ubuntu-latest
     # Phase-2 tier: push-to-main only (and manual dispatch). PR runs would
     # double the CI footprint without proportional value at this stage.
-    if: github.event_name == 'push' || github.event.inputs.tier == 'coverage' || github.event_name == 'schedule'
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event.inputs.tier == 'coverage'
     needs: smoke
     timeout-minutes: 30
     env:

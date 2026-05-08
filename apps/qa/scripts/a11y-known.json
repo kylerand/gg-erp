@@ -3,7 +3,6 @@
   "pages": {
     "/work-orders/open": ["select-name"],
     "/inventory/parts": ["select-name"],
-    "/customer-dealers/customers": ["select-name"],
     "/sales/pipeline": ["scrollable-region-focusable"]
   }
 }

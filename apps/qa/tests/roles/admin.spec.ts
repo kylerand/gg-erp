@@ -27,16 +27,17 @@ test.describe('admin', () => {
     await waitForAppReady(page);
     await expect(page.locator('h1, h2').first()).toBeVisible({ timeout: 5_000 });
     // Audit body renders something — header column copy or an empty state.
-    await expect(page.locator('body')).toContainText(
-      /Timestamp|Actor|Outcome|No audit events/i,
-    );
+    await expect(page.locator('body')).toContainText(/Timestamp|Actor|Outcome|No audit events/i);
   });
 
-  test('integration health surfaces QB and Cognito cards', async ({ page }) => {
+  test('integration health surfaces live accounting connector cards', async ({ page }) => {
     await page.goto('/admin/integrations');
     await waitForAppReady(page);
     await expect(page.locator('h1, h2').first()).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByText(/QuickBooks/i).first()).toBeVisible();
-    await expect(page.getByText(/Cognito/i).first()).toBeVisible();
+    await expect(page.getByText(/QuickBooks Online/i).first()).toBeVisible();
+    await expect(page.getByText(/Integration Accounts/i).first()).toBeVisible();
+    await expect(page.getByText(/Invoice Sync Failures/i).first()).toBeVisible();
+    await expect(page.getByText(/Customer Sync Queue/i).first()).toBeVisible();
+    await expect(page.getByText(/Reconciliation Runs/i).first()).toBeVisible();
   });
 });

@@ -89,6 +89,11 @@ test('work-order detail page wires live execution panels', () => {
     'createLaborTimeEntry',
     'listWorkOrderQcGates',
     'submitWorkOrderQcGates',
+    'CustomerProfileDrawer',
+    'CartProfileDrawer',
+    'SalesContextPanel',
+    "erpRoute('create-quote'",
+    "erpRoute('quote'",
     'allowMockFallback: false',
   ];
 
@@ -110,7 +115,7 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
     [],
   );
   assert.deepEqual(
-    ['listCustomers', 'listOpportunities', 'listParts', 'SearchableSelect'].filter(
+    ['listCustomers', 'getCustomer', 'listOpportunities', 'listParts', 'SearchableSelect'].filter(
       (call) => !quoteSource.includes(call),
     ),
     [],

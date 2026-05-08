@@ -496,6 +496,12 @@ export interface WoOrderChecklistItem {
   id: string;
   label: string;
   done: boolean;
+  operationCode?: string;
+  sequenceNo?: number;
+  status?: string;
+  requiredSkillCode?: string;
+  estimatedMinutes?: number;
+  blockingReason?: string;
 }
 
 export type WoOrderPartStatus =
@@ -527,12 +533,84 @@ export interface WoOrderNote {
   createdAt: string;
 }
 
+export interface WoOrderCustomerProfile {
+  id: string;
+  fullName: string;
+  companyName?: string;
+  email: string;
+  phone?: string;
+  state: string;
+  preferredContactMethod: string;
+  externalReference?: string;
+}
+
+export interface WoOrderCartProfile {
+  id: string;
+  vin: string;
+  serialNumber: string;
+  modelCode: string;
+  modelYear: number;
+  customerId: string;
+  state: string;
+}
+
+export interface WoOrderQuoteSummary {
+  id: string;
+  quoteNumber: string;
+  status: string;
+  total: number;
+  validUntil?: string;
+  convertedWoId?: string;
+  updatedAt: string;
+}
+
+export interface WoOrderOpportunitySummary {
+  id: string;
+  title: string;
+  stage: string;
+  probability: number;
+  estimatedValue?: number;
+  expectedCloseDate?: string;
+  wonWorkOrderId?: string;
+  updatedAt: string;
+}
+
+export interface WoOrderSalesActivitySummary {
+  id: string;
+  activityType: string;
+  subject: string;
+  body?: string;
+  dueDate?: string;
+  completedAt?: string;
+  createdAt: string;
+}
+
+export interface WoOrderStatusHistory {
+  id: string;
+  fromStatus?: string;
+  toStatus: string;
+  reasonCode?: string;
+  reasonNote?: string;
+  actorUserId?: string;
+  correlationId: string;
+  createdAt: string;
+}
+
 export interface WoOrderDetail {
   id: string;
   number: string;
   title: string;
+  customerReference?: string;
+  assetReference?: string;
   customer: string;
   cart: string;
+  customerProfile?: WoOrderCustomerProfile;
+  cartProfile?: WoOrderCartProfile;
+  commercialContext?: {
+    quotes: WoOrderQuoteSummary[];
+    opportunities: WoOrderOpportunitySummary[];
+    activities: WoOrderSalesActivitySummary[];
+  };
   bay: string;
   status: WoOrder['status'];
   eta: string;
@@ -544,6 +622,7 @@ export interface WoOrderDetail {
   parts: WoOrderPartLine[];
   reservations: InventoryReservation[];
   notes: WoOrderNote[];
+  statusHistory?: WoOrderStatusHistory[];
 }
 
 export const MOCK_WO_ORDERS: WoOrder[] = [
@@ -564,8 +643,11 @@ export const MOCK_WO_ORDER_DETAIL: WoOrderDetail = {
   id: 'wo-ex-1',
   number: 'WO-2024-0001',
   title: 'Club Car DS Full Build — Lifted Off-Road',
+  customerReference: 'CUST-DEMO-001',
+  assetReference: 'CART-001-2019-CC-DS',
   customer: 'CUST-DEMO-001',
   cart: 'Club Car DS',
+  commercialContext: { quotes: [], opportunities: [], activities: [] },
   bay: 'Main Shop',
   status: 'READY',
   eta: 'No due date',
@@ -855,6 +937,16 @@ export async function listCustomers(
     },
     options,
   );
+}
+
+export async function getCustomer(id: string, options?: ApiDataOptions): Promise<Customer> {
+  const data = await apiFetch<{ customer: Customer }>(
+    `/identity/customers/${id}`,
+    undefined,
+    { customer: MOCK_CUSTOMERS.find((customer) => customer.id === id) ?? MOCK_CUSTOMERS[0] },
+    options,
+  );
+  return data.customer;
 }
 
 export async function createCustomer(input: CreateCustomerInput): Promise<Customer> {
@@ -2569,6 +2661,7 @@ export interface Quote {
   notes: string | null;
   termsAndConditions: string | null;
   createdByUserId: string | null;
+  convertedWoId?: string | null;
   createdAt: string;
   updatedAt: string;
   lines?: QuoteLine[];
@@ -2676,20 +2769,28 @@ export async function transitionOpportunityStage(
   });
 }
 
-export async function listQuotes(params?: {
-  status?: string;
-  customerId?: string;
-  opportunityId?: string;
-  limit?: number;
-  offset?: number;
-}): Promise<{ items: Quote[]; total: number }> {
+export async function listQuotes(
+  params?: {
+    status?: string;
+    customerId?: string;
+    opportunityId?: string;
+    limit?: number;
+    offset?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<{ items: Quote[]; total: number }> {
   const qs = new URLSearchParams();
   if (params?.status) qs.set('status', params.status);
   if (params?.customerId) qs.set('customerId', params.customerId);
   if (params?.opportunityId) qs.set('opportunityId', params.opportunityId);
   if (params?.limit) qs.set('limit', String(params.limit));
   if (params?.offset) qs.set('offset', String(params.offset));
-  return apiFetch(`/sales/quotes${qs.size ? `?${qs}` : ''}`, undefined, { items: [], total: 0 });
+  return apiFetch(
+    `/sales/quotes${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    { items: [], total: 0 },
+    options,
+  );
 }
 
 export async function getQuote(id: string): Promise<Quote> {

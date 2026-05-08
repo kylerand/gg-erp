@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { PageHeader, LoadingSkeleton, EmptyState, StatusBadge } from '@gg-erp/ui';
 import { listCustomers, transitionCustomerState, type Customer } from '@/lib/api-client';
@@ -12,9 +13,10 @@ import { Pagination } from '@/components/ui/pagination';
 const PAGE_SIZE = 25;
 
 export default function CustomersPage() {
+  const searchParams = useSearchParams();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [total, setTotal] = useState(0);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(true);
@@ -22,7 +24,10 @@ export default function CustomersPage() {
   const load = useCallback(async (s: string, p: number, ps: number) => {
     setLoading(true);
     try {
-      const r = await listCustomers({ search: s || undefined, limit: ps, offset: (p - 1) * ps });
+      const r = await listCustomers(
+        { search: s || undefined, limit: ps, offset: (p - 1) * ps },
+        { allowMockFallback: false },
+      );
       setCustomers(r.items);
       setTotal(r.total);
     } finally {

@@ -4,14 +4,19 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import {
+  Car,
   CheckCircle2,
   ClipboardCheck,
   Clock,
+  DollarSign,
+  ExternalLink,
   FileText,
   Info,
+  Mail,
   MessageCircle,
   Package,
   PackageCheck,
+  Phone,
   Printer,
   RefreshCw,
   Receipt,
@@ -19,6 +24,7 @@ import {
   ShieldCheck,
   Timer,
   Undo2,
+  UserRound,
   Wrench,
 } from 'lucide-react';
 import {
@@ -87,6 +93,22 @@ function formatHours(value: number): string {
   return value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 });
 }
 
+function formatCurrency(value: number): string {
+  return value.toLocaleString(undefined, {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  });
+}
+
+function formatMinutes(value?: number): string {
+  if (!value || value <= 0) return 'No estimate';
+  if (value < 60) return `${value}m`;
+  const hours = Math.floor(value / 60);
+  const minutes = value % 60;
+  return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
+}
+
 function formatDateTime(value?: string): string {
   if (!value) return 'Not recorded';
   return new Date(value).toLocaleString(undefined, {
@@ -99,6 +121,24 @@ function formatDateTime(value?: string): string {
 
 function qcStatusFromResponse(response: SubmitWorkOrderQcResponse): 'PASSED' | 'FAILED' {
   return response.status ?? response.overallResult ?? 'FAILED';
+}
+
+function displayStatus(value: string): string {
+  return value.replace(/_/g, ' ');
+}
+
+function customerDisplayName(workOrder: WoOrderDetail): string {
+  return (
+    workOrder.customerProfile?.companyName ??
+    workOrder.customerProfile?.fullName ??
+    workOrder.customer
+  );
+}
+
+function cartDisplayName(workOrder: WoOrderDetail): string {
+  return workOrder.cartProfile
+    ? `${workOrder.cartProfile.modelYear} ${workOrder.cartProfile.modelCode} · ${workOrder.cartProfile.serialNumber}`
+    : workOrder.cart;
 }
 
 function createDrafts(parts: WoOrderPartLine[], lotsByPartLine: Record<string, InventoryLot[]>) {
@@ -419,15 +459,32 @@ export default function WorkOrderDetailPage() {
   const doneCount = workOrder.checklist.filter((item) => item.done).length;
   const serviceProgress =
     workOrder.checklist.length > 0 ? Math.round((doneCount / workOrder.checklist.length) * 100) : 0;
+  const resolvedCustomerName = customerDisplayName(workOrder);
+  const resolvedCartName = cartDisplayName(workOrder);
+  const customerId = workOrder.customerProfile?.id;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <PageHeader
           title={`${workOrder.number}: ${workOrder.title}`}
-          description={`${workOrder.customer} · ${workOrder.cart}`}
+          description={`${resolvedCustomerName} · ${resolvedCartName}`}
         />
         <div className="flex flex-wrap gap-2">
+          {customerId && (
+            <>
+              <LinkButton
+                href={erpRoute('create-quote', { customerId, workOrderId: workOrder.id })}
+              >
+                <DollarSign size={15} />
+                New Quote
+              </LinkButton>
+              <LinkButton href={erpRoute('quote', { customerId })}>
+                <FileText size={15} />
+                Quotes
+              </LinkButton>
+            </>
+          )}
           <Button type="button" variant="outline" onClick={() => window.print()}>
             <Printer size={15} />
             Print
@@ -497,16 +554,7 @@ export default function WorkOrderDetailPage() {
             <div className="divide-y divide-gray-100">
               {workOrder.checklist.length > 0 ? (
                 workOrder.checklist.map((item) => (
-                  <div key={item.id} className="flex items-center gap-3 px-4 py-3">
-                    <CheckCircle2
-                      size={18}
-                      className={item.done ? 'text-green-600' : 'text-gray-300'}
-                    />
-                    <span className="text-sm font-medium text-gray-800">{item.label}</span>
-                    <span className="ml-auto text-xs text-gray-500">
-                      {item.done ? 'Done' : 'Open'}
-                    </span>
-                  </div>
+                  <ServiceLine key={item.id} item={item} workOrderId={workOrder.id} />
                 ))
               ) : (
                 <EmptyPanel text="No service operations are attached to this work order yet." />
@@ -608,15 +656,9 @@ export default function WorkOrderDetailPage() {
         </div>
 
         <aside className="space-y-4">
-          <section className="rounded-lg border border-gray-200 bg-white p-4">
-            <h2 className="text-sm font-semibold text-gray-900">Order Details</h2>
-            <div className="mt-4 space-y-3 text-sm">
-              <DetailLine label="Customer" value={workOrder.customer} />
-              <DetailLine label="Cart" value={workOrder.cart} />
-              <DetailLine label="Bay" value={workOrder.bay} />
-              <DetailLine label="Rework Loop" value={String(workOrder.reworkLoop)} />
-            </div>
-          </section>
+          <CustomerProfileDrawer workOrder={workOrder} />
+          <CartProfileDrawer workOrder={workOrder} />
+          <SalesContextPanel workOrder={workOrder} />
 
           <section id="messages" className="rounded-lg border border-gray-200 bg-white p-4">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
@@ -738,6 +780,52 @@ function EmptyPanel({ text }: { text: string }) {
   return <div className="px-4 py-8 text-sm text-gray-500">{text}</div>;
 }
 
+function ServiceLine({
+  item,
+  workOrderId,
+}: {
+  item: WoOrderDetail['checklist'][number];
+  workOrderId: string;
+}) {
+  const status = item.status ?? (item.done ? 'DONE' : 'OPEN');
+  return (
+    <div className="grid gap-3 px-4 py-3 md:grid-cols-[1fr_auto] md:items-center">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <CheckCircle2 size={18} className={item.done ? 'text-green-600' : 'text-gray-300'} />
+          <span className="text-sm font-semibold text-gray-900">{item.label}</span>
+          <StatusBadge status={status}>{displayStatus(status)}</StatusBadge>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
+          {item.operationCode && <span className="font-mono">{item.operationCode}</span>}
+          {item.sequenceNo !== undefined && <span>Step {item.sequenceNo}</span>}
+          <span>{formatMinutes(item.estimatedMinutes)}</span>
+          {item.requiredSkillCode && <span>{item.requiredSkillCode}</span>}
+        </div>
+        {item.blockingReason && (
+          <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800">
+            {item.blockingReason}
+          </div>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-2 md:justify-end">
+        <LinkButton href={erpRoute('sop-runner', { workOrderId, operationId: item.id })}>
+          <Wrench size={14} />
+          SOP
+        </LinkButton>
+        <LinkButton href={erpRoute('time-logging', { workOrderId, operationId: item.id })}>
+          <Timer size={14} />
+          Time
+        </LinkButton>
+        <LinkButton href={erpRoute('qc-checklist', { workOrderId, operationId: item.id })}>
+          <ShieldCheck size={14} />
+          QC
+        </LinkButton>
+      </div>
+    </div>
+  );
+}
+
 function PanelError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <div className="m-4 flex flex-wrap items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -747,6 +835,248 @@ function PanelError({ message, onRetry }: { message: string; onRetry: () => void
         Retry
       </Button>
     </div>
+  );
+}
+
+function CustomerProfileDrawer({ workOrder }: { workOrder: WoOrderDetail }) {
+  const profile = workOrder.customerProfile;
+  const searchValue =
+    profile?.externalReference ??
+    profile?.fullName ??
+    workOrder.customerReference ??
+    workOrder.customer;
+
+  return (
+    <details id="commercial" open className="rounded-lg border border-gray-200 bg-white p-4">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-gray-900">
+        <span className="flex items-center gap-2">
+          <UserRound size={15} />
+          Customer
+        </span>
+        <ExternalLink size={14} className="text-gray-400" />
+      </summary>
+      <div className="mt-4 space-y-3 text-sm">
+        {profile ? (
+          <>
+            <div>
+              <div className="font-semibold text-gray-900">
+                {profile.companyName ?? profile.fullName}
+              </div>
+              {profile.companyName && (
+                <div className="text-xs text-gray-500">{profile.fullName}</div>
+              )}
+            </div>
+            <DetailLine label="Lifecycle" value={displayStatus(profile.state)} />
+            <DetailLine label="Preferred" value={profile.preferredContactMethod} />
+            {profile.externalReference && (
+              <DetailLine label="External Ref" value={profile.externalReference} />
+            )}
+            <div className="grid gap-2">
+              <ContactLink href={`mailto:${profile.email}`} icon={Mail} label={profile.email} />
+              {profile.phone && (
+                <ContactLink href={`tel:${profile.phone}`} icon={Phone} label={profile.phone} />
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <LinkButton href={erpRoute('customer', { search: searchValue })}>
+                <UserRound size={14} />
+                Customer List
+              </LinkButton>
+              <LinkButton
+                href={erpRoute('create-quote', {
+                  customerId: profile.id,
+                  workOrderId: workOrder.id,
+                })}
+              >
+                <DollarSign size={14} />
+                New Quote
+              </LinkButton>
+            </div>
+          </>
+        ) : (
+          <>
+            <DetailLine
+              label="Reference"
+              value={workOrder.customerReference ?? workOrder.customer}
+            />
+            <p className="text-xs text-amber-700">
+              This work order has a customer reference, but it is not resolved to a customer record.
+            </p>
+            <LinkButton href={erpRoute('customer', { search: searchValue })}>
+              <UserRound size={14} />
+              Search Customers
+            </LinkButton>
+          </>
+        )}
+      </div>
+    </details>
+  );
+}
+
+function CartProfileDrawer({ workOrder }: { workOrder: WoOrderDetail }) {
+  const profile = workOrder.cartProfile;
+
+  return (
+    <details open className="rounded-lg border border-gray-200 bg-white p-4">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-gray-900">
+        <span className="flex items-center gap-2">
+          <Car size={15} />
+          Cart
+        </span>
+        <ExternalLink size={14} className="text-gray-400" />
+      </summary>
+      <div className="mt-4 space-y-3 text-sm">
+        {profile ? (
+          <>
+            <div className="font-semibold text-gray-900">
+              {profile.modelYear} {profile.modelCode}
+            </div>
+            <DetailLine label="Serial" value={profile.serialNumber} />
+            <DetailLine label="VIN" value={profile.vin} />
+            <DetailLine label="State" value={displayStatus(profile.state)} />
+          </>
+        ) : (
+          <>
+            <DetailLine label="Reference" value={workOrder.assetReference ?? workOrder.cart} />
+            <p className="text-xs text-amber-700">
+              This cart reference is not resolved to a cart vehicle record.
+            </p>
+          </>
+        )}
+        <DetailLine label="Bay" value={workOrder.bay} />
+        <DetailLine label="Rework Loop" value={String(workOrder.reworkLoop)} />
+      </div>
+    </details>
+  );
+}
+
+function SalesContextPanel({ workOrder }: { workOrder: WoOrderDetail }) {
+  const quotes = workOrder.commercialContext?.quotes ?? [];
+  const opportunities = workOrder.commercialContext?.opportunities ?? [];
+  const activities = workOrder.commercialContext?.activities ?? [];
+  const customerId = workOrder.customerProfile?.id;
+
+  return (
+    <section className="rounded-lg border border-gray-200 bg-white p-4">
+      <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+        <DollarSign size={15} />
+        Sales Context
+      </h2>
+      <div className="mt-4 space-y-4">
+        <div>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Quotes</h3>
+            {customerId && (
+              <Link
+                href={erpRoute('quote', { customerId })}
+                className="text-xs font-semibold text-[#B1581B] hover:underline"
+              >
+                View all
+              </Link>
+            )}
+          </div>
+          {quotes.length > 0 ? (
+            <div className="space-y-2">
+              {quotes.map((quote) => (
+                <Link
+                  key={quote.id}
+                  href={erpRecordRoute('quote', quote.id)}
+                  className="block rounded-md border border-gray-100 bg-gray-50 px-3 py-2 hover:border-[#E37125]"
+                >
+                  <div className="flex items-center justify-between gap-2 text-sm">
+                    <span className="font-mono font-semibold text-gray-900">
+                      {quote.quoteNumber}
+                    </span>
+                    <span className="font-semibold text-gray-900">
+                      {formatCurrency(quote.total)}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
+                    <span>{displayStatus(quote.status)}</span>
+                    <span>{formatDateTime(quote.updatedAt)}</span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500">
+              No quotes are linked to this customer or work order.
+            </p>
+          )}
+        </div>
+
+        <div>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Opportunities
+          </h3>
+          {opportunities.length > 0 ? (
+            <div className="space-y-2">
+              {opportunities.map((opportunity) => (
+                <Link
+                  key={opportunity.id}
+                  href={erpRecordRoute('sales-opportunity', opportunity.id)}
+                  className="block rounded-md border border-gray-100 bg-gray-50 px-3 py-2 hover:border-[#E37125]"
+                >
+                  <div className="text-sm font-semibold text-gray-900">{opportunity.title}</div>
+                  <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
+                    <span>{displayStatus(opportunity.stage)}</span>
+                    <span>{opportunity.probability}%</span>
+                    {opportunity.estimatedValue !== undefined && (
+                      <span>{formatCurrency(opportunity.estimatedValue)}</span>
+                    )}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500">
+              No opportunities are linked to this customer or work order.
+            </p>
+          )}
+        </div>
+
+        {activities.length > 0 && (
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Recent Sales Activity
+            </h3>
+            <div className="space-y-2">
+              {activities.slice(0, 3).map((activity) => (
+                <div
+                  key={activity.id}
+                  className="rounded-md border border-gray-100 bg-gray-50 px-3 py-2"
+                >
+                  <div className="text-sm font-semibold text-gray-900">{activity.subject}</div>
+                  <div className="mt-1 text-xs text-gray-500">
+                    {displayStatus(activity.activityType)} · {formatDateTime(activity.createdAt)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ContactLink({
+  href,
+  icon: Icon,
+  label,
+}: {
+  href: string;
+  icon: typeof Mail;
+  label: string;
+}) {
+  return (
+    <a
+      href={href}
+      className="inline-flex items-center gap-2 rounded-md border border-gray-100 bg-gray-50 px-2 py-1 text-xs font-medium text-gray-700 hover:border-[#E37125]"
+    >
+      <Icon size={13} />
+      {label}
+    </a>
   );
 }
 
@@ -1004,10 +1334,29 @@ function ActivityPanel({
   qcGates: WorkOrderQcGate[];
 }) {
   const items = [
+    ...(workOrder.statusHistory ?? []).map((event) => ({
+      id: `status:${event.id}`,
+      at: event.createdAt,
+      title: `Status changed to ${displayStatus(event.toStatus)}`,
+      detail:
+        [event.reasonCode, event.reasonNote].filter(Boolean).join(' · ') || event.correlationId,
+    })),
+    ...(workOrder.commercialContext?.quotes ?? []).map((quote) => ({
+      id: `quote:${quote.id}`,
+      at: quote.updatedAt,
+      title: `${quote.quoteNumber} ${displayStatus(quote.status)}`,
+      detail: `${formatCurrency(quote.total)} quote`,
+    })),
+    ...(workOrder.commercialContext?.opportunities ?? []).map((opportunity) => ({
+      id: `opportunity:${opportunity.id}`,
+      at: opportunity.updatedAt,
+      title: `${opportunity.title}`,
+      detail: `${displayStatus(opportunity.stage)} opportunity`,
+    })),
     ...workOrder.reservations.map((reservation) => ({
       id: `reservation:${reservation.id}`,
       at: reservation.updatedAt,
-      title: `${reservation.status.replace(/_/g, ' ')} reservation`,
+      title: `${displayStatus(reservation.status)} reservation`,
       detail: `${reservation.partSku} · ${reservation.lotNumber ?? reservation.stockLotId ?? 'No lot'}`,
     })),
     ...timeEntries.map((entry) => ({
@@ -1031,7 +1380,7 @@ function ActivityPanel({
   if (items.length === 0) {
     return (
       <p className="mt-3 text-sm text-gray-500">
-        No material, labor, or QC activity has been recorded for this work order.
+        No commercial, material, labor, or QC activity has been recorded for this work order.
       </p>
     );
   }

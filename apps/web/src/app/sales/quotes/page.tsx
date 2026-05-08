@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { listQuotes, type Quote } from '@/lib/api-client';
 import { PageHeader, LoadingSkeleton } from '@gg-erp/ui';
 import { Pagination } from '@/components/ui/pagination';
@@ -20,6 +21,8 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function QuotesListPage() {
+  const searchParams = useSearchParams();
+  const customerIdFilter = searchParams.get('customerId') ?? undefined;
   const [items, setItems] = useState<Quote[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -27,14 +30,18 @@ export default function QuotesListPage() {
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async (p: number, ps: number, status: string) => {
+  const load = useCallback(async (p: number, ps: number, status: string, customerId?: string) => {
     setLoading(true);
     try {
-      const res = await listQuotes({
-        status: status === 'All' ? undefined : status,
-        limit: ps,
-        offset: (p - 1) * ps,
-      });
+      const res = await listQuotes(
+        {
+          status: status === 'All' ? undefined : status,
+          customerId,
+          limit: ps,
+          offset: (p - 1) * ps,
+        },
+        { allowMockFallback: false },
+      );
       setItems(res.items);
       setTotal(res.total);
     } finally {
@@ -43,15 +50,18 @@ export default function QuotesListPage() {
   }, []);
 
   useEffect(() => {
-    void load(page, pageSize, statusFilter);
-  }, [page, pageSize, statusFilter, load]);
+    void load(page, pageSize, statusFilter, customerIdFilter);
+  }, [page, pageSize, statusFilter, customerIdFilter, load]);
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <PageHeader title="Quotes" />
+        <PageHeader
+          title="Quotes"
+          description={customerIdFilter ? `Filtered to customer ${customerIdFilter}` : undefined}
+        />
         <Link
-          href={erpRoute('create-quote')}
+          href={erpRoute('create-quote', { customerId: customerIdFilter })}
           className="bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-semibold px-4 py-2 rounded-lg text-sm transition-colors"
         >
           + New Quote

@@ -1,11 +1,17 @@
 import Link from 'next/link';
 import { PageHeader } from '@gg-erp/ui';
-import { listInventoryReservations, listParts } from '@/lib/api-client';
+import { listInventoryReservations, listParts, listPurchaseOrders } from '@/lib/api-client';
 import { WorkspaceLinkGrid } from '@/components/WorkspaceLinkGrid';
 import { erpRoute } from '@/lib/erp-routes';
 
 export default async function InventoryPage() {
-  const [partsResult, activePartsResult, outOfStockResult, reservationsResult] = await Promise.all([
+  const [
+    partsResult,
+    activePartsResult,
+    outOfStockResult,
+    reservationsResult,
+    sentPurchaseOrdersResult,
+  ] = await Promise.all([
     listParts({ limit: 1, offset: 0 }, { allowMockFallback: false })
       .then((data) => ({ status: 'ready' as const, data }))
       .catch(() => ({ status: 'unavailable' as const })),
@@ -19,6 +25,9 @@ export default async function InventoryPage() {
       { status: 'OPEN', page: 1, pageSize: 1 },
       { allowMockFallback: false },
     )
+      .then((data) => ({ status: 'ready' as const, data }))
+      .catch(() => ({ status: 'unavailable' as const })),
+    listPurchaseOrders({ status: 'SENT', pageSize: 1 }, { allowMockFallback: false })
       .then((data) => ({ status: 'ready' as const, data }))
       .catch(() => ({ status: 'unavailable' as const })),
   ]);
@@ -81,10 +90,26 @@ export default async function InventoryPage() {
         },
   );
 
+  stats.push(
+    sentPurchaseOrdersResult.status === 'ready'
+      ? {
+          label: 'Sent POs',
+          value: sentPurchaseOrdersResult.data.total,
+          color: sentPurchaseOrdersResult.data.total > 0 ? 'text-amber-700' : 'text-green-700',
+          href: erpRoute('purchase-order', { status: 'SENT' }),
+        }
+      : {
+          label: 'PO Feed',
+          value: 'Unavailable',
+          color: 'text-red-600',
+          href: erpRoute('purchase-order'),
+        },
+  );
+
   return (
     <div>
       <PageHeader title="Inventory" description="Parts, reservations, and receiving" />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {stats.map((stat) => (
           <Link
             key={stat.label}

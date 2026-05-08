@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { PackageCheck, RefreshCw } from 'lucide-react';
 import { EmptyState, LoadingSkeleton, PageHeader, StatusBadge } from '@gg-erp/ui';
 import { Button } from '@/components/ui/button';
@@ -40,6 +41,9 @@ function errorMessage(error: unknown): string {
 }
 
 export default function ReceivingPage() {
+  const searchParams = useSearchParams();
+  const focusedPurchaseOrderId = searchParams.get('purchaseOrderId');
+  const focusedLineId = searchParams.get('lineId');
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [drafts, setDrafts] = useState<Record<string, ReceiptDraft>>({});
   const [loading, setLoading] = useState(true);
@@ -52,14 +56,19 @@ export default function ReceivingPage() {
     setError(null);
     try {
       const res = await listPurchaseOrders({ pageSize: 100 }, { allowMockFallback: false });
-      setPurchaseOrders(res.items.filter((po) => OPEN_STATES.has(po.purchaseOrderState)));
+      const openOrders = res.items.filter((po) => OPEN_STATES.has(po.purchaseOrderState));
+      setPurchaseOrders(
+        focusedPurchaseOrderId
+          ? openOrders.filter((po) => po.id === focusedPurchaseOrderId)
+          : openOrders,
+      );
     } catch (err) {
       setPurchaseOrders([]);
       setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [focusedPurchaseOrderId]);
 
   useEffect(() => {
     void load();
@@ -177,8 +186,12 @@ export default function ReceivingPage() {
       ) : purchaseOrders.length === 0 ? (
         <EmptyState
           icon="P"
-          title="No open POs"
-          description="No approved or sent purchase orders are ready for receipt."
+          title={focusedPurchaseOrderId ? 'Selected PO is not open' : 'No open POs'}
+          description={
+            focusedPurchaseOrderId
+              ? 'The selected purchase order is closed, cancelled, or no longer ready for receipt.'
+              : 'No approved or sent purchase orders are ready for receipt.'
+          }
         />
       ) : (
         <div className="space-y-4">
@@ -187,7 +200,13 @@ export default function ReceivingPage() {
               <CardHeader>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <CardTitle className="text-sm">
-                    {po.poNumber} · {po.vendorName}
+                    <Link
+                      href={erpRecordRoute('purchase-order', po.id)}
+                      className="hover:underline"
+                    >
+                      {po.poNumber}
+                    </Link>{' '}
+                    · {po.vendorName}
                   </CardTitle>
                   <StatusBadge status={po.purchaseOrderState} />
                 </div>
@@ -226,7 +245,14 @@ export default function ReceivingPage() {
                           !actionBusy;
 
                         return (
-                          <tr key={line.id}>
+                          <tr
+                            key={line.id}
+                            className={
+                              focusedLineId === line.id
+                                ? 'bg-amber-50 outline outline-1 outline-amber-200'
+                                : undefined
+                            }
+                          >
                             <td className="px-3 py-2 text-gray-500">{line.lineNumber}</td>
                             <td className="px-3 py-2">
                               <Link

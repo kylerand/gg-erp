@@ -3,6 +3,8 @@ import test, { mock } from 'node:test';
 import {
   consumeReservationHandler,
   createReservationHandler,
+  getPurchaseOrderHandler,
+  getVendorHandler,
   inventoryLotQueries,
   inventoryPurchaseOrderQueries,
   inventoryReservationQueries,
@@ -459,6 +461,96 @@ test('listPurchaseOrdersHandler returns paginated purchase orders', async () => 
   }
 });
 
+test('getPurchaseOrderHandler returns a purchase-order detail contract', async () => {
+  const getPoMock = mock.method(inventoryPurchaseOrderQueries, 'getPurchaseOrder', async () => ({
+    id: 'po-1',
+    poNumber: 'PO-2026-001',
+    vendorId: 'vendor-1',
+    purchaseOrderState: 'PARTIALLY_RECEIVED',
+    orderedAt: new Date('2026-03-01T12:00:00.000Z'),
+    expectedAt: new Date('2026-03-15T12:00:00.000Z'),
+    sentAt: new Date('2026-03-02T10:00:00.000Z'),
+    closedAt: null,
+    notes: 'Urgent order',
+    createdAt: new Date('2026-03-01T12:00:00.000Z'),
+    updatedAt: new Date('2026-03-02T10:00:00.000Z'),
+    vendor: { vendorName: 'Acme Parts', vendorCode: 'ACME' },
+    lines: [
+      {
+        id: 'line-1',
+        lineNumber: 1,
+        partId: 'part-1',
+        part: {
+          sku: 'BRK-001',
+          name: 'Brake Pad',
+          defaultLocationId: 'loc-1',
+          defaultLocation: { locationName: 'Main Warehouse' },
+        },
+        orderedQuantity: '10.000',
+        receivedQuantity: '4.000',
+        rejectedQuantity: '1.000',
+        unitCost: '25.5000',
+        promisedAt: new Date('2026-03-14T12:00:00.000Z'),
+        lineState: 'OPEN',
+        unitOfMeasure: { uomCode: 'EA', uomName: 'Each' },
+      },
+    ],
+  }));
+
+  try {
+    const response = await getPurchaseOrderHandler({
+      httpMethod: 'GET',
+      pathParameters: { id: 'po-1' },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(getPoMock.mock.calls[0].arguments[0], 'po-1');
+
+    const payload = JSON.parse(response.body) as {
+      purchaseOrder: {
+        poNumber: string;
+        purchaseOrderState: string;
+        vendorName: string;
+        lines: Array<{
+          openQuantity: number;
+          unitOfMeasure: string;
+          lineTotal: number;
+          promisedAt: string;
+        }>;
+      };
+    };
+
+    assert.equal(payload.purchaseOrder.poNumber, 'PO-2026-001');
+    assert.equal(payload.purchaseOrder.purchaseOrderState, 'PARTIALLY_RECEIVED');
+    assert.equal(payload.purchaseOrder.vendorName, 'Acme Parts');
+    assert.equal(payload.purchaseOrder.lines[0].openQuantity, 5);
+    assert.equal(payload.purchaseOrder.lines[0].unitOfMeasure, 'EA');
+    assert.equal(payload.purchaseOrder.lines[0].lineTotal, 255);
+    assert.equal(payload.purchaseOrder.lines[0].promisedAt, '2026-03-14T12:00:00.000Z');
+  } finally {
+    getPoMock.mock.restore();
+  }
+});
+
+test('getPurchaseOrderHandler returns 404 when missing', async () => {
+  const getPoMock = mock.method(
+    inventoryPurchaseOrderQueries,
+    'getPurchaseOrder',
+    async () => null,
+  );
+
+  try {
+    const response = await getPurchaseOrderHandler({
+      httpMethod: 'GET',
+      pathParameters: { id: 'missing-po' },
+    });
+
+    assert.equal(response.statusCode, 404);
+  } finally {
+    getPoMock.mock.restore();
+  }
+});
+
 test('listPurchaseOrdersHandler returns empty page when no orders match', async () => {
   const listPoMock = mock.method(inventoryPurchaseOrderQueries, 'listPurchaseOrders', async () => ({
     items: [],
@@ -476,5 +568,55 @@ test('listPurchaseOrdersHandler returns empty page when no orders match', async 
     assert.equal(payload.total, 0);
   } finally {
     listPoMock.mock.restore();
+  }
+});
+
+test('getVendorHandler returns vendor procurement summary fields', async () => {
+  const getVendorMock = mock.method(inventoryPurchaseOrderQueries, 'getVendor', async () => ({
+    id: 'vendor-1',
+    vendorCode: 'ACME',
+    vendorName: 'Acme Parts',
+    vendorState: 'ACTIVE',
+    email: 'orders@example.com',
+    phone: '555-0100',
+    leadTimeDays: 7,
+    paymentTerms: 'NET30',
+    createdAt: new Date('2026-03-01T12:00:00.000Z'),
+    updatedAt: new Date('2026-03-02T10:00:00.000Z'),
+    purchaseOrders: [
+      {
+        id: 'po-open',
+        purchaseOrderState: 'SENT',
+        expectedAt: new Date('2026-03-15T12:00:00.000Z'),
+      },
+      {
+        id: 'po-done',
+        purchaseOrderState: 'RECEIVED',
+        expectedAt: new Date('2026-03-10T12:00:00.000Z'),
+      },
+    ],
+  }));
+
+  try {
+    const response = await getVendorHandler({
+      httpMethod: 'GET',
+      pathParameters: { id: 'vendor-1' },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(getVendorMock.mock.calls[0].arguments[0], 'vendor-1');
+
+    const payload = JSON.parse(response.body) as {
+      vendor: {
+        vendorCode: string;
+        openPurchaseOrderCount: number;
+        nextExpectedAt: string;
+      };
+    };
+    assert.equal(payload.vendor.vendorCode, 'ACME');
+    assert.equal(payload.vendor.openPurchaseOrderCount, 1);
+    assert.equal(payload.vendor.nextExpectedAt, '2026-03-15T12:00:00.000Z');
+  } finally {
+    getVendorMock.mock.restore();
   }
 });

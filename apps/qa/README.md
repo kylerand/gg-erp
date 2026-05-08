@@ -76,6 +76,9 @@ For real-Cognito tests (Phase 5), see the `cognitoFixture` design in the plan.
 
 - A new bug appears → smoke fails until you add the route here OR fix the bug.
 - A bug gets fixed → smoke fails until you remove the entry. The error message says ✅ celebrate.
+- A new Terraform route is pending deployment → add a short-lived entry with
+  `expectRouteMiss: true`, then remove it after the QA API reaches the Lambda
+  handler.
 
 This makes regression detection AND fix detection automatic.
 

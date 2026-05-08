@@ -33,8 +33,10 @@ import {
   getPartChainHandler,
   createPartHandler,
   listVendorsHandler,
+  getVendorHandler,
   listManufacturersHandler,
   listPurchaseOrdersHandler,
+  getPurchaseOrderHandler,
   createManufacturerHandler,
   planMaterialByStageHandler,
   listReservationsHandler,
@@ -230,6 +232,8 @@ async function route(
   const migrationBatchMatch = pathname.match(/^\/migration\/batches\/([^/]+)/);
   const customerMatch = pathname.match(/^\/identity\/customers\/([^/]+)/);
   const partMatch = pathname.match(/^\/inventory\/parts\/([^/]+)(?:\/([^/]+))?/);
+  const purchaseOrderMatch = pathname.match(/^\/inventory\/purchase-orders\/([^/]+)$/);
+  const vendorMatch = pathname.match(/^\/inventory\/vendors\/([^/]+)$/);
   const inventoryReservationMatch = pathname.match(/^\/inventory\/reservations\/([^/]+)\/([^/]+)$/);
   const taskMatch = pathname.match(/^\/tickets\/work-orders\/([^/]+)\/tasks(?:\/([^/]+))?/);
   const reworkMatch = pathname.match(/^\/tickets\/work-orders\/([^/]+)\/rework/);
@@ -320,12 +324,16 @@ async function route(
     result = await createManufacturerHandler(event);
   } else if (pathname === '/inventory/purchase-orders' && method === 'GET') {
     result = await listPurchaseOrdersHandler(event);
+  } else if (purchaseOrderMatch && method === 'GET') {
+    result = await getPurchaseOrderHandler({ ...event, pathParameters: { id: purchaseOrderMatch[1] } });
   } else if (partMatch && partMatch[2] === 'chain' && method === 'GET') {
     result = await getPartChainHandler({ ...event, pathParameters: { id: partMatch[1] } });
   } else if (partMatch && !partMatch[2] && method === 'GET') {
     result = await getPartHandler({ ...event, pathParameters: { id: partMatch[1] } });
   } else if (pathname === '/inventory/vendors' && method === 'GET') {
     result = await listVendorsHandler(event);
+  } else if (vendorMatch && method === 'GET') {
+    result = await getVendorHandler({ ...event, pathParameters: { id: vendorMatch[1] } });
 
   // ── Tickets ───────────────────────────────────────────────────────────────
   } else if (taskMatch && method === 'GET' && !taskMatch[2]) {

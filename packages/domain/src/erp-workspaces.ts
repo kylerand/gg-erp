@@ -178,6 +178,15 @@ export const ERP_WORKSPACES = [
         keywords: ['reserve', 'shortage', 'pick'],
       },
       {
+        key: 'purchase-order',
+        label: 'Purchase Orders',
+        description: 'Track vendor orders, ETAs, and line-level receiving.',
+        route: '/inventory/purchase-orders',
+        status: 'live',
+        objectKey: 'purchase-order',
+        keywords: ['po', 'purchase', 'vendor', 'eta'],
+      },
+      {
         key: 'receiving',
         label: 'Receiving',
         description: 'Receive purchase orders and inbound parts.',

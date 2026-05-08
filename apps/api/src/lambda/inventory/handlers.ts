@@ -368,10 +368,29 @@ export const inventoryLotQueries = {
   },
 };
 
+const PURCHASE_ORDER_INCLUDE = Prisma.validator<Prisma.PurchaseOrderInclude>()({
+  vendor: { select: { vendorName: true, vendorCode: true } },
+  lines: {
+    include: {
+      part: {
+        select: {
+          sku: true,
+          name: true,
+          defaultLocationId: true,
+          defaultLocation: { select: { locationName: true } },
+        },
+      },
+      unitOfMeasure: { select: { uomCode: true, uomName: true } },
+    },
+    orderBy: { lineNumber: 'asc' },
+  },
+});
+
 export const inventoryPurchaseOrderQueries = {
   async listPurchaseOrders(filters?: {
     status?: string;
     supplierId?: string;
+    vendorId?: string;
     page?: number;
     pageSize?: number;
   }) {
@@ -390,7 +409,9 @@ export const inventoryPurchaseOrderQueries = {
               | 'CANCELLED',
           }
         : {}),
-      ...(filters?.supplierId ? { vendorId: filters.supplierId } : {}),
+      ...(filters?.supplierId || filters?.vendorId
+        ? { vendorId: filters.supplierId ?? filters.vendorId }
+        : {}),
     };
 
     const prisma = getInventoryPrisma();
@@ -398,22 +419,7 @@ export const inventoryPurchaseOrderQueries = {
     const [items, total] = await Promise.all([
       prisma.purchaseOrder.findMany({
         where,
-        include: {
-          vendor: { select: { vendorName: true, vendorCode: true } },
-          lines: {
-            include: {
-              part: {
-                select: {
-                  sku: true,
-                  name: true,
-                  defaultLocationId: true,
-                  defaultLocation: { select: { locationName: true } },
-                },
-              },
-            },
-            orderBy: { lineNumber: 'asc' },
-          },
-        },
+        include: PURCHASE_ORDER_INCLUDE,
         orderBy: { orderedAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -422,6 +428,26 @@ export const inventoryPurchaseOrderQueries = {
     ]);
 
     return { items, total, page, pageSize };
+  },
+
+  async getPurchaseOrder(id: string) {
+    return getInventoryPrisma().purchaseOrder.findFirst({
+      where: { id },
+      include: PURCHASE_ORDER_INCLUDE,
+    });
+  },
+
+  async getVendor(id: string) {
+    return getInventoryPrisma().vendor.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        purchaseOrders: {
+          select: { id: true, purchaseOrderState: true, expectedAt: true },
+          orderBy: [{ expectedAt: 'desc' }, { orderedAt: 'desc' }],
+          take: 25,
+        },
+      },
+    });
   },
 };
 
@@ -1541,6 +1567,7 @@ export const listPurchaseOrdersHandler = wrapHandler(
     const result = await inventoryPurchaseOrderQueries.listPurchaseOrders({
       status: qs.status,
       supplierId: qs.supplierId,
+      vendorId: qs.vendorId,
       page,
       pageSize,
     });
@@ -1551,6 +1578,19 @@ export const listPurchaseOrdersHandler = wrapHandler(
       page: result.page,
       pageSize: result.pageSize,
     });
+  },
+  { requireAuth: false },
+);
+
+export const getPurchaseOrderHandler = wrapHandler(
+  async (ctx) => {
+    const id = ctx.event.pathParameters?.id;
+    if (!id) return jsonResponse(400, { message: 'Purchase order ID is required.' });
+
+    const purchaseOrder = await inventoryPurchaseOrderQueries.getPurchaseOrder(id);
+    if (!purchaseOrder) return jsonResponse(404, { message: `Purchase order not found: ${id}` });
+
+    return jsonResponse(200, { purchaseOrder: toPurchaseOrderResponse(purchaseOrder) });
   },
   { requireAuth: false },
 );
@@ -1647,6 +1687,19 @@ export const listVendorsHandler = wrapHandler(
     ]);
 
     return jsonResponse(200, { items: items.map(toVendorResponse), total, limit, offset });
+  },
+  { requireAuth: false },
+);
+
+export const getVendorHandler = wrapHandler(
+  async (ctx) => {
+    const id = ctx.event.pathParameters?.id;
+    if (!id) return jsonResponse(400, { message: 'Vendor ID is required.' });
+
+    const vendor = await inventoryPurchaseOrderQueries.getVendor(id);
+    if (!vendor) return jsonResponse(404, { message: `Vendor not found: ${id}` });
+
+    return jsonResponse(200, { vendor: toVendorResponse(vendor) });
   },
   { requireAuth: false },
 );
@@ -1791,7 +1844,16 @@ function toVendorResponse(r: {
   paymentTerms: string | null;
   createdAt: Date;
   updatedAt: Date;
+  purchaseOrders?: Array<{
+    id: string;
+    purchaseOrderState: string;
+    expectedAt: Date | null;
+  }>;
 }) {
+  const openPurchaseOrders =
+    r.purchaseOrders?.filter(
+      (po) => po.purchaseOrderState !== 'RECEIVED' && po.purchaseOrderState !== 'CANCELLED',
+    ) ?? [];
   return {
     id: r.id,
     vendorCode: r.vendorCode,
@@ -1801,6 +1863,13 @@ function toVendorResponse(r: {
     phone: r.phone ?? undefined,
     leadTimeDays: r.leadTimeDays ?? undefined,
     paymentTerms: r.paymentTerms ?? undefined,
+    purchaseOrderCount: r.purchaseOrders?.length,
+    openPurchaseOrderCount: r.purchaseOrders ? openPurchaseOrders.length : undefined,
+    nextExpectedAt: openPurchaseOrders
+      .map((po) => po.expectedAt)
+      .filter((date): date is Date => Boolean(date))
+      .sort((a, b) => a.getTime() - b.getTime())[0]
+      ?.toISOString(),
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   };
@@ -1871,7 +1940,9 @@ function toPurchaseOrderResponse(r: {
     receivedQuantity: unknown;
     rejectedQuantity: unknown;
     unitCost: unknown;
+    promisedAt?: Date | null;
     lineState: string;
+    unitOfMeasure?: { uomCode: string; uomName: string } | null;
   }>;
 }) {
   return {
@@ -1902,7 +1973,11 @@ function toPurchaseOrderResponse(r: {
         Number(l.orderedQuantity) - Number(l.receivedQuantity) - Number(l.rejectedQuantity),
         0,
       ),
+      unitOfMeasure: l.unitOfMeasure?.uomCode,
+      unitOfMeasureName: l.unitOfMeasure?.uomName,
       unitCost: Number(l.unitCost),
+      lineTotal: Number(l.unitCost) * Number(l.orderedQuantity),
+      promisedAt: l.promisedAt?.toISOString(),
       lineState: l.lineState,
     })),
     createdAt: r.createdAt.toISOString(),

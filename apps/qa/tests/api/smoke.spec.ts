@@ -36,6 +36,7 @@ interface KnownBroken {
   method: string;
   path: string;
   expectStatus: number;
+  expectRouteMiss?: boolean;
   note: string;
 }
 
@@ -163,6 +164,16 @@ test.describe('API smoke — every route returns a healthy status', () => {
               ? '✅ Looks fixed — remove this entry from known-broken.json.'
               : '❌ Different status; update known-broken.json'),
         ).toBe(known.expectStatus);
+        if (known.expectRouteMiss !== undefined) {
+          expect(
+            isApiGatewayRouteMiss,
+            `${key} route-miss expectation changed (${known.note}). ` +
+              `status=${status}; body=${body.slice(0, 200)}. ` +
+              (known.expectRouteMiss
+                ? 'If this now reaches a Lambda handler, remove this pending-deploy entry.'
+                : 'Update known-broken.json if the route now misses API Gateway.'),
+          ).toBe(known.expectRouteMiss);
+        }
         return;
       }
 

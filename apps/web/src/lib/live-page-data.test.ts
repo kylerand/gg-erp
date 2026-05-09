@@ -351,6 +351,8 @@ test('inventory procurement drill-in uses live PO/vendor reads and focused recei
     [
       'listPurchaseOrders(',
       'listVendors(',
+      'createPurchaseOrder',
+      'listParts(',
       'useSearchParams',
       "erpRecordRoute('purchase-order'",
       'allowMockFallback: false',
@@ -362,6 +364,11 @@ test('inventory procurement drill-in uses live PO/vendor reads and focused recei
     [
       'getPurchaseOrder',
       'getVendor',
+      'updatePurchaseOrder',
+      'approvePurchaseOrder',
+      'sendPurchaseOrder',
+      'cancelPurchaseOrder',
+      'closePurchaseOrder',
       "erpRoute('receiving')",
       'allowMockFallback: false',
       "erpRecordRoute('part'",
@@ -389,6 +396,12 @@ test('inventory procurement drill-in uses live PO/vendor reads and focused recei
     [
       'export async function getPurchaseOrder',
       'export async function getVendor',
+      'export async function createPurchaseOrder',
+      'export async function updatePurchaseOrder',
+      'export function approvePurchaseOrder',
+      'export function sendPurchaseOrder',
+      'export function cancelPurchaseOrder',
+      'export function closePurchaseOrder',
       'vendorId',
     ].filter((snippet) => !apiClientSource.includes(snippet)),
     [],

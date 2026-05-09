@@ -134,6 +134,12 @@ export const inventoryLotQueries = {
           `Purchase order line not found: ${input.purchaseOrderLineId}`,
         );
       }
+      if (input.purchaseOrderId && input.purchaseOrderId !== line.purchaseOrderId) {
+        throw new ReceivingCommandError(
+          409,
+          `Purchase order line ${input.purchaseOrderLineId} does not belong to purchase order ${input.purchaseOrderId}.`,
+        );
+      }
 
       if (!['APPROVED', 'SENT', 'PARTIALLY_RECEIVED'].includes(line.purchaseOrderState)) {
         throw new ReceivingCommandError(
@@ -451,6 +457,249 @@ export const inventoryPurchaseOrderQueries = {
   },
 };
 
+interface PurchaseOrderLineCommandInput {
+  id?: string;
+  partId: string;
+  orderedQuantity: number;
+  unitCost: number;
+  unitOfMeasureId?: string;
+  promisedAt?: string | null;
+}
+
+interface CreatePurchaseOrderInput {
+  poNumber?: string;
+  vendorId: string;
+  expectedAt?: string | null;
+  notes?: string | null;
+  lines: PurchaseOrderLineCommandInput[];
+}
+
+interface UpdatePurchaseOrderInput {
+  vendorId?: string;
+  expectedAt?: string | null;
+  notes?: string | null;
+  lines?: PurchaseOrderLineCommandInput[];
+}
+
+type PurchaseOrderCommandAction = 'approve' | 'send' | 'cancel' | 'close';
+
+interface PreparedPurchaseOrderLine {
+  id: string;
+  partId: string;
+  unitOfMeasureId: string;
+  orderedQuantity: number;
+  unitCost: number;
+  promisedAt: Date | null;
+}
+
+export const inventoryPurchaseOrderCommands = {
+  async createPurchaseOrder(input: CreatePurchaseOrderInput, correlationId: string) {
+    const prisma = getInventoryPrisma();
+    return prisma.$transaction(async (tx) => {
+      await assertActiveVendor(tx, input.vendorId);
+      const lines = await preparePurchaseOrderLines(tx, input.lines);
+      const poNumber = input.poNumber?.trim() || generatePurchaseOrderNumber();
+
+      return tx.purchaseOrder.create({
+        data: {
+          id: randomUUID(),
+          poNumber,
+          vendorId: input.vendorId,
+          purchaseOrderState: 'DRAFT',
+          orderedAt: new Date(),
+          expectedAt: normalizeNullableDate(input.expectedAt),
+          notes: normalizeNullableString(input.notes),
+          correlationId,
+          lines: {
+            create: lines.map((line, index) => ({
+              id: line.id,
+              lineNumber: index + 1,
+              orderedQuantity: line.orderedQuantity,
+              unitCost: line.unitCost,
+              promisedAt: line.promisedAt,
+              lineState: 'OPEN',
+              correlationId,
+              part: { connect: { id: line.partId } },
+              unitOfMeasure: { connect: { id: line.unitOfMeasureId } },
+            })),
+          },
+        },
+        include: PURCHASE_ORDER_INCLUDE,
+      });
+    });
+  },
+
+  async updatePurchaseOrder(id: string, input: UpdatePurchaseOrderInput, correlationId: string) {
+    const prisma = getInventoryPrisma();
+    return prisma.$transaction(async (tx) => {
+      const existing = await tx.purchaseOrder.findUnique({
+        where: { id },
+        include: { lines: { select: { id: true } } },
+      });
+      if (!existing) {
+        throw new PurchaseOrderCommandError(404, `Purchase order not found: ${id}`);
+      }
+      if (existing.purchaseOrderState !== 'DRAFT') {
+        throw new PurchaseOrderCommandError(
+          409,
+          `Purchase order is not editable in ${existing.purchaseOrderState} state.`,
+        );
+      }
+
+      if (input.vendorId !== undefined) {
+        await assertActiveVendor(tx, input.vendorId);
+      }
+
+      const data: Prisma.PurchaseOrderUncheckedUpdateInput = {
+        updatedAt: new Date(),
+        correlationId,
+        version: { increment: 1 },
+      };
+      if (input.vendorId !== undefined) data.vendorId = input.vendorId;
+      if ('expectedAt' in input) data.expectedAt = normalizeNullableDate(input.expectedAt);
+      if ('notes' in input) data.notes = normalizeNullableString(input.notes);
+
+      await tx.purchaseOrder.update({ where: { id }, data });
+
+      if (input.lines !== undefined) {
+        const lines = await preparePurchaseOrderLines(tx, input.lines);
+        await tx.purchaseOrderLine.deleteMany({ where: { purchaseOrderId: id } });
+        await tx.purchaseOrderLine.createMany({
+          data: lines.map((line, index) => ({
+            id: line.id,
+            purchaseOrderId: id,
+            lineNumber: index + 1,
+            partId: line.partId,
+            orderedQuantity: line.orderedQuantity,
+            receivedQuantity: 0,
+            rejectedQuantity: 0,
+            unitOfMeasureId: line.unitOfMeasureId,
+            unitCost: line.unitCost,
+            promisedAt: line.promisedAt,
+            lineState: 'OPEN',
+            correlationId,
+          })),
+        });
+      }
+
+      const updated = await tx.purchaseOrder.findUnique({
+        where: { id },
+        include: PURCHASE_ORDER_INCLUDE,
+      });
+      if (!updated) throw new PurchaseOrderCommandError(404, `Purchase order not found: ${id}`);
+      return updated;
+    });
+  },
+
+  async transitionPurchaseOrder(
+    id: string,
+    action: PurchaseOrderCommandAction,
+    correlationId: string,
+  ) {
+    const prisma = getInventoryPrisma();
+    return prisma.$transaction(async (tx) => {
+      const existing = await tx.purchaseOrder.findUnique({
+        where: { id },
+        include: {
+          vendor: { select: { vendorState: true } },
+          lines: {
+            select: {
+              id: true,
+              orderedQuantity: true,
+              receivedQuantity: true,
+              rejectedQuantity: true,
+            },
+          },
+        },
+      });
+      if (!existing) {
+        throw new PurchaseOrderCommandError(404, `Purchase order not found: ${id}`);
+      }
+
+      const now = new Date();
+      const data: Prisma.PurchaseOrderUncheckedUpdateInput = {
+        updatedAt: now,
+        correlationId,
+        version: { increment: 1 },
+      };
+
+      if (action === 'approve') {
+        if (existing.purchaseOrderState !== 'DRAFT') {
+          throw new PurchaseOrderCommandError(
+            409,
+            `Only DRAFT purchase orders can be approved. Current state: ${existing.purchaseOrderState}.`,
+          );
+        }
+        if (existing.vendor.vendorState !== 'ACTIVE') {
+          throw new PurchaseOrderCommandError(
+            409,
+            'Only ACTIVE vendors can receive new purchase orders.',
+          );
+        }
+        if (existing.lines.length === 0) {
+          throw new PurchaseOrderCommandError(409, 'Purchase order must have at least one line.');
+        }
+        data.purchaseOrderState = 'APPROVED';
+      } else if (action === 'send') {
+        if (existing.purchaseOrderState !== 'APPROVED') {
+          throw new PurchaseOrderCommandError(
+            409,
+            `Only APPROVED purchase orders can be sent. Current state: ${existing.purchaseOrderState}.`,
+          );
+        }
+        data.purchaseOrderState = 'SENT';
+        data.sentAt = now;
+      } else if (action === 'cancel') {
+        if (
+          !['DRAFT', 'APPROVED', 'SENT'].includes(existing.purchaseOrderState) ||
+          hasReceivedPurchaseOrderQuantity(existing.lines)
+        ) {
+          throw new PurchaseOrderCommandError(
+            409,
+            `Purchase order cannot be cancelled in ${existing.purchaseOrderState} state after receipt activity.`,
+          );
+        }
+        data.purchaseOrderState = 'CANCELLED';
+        data.closedAt = now;
+        await tx.purchaseOrderLine.updateMany({
+          where: { purchaseOrderId: id },
+          data: {
+            lineState: 'CANCELLED',
+            updatedAt: now,
+            correlationId,
+            version: { increment: 1 },
+          },
+        });
+      } else {
+        if (!['SENT', 'PARTIALLY_RECEIVED'].includes(existing.purchaseOrderState)) {
+          throw new PurchaseOrderCommandError(
+            409,
+            `Only SENT or PARTIALLY_RECEIVED purchase orders can be closed. Current state: ${existing.purchaseOrderState}.`,
+          );
+        }
+        if (!arePurchaseOrderLinesComplete(existing.lines)) {
+          throw new PurchaseOrderCommandError(
+            409,
+            'Purchase order cannot be closed until all line quantities are received or rejected.',
+          );
+        }
+        data.purchaseOrderState = 'RECEIVED';
+        data.closedAt = now;
+        await tx.purchaseOrderLine.updateMany({
+          where: { purchaseOrderId: id },
+          data: { lineState: 'RECEIVED', updatedAt: now, correlationId, version: { increment: 1 } },
+        });
+      }
+
+      return tx.purchaseOrder.update({
+        where: { id },
+        data,
+        include: PURCHASE_ORDER_INCLUDE,
+      });
+    });
+  },
+};
+
 const RESERVATION_STATUSES = [
   'ACTIVE',
   'PARTIALLY_CONSUMED',
@@ -524,6 +773,7 @@ interface AdjustReservationInput {
 }
 
 interface ReceiveInventoryLotInput {
+  purchaseOrderId?: string;
   purchaseOrderLineId: string;
   quantity: number;
   rejectedQuantity?: number;
@@ -559,6 +809,15 @@ class ReservationCommandError extends Error {
 }
 
 class ReceivingCommandError extends Error {
+  constructor(
+    readonly statusCode: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+class PurchaseOrderCommandError extends Error {
   constructor(
     readonly statusCode: number,
     message: string,
@@ -1097,6 +1356,202 @@ function parseOptionalAdjustmentBody(
   return parseBody<AdjustReservationInput>(event);
 }
 
+function parseOptionalPurchaseOrderBody(
+  event: LambdaEvent,
+): { ok: true; value: UpdatePurchaseOrderInput } | { ok: false; error: string } {
+  if (!event.body?.trim()) return { ok: true, value: {} };
+  return parseBody<UpdatePurchaseOrderInput>(event);
+}
+
+function generatePurchaseOrderNumber(): string {
+  const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  return `PO-${stamp}-${randomUUID().slice(0, 8).toUpperCase()}`;
+}
+
+function normalizeNullableString(value: string | null | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeNullableDate(value: string | null | undefined): Date | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  return new Date(value);
+}
+
+async function assertActiveVendor(tx: Prisma.TransactionClient, vendorId: string): Promise<void> {
+  const vendor = await tx.vendor.findFirst({
+    where: { id: vendorId, deletedAt: null },
+    select: { vendorState: true },
+  });
+  if (!vendor) {
+    throw new PurchaseOrderCommandError(404, `Vendor not found: ${vendorId}`);
+  }
+  if (vendor.vendorState !== 'ACTIVE') {
+    throw new PurchaseOrderCommandError(
+      409,
+      'Only ACTIVE vendors can receive new purchase orders.',
+    );
+  }
+}
+
+async function preparePurchaseOrderLines(
+  tx: Prisma.TransactionClient,
+  lines: PurchaseOrderLineCommandInput[],
+): Promise<PreparedPurchaseOrderLine[]> {
+  const seenPartIds = new Set<string>();
+  const prepared: PreparedPurchaseOrderLine[] = [];
+
+  for (const line of lines) {
+    if (seenPartIds.has(line.partId)) {
+      throw new PurchaseOrderCommandError(
+        409,
+        `Duplicate purchase order line for part: ${line.partId}`,
+      );
+    }
+    seenPartIds.add(line.partId);
+
+    const part = await tx.part.findFirst({
+      where: { id: line.partId, deletedAt: null },
+      select: { id: true, sku: true, partState: true, unitOfMeasure: true },
+    });
+    if (!part) {
+      throw new PurchaseOrderCommandError(404, `Part not found: ${line.partId}`);
+    }
+    if (part.partState !== 'ACTIVE') {
+      throw new PurchaseOrderCommandError(
+        409,
+        `Only ACTIVE parts can be added to a purchase order: ${part.sku}`,
+      );
+    }
+
+    const unitOfMeasure = line.unitOfMeasureId
+      ? await tx.unitOfMeasure.findFirst({
+          where: { id: line.unitOfMeasureId, deletedAt: null },
+          select: { id: true },
+        })
+      : ((await tx.unitOfMeasure.findFirst({
+          where: { uomCode: part.unitOfMeasure, deletedAt: null },
+          select: { id: true },
+        })) ??
+        (await tx.unitOfMeasure.findFirst({
+          where: { uomCode: 'EA', deletedAt: null },
+          select: { id: true },
+        })));
+
+    if (!unitOfMeasure) {
+      throw new PurchaseOrderCommandError(
+        409,
+        `No active unit of measure found for part ${part.sku}.`,
+      );
+    }
+
+    prepared.push({
+      id: line.id?.trim() || randomUUID(),
+      partId: line.partId,
+      unitOfMeasureId: unitOfMeasure.id,
+      orderedQuantity: line.orderedQuantity,
+      unitCost: line.unitCost,
+      promisedAt: normalizeNullableDate(line.promisedAt) ?? null,
+    });
+  }
+
+  return prepared;
+}
+
+function hasReceivedPurchaseOrderQuantity(
+  lines: Array<{ receivedQuantity: unknown; rejectedQuantity: unknown }>,
+): boolean {
+  return lines.some(
+    (line) => numberFromDb(line.receivedQuantity) > 0 || numberFromDb(line.rejectedQuantity) > 0,
+  );
+}
+
+function arePurchaseOrderLinesComplete(
+  lines: Array<{
+    orderedQuantity: unknown;
+    receivedQuantity: unknown;
+    rejectedQuantity: unknown;
+  }>,
+): boolean {
+  return (
+    lines.length > 0 &&
+    lines.every(
+      (line) =>
+        numberFromDb(line.receivedQuantity) + numberFromDb(line.rejectedQuantity) >=
+        numberFromDb(line.orderedQuantity),
+    )
+  );
+}
+
+function validatePurchaseOrderLineInput(
+  line: PurchaseOrderLineCommandInput,
+  index: number,
+): string | undefined {
+  const prefix = `lines[${index}]`;
+  const id = parseOptionalUuid(line.id, `${prefix}.id`);
+  if (id.error) return id.error;
+  const partId = parseOptionalUuid(line.partId, `${prefix}.partId`);
+  if (partId.error || !partId.value) return partId.error ?? `${prefix}.partId is required.`;
+  const unitOfMeasureId = parseOptionalUuid(line.unitOfMeasureId, `${prefix}.unitOfMeasureId`);
+  if (unitOfMeasureId.error) return unitOfMeasureId.error;
+  if (!Number.isFinite(line.orderedQuantity) || line.orderedQuantity <= 0) {
+    return `${prefix}.orderedQuantity must be greater than zero.`;
+  }
+  if (!Number.isFinite(line.unitCost) || line.unitCost < 0) {
+    return `${prefix}.unitCost must be zero or greater.`;
+  }
+  if (line.promisedAt && Number.isNaN(new Date(line.promisedAt).getTime())) {
+    return `${prefix}.promisedAt must be a valid date.`;
+  }
+  return undefined;
+}
+
+function validateCreatePurchaseOrderInput(input: CreatePurchaseOrderInput): string | undefined {
+  if (input.poNumber !== undefined && input.poNumber.trim().length === 0) {
+    return 'poNumber cannot be blank when provided.';
+  }
+  const vendorId = parseOptionalUuid(input.vendorId, 'vendorId');
+  if (vendorId.error || !vendorId.value) return vendorId.error ?? 'vendorId is required.';
+  if (input.expectedAt && Number.isNaN(new Date(input.expectedAt).getTime())) {
+    return 'expectedAt must be a valid date.';
+  }
+  if (input.notes !== undefined && input.notes !== null && typeof input.notes !== 'string') {
+    return 'notes must be a string.';
+  }
+  if (!Array.isArray(input.lines) || input.lines.length === 0) {
+    return 'lines must include at least one purchase order line.';
+  }
+  for (let i = 0; i < input.lines.length; i += 1) {
+    const validation = validatePurchaseOrderLineInput(input.lines[i]!, i);
+    if (validation) return validation;
+  }
+  return undefined;
+}
+
+function validateUpdatePurchaseOrderInput(input: UpdatePurchaseOrderInput): string | undefined {
+  const vendorId = parseOptionalUuid(input.vendorId, 'vendorId');
+  if (vendorId.error) return vendorId.error;
+  if (input.expectedAt && Number.isNaN(new Date(input.expectedAt).getTime())) {
+    return 'expectedAt must be a valid date.';
+  }
+  if (input.notes !== undefined && input.notes !== null && typeof input.notes !== 'string') {
+    return 'notes must be a string.';
+  }
+  if (input.lines !== undefined) {
+    if (!Array.isArray(input.lines) || input.lines.length === 0) {
+      return 'lines must include at least one purchase order line.';
+    }
+    for (let i = 0; i < input.lines.length; i += 1) {
+      const validation = validatePurchaseOrderLineInput(input.lines[i]!, i);
+      if (validation) return validation;
+    }
+  }
+  return undefined;
+}
+
 function validateCreateReservationInput(input: CreateReservationInput): string | undefined {
   const stockLotId = parseOptionalUuid(input.stockLotId, 'stockLotId');
   if (stockLotId.error || !stockLotId.value) return stockLotId.error ?? 'stockLotId is required.';
@@ -1117,6 +1572,8 @@ function validateCreateReservationInput(input: CreateReservationInput): string |
 }
 
 function validateReceiveInventoryLotInput(input: ReceiveInventoryLotInput): string | undefined {
+  const purchaseOrderId = parseOptionalUuid(input.purchaseOrderId, 'purchaseOrderId');
+  if (purchaseOrderId.error) return purchaseOrderId.error;
   const purchaseOrderLineId = parseOptionalUuid(input.purchaseOrderLineId, 'purchaseOrderLineId');
   if (purchaseOrderLineId.error || !purchaseOrderLineId.value) {
     return purchaseOrderLineId.error ?? 'purchaseOrderLineId is required.';
@@ -1591,6 +2048,112 @@ export const getPurchaseOrderHandler = wrapHandler(
     if (!purchaseOrder) return jsonResponse(404, { message: `Purchase order not found: ${id}` });
 
     return jsonResponse(200, { purchaseOrder: toPurchaseOrderResponse(purchaseOrder) });
+  },
+  { requireAuth: false },
+);
+
+async function handlePurchaseOrderCommand(
+  command: Promise<Awaited<ReturnType<typeof inventoryPurchaseOrderCommands.createPurchaseOrder>>>,
+  statusCode = 200,
+) {
+  try {
+    const purchaseOrder = await command;
+    return jsonResponse(statusCode, { purchaseOrder: toPurchaseOrderResponse(purchaseOrder) });
+  } catch (error) {
+    if (error instanceof PurchaseOrderCommandError) {
+      return jsonResponse(error.statusCode, { message: error.message });
+    }
+    throw error;
+  }
+}
+
+export const createPurchaseOrderHandler = wrapHandler(
+  async (ctx) => {
+    const body = parseBody<CreatePurchaseOrderInput>(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
+    const validation = validateCreatePurchaseOrderInput(body.value);
+    if (validation) return jsonResponse(422, { message: validation });
+
+    return handlePurchaseOrderCommand(
+      inventoryPurchaseOrderCommands.createPurchaseOrder(body.value, ctx.correlationId),
+      201,
+    );
+  },
+  { requireAuth: false },
+);
+
+export const updatePurchaseOrderHandler = wrapHandler(
+  async (ctx) => {
+    const id = parseOptionalUuid(ctx.event.pathParameters?.id, 'id');
+    if (id.error || !id.value) return jsonResponse(422, { message: id.error ?? 'id is required.' });
+    const body = parseOptionalPurchaseOrderBody(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
+    const validation = validateUpdatePurchaseOrderInput(body.value);
+    if (validation) return jsonResponse(422, { message: validation });
+
+    return handlePurchaseOrderCommand(
+      inventoryPurchaseOrderCommands.updatePurchaseOrder(id.value, body.value, ctx.correlationId),
+    );
+  },
+  { requireAuth: false },
+);
+
+function purchaseOrderTransitionHandler(action: PurchaseOrderCommandAction) {
+  return wrapHandler(
+    async (ctx) => {
+      const id = parseOptionalUuid(ctx.event.pathParameters?.id, 'id');
+      if (id.error || !id.value) {
+        return jsonResponse(422, { message: id.error ?? 'id is required.' });
+      }
+      return handlePurchaseOrderCommand(
+        inventoryPurchaseOrderCommands.transitionPurchaseOrder(id.value, action, ctx.correlationId),
+      );
+    },
+    { requireAuth: false },
+  );
+}
+
+export const approvePurchaseOrderHandler = purchaseOrderTransitionHandler('approve');
+export const sendPurchaseOrderHandler = purchaseOrderTransitionHandler('send');
+export const cancelPurchaseOrderHandler = purchaseOrderTransitionHandler('cancel');
+export const closePurchaseOrderHandler = purchaseOrderTransitionHandler('close');
+
+export const purchaseOrderCommandRouterHandler = wrapHandler(
+  async (ctx) => {
+    const method = ctx.event.httpMethod ?? ctx.event.requestContext?.http?.method ?? 'GET';
+    const routeKey = ctx.event.routeKey ?? '';
+    const path = ctx.event.rawPath ?? ctx.event.path ?? ctx.event.requestContext?.http?.path ?? '';
+    const id = ctx.event.pathParameters?.id;
+
+    if (
+      method === 'POST' &&
+      (routeKey === 'POST /inventory/purchase-orders' || path === '/inventory/purchase-orders')
+    ) {
+      return createPurchaseOrderHandler(ctx.event);
+    }
+    if (
+      method === 'PATCH' &&
+      (routeKey === 'PATCH /inventory/purchase-orders/{id}' ||
+        /^\/inventory\/purchase-orders\/[^/]+$/.test(path))
+    ) {
+      return updatePurchaseOrderHandler(ctx.event);
+    }
+
+    const action =
+      routeKey.endsWith('/approve') || path.endsWith('/approve')
+        ? 'approve'
+        : routeKey.endsWith('/send') || path.endsWith('/send')
+          ? 'send'
+          : routeKey.endsWith('/cancel') || path.endsWith('/cancel')
+            ? 'cancel'
+            : routeKey.endsWith('/close') || path.endsWith('/close')
+              ? 'close'
+              : undefined;
+    if (method === 'PATCH' && id && action) {
+      return purchaseOrderTransitionHandler(action)(ctx.event);
+    }
+
+    return jsonResponse(405, { message: 'Unsupported purchase order command route.' });
   },
   { requireAuth: false },
 );

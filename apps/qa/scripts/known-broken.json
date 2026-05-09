@@ -6,48 +6,6 @@
       "path": "/accounting/webhook",
       "expectStatus": 500,
       "note": "Webhook signature validation throws when no body/headers; needs explicit 400 path for unsigned probes."
-    },
-    {
-      "method": "POST",
-      "path": "/inventory/purchase-orders",
-      "expectStatus": 404,
-      "expectRouteMiss": true,
-      "note": "Pending deploy of PR #63 purchase-order command route; remove after QA API includes the new Lambda integration."
-    },
-    {
-      "method": "PATCH",
-      "path": "/inventory/purchase-orders/{id}",
-      "expectStatus": 404,
-      "expectRouteMiss": true,
-      "note": "Pending deploy of PR #63 purchase-order update route; remove after QA API includes the new Lambda integration."
-    },
-    {
-      "method": "PATCH",
-      "path": "/inventory/purchase-orders/{id}/approve",
-      "expectStatus": 404,
-      "expectRouteMiss": true,
-      "note": "Pending deploy of PR #63 purchase-order approve route; remove after QA API includes the new Lambda integration."
-    },
-    {
-      "method": "PATCH",
-      "path": "/inventory/purchase-orders/{id}/send",
-      "expectStatus": 404,
-      "expectRouteMiss": true,
-      "note": "Pending deploy of PR #63 purchase-order send route; remove after QA API includes the new Lambda integration."
-    },
-    {
-      "method": "PATCH",
-      "path": "/inventory/purchase-orders/{id}/cancel",
-      "expectStatus": 404,
-      "expectRouteMiss": true,
-      "note": "Pending deploy of PR #63 purchase-order cancel route; remove after QA API includes the new Lambda integration."
-    },
-    {
-      "method": "PATCH",
-      "path": "/inventory/purchase-orders/{id}/close",
-      "expectStatus": 404,
-      "expectRouteMiss": true,
-      "note": "Pending deploy of PR #63 purchase-order close route; remove after QA API includes the new Lambda integration."
     }
   ]
 }

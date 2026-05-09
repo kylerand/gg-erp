@@ -5,10 +5,13 @@ export interface LambdaEvent {
   headers?: Record<string, string | undefined> | null;
   queryStringParameters?: Record<string, string | undefined> | null;
   pathParameters?: Record<string, string | undefined> | null;
+  routeKey?: string;
+  rawPath?: string;
+  path?: string;
   httpMethod?: string;
   requestContext?: {
     requestId?: string;
-    http?: { method?: string };
+    http?: { method?: string; path?: string };
     authorizer?: {
       claims?: Record<string, string>;
       jwt?: { claims?: Record<string, string> };

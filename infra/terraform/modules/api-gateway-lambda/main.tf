@@ -853,6 +853,25 @@ resource "aws_lambda_function" "inventory_get_purchase_order" {
   }
 }
 
+resource "aws_lambda_function" "inventory_purchase_order_command" {
+  function_name    = "${var.name_prefix}-inventory-purchase-order-command"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "purchase-order-command.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
 resource "aws_lambda_function" "inventory_list_lots" {
   function_name    = "${var.name_prefix}-inventory-list-lots"
   role             = aws_iam_role.erp_lambda.arn
@@ -1785,6 +1804,56 @@ resource "aws_apigatewayv2_route" "inventory_get_purchase_order" {
   route_key          = "GET /inventory/purchase-orders/{id}"
   target             = "integrations/${aws_apigatewayv2_integration.inventory_get_purchase_order.id}"
   authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "inventory_purchase_order_command" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.inventory_purchase_order_command.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "inventory_create_purchase_order" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /inventory/purchase-orders"
+  target             = "integrations/${aws_apigatewayv2_integration.inventory_purchase_order_command.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+resource "aws_apigatewayv2_route" "inventory_update_purchase_order" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /inventory/purchase-orders/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.inventory_purchase_order_command.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+resource "aws_apigatewayv2_route" "inventory_approve_purchase_order" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /inventory/purchase-orders/{id}/approve"
+  target             = "integrations/${aws_apigatewayv2_integration.inventory_purchase_order_command.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+resource "aws_apigatewayv2_route" "inventory_send_purchase_order" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /inventory/purchase-orders/{id}/send"
+  target             = "integrations/${aws_apigatewayv2_integration.inventory_purchase_order_command.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+resource "aws_apigatewayv2_route" "inventory_cancel_purchase_order" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /inventory/purchase-orders/{id}/cancel"
+  target             = "integrations/${aws_apigatewayv2_integration.inventory_purchase_order_command.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+resource "aws_apigatewayv2_route" "inventory_close_purchase_order" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /inventory/purchase-orders/{id}/close"
+  target             = "integrations/${aws_apigatewayv2_integration.inventory_purchase_order_command.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "inventory_list_lots" {
@@ -4256,6 +4325,7 @@ locals {
     inventory_get_vendor                  = aws_lambda_function.inventory_get_vendor
     inventory_list_purchase_orders        = aws_lambda_function.inventory_list_purchase_orders
     inventory_get_purchase_order          = aws_lambda_function.inventory_get_purchase_order
+    inventory_purchase_order_command      = aws_lambda_function.inventory_purchase_order_command
     inventory_list_lots                   = aws_lambda_function.inventory_list_lots
     inventory_receive_lot                 = aws_lambda_function.inventory_receive_lot
     inventory_list_reservations           = aws_lambda_function.inventory_list_reservations

@@ -1485,19 +1485,21 @@ export interface PurchaseOrderLine {
   lineState: string;
 }
 
+export type PurchaseOrderState =
+  | 'DRAFT'
+  | 'APPROVED'
+  | 'SENT'
+  | 'PARTIALLY_RECEIVED'
+  | 'RECEIVED'
+  | 'CANCELLED';
+
 export interface PurchaseOrder {
   id: string;
   poNumber: string;
   vendorId: string;
   vendorName: string;
   vendorCode: string;
-  purchaseOrderState:
-    | 'DRAFT'
-    | 'APPROVED'
-    | 'SENT'
-    | 'PARTIALLY_RECEIVED'
-    | 'RECEIVED'
-    | 'CANCELLED';
+  purchaseOrderState: PurchaseOrderState;
   orderedAt: string;
   expectedAt?: string;
   sentAt?: string;
@@ -1507,6 +1509,30 @@ export interface PurchaseOrder {
   lines: PurchaseOrderLine[];
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface PurchaseOrderLineInput {
+  id?: string;
+  partId: string;
+  orderedQuantity: number;
+  unitCost: number;
+  unitOfMeasureId?: string;
+  promisedAt?: string | null;
+}
+
+export interface CreatePurchaseOrderInput {
+  poNumber?: string;
+  vendorId: string;
+  expectedAt?: string | null;
+  notes?: string | null;
+  lines: PurchaseOrderLineInput[];
+}
+
+export interface UpdatePurchaseOrderInput {
+  vendorId?: string;
+  expectedAt?: string | null;
+  notes?: string | null;
+  lines?: PurchaseOrderLineInput[];
 }
 
 export async function listPurchaseOrders(
@@ -1547,7 +1573,63 @@ export async function getPurchaseOrder(
   return data.purchaseOrder;
 }
 
+export async function createPurchaseOrder(input: CreatePurchaseOrderInput): Promise<PurchaseOrder> {
+  const data = await apiFetch<{ purchaseOrder: PurchaseOrder }>('/inventory/purchase-orders', {
+    method: 'POST',
+    headers: mutationHeaders(),
+    body: JSON.stringify(input),
+  });
+  return data.purchaseOrder;
+}
+
+export async function updatePurchaseOrder(
+  id: string,
+  input: UpdatePurchaseOrderInput,
+): Promise<PurchaseOrder> {
+  const data = await apiFetch<{ purchaseOrder: PurchaseOrder }>(
+    `/inventory/purchase-orders/${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      headers: mutationHeaders(),
+      body: JSON.stringify(input),
+    },
+  );
+  return data.purchaseOrder;
+}
+
+async function transitionPurchaseOrder(
+  id: string,
+  action: 'approve' | 'send' | 'cancel' | 'close',
+): Promise<PurchaseOrder> {
+  const data = await apiFetch<{ purchaseOrder: PurchaseOrder }>(
+    `/inventory/purchase-orders/${encodeURIComponent(id)}/${action}`,
+    {
+      method: 'PATCH',
+      headers: mutationHeaders(),
+      body: JSON.stringify({}),
+    },
+  );
+  return data.purchaseOrder;
+}
+
+export function approvePurchaseOrder(id: string): Promise<PurchaseOrder> {
+  return transitionPurchaseOrder(id, 'approve');
+}
+
+export function sendPurchaseOrder(id: string): Promise<PurchaseOrder> {
+  return transitionPurchaseOrder(id, 'send');
+}
+
+export function cancelPurchaseOrder(id: string): Promise<PurchaseOrder> {
+  return transitionPurchaseOrder(id, 'cancel');
+}
+
+export function closePurchaseOrder(id: string): Promise<PurchaseOrder> {
+  return transitionPurchaseOrder(id, 'close');
+}
+
 export interface ReceiveInventoryLotInput {
+  purchaseOrderId?: string;
   purchaseOrderLineId: string;
   quantity: number;
   rejectedQuantity?: number;

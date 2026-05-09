@@ -116,6 +116,7 @@ export default function ReceivingPage() {
     setActionError(null);
     try {
       await receiveInventoryLot({
+        purchaseOrderId: focusedPurchaseOrderId ?? undefined,
         purchaseOrderLineId: line.id,
         quantity,
         lotNumber: draft.lotNumber.trim() || undefined,

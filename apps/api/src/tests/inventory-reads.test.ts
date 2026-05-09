@@ -2,10 +2,15 @@ import assert from 'node:assert/strict';
 import test, { mock } from 'node:test';
 import {
   consumeReservationHandler,
+  approvePurchaseOrderHandler,
+  cancelPurchaseOrderHandler,
+  closePurchaseOrderHandler,
+  createPurchaseOrderHandler,
   createReservationHandler,
   getPurchaseOrderHandler,
   getVendorHandler,
   inventoryLotQueries,
+  inventoryPurchaseOrderCommands,
   inventoryPurchaseOrderQueries,
   inventoryReservationQueries,
   listLotsHandler,
@@ -13,6 +18,8 @@ import {
   listReservationsHandler,
   receiveInventoryLotHandler,
   releaseReservationHandler,
+  sendPurchaseOrderHandler,
+  updatePurchaseOrderHandler,
 } from '../lambda/inventory/handlers.js';
 
 const STOCK_LOT_ID = '00000000-0000-4000-8000-000000000001';
@@ -21,6 +28,9 @@ const WORK_ORDER_PART_ID = '00000000-0000-4000-8000-000000000003';
 const RESERVATION_ID = '00000000-0000-4000-8000-000000000004';
 const PART_ID = '00000000-0000-4000-8000-000000000005';
 const PURCHASE_ORDER_LINE_ID = '00000000-0000-4000-8000-000000000007';
+const PURCHASE_ORDER_ID = '00000000-0000-4000-8000-000000000008';
+const VENDOR_ID = '00000000-0000-4000-8000-000000000009';
+const UOM_ID = '00000000-0000-4000-8000-000000000010';
 
 const reservationPayload = {
   id: RESERVATION_ID,
@@ -44,6 +54,44 @@ const reservationPayload = {
   workOrderNumber: 'WO-100',
   workOrderPartId: WORK_ORDER_PART_ID,
 };
+
+function purchaseOrderPayload(state = 'DRAFT') {
+  return {
+    id: PURCHASE_ORDER_ID,
+    poNumber: 'PO-2026-001',
+    vendorId: VENDOR_ID,
+    purchaseOrderState: state,
+    orderedAt: new Date('2026-03-01T12:00:00.000Z'),
+    expectedAt: new Date('2026-03-15T12:00:00.000Z'),
+    sentAt: state === 'SENT' ? new Date('2026-03-02T10:00:00.000Z') : null,
+    closedAt:
+      state === 'RECEIVED' || state === 'CANCELLED' ? new Date('2026-03-16T10:00:00.000Z') : null,
+    notes: 'Urgent order',
+    createdAt: new Date('2026-03-01T12:00:00.000Z'),
+    updatedAt: new Date('2026-03-02T10:00:00.000Z'),
+    vendor: { vendorName: 'Acme Parts', vendorCode: 'ACME' },
+    lines: [
+      {
+        id: PURCHASE_ORDER_LINE_ID,
+        lineNumber: 1,
+        partId: PART_ID,
+        part: {
+          sku: 'BRK-001',
+          name: 'Brake Pad',
+          defaultLocationId: 'loc-1',
+          defaultLocation: { locationName: 'Main Warehouse' },
+        },
+        orderedQuantity: '10.000',
+        receivedQuantity: state === 'RECEIVED' ? '10.000' : '0.000',
+        rejectedQuantity: '0.000',
+        unitCost: '25.5000',
+        promisedAt: new Date('2026-03-14T12:00:00.000Z'),
+        lineState: state === 'CANCELLED' ? 'CANCELLED' : state === 'RECEIVED' ? 'RECEIVED' : 'OPEN',
+        unitOfMeasure: { uomCode: 'EA', uomName: 'Each' },
+      },
+    ],
+  };
+}
 
 // ─── List Lots ────────────────────────────────────────────────────────────────
 
@@ -548,6 +596,161 @@ test('getPurchaseOrderHandler returns 404 when missing', async () => {
     assert.equal(response.statusCode, 404);
   } finally {
     getPoMock.mock.restore();
+  }
+});
+
+test('createPurchaseOrderHandler validates and creates a draft purchase order', async () => {
+  const createPoMock = mock.method(
+    inventoryPurchaseOrderCommands,
+    'createPurchaseOrder',
+    async () => purchaseOrderPayload('DRAFT'),
+  );
+
+  try {
+    const response = await createPurchaseOrderHandler({
+      httpMethod: 'POST',
+      headers: { 'x-correlation-id': 'po-create-correlation' },
+      body: JSON.stringify({
+        vendorId: VENDOR_ID,
+        expectedAt: '2026-03-15T12:00:00.000Z',
+        notes: 'Urgent order',
+        lines: [
+          {
+            partId: PART_ID,
+            orderedQuantity: 10,
+            unitCost: 25.5,
+            unitOfMeasureId: UOM_ID,
+            promisedAt: '2026-03-14T12:00:00.000Z',
+          },
+        ],
+      }),
+    });
+
+    assert.equal(response.statusCode, 201);
+    assert.equal(createPoMock.mock.calls.length, 1);
+    assert.deepEqual(createPoMock.mock.calls[0].arguments[0], {
+      vendorId: VENDOR_ID,
+      expectedAt: '2026-03-15T12:00:00.000Z',
+      notes: 'Urgent order',
+      lines: [
+        {
+          partId: PART_ID,
+          orderedQuantity: 10,
+          unitCost: 25.5,
+          unitOfMeasureId: UOM_ID,
+          promisedAt: '2026-03-14T12:00:00.000Z',
+        },
+      ],
+    });
+    assert.equal(createPoMock.mock.calls[0].arguments[1], 'po-create-correlation');
+
+    const payload = JSON.parse(response.body) as {
+      purchaseOrder: {
+        poNumber: string;
+        purchaseOrderState: string;
+        lines: Array<{ partId: string }>;
+      };
+    };
+    assert.equal(payload.purchaseOrder.poNumber, 'PO-2026-001');
+    assert.equal(payload.purchaseOrder.purchaseOrderState, 'DRAFT');
+    assert.equal(payload.purchaseOrder.lines[0].partId, PART_ID);
+  } finally {
+    createPoMock.mock.restore();
+  }
+});
+
+test('createPurchaseOrderHandler rejects missing lines before command dispatch', async () => {
+  const createPoMock = mock.method(
+    inventoryPurchaseOrderCommands,
+    'createPurchaseOrder',
+    async () => purchaseOrderPayload('DRAFT'),
+  );
+
+  try {
+    const response = await createPurchaseOrderHandler({
+      httpMethod: 'POST',
+      body: JSON.stringify({ vendorId: VENDOR_ID, lines: [] }),
+    });
+
+    assert.equal(response.statusCode, 422);
+    assert.equal(createPoMock.mock.calls.length, 0);
+  } finally {
+    createPoMock.mock.restore();
+  }
+});
+
+test('updatePurchaseOrderHandler edits draft header and line payloads', async () => {
+  const updatePoMock = mock.method(
+    inventoryPurchaseOrderCommands,
+    'updatePurchaseOrder',
+    async () => purchaseOrderPayload('DRAFT'),
+  );
+
+  try {
+    const response = await updatePurchaseOrderHandler({
+      httpMethod: 'PATCH',
+      headers: { 'x-correlation-id': 'po-update-correlation' },
+      pathParameters: { id: PURCHASE_ORDER_ID },
+      body: JSON.stringify({
+        notes: 'Repriced before approval',
+        lines: [{ id: PURCHASE_ORDER_LINE_ID, partId: PART_ID, orderedQuantity: 12, unitCost: 24 }],
+      }),
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(updatePoMock.mock.calls[0].arguments[0], PURCHASE_ORDER_ID);
+    assert.deepEqual(updatePoMock.mock.calls[0].arguments[1], {
+      notes: 'Repriced before approval',
+      lines: [{ id: PURCHASE_ORDER_LINE_ID, partId: PART_ID, orderedQuantity: 12, unitCost: 24 }],
+    });
+    assert.equal(updatePoMock.mock.calls[0].arguments[2], 'po-update-correlation');
+  } finally {
+    updatePoMock.mock.restore();
+  }
+});
+
+test('purchase-order transition handlers dispatch lifecycle actions', async () => {
+  const transitionMock = mock.method(
+    inventoryPurchaseOrderCommands,
+    'transitionPurchaseOrder',
+    async (_id: string, action: string) =>
+      purchaseOrderPayload(
+        action === 'approve'
+          ? 'APPROVED'
+          : action === 'send'
+            ? 'SENT'
+            : action === 'cancel'
+              ? 'CANCELLED'
+              : 'RECEIVED',
+      ),
+  );
+
+  try {
+    const baseEvent = {
+      httpMethod: 'PATCH',
+      headers: { 'x-correlation-id': 'po-transition-correlation' },
+      pathParameters: { id: PURCHASE_ORDER_ID },
+    };
+    const approve = await approvePurchaseOrderHandler(baseEvent);
+    const send = await sendPurchaseOrderHandler(baseEvent);
+    const cancel = await cancelPurchaseOrderHandler(baseEvent);
+    const close = await closePurchaseOrderHandler(baseEvent);
+
+    assert.equal(approve.statusCode, 200);
+    assert.equal(send.statusCode, 200);
+    assert.equal(cancel.statusCode, 200);
+    assert.equal(close.statusCode, 200);
+    assert.deepEqual(
+      transitionMock.mock.calls.map((call) => call.arguments.slice(0, 3)),
+      [
+        [PURCHASE_ORDER_ID, 'approve', 'po-transition-correlation'],
+        [PURCHASE_ORDER_ID, 'send', 'po-transition-correlation'],
+        [PURCHASE_ORDER_ID, 'cancel', 'po-transition-correlation'],
+        [PURCHASE_ORDER_ID, 'close', 'po-transition-correlation'],
+      ],
+    );
+  } finally {
+    transitionMock.mock.restore();
   }
 });
 

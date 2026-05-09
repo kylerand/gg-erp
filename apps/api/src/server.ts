@@ -37,6 +37,12 @@ import {
   listManufacturersHandler,
   listPurchaseOrdersHandler,
   getPurchaseOrderHandler,
+  createPurchaseOrderHandler,
+  updatePurchaseOrderHandler,
+  approvePurchaseOrderHandler,
+  sendPurchaseOrderHandler,
+  cancelPurchaseOrderHandler,
+  closePurchaseOrderHandler,
   createManufacturerHandler,
   planMaterialByStageHandler,
   listReservationsHandler,
@@ -233,6 +239,7 @@ async function route(
   const customerMatch = pathname.match(/^\/identity\/customers\/([^/]+)/);
   const partMatch = pathname.match(/^\/inventory\/parts\/([^/]+)(?:\/([^/]+))?/);
   const purchaseOrderMatch = pathname.match(/^\/inventory\/purchase-orders\/([^/]+)$/);
+  const purchaseOrderActionMatch = pathname.match(/^\/inventory\/purchase-orders\/([^/]+)\/([^/]+)$/);
   const vendorMatch = pathname.match(/^\/inventory\/vendors\/([^/]+)$/);
   const inventoryReservationMatch = pathname.match(/^\/inventory\/reservations\/([^/]+)\/([^/]+)$/);
   const taskMatch = pathname.match(/^\/tickets\/work-orders\/([^/]+)\/tasks(?:\/([^/]+))?/);
@@ -324,8 +331,20 @@ async function route(
     result = await createManufacturerHandler(event);
   } else if (pathname === '/inventory/purchase-orders' && method === 'GET') {
     result = await listPurchaseOrdersHandler(event);
+  } else if (pathname === '/inventory/purchase-orders' && method === 'POST') {
+    result = await createPurchaseOrderHandler(event);
   } else if (purchaseOrderMatch && method === 'GET') {
     result = await getPurchaseOrderHandler({ ...event, pathParameters: { id: purchaseOrderMatch[1] } });
+  } else if (purchaseOrderMatch && method === 'PATCH') {
+    result = await updatePurchaseOrderHandler({ ...event, pathParameters: { id: purchaseOrderMatch[1] } });
+  } else if (purchaseOrderActionMatch && purchaseOrderActionMatch[2] === 'approve' && method === 'PATCH') {
+    result = await approvePurchaseOrderHandler({ ...event, pathParameters: { id: purchaseOrderActionMatch[1] } });
+  } else if (purchaseOrderActionMatch && purchaseOrderActionMatch[2] === 'send' && method === 'PATCH') {
+    result = await sendPurchaseOrderHandler({ ...event, pathParameters: { id: purchaseOrderActionMatch[1] } });
+  } else if (purchaseOrderActionMatch && purchaseOrderActionMatch[2] === 'cancel' && method === 'PATCH') {
+    result = await cancelPurchaseOrderHandler({ ...event, pathParameters: { id: purchaseOrderActionMatch[1] } });
+  } else if (purchaseOrderActionMatch && purchaseOrderActionMatch[2] === 'close' && method === 'PATCH') {
+    result = await closePurchaseOrderHandler({ ...event, pathParameters: { id: purchaseOrderActionMatch[1] } });
   } else if (partMatch && partMatch[2] === 'chain' && method === 'GET') {
     result = await getPartChainHandler({ ...event, pathParameters: { id: partMatch[1] } });
   } else if (partMatch && !partMatch[2] && method === 'GET') {

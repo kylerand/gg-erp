@@ -382,6 +382,9 @@ test('inventory procurement drill-in uses live PO/vendor reads and focused recei
       "searchParams.get('purchaseOrderId')",
       "searchParams.get('lineId')",
       "erpRecordRoute('purchase-order'",
+      'Receiving variance report',
+      'rejectedQuantity',
+      'receiveInventoryLot',
     ].filter((snippet) => !receivingSource.includes(snippet)),
     [],
   );

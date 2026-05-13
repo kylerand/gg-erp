@@ -376,6 +376,45 @@ test('receiveInventoryLotHandler rejects invalid receipt quantities', async () =
   }
 });
 
+test('receiveInventoryLotHandler allows rejected-only variance receipts', async () => {
+  const receiveLotMock = mock.method(inventoryLotQueries, 'receivePurchaseOrderLine', async () => ({
+    purchaseOrderLine: {
+      id: PURCHASE_ORDER_LINE_ID,
+      lineState: 'RECEIVED',
+      receivedQuantity: 0,
+      rejectedQuantity: 2,
+    },
+    purchaseOrderState: 'PARTIALLY_RECEIVED',
+  }));
+
+  try {
+    const response = await receiveInventoryLotHandler({
+      httpMethod: 'POST',
+      headers: { 'x-correlation-id': 'variance-correlation' },
+      body: JSON.stringify({
+        purchaseOrderLineId: PURCHASE_ORDER_LINE_ID,
+        quantity: 0,
+        rejectedQuantity: 2,
+      }),
+    });
+
+    assert.equal(response.statusCode, 201);
+    assert.deepEqual(receiveLotMock.mock.calls[0].arguments[0], {
+      purchaseOrderLineId: PURCHASE_ORDER_LINE_ID,
+      quantity: 0,
+      rejectedQuantity: 2,
+    });
+    const payload = JSON.parse(response.body) as {
+      lot?: unknown;
+      purchaseOrderLine: { rejectedQuantity: number };
+    };
+    assert.equal(payload.lot, undefined);
+    assert.equal(payload.purchaseOrderLine.rejectedQuantity, 2);
+  } finally {
+    receiveLotMock.mock.restore();
+  }
+});
+
 // ─── Inventory Reservations ─────────────────────────────────────────────────
 
 test('listReservationsHandler forwards filters to the reservation query layer', async () => {

@@ -103,8 +103,6 @@ export const inventoryLotQueries = {
     const rejectedQuantity = input.rejectedQuantity ?? 0;
     const receivedAt = input.receivedAt ? new Date(input.receivedAt) : new Date();
     const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null;
-    const lotId = randomUUID();
-    const ledgerEntryId = randomUUID();
 
     return getInventoryPrisma().$transaction(async (tx) => {
       const lines = await tx.$queryRaw<PurchaseOrderReceiptLineRow[]>`
@@ -164,120 +162,149 @@ export const inventoryLotQueries = {
         );
       }
 
-      const stockLocation = await resolveReceiptStockLocation(
-        tx,
-        input.stockLocationId ?? line.partDefaultLocationId ?? undefined,
-      );
-      if (!stockLocation) {
-        throw new ReceivingCommandError(
-          409,
-          'No active stock location is available for receiving.',
+      let lotResponse: ReturnType<typeof toLotDetailResponse> | undefined;
+      if (acceptedQuantity > 0) {
+        const lotId = randomUUID();
+        const ledgerEntryId = randomUUID();
+        const stockLocation = await resolveReceiptStockLocation(
+          tx,
+          input.stockLocationId ?? line.partDefaultLocationId ?? undefined,
         );
+        if (!stockLocation) {
+          throw new ReceivingCommandError(
+            409,
+            'No active stock location is available for receiving.',
+          );
+        }
+
+        const lotNumber =
+          input.lotNumber?.trim() ||
+          `RCV-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${lotId.slice(0, 8)}`;
+        const metadata = {
+          source: 'purchase_order_receipt',
+          purchaseOrderId: line.purchaseOrderId,
+          purchaseOrderLineId: line.id,
+        };
+
+        await tx.$executeRaw`
+          INSERT INTO inventory.stock_lots (
+            id,
+            part_id,
+            stock_location_id,
+            lot_number,
+            serial_number,
+            lot_state,
+            received_at,
+            expires_at,
+            metadata,
+            created_at,
+            updated_at,
+            version
+          )
+          VALUES (
+            ${lotId}::uuid,
+            ${line.partId}::uuid,
+            ${stockLocation.id}::uuid,
+            ${lotNumber},
+            ${input.serialNumber?.trim() || null},
+            'AVAILABLE',
+            ${receivedAt},
+            ${expiresAt}::date,
+            ${JSON.stringify(metadata)}::jsonb,
+            now(),
+            now(),
+            0
+          )
+        `;
+
+        await tx.$executeRaw`
+          INSERT INTO inventory.inventory_ledger_entries (
+            id,
+            part_id,
+            stock_location_id,
+            stock_lot_id,
+            movement_type,
+            quantity_delta,
+            unit_cost,
+            value_delta,
+            reason_code,
+            source_document_type,
+            source_document_id,
+            correlation_id,
+            created_at
+          )
+          VALUES (
+            ${ledgerEntryId}::uuid,
+            ${line.partId}::uuid,
+            ${stockLocation.id}::uuid,
+            ${lotId}::uuid,
+            'RECEIPT',
+            ${acceptedQuantity},
+            ${numberFromDb(line.unitCost)},
+            ${acceptedQuantity * numberFromDb(line.unitCost)},
+            'PURCHASE_ORDER_RECEIPT',
+            'PURCHASE_ORDER_LINE',
+            ${line.id},
+            ${correlationId},
+            now()
+          )
+        `;
+
+        await tx.$executeRaw`
+          INSERT INTO inventory.inventory_balances (
+            id,
+            part_id,
+            stock_location_id,
+            stock_lot_id,
+            quantity_on_hand,
+            quantity_reserved,
+            quantity_allocated,
+            quantity_consumed,
+            last_ledger_entry_id,
+            updated_at,
+            last_correlation_id,
+            version
+          )
+          VALUES (
+            ${randomUUID()}::uuid,
+            ${line.partId}::uuid,
+            ${stockLocation.id}::uuid,
+            ${lotId}::uuid,
+            ${acceptedQuantity},
+            0,
+            0,
+            0,
+            ${ledgerEntryId}::uuid,
+            now(),
+            ${correlationId},
+            0
+          )
+        `;
+
+        const lot = await tx.stockLot.findUnique({
+          where: { id: lotId },
+          include: {
+            part: { select: { sku: true, name: true } },
+            stockLocation: { select: { locationName: true } },
+          },
+        });
+        if (!lot) {
+          throw new ReceivingCommandError(500, 'Received lot could not be reloaded.');
+        }
+
+        const balanceRows = await tx.$queryRaw<InventoryLotBalanceRow[]>`
+          SELECT
+            stock_lot_id::text AS "stockLotId",
+            COALESCE(SUM(quantity_on_hand), 0) AS "quantityOnHand",
+            COALESCE(SUM(quantity_reserved), 0) AS "quantityReserved",
+            COALESCE(SUM(quantity_allocated), 0) AS "quantityAllocated",
+            COALESCE(SUM(quantity_consumed), 0) AS "quantityConsumed"
+          FROM inventory.inventory_balances
+          WHERE stock_lot_id = ${lotId}::uuid
+          GROUP BY stock_lot_id
+        `;
+        lotResponse = toLotDetailResponse({ ...lot, balance: balanceRows[0] });
       }
-
-      const lotNumber =
-        input.lotNumber?.trim() ||
-        `RCV-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${lotId.slice(0, 8)}`;
-      const metadata = {
-        source: 'purchase_order_receipt',
-        purchaseOrderId: line.purchaseOrderId,
-        purchaseOrderLineId: line.id,
-      };
-
-      await tx.$executeRaw`
-        INSERT INTO inventory.stock_lots (
-          id,
-          part_id,
-          stock_location_id,
-          lot_number,
-          serial_number,
-          lot_state,
-          received_at,
-          expires_at,
-          metadata,
-          created_at,
-          updated_at,
-          version
-        )
-        VALUES (
-          ${lotId}::uuid,
-          ${line.partId}::uuid,
-          ${stockLocation.id}::uuid,
-          ${lotNumber},
-          ${input.serialNumber?.trim() || null},
-          'AVAILABLE',
-          ${receivedAt},
-          ${expiresAt}::date,
-          ${JSON.stringify(metadata)}::jsonb,
-          now(),
-          now(),
-          0
-        )
-      `;
-
-      await tx.$executeRaw`
-        INSERT INTO inventory.inventory_ledger_entries (
-          id,
-          part_id,
-          stock_location_id,
-          stock_lot_id,
-          movement_type,
-          quantity_delta,
-          unit_cost,
-          value_delta,
-          reason_code,
-          source_document_type,
-          source_document_id,
-          correlation_id,
-          created_at
-        )
-        VALUES (
-          ${ledgerEntryId}::uuid,
-          ${line.partId}::uuid,
-          ${stockLocation.id}::uuid,
-          ${lotId}::uuid,
-          'RECEIPT',
-          ${acceptedQuantity},
-          ${numberFromDb(line.unitCost)},
-          ${acceptedQuantity * numberFromDb(line.unitCost)},
-          'PURCHASE_ORDER_RECEIPT',
-          'PURCHASE_ORDER_LINE',
-          ${line.id},
-          ${correlationId},
-          now()
-        )
-      `;
-
-      await tx.$executeRaw`
-        INSERT INTO inventory.inventory_balances (
-          id,
-          part_id,
-          stock_location_id,
-          stock_lot_id,
-          quantity_on_hand,
-          quantity_reserved,
-          quantity_allocated,
-          quantity_consumed,
-          last_ledger_entry_id,
-          updated_at,
-          last_correlation_id,
-          version
-        )
-        VALUES (
-          ${randomUUID()}::uuid,
-          ${line.partId}::uuid,
-          ${stockLocation.id}::uuid,
-          ${lotId}::uuid,
-          ${acceptedQuantity},
-          0,
-          0,
-          0,
-          ${ledgerEntryId}::uuid,
-          now(),
-          ${correlationId},
-          0
-        )
-      `;
 
       await tx.$executeRaw`
         UPDATE inventory.purchase_order_lines
@@ -318,29 +345,6 @@ export const inventoryLotQueries = {
         WHERE po.id = ${line.purchaseOrderId}::uuid
       `;
 
-      const lot = await tx.stockLot.findUnique({
-        where: { id: lotId },
-        include: {
-          part: { select: { sku: true, name: true } },
-          stockLocation: { select: { locationName: true } },
-        },
-      });
-      if (!lot) {
-        throw new ReceivingCommandError(500, 'Received lot could not be reloaded.');
-      }
-
-      const balanceRows = await tx.$queryRaw<InventoryLotBalanceRow[]>`
-        SELECT
-          stock_lot_id::text AS "stockLotId",
-          COALESCE(SUM(quantity_on_hand), 0) AS "quantityOnHand",
-          COALESCE(SUM(quantity_reserved), 0) AS "quantityReserved",
-          COALESCE(SUM(quantity_allocated), 0) AS "quantityAllocated",
-          COALESCE(SUM(quantity_consumed), 0) AS "quantityConsumed"
-        FROM inventory.inventory_balances
-        WHERE stock_lot_id = ${lotId}::uuid
-        GROUP BY stock_lot_id
-      `;
-
       const receiptRows = await tx.$queryRaw<
         Array<{
           purchaseOrderState: string;
@@ -361,7 +365,7 @@ export const inventoryLotQueries = {
       const receipt = receiptRows[0];
 
       return {
-        lot: toLotDetailResponse({ ...lot, balance: balanceRows[0] }),
+        ...(lotResponse ? { lot: lotResponse } : {}),
         purchaseOrderLine: {
           id: line.id,
           lineState: receipt?.lineState ?? line.lineState,
@@ -1289,7 +1293,7 @@ async function handleReservationCommand(
 
 async function handleReceivingCommand(
   command: Promise<{
-    lot: ReturnType<typeof toLotDetailResponse>;
+    lot?: ReturnType<typeof toLotDetailResponse>;
     purchaseOrderLine: {
       id: string;
       lineState: string;
@@ -1597,14 +1601,17 @@ function validateReceiveInventoryLotInput(input: ReceiveInventoryLotInput): stri
   }
   const stockLocationId = parseOptionalUuid(input.stockLocationId, 'stockLocationId');
   if (stockLocationId.error) return stockLocationId.error;
-  if (!Number.isFinite(input.quantity) || input.quantity <= 0) {
-    return 'quantity must be greater than zero.';
+  if (!Number.isFinite(input.quantity) || input.quantity < 0) {
+    return 'quantity must be zero or greater.';
   }
   if (
     input.rejectedQuantity !== undefined &&
     (!Number.isFinite(input.rejectedQuantity) || input.rejectedQuantity < 0)
   ) {
     return 'rejectedQuantity must be zero or greater.';
+  }
+  if (input.quantity + (input.rejectedQuantity ?? 0) <= 0) {
+    return 'accepted or rejected quantity must be greater than zero.';
   }
   if (input.receivedAt && Number.isNaN(new Date(input.receivedAt).getTime())) {
     return 'receivedAt must be a valid date.';

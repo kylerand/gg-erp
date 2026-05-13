@@ -44,6 +44,7 @@ test('registry route helper resolves module links and filtered routes', () => {
     getRequiredErpRoute('accounting-sync', { view: 'queue' }),
     '/accounting/sync?view=queue',
   );
+  assert.equal(getRequiredErpRoute('vendor-payable'), '/accounting/sync?view=payables');
   assert.equal(
     getRequiredErpRoute('accounting-sync', {
       view: 'invoices',
@@ -93,6 +94,7 @@ test('workspace navigation items include live links and quick actions', () => {
   );
   assert.ok(inventoryItems.some((item) => item.key === 'purchase-order'));
   assert.ok(accountingItems.some((item) => item.key === 'quickbooks-customer'));
+  assert.ok(accountingItems.some((item) => item.key === 'vendor-payable'));
   assert.ok(accountingItems.some((item) => item.key === 'quickbooks-invoice'));
   assert.ok(accountingItems.some((item) => item.key === 'quickbooks-chart-of-accounts'));
   assert.ok(trainingItems.some((item) => item.key === 'training-admin'));

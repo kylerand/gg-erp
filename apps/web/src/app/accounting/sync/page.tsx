@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import { PageHeader, EmptyState, LoadingSkeleton, SyncStatusBadge } from '@gg-erp/ui';
 import type { SyncStatus } from '@gg-erp/ui';
@@ -10,15 +11,18 @@ import {
   listCustomerSyncs,
   listIntegrationAccounts,
   getFailureSummary,
+  listPurchaseOrders,
   type InvoiceSyncRecord,
   type CustomerSyncRecord,
   type IntegrationAccount,
   type FailureSummary,
+  type PurchaseOrder,
+  type PurchaseOrderLine,
 } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
-import { erpRoute } from '@/lib/erp-routes';
+import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 
-type SyncView = 'failures' | 'queue' | 'invoices' | 'customers' | 'accounts';
+type SyncView = 'failures' | 'queue' | 'payables' | 'invoices' | 'customers' | 'accounts';
 type StateFilter =
   | 'ALL'
   | 'FAILED'
@@ -32,6 +36,7 @@ type PeriodFilter = 'today' | undefined;
 const VIEWS: Array<{ id: SyncView; label: string; description: string }> = [
   { id: 'failures', label: 'Failures', description: 'Rows that need attention' },
   { id: 'queue', label: 'Queue', description: 'Pending or in progress' },
+  { id: 'payables', label: 'Payables', description: 'Received POs needing bill review' },
   { id: 'invoices', label: 'Invoices', description: 'Invoice sync records' },
   { id: 'customers', label: 'Customers', description: 'Customer sync records' },
   { id: 'accounts', label: 'Accounts', description: 'QuickBooks account mappings' },
@@ -71,10 +76,27 @@ const CUSTOMER_LOAD_STATES: Array<CustomerSyncRecord['state'] | undefined> = [
   'SKIPPED',
 ];
 const EMPTY_FAILURES: FailureSummary = { invoice: 0, customer: 0, payment: 0, total: 0 };
+const PAYABLE_PO_STATES = new Set(['PARTIALLY_RECEIVED', 'RECEIVED']);
+
+interface PayableRow {
+  id: string;
+  purchaseOrder: PurchaseOrder;
+  receivedQuantity: number;
+  rejectedQuantity: number;
+  openQuantity: number;
+  billableValue: number;
+  rejectedValue: number;
+  status: 'Ready for bill review' | 'Receiving open' | 'Variance review';
+  statusTone: 'green' | 'amber' | 'red';
+  detail: string;
+  actionHref: string;
+  actionLabel: string;
+}
 
 export default function SyncMonitorPage() {
   const [invoiceRecords, setInvoiceRecords] = useState<InvoiceSyncRecord[]>([]);
   const [customerRecords, setCustomerRecords] = useState<CustomerSyncRecord[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [accounts, setAccounts] = useState<IntegrationAccount[]>([]);
   const [failureSummary, setFailureSummary] = useState<FailureSummary>(EMPTY_FAILURES);
   const [loading, setLoading] = useState(true);
@@ -105,6 +127,7 @@ export default function SyncMonitorPage() {
     Promise.allSettled([
       ...invoiceRequests,
       ...customerRequests,
+      listPurchaseOrders({ pageSize: 200 }, { allowMockFallback: false }),
       listIntegrationAccounts(),
       getFailureSummary(),
       getQbStatus(),
@@ -122,12 +145,15 @@ export default function SyncMonitorPage() {
           invoiceRequestCount + customerRequestCount,
         ) as PromiseSettledResult<{ items: CustomerSyncRecord[] }>[];
         const [accountsResult, failureResult, statusResult] = results.slice(
-          invoiceRequestCount + customerRequestCount,
+          invoiceRequestCount + customerRequestCount + 1,
         ) as [
           PromiseSettledResult<{ items: IntegrationAccount[] }>,
           PromiseSettledResult<FailureSummary>,
           PromiseSettledResult<{ connected: boolean; companyName?: string }>,
         ];
+        const payableResult = results[
+          invoiceRequestCount + customerRequestCount
+        ] as PromiseSettledResult<{ items: PurchaseOrder[] }>;
 
         const errs = results
           .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
@@ -149,6 +175,7 @@ export default function SyncMonitorPage() {
 
         if (invoiceGroups.length) setInvoiceRecords(mergeById(invoiceGroups));
         if (customerGroups.length) setCustomerRecords(mergeById(customerGroups));
+        if (payableResult.status === 'fulfilled') setPurchaseOrders(payableResult.value.items);
         if (accountsResult.status === 'fulfilled') setAccounts(accountsResult.value.items);
         if (failureResult.status === 'fulfilled') setFailureSummary(failureResult.value);
         if (statusResult.status === 'fulfilled') {
@@ -222,20 +249,23 @@ export default function SyncMonitorPage() {
     const customerList = customerRecords
       .filter((r) => state === 'ALL' || r.state === state)
       .filter((r) => !period || isToday(r.syncedAt ?? r.createdAt));
+    const payableRows = buildPayableRows(purchaseOrders);
 
     return {
       invoiceFailures,
       customerFailures,
       invoiceQueue,
       customerQueue,
+      payableRows,
       invoiceList,
       customerList,
     };
-  }, [customerRecords, invoiceRecords, period, state]);
+  }, [customerRecords, invoiceRecords, period, purchaseOrders, state]);
 
   const stats = {
     failures: rows.invoiceFailures.length + rows.customerFailures.length + failureSummary.payment,
     queue: rows.invoiceQueue.length + rows.customerQueue.length,
+    payables: rows.payableRows.length,
     invoices: invoiceRecords.length,
     customers: customerRecords.length,
     accounts: accounts.length,
@@ -244,13 +274,15 @@ export default function SyncMonitorPage() {
   const activeDescription =
     view === 'failures'
       ? 'Invoice and customer sync failures with retry context.'
-      : view === 'queue'
-        ? 'Records waiting to sync or currently in progress.'
-        : view === 'invoices'
-          ? 'Invoice sync history from the ERP to QuickBooks.'
-          : view === 'customers'
-            ? 'Customer sync history from the ERP to QuickBooks.'
-            : 'Connected integration accounts and mapped QuickBooks account metadata.';
+        : view === 'queue'
+          ? 'Records waiting to sync or currently in progress.'
+          : view === 'payables'
+            ? 'Received purchase orders ready for vendor bill review.'
+            : view === 'invoices'
+              ? 'Invoice sync history from the ERP to QuickBooks.'
+              : view === 'customers'
+                ? 'Customer sync history from the ERP to QuickBooks.'
+                : 'Connected integration accounts and mapped QuickBooks account metadata.';
 
   return (
     <div>
@@ -345,6 +377,8 @@ export default function SyncMonitorPage() {
         />
       ) : view === 'queue' ? (
         <QueueList invoiceRows={rows.invoiceQueue} customerRows={rows.customerQueue} />
+      ) : view === 'payables' ? (
+        <PayablesList rows={rows.payableRows} />
       ) : view === 'invoices' ? (
         <InvoiceTable records={rows.invoiceList} retrying={retrying} onRetry={retry} />
       ) : view === 'customers' ? (
@@ -352,6 +386,182 @@ export default function SyncMonitorPage() {
       ) : (
         <AccountsTable accounts={accounts} />
       )}
+    </div>
+  );
+}
+
+function buildPayableRows(purchaseOrders: PurchaseOrder[]): PayableRow[] {
+  return purchaseOrders
+    .filter(
+      (po) =>
+        PAYABLE_PO_STATES.has(po.purchaseOrderState) ||
+        po.lines.some((line) => line.receivedQuantity > 0 || line.rejectedQuantity > 0),
+    )
+    .map((purchaseOrder) => {
+      const receivedQuantity = purchaseOrder.lines.reduce(
+        (sum, line) => sum + line.receivedQuantity,
+        0,
+      );
+      const rejectedQuantity = purchaseOrder.lines.reduce(
+        (sum, line) => sum + line.rejectedQuantity,
+        0,
+      );
+      const openQuantity = purchaseOrder.lines.reduce((sum, line) => sum + payableOpen(line), 0);
+      const billableValue = purchaseOrder.lines.reduce(
+        (sum, line) => sum + line.receivedQuantity * line.unitCost,
+        0,
+      );
+      const rejectedValue = purchaseOrder.lines.reduce(
+        (sum, line) => sum + line.rejectedQuantity * line.unitCost,
+        0,
+      );
+
+      const hasVariance = rejectedQuantity > 0;
+      const hasOpenReceiving = openQuantity > 0;
+      const status: PayableRow['status'] = hasVariance
+        ? 'Variance review'
+        : hasOpenReceiving
+          ? 'Receiving open'
+          : 'Ready for bill review';
+      const statusTone: PayableRow['statusTone'] =
+        status === 'Variance review' ? 'red' : status === 'Receiving open' ? 'amber' : 'green';
+      const actionHref =
+        status === 'Ready for bill review'
+          ? erpRecordRoute('purchase-order', purchaseOrder.id)
+          : `${erpRoute('receiving')}?purchaseOrderId=${encodeURIComponent(purchaseOrder.id)}`;
+      const actionLabel =
+        status === 'Ready for bill review'
+          ? 'Open PO for bill review'
+          : status === 'Receiving open'
+            ? 'Complete receiving'
+            : 'Review variance';
+      const detail =
+        status === 'Ready for bill review'
+          ? 'Received quantity is ready for vendor bill entry.'
+          : status === 'Receiving open'
+            ? 'Remaining quantity is still open before final bill review.'
+            : 'Rejected quantity needs vendor credit, replacement, or price decision.';
+
+      return {
+        id: purchaseOrder.id,
+        purchaseOrder,
+        receivedQuantity,
+        rejectedQuantity,
+        openQuantity,
+        billableValue,
+        rejectedValue,
+        status,
+        statusTone,
+        detail,
+        actionHref,
+        actionLabel,
+      };
+    })
+    .filter((row) => row.receivedQuantity > 0 || row.rejectedQuantity > 0)
+    .sort((a, b) => {
+      const statusRank = {
+        'Variance review': 0,
+        'Receiving open': 1,
+        'Ready for bill review': 2,
+      } as const;
+      return statusRank[a.status] - statusRank[b.status] || b.billableValue - a.billableValue;
+    });
+}
+
+function payableOpen(line: PurchaseOrderLine): number {
+  return Math.max(line.orderedQuantity - line.receivedQuantity - line.rejectedQuantity, 0);
+}
+
+function PayablesList({ rows }: { rows: PayableRow[] }) {
+  if (rows.length === 0) {
+    return (
+      <EmptyState
+        icon="OK"
+        title="No received POs need bill review"
+        description="Purchase orders will appear here after receiving records accepted or rejected quantities."
+      />
+    );
+  }
+
+  const readyRows = rows.filter((row) => row.status === 'Ready for bill review');
+  const openRows = rows.filter((row) => row.status === 'Receiving open');
+  const varianceRows = rows.filter((row) => row.status === 'Variance review');
+  const billableValue = rows.reduce((sum, row) => sum + row.billableValue, 0);
+  const rejectedValue = rows.reduce((sum, row) => sum + row.rejectedValue, 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+        <PayableMetric label="Bill ready" value={readyRows.length} tone="green" />
+        <PayableMetric label="Needs receiving" value={openRows.length} tone="amber" />
+        <PayableMetric label="Variance review" value={varianceRows.length} tone="red" />
+        <PayableMetric
+          label="Accepted value"
+          value={formatCurrency(billableValue)}
+          subline={rejectedValue > 0 ? `${formatCurrency(rejectedValue)} rejected` : undefined}
+        />
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+        <table className="w-full min-w-[1040px] text-sm">
+          <thead className="border-b border-gray-200 bg-gray-50">
+            <tr>
+              <th className="px-4 py-3 text-left font-medium text-gray-600">State</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600">PO</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600">Vendor</th>
+              <th className="px-4 py-3 text-right font-medium text-gray-600">Accepted</th>
+              <th className="px-4 py-3 text-right font-medium text-gray-600">Rejected</th>
+              <th className="px-4 py-3 text-right font-medium text-gray-600">Open</th>
+              <th className="px-4 py-3 text-right font-medium text-gray-600">Billable</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600">Action</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {rows.map((row) => (
+              <tr key={row.id} className="hover:bg-gray-50">
+                <td className="px-4 py-3">
+                  <PayableStatus status={row.status} tone={row.statusTone} />
+                </td>
+                <td className="px-4 py-3">
+                  <Link
+                    href={erpRecordRoute('purchase-order', row.purchaseOrder.id)}
+                    className="font-mono text-xs font-semibold text-gray-900 hover:underline"
+                  >
+                    {row.purchaseOrder.poNumber}
+                  </Link>
+                  <div className="mt-0.5 text-[11px] text-gray-500">{row.detail}</div>
+                </td>
+                <td className="px-4 py-3 text-gray-700">
+                  <div className="font-medium text-gray-900">{row.purchaseOrder.vendorName}</div>
+                  <div className="font-mono text-[11px] text-gray-500">
+                    {row.purchaseOrder.vendorCode}
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums">
+                  {formatQuantity(row.receivedQuantity)}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums text-red-700">
+                  {formatQuantity(row.rejectedQuantity)}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums text-amber-700">
+                  {formatQuantity(row.openQuantity)}
+                </td>
+                <td className="px-4 py-3 text-right font-semibold tabular-nums">
+                  {formatCurrency(row.billableValue)}
+                </td>
+                <td className="px-4 py-3">
+                  <Link
+                    href={row.actionHref}
+                    className="text-xs font-semibold text-gray-900 hover:underline"
+                  >
+                    {row.actionLabel}
+                  </Link>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -618,6 +828,54 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+function PayableMetric({
+  label,
+  value,
+  subline,
+  tone = 'default',
+}: {
+  label: string;
+  value: string | number;
+  subline?: string;
+  tone?: 'default' | 'amber' | 'green' | 'red';
+}) {
+  const color =
+    tone === 'amber'
+      ? 'text-amber-700'
+      : tone === 'green'
+        ? 'text-green-700'
+        : tone === 'red'
+          ? 'text-red-700'
+          : 'text-gray-900';
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-4">
+      <div className={`text-2xl font-semibold ${color}`}>{value}</div>
+      <div className="mt-1 text-xs font-medium text-gray-500">{label}</div>
+      {subline && <div className="mt-1 text-[11px] font-medium text-red-700">{subline}</div>}
+    </div>
+  );
+}
+
+function PayableStatus({
+  status,
+  tone,
+}: {
+  status: PayableRow['status'];
+  tone: PayableRow['statusTone'];
+}) {
+  const styles =
+    tone === 'green'
+      ? 'border-green-200 bg-green-50 text-green-700'
+      : tone === 'amber'
+        ? 'border-amber-200 bg-amber-50 text-amber-700'
+        : 'border-red-200 bg-red-50 text-red-700';
+  return (
+    <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-medium ${styles}`}>
+      {status}
+    </span>
+  );
+}
+
 function SyncState({ state }: { state: string }) {
   if (
     state === 'PENDING' ||
@@ -638,6 +896,7 @@ function SyncState({ state }: { state: string }) {
 function normalizeView(raw: string | null): SyncView {
   if (
     raw === 'queue' ||
+    raw === 'payables' ||
     raw === 'invoices' ||
     raw === 'customers' ||
     raw === 'accounts' ||
@@ -691,4 +950,16 @@ function formatDateTime(iso?: string | null): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function formatCurrency(value: number): string {
+  return value.toLocaleString(undefined, {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatQuantity(value: number): string {
+  return value.toLocaleString(undefined, { maximumFractionDigits: 3 });
 }

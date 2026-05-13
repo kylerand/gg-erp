@@ -10,12 +10,14 @@ import {
   getPurchaseOrderHandler,
   getVendorHandler,
   inventoryLotQueries,
+  inventoryPlanningQueries,
   inventoryPurchaseOrderCommands,
   inventoryPurchaseOrderQueries,
   inventoryReservationQueries,
   listLotsHandler,
   listPurchaseOrdersHandler,
   listReservationsHandler,
+  planMaterialByStageHandler,
   receiveInventoryLotHandler,
   releaseReservationHandler,
   sendPurchaseOrderHandler,
@@ -31,6 +33,114 @@ const PURCHASE_ORDER_LINE_ID = '00000000-0000-4000-8000-000000000007';
 const PURCHASE_ORDER_ID = '00000000-0000-4000-8000-000000000008';
 const VENDOR_ID = '00000000-0000-4000-8000-000000000009';
 const UOM_ID = '00000000-0000-4000-8000-000000000010';
+
+test('planMaterialByStageHandler returns replenishment recommendations', async () => {
+  const planMock = mock.method(inventoryPlanningQueries, 'getMaterialPlanByStage', async () => ({
+    generatedAt: '2026-05-12T12:00:00.000Z',
+    groups: [
+      {
+        installStage: 'WIRING',
+        totalShortfall: 3,
+        lines: [
+          {
+            part: {
+              id: PART_ID,
+              sku: 'BRK-001',
+              name: 'Brake Pad',
+              unitOfMeasure: 'EA',
+              partState: 'ACTIVE',
+              reorderPoint: 5,
+              defaultVendorId: VENDOR_ID,
+              defaultVendorName: 'Acme Parts',
+              quantityOnHand: 2,
+              quantityReserved: 1,
+              quantityAvailable: 1,
+            },
+            onHand: 2,
+            reserved: 1,
+            available: 1,
+            reorderPoint: 5,
+            shortfall: 3,
+          },
+        ],
+      },
+    ],
+    unassigned: [],
+    replenishment: {
+      summary: {
+        recommendationCount: 1,
+        vendorGroupCount: 1,
+        partsNeedingVendor: 0,
+        criticalCount: 0,
+        highCount: 1,
+        mediumCount: 0,
+        totalRecommendedQuantity: 4,
+        estimatedCost: 102,
+      },
+      recommendations: [
+        {
+          part: {
+            id: PART_ID,
+            sku: 'BRK-001',
+            name: 'Brake Pad',
+            unitOfMeasure: 'EA',
+            partState: 'ACTIVE',
+            reorderPoint: 5,
+            defaultVendorId: VENDOR_ID,
+            defaultVendorName: 'Acme Parts',
+          },
+          vendorId: VENDOR_ID,
+          vendorName: 'Acme Parts',
+          vendorState: 'ACTIVE',
+          leadTimeDays: 7,
+          onHand: 2,
+          reserved: 1,
+          available: 1,
+          reorderPoint: 5,
+          inboundQuantity: 0,
+          draftQuantity: 0,
+          projectedAvailable: 1,
+          shortfall: 4,
+          recommendedOrderQuantity: 4,
+          openPurchaseOrderCount: 0,
+          estimatedUnitCost: 25.5,
+          severity: 'high',
+          reason: 'Available inventory is below the reorder point and has no inbound cover.',
+        },
+      ],
+      vendorGroups: [
+        {
+          vendorId: VENDOR_ID,
+          vendorName: 'Acme Parts',
+          vendorState: 'ACTIVE',
+          leadTimeDays: 7,
+          recommendations: [],
+          totalRecommendedQuantity: 4,
+          estimatedSubtotal: 102,
+        },
+      ],
+    },
+  }));
+
+  try {
+    const response = await planMaterialByStageHandler({ httpMethod: 'GET' });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(planMock.mock.calls.length, 1);
+    const payload = JSON.parse(response.body) as {
+      replenishment: {
+        summary: { recommendationCount: number; totalRecommendedQuantity: number };
+        recommendations: Array<{ part: { sku: string }; recommendedOrderQuantity: number }>;
+      };
+    };
+    assert.equal(payload.replenishment.summary.recommendationCount, 1);
+    assert.equal(payload.replenishment.summary.totalRecommendedQuantity, 4);
+    assert.equal(payload.replenishment.recommendations[0].part.sku, 'BRK-001');
+    assert.equal(payload.replenishment.recommendations[0].recommendedOrderQuantity, 4);
+  } finally {
+    planMock.mock.restore();
+  }
+});
 
 const reservationPayload = {
   id: RESERVATION_ID,

@@ -1023,6 +1023,10 @@ export interface Part {
   reorderPoint: number;
   /** Populated when fetching parts with stock summary */
   quantityOnHand?: number;
+  quantityReserved?: number;
+  quantityAllocated?: number;
+  quantityConsumed?: number;
+  quantityAvailable?: number;
   location?: string;
 }
 
@@ -1164,6 +1168,8 @@ export async function getPartChain(id: string): Promise<PartChain> {
 export interface StageMaterialPlanLine {
   part: Part;
   onHand: number;
+  reserved?: number;
+  available?: number;
   reorderPoint: number;
   shortfall: number;
 }
@@ -1178,12 +1184,64 @@ export interface StageMaterialPlanResponse {
   generatedAt: string;
   groups: StageMaterialPlanGroup[];
   unassigned: StageMaterialPlanLine[];
+  replenishment?: ReplenishmentPlan;
 }
 
-export async function getMaterialPlanByStage(): Promise<StageMaterialPlanResponse> {
+export interface ReplenishmentRecommendation {
+  part: Part;
+  vendorId?: string;
+  vendorName?: string;
+  vendorState?: 'ACTIVE' | 'INACTIVE';
+  leadTimeDays?: number;
+  onHand: number;
+  reserved: number;
+  available: number;
+  reorderPoint: number;
+  inboundQuantity: number;
+  draftQuantity: number;
+  projectedAvailable: number;
+  shortfall: number;
+  recommendedOrderQuantity: number;
+  openPurchaseOrderCount: number;
+  nextExpectedAt?: string;
+  estimatedUnitCost?: number;
+  severity: 'critical' | 'high' | 'medium';
+  reason: string;
+}
+
+export interface ReplenishmentVendorGroup {
+  vendorId?: string;
+  vendorName: string;
+  vendorState?: 'ACTIVE' | 'INACTIVE';
+  leadTimeDays?: number;
+  recommendations: ReplenishmentRecommendation[];
+  totalRecommendedQuantity: number;
+  estimatedSubtotal: number;
+}
+
+export interface ReplenishmentPlan {
+  summary: {
+    recommendationCount: number;
+    vendorGroupCount: number;
+    partsNeedingVendor: number;
+    criticalCount: number;
+    highCount: number;
+    mediumCount: number;
+    totalRecommendedQuantity: number;
+    estimatedCost: number;
+  };
+  recommendations: ReplenishmentRecommendation[];
+  vendorGroups: ReplenishmentVendorGroup[];
+}
+
+export async function getMaterialPlanByStage(
+  options?: ApiDataOptions,
+): Promise<StageMaterialPlanResponse> {
   const mockLines: StageMaterialPlanLine[] = MOCK_PARTS.filter((p) => p.installStage).map((p) => ({
     part: p,
     onHand: p.quantityOnHand ?? 0,
+    reserved: 0,
+    available: p.quantityOnHand ?? 0,
     reorderPoint: p.reorderPoint,
     shortfall: Math.max(p.reorderPoint - (p.quantityOnHand ?? 0), 0),
   }));
@@ -1199,14 +1257,35 @@ export async function getMaterialPlanByStage(): Promise<StageMaterialPlanRespons
   const unassigned = MOCK_PARTS.filter((p) => !p.installStage).map((p) => ({
     part: p,
     onHand: p.quantityOnHand ?? 0,
+    reserved: 0,
+    available: p.quantityOnHand ?? 0,
     reorderPoint: p.reorderPoint,
     shortfall: Math.max(p.reorderPoint - (p.quantityOnHand ?? 0), 0),
   }));
-  return apiFetch(`/inventory/planning/material-by-stage`, undefined, {
-    generatedAt: new Date().toISOString(),
-    groups,
-    unassigned,
-  });
+  return apiFetch(
+    `/inventory/planning/material-by-stage`,
+    undefined,
+    {
+      generatedAt: new Date().toISOString(),
+      groups,
+      unassigned,
+      replenishment: {
+        summary: {
+          recommendationCount: 0,
+          vendorGroupCount: 0,
+          partsNeedingVendor: 0,
+          criticalCount: 0,
+          highCount: 0,
+          mediumCount: 0,
+          totalRecommendedQuantity: 0,
+          estimatedCost: 0,
+        },
+        recommendations: [],
+        vendorGroups: [],
+      },
+    },
+    options,
+  );
 }
 
 // ─── Inventory Lots & Reservations ──────────────────────────────────────────

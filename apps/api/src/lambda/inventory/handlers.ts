@@ -759,6 +759,23 @@ interface InventoryLotBalanceRow {
   quantityConsumed: unknown;
 }
 
+interface PartInventoryBalanceRow {
+  partId: string;
+  quantityOnHand: unknown;
+  quantityReserved: unknown;
+  quantityAllocated: unknown;
+  quantityConsumed: unknown;
+}
+
+interface PartProcurementRow {
+  partId: string;
+  inboundQuantity: unknown;
+  draftQuantity: unknown;
+  openPurchaseOrderCount: unknown;
+  nextExpectedAt: Date | null;
+  estimatedUnitCost: unknown;
+}
+
 interface CreateReservationInput {
   stockLotId: string;
   quantity: number;
@@ -1614,7 +1631,7 @@ const PART_INCLUDE = {
     include: { stockLocation: { select: { locationName: true } } },
   },
   manufacturer: { select: { manufacturerName: true } },
-  defaultVendor: { select: { vendorName: true } },
+  defaultVendor: { select: { vendorName: true, vendorState: true, leadTimeDays: true } },
   defaultLocation: { select: { locationName: true } },
 } as const;
 
@@ -1759,8 +1776,8 @@ export const getPartChainHandler = wrapHandler(
 
 // ─── Material Plan by Install Stage ──────────────────────────────────────────
 
-export const planMaterialByStageHandler = wrapHandler(
-  async () => {
+export const inventoryPlanningQueries = {
+  async getMaterialPlanByStage() {
     const prisma = getInventoryPrisma();
     const parts = await prisma.part.findMany({
       where: { deletedAt: null, partState: 'ACTIVE' },
@@ -1768,46 +1785,249 @@ export const planMaterialByStageHandler = wrapHandler(
       include: PART_INCLUDE,
     });
 
+    let balanceRows: PartInventoryBalanceRow[] = [];
+    let procurementRows: PartProcurementRow[] = [];
+    if (parts.length > 0) {
+      const partIds = parts.map((part) => Prisma.sql`${part.id}::uuid`);
+      [balanceRows, procurementRows] = await Promise.all([
+        prisma.$queryRaw<PartInventoryBalanceRow[]>`
+          SELECT
+            part_id::text AS "partId",
+            COALESCE(SUM(quantity_on_hand), 0) AS "quantityOnHand",
+            COALESCE(SUM(quantity_reserved), 0) AS "quantityReserved",
+            COALESCE(SUM(quantity_allocated), 0) AS "quantityAllocated",
+            COALESCE(SUM(quantity_consumed), 0) AS "quantityConsumed"
+          FROM inventory.inventory_balances
+          WHERE part_id IN (${Prisma.join(partIds)})
+          GROUP BY part_id
+        `,
+        prisma.$queryRaw<PartProcurementRow[]>`
+          SELECT
+            pol.part_id::text AS "partId",
+            COALESCE(SUM(
+              CASE
+                WHEN po.purchase_order_state IN ('APPROVED', 'SENT', 'PARTIALLY_RECEIVED')
+                THEN GREATEST(pol.ordered_quantity - pol.received_quantity - pol.rejected_quantity, 0)
+                ELSE 0
+              END
+            ), 0) AS "inboundQuantity",
+            COALESCE(SUM(
+              CASE
+                WHEN po.purchase_order_state = 'DRAFT'
+                THEN GREATEST(pol.ordered_quantity - pol.received_quantity - pol.rejected_quantity, 0)
+                ELSE 0
+              END
+            ), 0) AS "draftQuantity",
+            COUNT(DISTINCT CASE
+              WHEN po.purchase_order_state IN ('APPROVED', 'SENT', 'PARTIALLY_RECEIVED')
+              THEN po.id
+              ELSE NULL
+            END)::int AS "openPurchaseOrderCount",
+            MIN(CASE
+              WHEN po.purchase_order_state IN ('APPROVED', 'SENT', 'PARTIALLY_RECEIVED')
+              THEN po.expected_at
+              ELSE NULL
+            END) AS "nextExpectedAt",
+            (ARRAY_AGG(pol.unit_cost ORDER BY po.ordered_at DESC NULLS LAST, pol.created_at DESC))[1]
+              AS "estimatedUnitCost"
+          FROM inventory.purchase_order_lines pol
+          INNER JOIN inventory.purchase_orders po ON po.id = pol.purchase_order_id
+          WHERE pol.part_id IN (${Prisma.join(partIds)})
+            AND po.purchase_order_state IN ('DRAFT', 'APPROVED', 'SENT', 'PARTIALLY_RECEIVED')
+            AND pol.line_state <> 'CANCELLED'
+          GROUP BY pol.part_id
+        `,
+      ]);
+    }
+
+    const balanceByPart = new Map(balanceRows.map((row) => [row.partId, row]));
+    const procurementByPart = new Map(procurementRows.map((row) => [row.partId, row]));
+
     const STAGE_ORDER = ['FABRICATION', 'FRAME', 'WIRING', 'PARTS_PREP', 'FINAL_ASSEMBLY'] as const;
     type Stage = (typeof STAGE_ORDER)[number];
 
     const toLine = (part: (typeof parts)[number]) => {
-      const onHand = (part.stockLots ?? []).length;
+      const balance = balanceByPart.get(part.id);
+      const onHand = numberFromDb(balance?.quantityOnHand);
+      const reserved = numberFromDb(balance?.quantityReserved);
+      const allocated = numberFromDb(balance?.quantityAllocated);
+      const consumed = numberFromDb(balance?.quantityConsumed);
+      const available = Math.max(onHand - reserved, 0);
       const reorderPoint = Number(part.reorderPoint);
       return {
-        part: toPartResponse(part),
+        part: {
+          ...toPartResponse(part),
+          quantityOnHand: onHand,
+          quantityReserved: reserved,
+          quantityAllocated: allocated,
+          quantityConsumed: consumed,
+          quantityAvailable: available,
+        },
         onHand,
+        reserved,
+        available,
         reorderPoint,
-        shortfall: Math.max(reorderPoint - onHand, 0),
+        shortfall: Math.max(reorderPoint - available, 0),
       };
     };
 
-    const byStage = new Map<Stage, ReturnType<typeof toLine>[]>();
-    const unassigned: ReturnType<typeof toLine>[] = [];
-    for (const p of parts) {
-      const line = toLine(p);
-      if (!p.installStage) {
+    const lines = parts.map(toLine);
+    const byStage = new Map<Stage, typeof lines>();
+    const unassigned: typeof lines = [];
+    for (const line of lines) {
+      if (!line.part.installStage) {
         unassigned.push(line);
         continue;
       }
-      const arr = byStage.get(p.installStage as Stage) ?? [];
+      const arr = byStage.get(line.part.installStage as Stage) ?? [];
       arr.push(line);
-      byStage.set(p.installStage as Stage, arr);
+      byStage.set(line.part.installStage as Stage, arr);
     }
 
     const groups = STAGE_ORDER.filter((s) => byStage.has(s)).map((stage) => {
-      const lines = (byStage.get(stage) ?? []).sort(
+      const stageLines = (byStage.get(stage) ?? []).sort(
         (a, b) => b.shortfall - a.shortfall || a.part.sku.localeCompare(b.part.sku),
       );
       return {
         installStage: stage,
-        lines,
-        totalShortfall: lines.reduce((sum, l) => sum + l.shortfall, 0),
+        lines: stageLines,
+        totalShortfall: stageLines.reduce((sum, l) => sum + l.shortfall, 0),
       };
     });
 
-    return jsonResponse(200, { generatedAt: new Date().toISOString(), groups, unassigned });
+    const recommendations = lines
+      .map((line) => {
+        const procurement = procurementByPart.get(line.part.id);
+        const inboundQuantity = numberFromDb(procurement?.inboundQuantity);
+        const draftQuantity = numberFromDb(procurement?.draftQuantity);
+        const projectedAvailable = line.available + inboundQuantity;
+        const shortfall = Math.max(line.reorderPoint - projectedAvailable, 0);
+        const estimatedUnitCost = numberFromDb(procurement?.estimatedUnitCost);
+        const vendorName = line.part.defaultVendorName;
+        const vendorState = (parts.find((part) => part.id === line.part.id)?.defaultVendor
+          ?.vendorState ?? undefined) as 'ACTIVE' | 'INACTIVE' | undefined;
+        const leadTimeDays =
+          parts.find((part) => part.id === line.part.id)?.defaultVendor?.leadTimeDays ?? undefined;
+        if (shortfall <= 0) return null;
+        const severity: 'critical' | 'high' | 'medium' =
+          line.available <= 0 ? 'critical' : shortfall >= line.reorderPoint ? 'high' : 'medium';
+        return {
+          part: line.part,
+          vendorId: line.part.defaultVendorId,
+          vendorName,
+          vendorState,
+          leadTimeDays,
+          onHand: line.onHand,
+          reserved: line.reserved,
+          available: line.available,
+          reorderPoint: line.reorderPoint,
+          inboundQuantity,
+          draftQuantity,
+          projectedAvailable,
+          shortfall,
+          recommendedOrderQuantity: shortfall,
+          openPurchaseOrderCount: numberFromDb(procurement?.openPurchaseOrderCount),
+          nextExpectedAt: procurement?.nextExpectedAt?.toISOString(),
+          estimatedUnitCost: estimatedUnitCost > 0 ? estimatedUnitCost : undefined,
+          severity,
+          reason: !line.part.defaultVendorId
+            ? 'Assign a default vendor before creating a replenishment purchase order.'
+            : inboundQuantity > 0
+              ? 'Open purchase orders do not cover the reorder point.'
+              : 'Available inventory is below the reorder point and has no inbound cover.',
+        };
+      })
+      .filter((recommendation): recommendation is NonNullable<typeof recommendation> =>
+        Boolean(recommendation),
+      )
+      .sort((a, b) => {
+        const severityRank = { critical: 0, high: 1, medium: 2 } as const;
+        return (
+          severityRank[a.severity] - severityRank[b.severity] ||
+          b.shortfall - a.shortfall ||
+          a.part.sku.localeCompare(b.part.sku)
+        );
+      });
+
+    const vendorGroupMap = new Map<
+      string,
+      {
+        vendorId?: string;
+        vendorName: string;
+        vendorState?: 'ACTIVE' | 'INACTIVE';
+        leadTimeDays?: number;
+        recommendations: typeof recommendations;
+        totalRecommendedQuantity: number;
+        estimatedSubtotal: number;
+      }
+    >();
+    for (const recommendation of recommendations) {
+      const key = recommendation.vendorId ?? 'UNASSIGNED';
+      const group =
+        vendorGroupMap.get(key) ??
+        ({
+          vendorId: recommendation.vendorId,
+          vendorName: recommendation.vendorName ?? 'No default vendor',
+          vendorState: recommendation.vendorState,
+          leadTimeDays: recommendation.leadTimeDays,
+          recommendations: [],
+          totalRecommendedQuantity: 0,
+          estimatedSubtotal: 0,
+        } satisfies {
+          vendorId?: string;
+          vendorName: string;
+          vendorState?: 'ACTIVE' | 'INACTIVE';
+          leadTimeDays?: number;
+          recommendations: typeof recommendations;
+          totalRecommendedQuantity: number;
+          estimatedSubtotal: number;
+        });
+      group.recommendations.push(recommendation);
+      group.totalRecommendedQuantity += recommendation.recommendedOrderQuantity;
+      group.estimatedSubtotal +=
+        recommendation.recommendedOrderQuantity * (recommendation.estimatedUnitCost ?? 0);
+      vendorGroupMap.set(key, group);
+    }
+
+    const vendorGroups = [...vendorGroupMap.values()].sort(
+      (a, b) =>
+        b.recommendations.length - a.recommendations.length ||
+        a.vendorName.localeCompare(b.vendorName),
+    );
+    const summary = {
+      recommendationCount: recommendations.length,
+      vendorGroupCount: vendorGroups.filter((group) => Boolean(group.vendorId)).length,
+      partsNeedingVendor: recommendations.filter((recommendation) => !recommendation.vendorId)
+        .length,
+      criticalCount: recommendations.filter(
+        (recommendation) => recommendation.severity === 'critical',
+      ).length,
+      highCount: recommendations.filter((recommendation) => recommendation.severity === 'high')
+        .length,
+      mediumCount: recommendations.filter((recommendation) => recommendation.severity === 'medium')
+        .length,
+      totalRecommendedQuantity: recommendations.reduce(
+        (sum, recommendation) => sum + recommendation.recommendedOrderQuantity,
+        0,
+      ),
+      estimatedCost: recommendations.reduce(
+        (sum, recommendation) =>
+          sum + recommendation.recommendedOrderQuantity * (recommendation.estimatedUnitCost ?? 0),
+        0,
+      ),
+    };
+
+    return {
+      generatedAt: new Date().toISOString(),
+      groups,
+      unassigned,
+      replenishment: { summary, recommendations, vendorGroups },
+    };
   },
+};
+
+export const planMaterialByStageHandler = wrapHandler(
+  async () => jsonResponse(200, await inventoryPlanningQueries.getMaterialPlanByStage()),
   { requireAuth: false },
 );
 

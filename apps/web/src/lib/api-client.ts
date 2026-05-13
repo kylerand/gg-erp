@@ -1720,7 +1720,7 @@ export interface ReceiveInventoryLotInput {
 }
 
 export async function receiveInventoryLot(input: ReceiveInventoryLotInput): Promise<{
-  lot: InventoryLot;
+  lot?: InventoryLot;
   purchaseOrderLine: {
     id: string;
     lineState: string;

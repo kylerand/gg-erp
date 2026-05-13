@@ -1138,6 +1138,23 @@ export async function listParts(
   );
 }
 
+export interface CreatePartInput {
+  sku: string;
+  name: string;
+  description?: string;
+  unitOfMeasure: string;
+  reorderPoint?: number;
+}
+
+export async function createPart(input: CreatePartInput): Promise<Part> {
+  const data = await apiFetch<{ part: Part }>('/inventory/parts', {
+    method: 'POST',
+    headers: mutationHeaders(),
+    body: JSON.stringify(input),
+  });
+  return data.part;
+}
+
 export async function getPart(id: string): Promise<Part | undefined> {
   return apiFetch(
     `/inventory/parts/${id}`,

@@ -348,7 +348,7 @@ test('accounting sync monitor exposes live purchase-order payable handoff', () =
     [
       'ACCOUNTING_LINKS.payables',
       'summarizePayables',
-      "listPurchaseOrders({ pageSize: 200 }, { allowMockFallback: false })",
+      'listPurchaseOrders({ pageSize: 200 }, { allowMockFallback: false })',
       'PO bill review',
     ].filter((snippet) => !accountingSource.includes(snippet)),
     [],
@@ -361,7 +361,7 @@ test('accounting sync monitor exposes live purchase-order payable handoff', () =
       'PayablesList',
       "erpRecordRoute('purchase-order'",
       "erpRoute('receiving')",
-      "listPurchaseOrders({ pageSize: 200 }, { allowMockFallback: false })",
+      'listPurchaseOrders({ pageSize: 200 }, { allowMockFallback: false })',
     ].filter((snippet) => !syncSource.includes(snippet)),
     [],
   );
@@ -376,6 +376,7 @@ test('accounting sync monitor exposes live purchase-order payable handoff', () =
 
 test('inventory procurement drill-in uses live PO/vendor reads and focused receiving links', () => {
   const inventorySource = readSource('app/inventory/page.tsx');
+  const partsSource = readSource('app/inventory/parts/page.tsx');
   const purchaseOrdersSource = readSource('app/inventory/purchase-orders/page.tsx');
   const purchaseOrderDetailSource = readSource('app/inventory/purchase-orders/[id]/page.tsx');
   const receivingSource = readSource('app/inventory/receiving/page.tsx');
@@ -399,7 +400,23 @@ test('inventory procurement drill-in uses live PO/vendor reads and focused recei
       'useSearchParams',
       "erpRecordRoute('purchase-order'",
       'allowMockFallback: false',
+      'selectedPurchaseOrderIds',
+      'exportPurchaseOrders',
+      'Copy PO numbers',
     ].filter((snippet) => !purchaseOrdersSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      'downloadCsv',
+      'parseCsv',
+      'createPart',
+      'selectedPartIds',
+      'handlePartImport',
+      'Create valid parts',
+      'accept=".csv,text/csv"',
+    ].filter((snippet) => !partsSource.includes(snippet)),
     [],
   );
 
@@ -442,6 +459,7 @@ test('inventory procurement drill-in uses live PO/vendor reads and focused recei
     [
       'export async function getPurchaseOrder',
       'export async function getVendor',
+      'export async function createPart',
       'export async function createPurchaseOrder',
       'export async function updatePurchaseOrder',
       'export function approvePurchaseOrder',

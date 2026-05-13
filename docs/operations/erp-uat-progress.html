@@ -233,18 +233,18 @@
 
       <div class="summary">
         <div class="metric"><strong>9</strong><span>Tracked delivery slices</span></div>
-        <div class="metric"><strong>2</strong><span>Done</span></div>
-        <div class="metric"><strong>7</strong><span>In progress</span></div>
+        <div class="metric"><strong>3</strong><span>Done</span></div>
+        <div class="metric"><strong>6</strong><span>In progress</span></div>
         <div class="metric"><strong>0</strong><span>Not started</span></div>
       </div>
 
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: finish import/export and bulk actions after PO lifecycle, replenishment,
-          variance, and payable handoff execution.
+          Current focus: move from inventory/purchasing actionability into reporting exports, saved
+          views, and remaining catalog configuration.
         </p>
-        <div class="progress" aria-label="88 percent complete"><div style="width: 88%"></div></div>
+        <div class="progress" aria-label="94 percent complete"><div style="width: 94%"></div></div>
       </section>
 
       <section>
@@ -317,15 +317,19 @@
             </tr>
             <tr>
               <td>Inventory and purchasing</td>
-              <td><span class="pill doing">In progress</span></td>
+              <td><span class="pill done">Done</span></td>
               <td>
                 PO receiving, PO/vendor list and detail reads, purchase-order drill-in, focused
                 receiving links, PO create/edit/approve/send/cancel/close actions, work-order
                 reservation execution, live replenishment recommendations with draft PO creation,
                 receiving variance reporting with accepted/rejected quantity posting, and live
-                accounting payable review for received POs are wired to live inventory APIs.
+                accounting payable review for received POs are wired to live inventory APIs. Part
+                lookup now supports CSV export, CSV import through the live create-part endpoint,
+                selected-row SKU copy, and purchase-order selected/visible CSV export.
               </td>
-              <td>Add import/export and bulk row actions.</td>
+              <td>
+                Expand item edit and vendor/BOM selectors when those mutation APIs are stable.
+              </td>
             </tr>
             <tr>
               <td>Reporting catalog</td>

@@ -3,7 +3,7 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { FileText, Plus, RefreshCw, Save, X } from 'lucide-react';
+import { Clipboard, Download, FileText, Plus, RefreshCw, Save, X } from 'lucide-react';
 import { EmptyState, LoadingSkeleton, PageHeader, StatusBadge } from '@gg-erp/ui';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,6 +15,7 @@ import {
   type PurchaseOrder,
   type Vendor,
 } from '@/lib/api-client';
+import { downloadCsv, type CsvColumn } from '@/lib/csv-client';
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 
 const STATUS_OPTIONS = [
@@ -26,6 +27,26 @@ const STATUS_OPTIONS = [
   'RECEIVED',
   'CANCELLED',
 ] as const;
+
+const PURCHASE_ORDER_EXPORT_COLUMNS: CsvColumn<PurchaseOrder>[] = [
+  { header: 'poNumber', value: (po) => po.poNumber },
+  { header: 'vendorName', value: (po) => po.vendorName },
+  { header: 'vendorCode', value: (po) => po.vendorCode },
+  { header: 'status', value: (po) => po.purchaseOrderState },
+  { header: 'lineCount', value: (po) => po.lineCount },
+  { header: 'openUnits', value: openUnits },
+  { header: 'orderValue', value: orderTotal },
+  { header: 'orderedAt', value: (po) => po.orderedAt },
+  { header: 'expectedAt', value: (po) => po.expectedAt },
+  { header: 'sentAt', value: (po) => po.sentAt },
+  { header: 'closedAt', value: (po) => po.closedAt },
+  { header: 'notes', value: (po) => po.notes },
+  {
+    header: 'lines',
+    value: (po) =>
+      po.lines.map((line) => `${line.partSku ?? line.partId}:${line.orderedQuantity}`).join('; '),
+  },
+];
 
 function formatDate(value?: string): string {
   return value ? new Date(value).toLocaleDateString() : 'Unscheduled';
@@ -57,6 +78,10 @@ function buildPurchaseOrderHref(status: string, vendorId: string): string {
   return erpRoute('purchase-order', query);
 }
 
+function nowStamp(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Request failed.';
 }
@@ -73,6 +98,8 @@ export default function PurchaseOrdersPage() {
   const [creating, setCreating] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedPurchaseOrderIds, setSelectedPurchaseOrderIds] = useState<string[]>([]);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [createDraft, setCreateDraft] = useState({
     vendorId: '',
     partId: '',
@@ -115,6 +142,10 @@ export default function PurchaseOrdersPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    setSelectedPurchaseOrderIds([]);
+  }, [status, vendorId]);
+
   const summary = useMemo(() => {
     const open = purchaseOrders.filter(
       (po) => po.purchaseOrderState !== 'RECEIVED' && po.purchaseOrderState !== 'CANCELLED',
@@ -131,6 +162,12 @@ export default function PurchaseOrdersPage() {
     () => vendors.filter((vendor) => vendor.vendorState === 'ACTIVE'),
     [vendors],
   );
+  const selectedPurchaseOrders = useMemo(
+    () => purchaseOrders.filter((po) => selectedPurchaseOrderIds.includes(po.id)),
+    [purchaseOrders, selectedPurchaseOrderIds],
+  );
+  const allVisibleSelected =
+    purchaseOrders.length > 0 && selectedPurchaseOrders.length === purchaseOrders.length;
 
   useEffect(() => {
     setCreateDraft((current) => ({
@@ -142,6 +179,51 @@ export default function PurchaseOrdersPage() {
 
   function updateFilters(nextStatus: string, nextVendorId: string) {
     router.push(buildPurchaseOrderHref(nextStatus, nextVendorId));
+  }
+
+  function togglePurchaseOrderSelection(purchaseOrderId: string) {
+    setSelectedPurchaseOrderIds((current) =>
+      current.includes(purchaseOrderId)
+        ? current.filter((id) => id !== purchaseOrderId)
+        : [...current, purchaseOrderId],
+    );
+  }
+
+  function toggleVisiblePurchaseOrders() {
+    setSelectedPurchaseOrderIds(allVisibleSelected ? [] : purchaseOrders.map((po) => po.id));
+  }
+
+  function exportPurchaseOrders(scope: 'visible' | 'selected') {
+    const rows = scope === 'selected' ? selectedPurchaseOrders : purchaseOrders;
+    if (rows.length === 0) {
+      setActionMessage('No purchase orders available to export.');
+      return;
+    }
+    downloadCsv(
+      `gg-purchase-orders-${scope}-${nowStamp()}.csv`,
+      rows,
+      PURCHASE_ORDER_EXPORT_COLUMNS,
+    );
+    setActionMessage(`Exported ${rows.length} purchase order${rows.length === 1 ? '' : 's'}.`);
+  }
+
+  async function copySelectedPurchaseOrderNumbers() {
+    if (selectedPurchaseOrders.length === 0) {
+      setActionMessage('Select purchase orders before copying PO numbers.');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(
+        selectedPurchaseOrders.map((po) => po.poNumber).join('\n'),
+      );
+      setActionMessage(
+        `Copied ${selectedPurchaseOrders.length} PO number${
+          selectedPurchaseOrders.length === 1 ? '' : 's'
+        }.`,
+      );
+    } catch (err) {
+      setActionMessage(`Copy failed: ${errorMessage(err)}`);
+    }
   }
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
@@ -225,6 +307,19 @@ export default function PurchaseOrdersPage() {
           </select>
         </div>
         <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" onClick={() => exportPurchaseOrders('visible')}>
+            <Download data-icon="inline-start" />
+            Export visible
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={selectedPurchaseOrders.length === 0}
+            onClick={() => exportPurchaseOrders('selected')}
+          >
+            <Download data-icon="inline-start" />
+            Export selected
+          </Button>
           <Button type="button" variant="outline" onClick={() => setShowCreate((open) => !open)}>
             {showCreate ? <X data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
             {showCreate ? 'Close' : 'New PO'}
@@ -235,6 +330,34 @@ export default function PurchaseOrdersPage() {
           </Button>
         </div>
       </div>
+      {actionMessage && (
+        <div className="mb-4 text-sm font-medium text-gray-600">{actionMessage}</div>
+      )}
+      {selectedPurchaseOrders.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <span className="text-sm font-semibold text-amber-900">
+            {selectedPurchaseOrders.length} selected
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => void copySelectedPurchaseOrderNumbers()}
+          >
+            <Clipboard data-icon="inline-start" />
+            Copy PO numbers
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => setSelectedPurchaseOrderIds([])}
+          >
+            <X data-icon="inline-start" />
+            Clear
+          </Button>
+        </div>
+      )}
 
       {showCreate && (
         <form
@@ -360,6 +483,15 @@ export default function PurchaseOrdersPage() {
           <table className="w-full min-w-[980px] text-sm">
             <thead className="bg-gray-50">
               <tr>
+                <th className="px-4 py-3 text-left font-medium text-gray-600">
+                  <input
+                    type="checkbox"
+                    aria-label="Select visible purchase orders"
+                    checked={allVisibleSelected}
+                    onChange={toggleVisiblePurchaseOrders}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                </th>
                 <th className="px-4 py-3 text-left font-medium text-gray-600">PO</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-600">Vendor</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
@@ -373,6 +505,15 @@ export default function PurchaseOrdersPage() {
             <tbody className="divide-y divide-gray-100">
               {purchaseOrders.map((po) => (
                 <tr key={po.id}>
+                  <td className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${po.poNumber}`}
+                      checked={selectedPurchaseOrderIds.includes(po.id)}
+                      onChange={() => togglePurchaseOrderSelection(po.id)}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                  </td>
                   <td className="px-4 py-3">
                     <Link
                       href={erpRecordRoute('purchase-order', po.id)}

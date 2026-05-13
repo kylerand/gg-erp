@@ -12,10 +12,12 @@ import {
   listCustomerSyncs,
   listIntegrationAccounts,
   getFailureSummary,
+  listPurchaseOrders,
   type InvoiceSyncRecord,
   type ReconciliationRun,
   type FailureSummary,
   type QbOverview,
+  type PurchaseOrder,
 } from '@/lib/api-client';
 
 interface AccountingMetrics {
@@ -27,6 +29,9 @@ interface AccountingMetrics {
   customerPending: number;
   customersSyncedTotal: number;
   failureSummary: FailureSummary;
+  payablesReady: number;
+  payablesReview: number;
+  payablesValue: number;
   lastReconciliation?: ReconciliationRun;
   reconciliationRunCount: number;
   integrationAccountsCount: number;
@@ -41,6 +46,9 @@ const EMPTY: AccountingMetrics = {
   customerPending: 0,
   customersSyncedTotal: 0,
   failureSummary: { invoice: 0, customer: 0, payment: 0, total: 0 },
+  payablesReady: 0,
+  payablesReview: 0,
+  payablesValue: 0,
   reconciliationRunCount: 0,
   integrationAccountsCount: 0,
 };
@@ -48,6 +56,7 @@ const EMPTY: AccountingMetrics = {
 const ACCOUNTING_LINKS = {
   failures: erpRoute('accounting-sync', { view: 'failures' }),
   queue: erpRoute('accounting-sync', { view: 'queue' }),
+  payables: erpRoute('vendor-payable'),
   invoices: erpRoute('accounting-sync', { view: 'invoices' }),
   invoicesSyncedToday: erpRoute('accounting-sync', {
     view: 'invoices',
@@ -81,6 +90,7 @@ export default function AccountingPage() {
         recons,
         accounts,
         failureSummary,
+        payables,
       ] = await Promise.allSettled([
         getQbStatus(),
         listInvoiceSyncRecords(),
@@ -93,6 +103,7 @@ export default function AccountingPage() {
         listReconciliationRuns({ limit: 1 }),
         listIntegrationAccounts(),
         getFailureSummary(),
+        listPurchaseOrders({ pageSize: 200 }, { allowMockFallback: false }),
       ]);
 
       if (cancelled) return;
@@ -105,6 +116,7 @@ export default function AccountingPage() {
 
       void invoiceAll;
       void customerAll;
+      const payableSummary = summarizePayables(ok(payables)?.items ?? []);
 
       setM({
         qb: ok(qb) ?? null,
@@ -117,6 +129,9 @@ export default function AccountingPage() {
         customerPending: ok(customerPending)?.items.length ?? 0,
         customersSyncedTotal: ok(customerAll)?.total ?? 0,
         failureSummary: ok(failureSummary) ?? EMPTY.failureSummary,
+        payablesReady: payableSummary.ready,
+        payablesReview: payableSummary.review,
+        payablesValue: payableSummary.value,
         lastReconciliation: ok(recons)?.items[0],
         reconciliationRunCount: ok(recons)?.total ?? 0,
         integrationAccountsCount: ok(accounts)?.total ?? 0,
@@ -334,7 +349,7 @@ export default function AccountingPage() {
           <span>Local sync state</span>
           <span className="group-open:rotate-90 transition-transform inline-block">▸</span>
         </summary>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 gap-4 mb-6 lg:grid-cols-5">
           <KpiCard
             label="Total failures"
             value={m.failureSummary.total}
@@ -349,6 +364,14 @@ export default function AccountingPage() {
             tone={m.invoicePending + m.customerPending > 0 ? 'amber' : 'neutral'}
             subline={`${m.invoicePending} invoice · ${m.customerPending} customer`}
             href={ACCOUNTING_LINKS.queue}
+            loading={loading}
+          />
+          <KpiCard
+            label="PO bill review"
+            value={m.payablesReady + m.payablesReview}
+            tone={m.payablesReview > 0 ? 'amber' : m.payablesReady > 0 ? 'green' : 'neutral'}
+            subline={`${m.payablesReady} ready · ${m.payablesReview} review · ${formatUsd(m.payablesValue)}`}
+            href={ACCOUNTING_LINKS.payables}
             loading={loading}
           />
           <KpiCard
@@ -631,6 +654,17 @@ function buildActionQueue(m: AccountingMetrics, connected: boolean): QueuedActio
     });
   }
 
+  const payablesNeedingAction = m.payablesReady + m.payablesReview;
+  if (payablesNeedingAction > 0) {
+    out.push({
+      severity: m.payablesReview > 0 ? 'medium' : 'low',
+      title: `${payablesNeedingAction} purchase order${payablesNeedingAction === 1 ? '' : 's'} need vendor bill review`,
+      detail: `${m.payablesReady} ready for bill entry · ${m.payablesReview} need receiving or variance cleanup · ${formatUsd(m.payablesValue)} accepted value.`,
+      cta: 'Review payables →',
+      href: ACCOUNTING_LINKS.payables,
+    });
+  }
+
   const lastRecon = m.lastReconciliation;
   const ageDays = lastRecon
     ? Math.floor((Date.now() - new Date(lastRecon.startedAt).getTime()) / 86_400_000)
@@ -710,6 +744,39 @@ function summarizeState(m: AccountingMetrics, connected: boolean, actionCount: n
     subhead:
       'Sync is healthy, reconciliation is current. Nothing requires your attention right now.',
   };
+}
+
+function summarizePayables(purchaseOrders: PurchaseOrder[]): {
+  ready: number;
+  review: number;
+  value: number;
+} {
+  return purchaseOrders.reduce(
+    (acc, po) => {
+      const totals = po.lines.reduce(
+        (lineAcc, line) => {
+          const open = Math.max(
+            line.orderedQuantity - line.receivedQuantity - line.rejectedQuantity,
+            0,
+          );
+          return {
+            received: lineAcc.received + line.receivedQuantity,
+            rejected: lineAcc.rejected + line.rejectedQuantity,
+            open: lineAcc.open + open,
+            value: lineAcc.value + line.receivedQuantity * line.unitCost,
+          };
+        },
+        { received: 0, rejected: 0, open: 0, value: 0 },
+      );
+      if (totals.received === 0 && totals.rejected === 0) return acc;
+      return {
+        ready: acc.ready + (totals.open === 0 && totals.rejected === 0 ? 1 : 0),
+        review: acc.review + (totals.open > 0 || totals.rejected > 0 ? 1 : 0),
+        value: acc.value + totals.value,
+      };
+    },
+    { ready: 0, review: 0, value: 0 },
+  );
 }
 
 function TodayBanner({ state, loading }: { state: TodayState; loading: boolean }) {

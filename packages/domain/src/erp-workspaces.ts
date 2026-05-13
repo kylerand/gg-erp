@@ -339,6 +339,15 @@ export const ERP_WORKSPACES = [
         keywords: ['quickbooks', 'sync', 'failure', 'invoice'],
       },
       {
+        key: 'vendor-payable',
+        label: 'Vendor Payables',
+        description: 'Review received purchase orders before vendor bill entry.',
+        route: '/accounting/sync?view=payables',
+        status: 'live',
+        objectKey: 'vendor-payable',
+        keywords: ['payable', 'ap', 'vendor bill', 'purchase order', 'receiving'],
+      },
+      {
         key: 'accounting-reconciliation',
         label: 'Reconciliation',
         description: 'Compare ERP and QuickBooks records.',

@@ -332,6 +332,48 @@ test('admin accounting settings expose live mapping configuration actions', () =
   );
 });
 
+test('accounting sync monitor exposes live purchase-order payable handoff', () => {
+  const accountingSource = readSource('app/accounting/page.tsx');
+  const syncSource = readSource('app/accounting/sync/page.tsx');
+  const workspaceSource = readFileSync(
+    path.resolve(WEB_SRC_DIR, '../../../packages/domain/src/erp-workspaces.ts'),
+    'utf8',
+  );
+  const registrySource = readFileSync(
+    path.resolve(WEB_SRC_DIR, '../../../packages/domain/src/erp-object-registry.ts'),
+    'utf8',
+  );
+
+  assert.deepEqual(
+    [
+      'ACCOUNTING_LINKS.payables',
+      'summarizePayables',
+      "listPurchaseOrders({ pageSize: 200 }, { allowMockFallback: false })",
+      'PO bill review',
+    ].filter((snippet) => !accountingSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      "view === 'payables'",
+      'buildPayableRows',
+      'PayablesList',
+      "erpRecordRoute('purchase-order'",
+      "erpRoute('receiving')",
+      "listPurchaseOrders({ pageSize: 200 }, { allowMockFallback: false })",
+    ].filter((snippet) => !syncSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    ['vendor-payable', '/accounting/sync?view=payables'].filter(
+      (snippet) => !workspaceSource.includes(snippet) || !registrySource.includes(snippet),
+    ),
+    [],
+  );
+});
+
 test('inventory procurement drill-in uses live PO/vendor reads and focused receiving links', () => {
   const inventorySource = readSource('app/inventory/page.tsx');
   const purchaseOrdersSource = readSource('app/inventory/purchase-orders/page.tsx');

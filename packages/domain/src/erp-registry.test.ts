@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   ERP_OBJECTS,
   getErpCommandDestinations,
+  getErpSavedReportViews,
   getErpQuickCreateDestinations,
   getRequiredErpRecordRoute,
   getErpWorkspaceNavigationItems,
@@ -113,8 +114,10 @@ test('live report catalog is routeable and references live registry sources', ()
     ERP_OBJECTS.filter((object) => object.status === 'live').map((object) => object.key),
   );
   const reports = getLiveErpReports();
+  const savedViews = getErpSavedReportViews();
 
   assert.ok(reports.length >= 8);
+  assert.ok(savedViews.length >= 4);
 
   for (const report of reports) {
     assert.ok(report.route.startsWith('/'), `${report.key} route should be app-relative`);
@@ -131,6 +134,15 @@ test('live report catalog is routeable and references live registry sources', ()
         liveObjectsByKey.has(sourceObjectKey),
         `${report.key} source ${sourceObjectKey} should be a live ERP object`,
       );
+    }
+  }
+
+  const reportKeys = new Set(reports.map((report) => report.key));
+  for (const view of savedViews) {
+    assert.ok(view.route.startsWith('/reporting'), `${view.key} should route to reporting`);
+    assert.ok(view.reportKeys.length > 0, `${view.key} should declare report keys`);
+    for (const reportKey of view.reportKeys) {
+      assert.ok(reportKeys.has(reportKey), `${view.key} references missing report ${reportKey}`);
     }
   }
 });

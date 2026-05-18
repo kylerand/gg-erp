@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { PageHeader } from '@gg-erp/ui';
 import {
+  getErpSavedReportViews,
   getLiveErpReports,
   type ErpReportCategory,
   type ErpReportDescriptor,
@@ -17,6 +18,7 @@ import {
   type WoOrder,
 } from '@/lib/api-client';
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
+import { ReportingExportActions } from './ReportingExportActions';
 
 type ReportingCategoryFilter = ErpReportCategory | 'all';
 
@@ -278,6 +280,7 @@ export default async function ReportingPage({ searchParams }: ReportingPageProps
   const activeCategory = normalizeCategory(singleParam(searchParams?.category));
   const query = singleParam(searchParams?.query);
   const reports = getLiveErpReports();
+  const savedViews = getErpSavedReportViews();
   const filteredReports = reports.filter(
     (report) =>
       (activeCategory === 'all' || report.category === activeCategory) &&
@@ -327,6 +330,44 @@ export default async function ReportingPage({ searchParams }: ReportingPageProps
           </div>
         </div>
       )}
+
+      <ReportingExportActions reports={filteredReports} savedViews={savedViews} />
+
+      <section className="mb-6">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+            Saved Views
+          </h2>
+          <span className="text-xs font-medium text-gray-500">
+            {savedViews.length} reusable report scope{savedViews.length === 1 ? '' : 's'}
+          </span>
+        </div>
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          {savedViews.map((view) => (
+            <Link
+              key={view.key}
+              href={view.route}
+              className="rounded-lg border border-gray-200 bg-white p-4 transition-colors hover:border-yellow-400"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">{view.label}</h3>
+                  <p className="mt-1 text-sm leading-5 text-gray-600">{view.description}</p>
+                </div>
+                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[0.7rem] font-semibold text-gray-500">
+                  {view.cadence}
+                </span>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-500">
+                <span className="rounded-full bg-gray-50 px-2 py-1">{view.ownerContext}</span>
+                <span className="rounded-full bg-gray-50 px-2 py-1">
+                  {view.reportKeys.length} reports
+                </span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </section>
 
       <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div className="flex flex-wrap gap-2">

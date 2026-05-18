@@ -498,11 +498,23 @@ export interface WoOrderChecklistItem {
   done: boolean;
   operationCode?: string;
   sequenceNo?: number;
-  status?: string;
+  status?: WoOperationStatus;
   requiredSkillCode?: string;
   estimatedMinutes?: number;
   blockingReason?: string;
+  actualStartAt?: string;
+  actualEndAt?: string;
+  updatedAt?: string;
 }
+
+export type WoOperationStatus =
+  | 'PENDING'
+  | 'READY'
+  | 'IN_PROGRESS'
+  | 'BLOCKED'
+  | 'DONE'
+  | 'SKIPPED'
+  | 'CANCELLED';
 
 export type WoOrderPartStatus =
   | 'REQUESTED'
@@ -729,6 +741,39 @@ export async function getWoOrder(
     options,
   );
   return data.workOrder;
+}
+
+export interface TransitionWoOperationInput {
+  status: WoOperationStatus;
+  blockingReason?: string;
+  reasonCode?: string;
+  reasonNote?: string;
+  actorUserId?: string;
+}
+
+export interface TransitionWoOperationResponse {
+  operation: WoOrderChecklistItem;
+  workOrder: {
+    id: string;
+    status: WoOrder['status'];
+    completedAt?: string;
+    updatedAt?: string;
+  };
+}
+
+export async function transitionWoOperation(
+  workOrderId: string,
+  operationId: string,
+  input: TransitionWoOperationInput,
+): Promise<TransitionWoOperationResponse> {
+  return apiFetch<TransitionWoOperationResponse>(
+    `/tickets/work-orders/${workOrderId}/operations/${operationId}/state`,
+    {
+      method: 'PATCH',
+      headers: mutationHeaders(),
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 // ─── Work Order Labor + QC Execution ───────────────────────────────────────

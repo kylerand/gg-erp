@@ -67,6 +67,7 @@ import {
   listAllWorkOrdersHandler,
   getWoDetailHandler,
   listAllTimeEntriesHandler,
+  transitionWoOperationHandler,
 } from './lambda/tickets/handlers.js';
 import {
   listSopsHandler,
@@ -244,6 +245,7 @@ async function route(
   const inventoryReservationMatch = pathname.match(/^\/inventory\/reservations\/([^/]+)\/([^/]+)$/);
   const taskMatch = pathname.match(/^\/tickets\/work-orders\/([^/]+)\/tasks(?:\/([^/]+))?/);
   const reworkMatch = pathname.match(/^\/tickets\/work-orders\/([^/]+)\/rework/);
+  const woOperationStateMatch = pathname.match(/^\/tickets\/work-orders\/([^/]+)\/operations\/([^/]+)\/state$/);
   const qcMatch = pathname.match(/^\/tickets\/work-orders\/([^/]+)\/qc-gates/);
   const timeEntryMatch = pathname.match(/^\/tickets\/work-orders\/([^/]+)\/time-entries(?:\/([^/]+))?/);
   const flatTimeEntryMatch = pathname.match(/^\/tickets\/time-entries\/([^/]+)/);
@@ -365,6 +367,11 @@ async function route(
     result = await listReworkHandler({ ...event, pathParameters: { workOrderId: reworkMatch[1] } });
   } else if (reworkMatch && method === 'POST') {
     result = await createReworkHandler({ ...event, pathParameters: { workOrderId: reworkMatch[1] } });
+  } else if (woOperationStateMatch && method === 'PATCH') {
+    result = await transitionWoOperationHandler({
+      ...event,
+      pathParameters: { workOrderId: woOperationStateMatch[1], operationId: woOperationStateMatch[2] },
+    });
   } else if (qcMatch && method === 'GET') {
     result = await getQcGatesHandler({ ...event, pathParameters: { workOrderId: qcMatch[1] } });
   } else if (qcMatch && method === 'POST') {
@@ -669,7 +676,7 @@ server.listen(PORT, () => {
   console.log(`   Workspace   GET /workspace/today`);
   console.log(`   Customers   GET|POST /identity/customers, GET|POST /:id/transition`);
   console.log(`   Inventory   GET|POST /inventory/parts, GET /inventory/vendors`);
-  console.log(`   Tickets     /tickets/work-orders/:id/tasks|rework|qc-gates|time-entries`);
+  console.log(`   Tickets     /tickets/work-orders/:id/tasks|operations|rework|qc-gates|time-entries`);
   console.log(`   Queue       GET /tickets/wo-queue, GET /tickets/wo-queue/:id`);
   console.log(`   Time        GET /tickets/time-entries`);
   console.log(`   Routing     GET|PATCH /tickets/routing-steps/:id`);

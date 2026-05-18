@@ -349,6 +349,47 @@ test('admin accounting settings expose live mapping configuration actions', () =
   );
 });
 
+test('admin configuration catalog is registry-backed with live settings destinations', () => {
+  const adminSource = readSource('app/admin/page.tsx');
+  const adminConfigSource = readFileSync(
+    path.resolve(WEB_SRC_DIR, '../../../packages/domain/src/erp-admin-config.ts'),
+    'utf8',
+  );
+
+  assert.deepEqual(
+    [
+      'ERP_ADMIN_CONFIGURATION_DOMAINS',
+      'admin-config-user-access',
+      'admin-config-accounting-settings',
+      'admin-config-integration-health',
+      'admin-config-audit-trail',
+      '/admin/access',
+      '/admin/accounting',
+      '/admin/integrations',
+      '/admin/audit',
+    ].filter((snippet) => !adminConfigSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      'getLiveErpAdminConfigurationDomains',
+      'AdminConfigCard',
+      'Live Signals',
+      'Actions',
+      'Live admin destinations',
+    ].filter((snippet) => !adminSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    ['href="#"', 'TODO', 'placeholder'].filter(
+      (snippet) => adminSource.includes(snippet) || adminConfigSource.includes(snippet),
+    ),
+    [],
+  );
+});
+
 test('accounting sync monitor exposes live purchase-order payable handoff', () => {
   const accountingSource = readSource('app/accounting/page.tsx');
   const syncSource = readSource('app/accounting/sync/page.tsx');

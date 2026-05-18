@@ -30,7 +30,7 @@ export default function QuizPage() {
   const questions = (module?.knowledgeChecks as OjtKnowledgeCheck[] | undefined) ?? [];
 
   useEffect(() => {
-    getTrainingModule(moduleId)
+    getTrainingModule(moduleId, { allowMockFallback: false })
       .then(setModule)
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -58,7 +58,7 @@ export default function QuizPage() {
     if (answers.length < questions.length) return;
     setSubmitting(true);
     try {
-      const res = await submitQuiz(moduleId, employeeId, answers);
+      const res = await submitQuiz(moduleId, employeeId, answers, { allowMockFallback: false });
       setResult(res);
       setSubmitted(true);
     } catch (err) {

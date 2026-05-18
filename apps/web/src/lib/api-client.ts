@@ -2380,8 +2380,16 @@ export async function listTrainingModules(
   );
 }
 
-export async function getTrainingModule(idOrCode: string): Promise<TrainingModule> {
-  const data = await apiFetch<{ module: TrainingModule }>(`/sop/modules/${idOrCode}`);
+export async function getTrainingModule(
+  idOrCode: string,
+  options?: ApiDataOptions,
+): Promise<TrainingModule> {
+  const data = await apiFetch<{ module: TrainingModule }>(
+    `/sop/modules/${idOrCode}`,
+    undefined,
+    undefined,
+    options,
+  );
   return data.module;
 }
 
@@ -2413,17 +2421,23 @@ export interface ModuleProgressData {
 export async function getModuleProgress(
   moduleIdOrCode: string,
   employeeId: string,
+  options?: ApiDataOptions,
 ): Promise<ModuleProgressData> {
-  return apiFetch(`/sop/modules/${moduleIdOrCode}/progress/${employeeId}`, undefined, {
-    moduleId: moduleIdOrCode,
-    employeeId,
-    status: 'not-started',
-    currentStep: null,
-    startedAt: null,
-    completedAt: null,
-    steps: [],
-    quizAttempts: [],
-  });
+  return apiFetch(
+    `/sop/modules/${moduleIdOrCode}/progress/${employeeId}`,
+    undefined,
+    {
+      moduleId: moduleIdOrCode,
+      employeeId,
+      status: 'not-started',
+      currentStep: null,
+      startedAt: null,
+      completedAt: null,
+      steps: [],
+      quizAttempts: [],
+    },
+    options,
+  );
 }
 
 export async function updateStepProgress(
@@ -2436,11 +2450,17 @@ export async function updateStepProgress(
     videoProgress?: number;
     completed?: boolean;
   },
+  options?: ApiDataOptions,
 ): Promise<void> {
-  await apiFetch(`/sop/modules/${moduleIdOrCode}/step-progress`, {
-    method: 'PUT',
-    body: JSON.stringify(params),
-  });
+  await apiFetch(
+    `/sop/modules/${moduleIdOrCode}/step-progress`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(params),
+    },
+    undefined,
+    options,
+  );
 }
 
 export interface QuizSubmitResult {
@@ -2463,11 +2483,17 @@ export async function submitQuiz(
   moduleIdOrCode: string,
   employeeId: string,
   answers: number[],
+  options?: ApiDataOptions,
 ): Promise<QuizSubmitResult> {
-  return apiFetch(`/sop/modules/${moduleIdOrCode}/quiz`, {
-    method: 'POST',
-    body: JSON.stringify({ employeeId, answers }),
-  });
+  return apiFetch<QuizSubmitResult>(
+    `/sop/modules/${moduleIdOrCode}/quiz`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ employeeId, answers }),
+    },
+    undefined,
+    options,
+  );
 }
 
 export interface OjtNote {
@@ -2479,10 +2505,19 @@ export interface OjtNote {
   updatedAt: string;
 }
 
-export async function listNotes(employeeId: string, moduleId?: string): Promise<OjtNote[]> {
+export async function listNotes(
+  employeeId: string,
+  moduleId?: string,
+  options?: ApiDataOptions,
+): Promise<OjtNote[]> {
   const qs = new URLSearchParams({ employeeId });
   if (moduleId) qs.set('moduleId', moduleId);
-  const data = await apiFetch<{ items: OjtNote[] }>(`/sop/notes?${qs}`, undefined, { items: [] });
+  const data = await apiFetch<{ items: OjtNote[] }>(
+    `/sop/notes?${qs}`,
+    undefined,
+    { items: [] },
+    options,
+  );
   return data.items;
 }
 
@@ -2491,22 +2526,29 @@ export async function saveNote(
   moduleId: string,
   content: string,
   stepId?: string,
+  options?: ApiDataOptions,
 ): Promise<void> {
-  await apiFetch('/sop/notes', {
-    method: 'POST',
-    body: JSON.stringify({ employeeId, moduleId, stepId, content }),
-  });
+  await apiFetch(
+    '/sop/notes',
+    {
+      method: 'POST',
+      body: JSON.stringify({ employeeId, moduleId, stepId, content }),
+    },
+    undefined,
+    options,
+  );
 }
 
 export async function listBookmarks(
   employeeId: string,
   moduleId?: string,
+  options?: ApiDataOptions,
 ): Promise<Array<{ id: string; moduleId: string; stepId: string; createdAt: string }>> {
   const qs = new URLSearchParams({ employeeId });
   if (moduleId) qs.set('moduleId', moduleId);
   const data = await apiFetch<{
     items: Array<{ id: string; moduleId: string; stepId: string; createdAt: string }>;
-  }>(`/sop/bookmarks?${qs}`, undefined, { items: [] });
+  }>(`/sop/bookmarks?${qs}`, undefined, { items: [] }, options);
   return data.items;
 }
 
@@ -2514,11 +2556,17 @@ export async function toggleBookmark(
   employeeId: string,
   moduleId: string,
   stepId: string,
+  options?: ApiDataOptions,
 ): Promise<boolean> {
-  const data = await apiFetch<{ bookmarked: boolean }>('/sop/bookmarks', {
-    method: 'POST',
-    body: JSON.stringify({ employeeId, moduleId, stepId }),
-  });
+  const data = await apiFetch<{ bookmarked: boolean }>(
+    '/sop/bookmarks',
+    {
+      method: 'POST',
+      body: JSON.stringify({ employeeId, moduleId, stepId }),
+    },
+    undefined,
+    options,
+  );
   return data.bookmarked;
 }
 
@@ -2562,10 +2610,16 @@ export async function listMyAssignments(
   );
 }
 
-export async function completeAssignment(id: string, score?: number): Promise<TrainingAssignment> {
+export async function completeAssignment(
+  id: string,
+  score?: number,
+  options?: ApiDataOptions,
+): Promise<TrainingAssignment> {
   const data = await apiFetch<{ assignment: TrainingAssignment }>(
     `/ojt/assignments/${id}/complete`,
     { method: 'PATCH', body: JSON.stringify({ score }) },
+    undefined,
+    options,
   );
   return data.assignment;
 }

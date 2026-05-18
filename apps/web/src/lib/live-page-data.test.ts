@@ -20,8 +20,12 @@ const truthCriticalPages = [
   'app/admin/audit/page.tsx',
   'app/admin/integrations/page.tsx',
   'app/training/page.tsx',
+  'app/training/[moduleId]/page.tsx',
+  'app/training/[moduleId]/quiz/page.tsx',
+  'app/training/[moduleId]/step/[stepId]/page.tsx',
   'app/training/admin/page.tsx',
   'app/training/assignments/page.tsx',
+  'app/training/my-ojt/page.tsx',
   'app/work-orders/[id]/page.tsx',
   'app/work-orders/new/page.tsx',
   'app/sales/quotes/new/page.tsx',
@@ -279,6 +283,89 @@ test('reporting catalog is registry-backed with filtered drill-through destinati
       'buildAuditHref',
       'allowMockFallback: false',
     ].filter((snippet) => !auditSource.includes(snippet)),
+    [],
+  );
+});
+
+test('training content keeps notes, bookmarks, and media wired to live APIs', () => {
+  const moduleSource = readSource('app/training/[moduleId]/page.tsx');
+  const stepSource = readSource('app/training/[moduleId]/step/[stepId]/page.tsx');
+  const quizSource = readSource('app/training/[moduleId]/quiz/page.tsx');
+  const myOjtSource = readSource('app/training/my-ojt/page.tsx');
+  const apiClientSource = readSource('lib/api-client.ts');
+  const sopHandlersSource = readFileSync(
+    path.resolve(WEB_SRC_DIR, '../../../apps/api/src/lambda/sop/handlers.ts'),
+    'utf8',
+  );
+  const seedSource = readFileSync(
+    path.resolve(WEB_SRC_DIR, '../../../packages/db/prisma/seed.ts'),
+    'utf8',
+  );
+
+  assert.deepEqual(
+    ['href={steps[0] ? erpNestedRoute', "href=\"#\""].filter((snippet) =>
+      moduleSource.includes(snippet),
+    ),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      "getTrainingModule(moduleId, { allowMockFallback: false })",
+      "getModuleProgress(mod.id, employeeId, { allowMockFallback: false })",
+      "listNotes(employeeId, mod.id, { allowMockFallback: false })",
+      "listBookmarks(employeeId, mod.id, { allowMockFallback: false })",
+      "saveNote(employeeId, module.id, content, stepId,",
+      "toggleBookmark(employeeId, module.id, stepId,",
+      'Progress tools did not load. Lesson content is still available.',
+    ].filter((snippet) => !stepSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      "getTrainingModule(moduleId, { allowMockFallback: false })",
+      'submitQuiz(moduleId, employeeId, answers, { allowMockFallback: false })',
+    ].filter((snippet) => !quizSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      "listMyAssignments(employeeId, {}, { allowMockFallback: false })",
+      "completeAssignment(id, undefined, { allowMockFallback: false })",
+    ].filter((snippet) => !myOjtSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      'options?: ApiDataOptions',
+      'listNotes(',
+      'listBookmarks(',
+      'toggleBookmark(',
+      'completeAssignment(',
+    ].filter((snippet) => !apiClientSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      'trainingStateQueries',
+      'findModuleReference',
+      'resolveTrainingStateModule',
+      'moduleId: moduleResult.moduleId',
+      'employeeId must be a valid UUID',
+    ].filter((snippet) => !sopHandlersSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      'OJT-BUILD-BASICS',
+      "thumbnailUrl: '/images/modules/ojt-basic-cart-build.svg'",
+      'trainingAssignment.upsert',
+    ].filter((snippet) => !seedSource.includes(snippet)),
     [],
   );
 });

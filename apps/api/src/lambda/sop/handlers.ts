@@ -522,6 +522,130 @@ export const submitQuizHandler = wrapHandler(async (ctx) => {
 
 // ─── Notes ────────────────────────────────────────────────────────────────────
 
+interface TrainingModuleReference {
+  id: string;
+  moduleCode: string;
+  moduleName: string;
+}
+
+interface OjtNoteRecord {
+  id: string;
+  moduleId: string;
+  stepId: string | null;
+  content: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface OjtBookmarkRecord {
+  id: string;
+  moduleId: string;
+  stepId: string;
+  createdAt: Date;
+}
+
+export const trainingStateQueries = {
+  findModuleReference(idOrCode: string): Promise<TrainingModuleReference | null> {
+    return prisma.trainingModule.findFirst({
+      where: moduleWhere(idOrCode),
+      select: { id: true, moduleCode: true, moduleName: true },
+    });
+  },
+  listNotes(employeeId: string, moduleId?: string): Promise<OjtNoteRecord[]> {
+    return prisma.ojtNote.findMany({
+      where: { employeeId, ...(moduleId ? { moduleId } : {}) },
+      orderBy: { updatedAt: 'desc' },
+    });
+  },
+  findExistingNote(
+    employeeId: string,
+    moduleId: string,
+    stepId: string | null,
+  ): Promise<OjtNoteRecord | null> {
+    return prisma.ojtNote.findFirst({ where: { employeeId, moduleId, stepId } });
+  },
+  updateNote(id: string, content: string, updatedAt: Date): Promise<OjtNoteRecord> {
+    return prisma.ojtNote.update({ where: { id }, data: { content, updatedAt } });
+  },
+  createNote(input: {
+    employeeId: string;
+    moduleId: string;
+    stepId: string | null;
+    content: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }): Promise<OjtNoteRecord> {
+    return prisma.ojtNote.create({ data: input });
+  },
+  deleteNote(id: string): Promise<unknown> {
+    return prisma.ojtNote.delete({ where: { id } });
+  },
+  listBookmarks(employeeId: string, moduleId?: string): Promise<OjtBookmarkRecord[]> {
+    return prisma.ojtBookmark.findMany({
+      where: { employeeId, ...(moduleId ? { moduleId } : {}) },
+      orderBy: { createdAt: 'desc' },
+    });
+  },
+  findBookmark(
+    employeeId: string,
+    moduleId: string,
+    stepId: string,
+  ): Promise<OjtBookmarkRecord | null> {
+    return prisma.ojtBookmark.findUnique({
+      where: { employeeId_moduleId_stepId: { employeeId, moduleId, stepId } },
+    });
+  },
+  createBookmark(employeeId: string, moduleId: string, stepId: string): Promise<OjtBookmarkRecord> {
+    return prisma.ojtBookmark.create({ data: { employeeId, moduleId, stepId } });
+  },
+  deleteBookmark(id: string): Promise<unknown> {
+    return prisma.ojtBookmark.delete({ where: { id } });
+  },
+};
+
+async function resolveTrainingStateModule(moduleIdOrCode?: string): Promise<
+  | { ok: true; moduleId?: string }
+  | { ok: false; response: ReturnType<typeof jsonResponse> }
+> {
+  const requestedModule = moduleIdOrCode?.trim();
+  if (!requestedModule) return { ok: true };
+
+  const module = await trainingStateQueries.findModuleReference(requestedModule);
+  if (!module) {
+    return {
+      ok: false,
+      response: jsonResponse(404, { message: `Training module not found: ${requestedModule}` }),
+    };
+  }
+
+  return { ok: true, moduleId: module.id };
+}
+
+function normalizeStepId(stepId: string | undefined): string | null {
+  const value = stepId?.trim();
+  return value ? value : null;
+}
+
+function toNoteResponse(note: OjtNoteRecord) {
+  return {
+    id: note.id,
+    moduleId: note.moduleId,
+    stepId: note.stepId,
+    content: note.content,
+    createdAt: note.createdAt.toISOString(),
+    updatedAt: note.updatedAt.toISOString(),
+  };
+}
+
+function toBookmarkResponse(bookmark: OjtBookmarkRecord) {
+  return {
+    id: bookmark.id,
+    moduleId: bookmark.moduleId,
+    stepId: bookmark.stepId,
+    createdAt: bookmark.createdAt.toISOString(),
+  };
+}
+
 export const listNotesHandler = wrapHandler(async (ctx) => {
   const qs = ctx.event.queryStringParameters ?? {};
   const employeeId = qs.employeeId;
@@ -529,17 +653,11 @@ export const listNotesHandler = wrapHandler(async (ctx) => {
   if (!employeeId) return jsonResponse(400, { message: 'employeeId is required.' });
   if (!UUID_RE.test(employeeId)) return jsonResponse(400, { message: 'employeeId must be a valid UUID.' });
 
-  const where = { employeeId, ...(moduleId ? { moduleId } : {}) };
-  const notes = await prisma.ojtNote.findMany({ where, orderBy: { updatedAt: 'desc' } });
+  const moduleResult = await resolveTrainingStateModule(moduleId);
+  if (!moduleResult.ok) return moduleResult.response;
 
-  return jsonResponse(200, { items: notes.map(n => ({
-    id: n.id,
-    moduleId: n.moduleId,
-    stepId: n.stepId,
-    content: n.content,
-    createdAt: n.createdAt.toISOString(),
-    updatedAt: n.updatedAt.toISOString(),
-  })) });
+  const notes = await trainingStateQueries.listNotes(employeeId, moduleResult.moduleId);
+  return jsonResponse(200, { items: notes.map(toNoteResponse) });
 }, { requireAuth: false });
 
 interface NoteBody { employeeId: string; moduleId: string; stepId?: string; content: string; }
@@ -551,18 +669,37 @@ export const upsertNoteHandler = wrapHandler(async (ctx) => {
   if (!employeeId || !moduleId || !content?.trim()) {
     return jsonResponse(422, { message: 'employeeId, moduleId, and content are required.' });
   }
+  if (!UUID_RE.test(employeeId)) return jsonResponse(422, { message: 'employeeId must be a valid UUID.' });
+
+  const moduleResult = await resolveTrainingStateModule(moduleId);
+  if (!moduleResult.ok) return moduleResult.response;
+  if (!moduleResult.moduleId) return jsonResponse(422, { message: 'moduleId is required.' });
+
+  const resolvedStepId = normalizeStepId(stepId);
+  const trimmedContent = content.trim();
   const now = new Date();
-  const existing = await prisma.ojtNote.findFirst({ where: { employeeId, moduleId, stepId: stepId ?? null } });
+  const existing = await trainingStateQueries.findExistingNote(
+    employeeId,
+    moduleResult.moduleId,
+    resolvedStepId,
+  );
   const note = existing
-    ? await prisma.ojtNote.update({ where: { id: existing.id }, data: { content, updatedAt: now } })
-    : await prisma.ojtNote.create({ data: { employeeId, moduleId, stepId: stepId ?? null, content, createdAt: now, updatedAt: now } });
-  return jsonResponse(200, { id: note.id, content: note.content, updatedAt: note.updatedAt.toISOString() });
+    ? await trainingStateQueries.updateNote(existing.id, trimmedContent, now)
+    : await trainingStateQueries.createNote({
+        employeeId,
+        moduleId: moduleResult.moduleId,
+        stepId: resolvedStepId,
+        content: trimmedContent,
+        createdAt: now,
+        updatedAt: now,
+      });
+  return jsonResponse(200, toNoteResponse(note));
 }, { requireAuth: false });
 
 export const deleteNoteHandler = wrapHandler(async (ctx) => {
   const id = ctx.event.pathParameters?.id;
   if (!id) return jsonResponse(400, { message: 'Note ID is required.' });
-  await prisma.ojtNote.delete({ where: { id } }).catch(() => {});
+  await trainingStateQueries.deleteNote(id).catch(() => {});
   return jsonResponse(200, { ok: true });
 }, { requireAuth: false });
 
@@ -573,13 +710,12 @@ export const listBookmarksHandler = wrapHandler(async (ctx) => {
   const employeeId = qs.employeeId;
   if (!employeeId) return jsonResponse(400, { message: 'employeeId is required.' });
   if (!UUID_RE.test(employeeId)) return jsonResponse(400, { message: 'employeeId must be a valid UUID.' });
-  const bookmarks = await prisma.ojtBookmark.findMany({
-    where: { employeeId, ...(qs.moduleId ? { moduleId: qs.moduleId } : {}) },
-    orderBy: { createdAt: 'desc' },
-  });
-  return jsonResponse(200, { items: bookmarks.map(b => ({
-    id: b.id, moduleId: b.moduleId, stepId: b.stepId, createdAt: b.createdAt.toISOString(),
-  })) });
+
+  const moduleResult = await resolveTrainingStateModule(qs.moduleId);
+  if (!moduleResult.ok) return moduleResult.response;
+
+  const bookmarks = await trainingStateQueries.listBookmarks(employeeId, moduleResult.moduleId);
+  return jsonResponse(200, { items: bookmarks.map(toBookmarkResponse) });
 }, { requireAuth: false });
 
 interface BookmarkBody { employeeId: string; moduleId: string; stepId: string; }
@@ -588,17 +724,26 @@ export const toggleBookmarkHandler = wrapHandler(async (ctx) => {
   const body = parseBody<BookmarkBody>(ctx.event);
   if (!body.ok) return jsonResponse(400, { message: body.error });
   const { employeeId, moduleId, stepId } = body.value;
-  if (!employeeId || !moduleId || !stepId) {
+  if (!employeeId || !moduleId || !stepId?.trim()) {
     return jsonResponse(422, { message: 'employeeId, moduleId, stepId are required.' });
   }
-  const existing = await prisma.ojtBookmark.findUnique({
-    where: { employeeId_moduleId_stepId: { employeeId, moduleId, stepId } },
-  });
+  if (!UUID_RE.test(employeeId)) return jsonResponse(422, { message: 'employeeId must be a valid UUID.' });
+
+  const moduleResult = await resolveTrainingStateModule(moduleId);
+  if (!moduleResult.ok) return moduleResult.response;
+  if (!moduleResult.moduleId) return jsonResponse(422, { message: 'moduleId is required.' });
+
+  const normalizedStepId = stepId.trim();
+  const existing = await trainingStateQueries.findBookmark(
+    employeeId,
+    moduleResult.moduleId,
+    normalizedStepId,
+  );
   if (existing) {
-    await prisma.ojtBookmark.delete({ where: { id: existing.id } });
+    await trainingStateQueries.deleteBookmark(existing.id);
     return jsonResponse(200, { bookmarked: false });
   } else {
-    await prisma.ojtBookmark.create({ data: { employeeId, moduleId, stepId } });
+    await trainingStateQueries.createBookmark(employeeId, moduleResult.moduleId, normalizedStepId);
     return jsonResponse(200, { bookmarked: true });
   }
 }, { requireAuth: false });

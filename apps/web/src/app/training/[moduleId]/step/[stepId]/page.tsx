@@ -56,6 +56,8 @@ export default function StepPage() {
   const [notes, setNotes] = useState<OjtNote[]>([]);
   const [bookmarked, setBookmarked] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [trackingWarning, setTrackingWarning] = useState<string | null>(null);
+  const [savingBookmark, setSavingBookmark] = useState(false);
 
   const steps = (module?.steps as OjtStep[] | undefined) ?? [];
   const stepIndex = steps.findIndex((s) => s.id === stepId);
@@ -68,13 +70,18 @@ export default function StepPage() {
     let cancelled = false;
     async function load() {
       try {
-        const mod = await getTrainingModule(moduleId);
+        setTrackingWarning(null);
+        const mod = await getTrainingModule(moduleId, { allowMockFallback: false });
         const [progressResult, notesResult, bookmarksResult] = await Promise.allSettled([
           canTrackProgress
-            ? getModuleProgress(moduleId, employeeId)
-            : Promise.resolve(emptyProgress(moduleId, employeeId)),
-          canTrackProgress ? listNotes(employeeId, moduleId) : Promise.resolve([]),
-          canTrackProgress ? listBookmarks(employeeId, moduleId) : Promise.resolve([]),
+            ? getModuleProgress(mod.id, employeeId, { allowMockFallback: false })
+            : Promise.resolve(emptyProgress(mod.id, employeeId)),
+          canTrackProgress
+            ? listNotes(employeeId, mod.id, { allowMockFallback: false })
+            : Promise.resolve([]),
+          canTrackProgress
+            ? listBookmarks(employeeId, mod.id, { allowMockFallback: false })
+            : Promise.resolve([]),
         ]);
 
         const prog =
@@ -89,6 +96,17 @@ export default function StepPage() {
           setProgress(prog);
           setNotes(notesList.filter((n) => n.stepId === stepId));
           setBookmarked(bookmarksList.some((b) => b.stepId === stepId));
+          if (!canTrackProgress) {
+            setTrackingWarning('Progress tools are unavailable for this signed-in user.');
+          } else if (
+            progressResult.status === 'rejected' ||
+            notesResult.status === 'rejected' ||
+            bookmarksResult.status === 'rejected'
+          ) {
+            setTrackingWarning(
+              'Progress tools did not load. Lesson content is still available.',
+            );
+          }
         }
       } catch (err) {
         console.error('Error loading step', err);
@@ -109,46 +127,85 @@ export default function StepPage() {
 
   function handleVideoProgress(pct: number) {
     if (!canTrackProgress) return;
-    updateStepProgress(moduleId, {
-      employeeId: employeeId,
-      stepId,
-      videoProgress: pct,
-    }).catch(() => {});
+    updateStepProgress(
+      module?.id ?? moduleId,
+      {
+        employeeId: employeeId,
+        stepId,
+        videoProgress: pct,
+      },
+      { allowMockFallback: false },
+    ).catch(() => {});
   }
 
   function handleVideoComplete() {
     if (!canTrackProgress) return;
-    updateStepProgress(moduleId, {
-      employeeId: employeeId,
-      stepId,
-      videoWatched: true,
-      videoProgress: 100,
-    }).catch(() => {});
+    updateStepProgress(
+      module?.id ?? moduleId,
+      {
+        employeeId: employeeId,
+        stepId,
+        videoWatched: true,
+        videoProgress: 100,
+      },
+      { allowMockFallback: false },
+    ).catch(() => {});
   }
 
   async function handleMarkComplete() {
-    if (!canTrackProgress) return;
-    await updateStepProgress(moduleId, {
-      employeeId: employeeId,
-      stepId,
-      status: 'completed',
-      completed: true,
-    });
-    const updated = await getModuleProgress(moduleId, employeeId);
-    setProgress(updated);
+    if (!module || !canTrackProgress) return;
+    try {
+      await updateStepProgress(
+        module.id,
+        {
+          employeeId: employeeId,
+          stepId,
+          status: 'completed',
+          completed: true,
+        },
+        { allowMockFallback: false },
+      );
+      const updated = await getModuleProgress(module.id, employeeId, {
+        allowMockFallback: false,
+      });
+      setProgress(updated);
+      setTrackingWarning(null);
+    } catch {
+      setTrackingWarning('Step completion could not be saved.');
+    }
   }
 
   async function handleBookmarkToggle() {
     if (!module || !canTrackProgress) return;
-    const next = await toggleBookmark(employeeId, module.id, stepId);
-    setBookmarked(next);
+    setSavingBookmark(true);
+    try {
+      const next = await toggleBookmark(employeeId, module.id, stepId, {
+        allowMockFallback: false,
+      });
+      setBookmarked(next);
+      setTrackingWarning(null);
+    } catch {
+      setTrackingWarning('Bookmark could not be saved.');
+    } finally {
+      setSavingBookmark(false);
+    }
   }
 
   async function handleSaveNote(content: string) {
     if (!module || !canTrackProgress) return;
-    await saveNote(employeeId, module.id, content, stepId);
-    const updatedNotes = await listNotes(employeeId, module.id);
-    setNotes(updatedNotes.filter((n) => n.stepId === stepId));
+    try {
+      await saveNote(employeeId, module.id, content, stepId, {
+        allowMockFallback: false,
+      });
+      const updatedNotes = await listNotes(employeeId, module.id, {
+        allowMockFallback: false,
+      });
+      setNotes(updatedNotes.filter((n) => n.stepId === stepId));
+      setTrackingWarning(null);
+    } catch (error) {
+      setTrackingWarning('Notes could not be saved.');
+      throw error;
+    }
   }
 
   if (loading) {
@@ -206,9 +263,15 @@ export default function StepPage() {
           <BookmarkButton
             isBookmarked={bookmarked}
             onToggle={handleBookmarkToggle}
-            loading={!canTrackProgress}
+            loading={!canTrackProgress || savingBookmark}
           />
         </div>
+
+        {trackingWarning && (
+          <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-900">
+            {trackingWarning}
+          </div>
+        )}
 
         {/* Safety warnings */}
         {(step.safetyWarnings?.length ?? 0) > 0 && (

@@ -88,7 +88,7 @@ async function main(): Promise<void> {
     },
     update: {},
   });
-  await prisma.employee.upsert({
+  const techEmployee = await prisma.employee.upsert({
     where: { id: '00000000-0000-0000-0004-000000000002' },
     create: {
       id: '00000000-0000-0000-0004-000000000002',
@@ -102,6 +102,106 @@ async function main(): Promise<void> {
     update: {},
   });
   console.info('  ✓ Employees: EMP-001, EMP-002');
+
+  // ── Sample training module ───────────────────────────────────────────
+  const buildBasicsSop = await prisma.sopDocument.upsert({
+    where: { id: '00000000-0000-0000-0010-000000000001' },
+    create: {
+      id: '00000000-0000-0000-0010-000000000001',
+      documentCode: 'SOP-BUILD-BASICS',
+      title: 'Golf Cart Build Basics',
+      documentStatus: 'PUBLISHED',
+      category: 'Training',
+      ownerEmployeeId: '00000000-0000-0000-0004-000000000001',
+    },
+    update: {
+      documentStatus: 'PUBLISHED',
+      title: 'Golf Cart Build Basics',
+      category: 'Training',
+    },
+  });
+
+  const buildBasicsModule = await prisma.trainingModule.upsert({
+    where: { id: '00000000-0000-0000-0011-000000000001' },
+    create: {
+      id: '00000000-0000-0000-0011-000000000001',
+      moduleCode: 'OJT-BUILD-BASICS',
+      moduleName: 'Golf Cart Build Basics',
+      description: 'Core safety, staging, and quality checkpoints for a standard cart build.',
+      moduleStatus: 'ACTIVE',
+      passScore: 80,
+      validityDays: 365,
+      isRequired: true,
+      estimatedTime: '25 min',
+      thumbnailUrl: '/images/modules/ojt-basic-cart-build.svg',
+      prerequisites: [],
+      jobRoles: ['Technician'],
+      requiresSupervisorSignoff: true,
+      sortOrder: 10,
+      sopDocumentId: buildBasicsSop.id,
+      steps: [
+        {
+          id: 'stage-cart',
+          title: 'Stage the cart and tools',
+          instructions:
+            'Confirm the cart, work order, batteries, lift parts, tire set, and required tools are staged before work begins.',
+          tools: ['Torque wrench', 'Battery lift', 'Wheel chocks'],
+          materials: ['Work order packet', 'Build parts kit'],
+          safetyWarnings: [
+            { severity: 'warning', text: 'Chock wheels before lifting or removing tires.' },
+          ],
+          whyItMatters: 'Complete staging prevents mid-build part searches and quality misses.',
+          requiresConfirmation: true,
+        },
+        {
+          id: 'quality-handoff',
+          title: 'Run build quality handoff',
+          instructions:
+            'Verify torque marks, cable routing, tire pressure, and accessory function before moving the cart to QC.',
+          tools: ['Torque wrench', 'Tire gauge'],
+          materials: ['QC checklist'],
+          commonMistakes: ['Skipping torque mark verification', 'Leaving charger cable unsecured'],
+          requiresConfirmation: true,
+        },
+      ],
+      knowledgeChecks: [
+        {
+          id: 'build-readiness',
+          question: 'What should happen before a cart is moved into build?',
+          options: [
+            'Start work and gather parts as needed',
+            'Confirm the cart, tools, and parts kit are staged',
+            'Only check the tire set',
+            'Wait for QC to inspect it first',
+          ],
+          correctAnswer: 1,
+          explanation: 'Build staging prevents rework and avoids avoidable stalls.',
+        },
+      ],
+    },
+    update: {
+      moduleStatus: 'ACTIVE',
+      thumbnailUrl: '/images/modules/ojt-basic-cart-build.svg',
+      sopDocumentId: buildBasicsSop.id,
+    },
+  });
+
+  await prisma.trainingAssignment.upsert({
+    where: { id: '00000000-0000-0000-0012-000000000001' },
+    create: {
+      id: '00000000-0000-0000-0012-000000000001',
+      moduleId: buildBasicsModule.id,
+      employeeId: techEmployee.id,
+      assignmentStatus: 'ASSIGNED',
+      dueAt: new Date('2026-06-01T12:00:00.000Z'),
+      correlationId: 'seed',
+    },
+    update: {
+      moduleId: buildBasicsModule.id,
+      employeeId: techEmployee.id,
+    },
+  });
+  console.info('  ✓ Training module: OJT-BUILD-BASICS');
 
   // ── Stock location ────────────────────────────────────────────────────
   const mainShop = await prisma.stockLocation.upsert({

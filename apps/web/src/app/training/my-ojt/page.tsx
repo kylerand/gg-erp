@@ -36,7 +36,7 @@ export default function MyOJTPage() {
     if (!employeeId) return;
     setLoading(true);
     try {
-      const res = await listMyAssignments(employeeId);
+      const res = await listMyAssignments(employeeId, {}, { allowMockFallback: false });
       setAssignments(res.items);
     } catch {
       toast.error('Failed to load training assignments');
@@ -50,7 +50,7 @@ export default function MyOJTPage() {
   async function handleComplete(id: string) {
     setCompleting(id);
     try {
-      const updated = await completeAssignment(id);
+      const updated = await completeAssignment(id, undefined, { allowMockFallback: false });
       setAssignments(prev => prev.map(a => a.id === id ? updated : a));
       toast.success('Module marked complete');
     } catch (err) {

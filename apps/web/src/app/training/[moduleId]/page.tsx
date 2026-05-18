@@ -12,7 +12,7 @@ export default async function ModuleOverviewPage({ params }: Props) {
 
   let module;
   try {
-    module = await getTrainingModule(moduleId);
+    module = await getTrainingModule(moduleId, { allowMockFallback: false });
   } catch {
     notFound();
   }
@@ -84,12 +84,18 @@ export default async function ModuleOverviewPage({ params }: Props) {
 
           {/* CTA */}
           <div className="mt-6">
-            <Link
-              href={steps[0] ? erpNestedRoute('training', moduleId, 'step', steps[0].id) : '#'}
-              className="inline-flex items-center gap-2 bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-semibold px-5 py-2.5 rounded-lg transition-colors"
-            >
-              Start Module →
-            </Link>
+            {steps[0] ? (
+              <Link
+                href={erpNestedRoute('training', moduleId, 'step', steps[0].id)}
+                className="inline-flex items-center gap-2 bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-semibold px-5 py-2.5 rounded-lg transition-colors"
+              >
+                Start Module →
+              </Link>
+            ) : (
+              <span className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-5 py-2.5 text-sm font-semibold text-gray-500">
+                No steps configured
+              </span>
+            )}
           </div>
         </div>
       </div>

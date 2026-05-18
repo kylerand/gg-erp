@@ -233,18 +233,17 @@
 
       <div class="summary">
         <div class="metric"><strong>9</strong><span>Tracked delivery slices</span></div>
-        <div class="metric"><strong>5</strong><span>Done</span></div>
-        <div class="metric"><strong>4</strong><span>In progress</span></div>
+        <div class="metric"><strong>6</strong><span>Done</span></div>
+        <div class="metric"><strong>3</strong><span>In progress</span></div>
         <div class="metric"><strong>0</strong><span>Not started</span></div>
       </div>
 
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: finish training hardening after reporting exports, saved report scopes, and
-          the admin configuration catalog.
+          Current focus: service operation transitions, SSO handoff, and remaining selector gaps.
         </p>
-        <div class="progress" aria-label="97 percent complete"><div style="width: 97%"></div></div>
+        <div class="progress" aria-label="98 percent complete"><div style="width: 98%"></div></div>
       </section>
 
       <section>
@@ -308,12 +307,15 @@
             </tr>
             <tr>
               <td>Training repair</td>
-              <td><span class="pill doing">In progress</span></td>
+              <td><span class="pill done">Done</span></td>
               <td>
-                Lesson content loads when optional learner state fails; module image fallback route
-                exists; assignment status/search filters are URL-backed for report drill-throughs.
+                Lesson content loads when optional learner state fails; notes and bookmarks resolve
+                module codes to canonical module IDs at the API boundary; training module, quiz,
+                assignment, notes, and bookmark calls opt out of mock fallback; module image
+                fallback route exists; dev seed includes a real training module thumbnail; assignment
+                status/search filters are URL-backed for report drill-throughs.
               </td>
-              <td>Finish API-level notes/bookmarks hardening and verify seeded module media.</td>
+              <td>Add manager assignment creation and content editing once those APIs exist.</td>
             </tr>
             <tr>
               <td>Inventory and purchasing</td>

@@ -233,18 +233,18 @@
 
       <div class="summary">
         <div class="metric"><strong>9</strong><span>Tracked delivery slices</span></div>
-        <div class="metric"><strong>4</strong><span>Done</span></div>
-        <div class="metric"><strong>5</strong><span>In progress</span></div>
+        <div class="metric"><strong>5</strong><span>Done</span></div>
+        <div class="metric"><strong>4</strong><span>In progress</span></div>
         <div class="metric"><strong>0</strong><span>Not started</span></div>
       </div>
 
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: finish admin configuration and training hardening after reporting exports
-          and saved report scopes.
+          Current focus: finish training hardening after reporting exports, saved report scopes, and
+          the admin configuration catalog.
         </p>
-        <div class="progress" aria-label="96 percent complete"><div style="width: 96%"></div></div>
+        <div class="progress" aria-label="97 percent complete"><div style="width: 97%"></div></div>
       </section>
 
       <section>
@@ -344,13 +344,15 @@
             </tr>
             <tr>
               <td>Admin configuration catalog</td>
-              <td><span class="pill doing">In progress</span></td>
+              <td><span class="pill done">Done</span></td>
               <td>
-                Access, audit, and integrations pages exist; integration health now uses strict live
-                QuickBooks, sync queue, account, and reconciliation sources, and `/admin/accounting`
-                configures live QuickBooks dimension and tax mappings.
+                `ERP_ADMIN_CONFIGURATION_DOMAINS` backs the admin landing catalog with live
+                user-access, accounting-settings, integration-health, and audit-trail destinations;
+                integration health uses strict live QuickBooks, sync queue, account, and
+                reconciliation sources, and `/admin/accounting` configures live QuickBooks dimension
+                and tax mappings.
               </td>
-              <td>Add roles/templates/API-key/webhook settings domains once those APIs exist.</td>
+              <td>Add API-key, webhook, and template domains only when those APIs exist.</td>
             </tr>
           </tbody>
         </table>

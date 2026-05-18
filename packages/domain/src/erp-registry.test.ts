@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ERP_OBJECTS,
+  getLiveErpAdminConfigurationDomains,
   getErpCommandDestinations,
+  getErpObjectByKey,
   getErpSavedReportViews,
   getErpQuickCreateDestinations,
   getRequiredErpRecordRoute,
@@ -144,6 +146,29 @@ test('live report catalog is routeable and references live registry sources', ()
     for (const reportKey of view.reportKeys) {
       assert.ok(reportKeys.has(reportKey), `${view.key} references missing report ${reportKey}`);
     }
+  }
+});
+
+test('admin configuration catalog routes to live registry objects', () => {
+  const domains = getLiveErpAdminConfigurationDomains();
+
+  assert.ok(domains.length >= 4);
+
+  for (const domain of domains) {
+    assert.ok(domain.route.startsWith('/admin/'), `${domain.key} should route inside admin`);
+    assert.equal(domain.status, 'live', `${domain.key} should be live`);
+    assert.notEqual(domain.ctaLabel.trim(), '', `${domain.key} should expose an action label`);
+    assert.ok(domain.liveSignals.length > 0, `${domain.key} should declare live signals`);
+    assert.ok(domain.actions.length > 0, `${domain.key} should declare actions`);
+
+    const object = getErpObjectByKey(domain.objectKey);
+    assert.ok(object, `${domain.key} should reference a registry object`);
+    assert.equal(object.status, 'live', `${domain.key} should reference a live registry object`);
+    assert.equal(
+      normalizeErpRoute(domain.route),
+      normalizeErpRoute(object.route),
+      `${domain.key} route should match its registry object`,
+    );
   }
 });
 

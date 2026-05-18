@@ -4,8 +4,10 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import {
+  Ban,
   Car,
   CheckCircle2,
+  CircleSlash,
   ClipboardCheck,
   Clock,
   DollarSign,
@@ -17,6 +19,7 @@ import {
   Package,
   PackageCheck,
   Phone,
+  Play,
   Printer,
   RefreshCw,
   Receipt,
@@ -37,6 +40,7 @@ import {
   listInventoryLots,
   releaseInventoryReservation,
   submitWorkOrderQcGates,
+  transitionWoOperation,
   type InventoryLot,
   type InventoryReservation,
   type LaborTimeEntry,
@@ -44,6 +48,7 @@ import {
   type SubmitWorkOrderQcResponse,
   type WoOrderDetail,
   type WoOrderPartLine,
+  type WoOperationStatus,
   type WorkOrderQcGate,
 } from '@/lib/api-client';
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
@@ -172,6 +177,8 @@ export default function WorkOrderDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [blockOperationId, setBlockOperationId] = useState<string | null>(null);
+  const [blockReason, setBlockReason] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -305,6 +312,44 @@ export default function WorkOrderDetailPage() {
       } else {
         await consumeInventoryReservation(reservation.id);
       }
+      await load();
+    } catch (err) {
+      setActionError(errorMessage(err));
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  async function handleOperationTransition(
+    item: WoOrderDetail['checklist'][number],
+    status: WoOperationStatus,
+  ) {
+    if (!workOrder) return;
+    if (status === 'BLOCKED' && blockOperationId !== item.id) {
+      setBlockOperationId(item.id);
+      setBlockReason(item.blockingReason ?? '');
+      setActionError(null);
+      return;
+    }
+
+    const reason = status === 'BLOCKED' ? blockReason.trim() : undefined;
+    if (status === 'BLOCKED' && !reason) {
+      setActionError('Add a blocker reason before blocking this service operation.');
+      setBlockOperationId(item.id);
+      return;
+    }
+
+    setActionBusy(`operation:${item.id}:${status}`);
+    setActionError(null);
+    try {
+      await transitionWoOperation(workOrder.id, item.id, {
+        status,
+        blockingReason: reason,
+        reasonCode: `OPERATION_${status}`,
+        actorUserId: user?.userId,
+      });
+      setBlockOperationId(null);
+      setBlockReason('');
       await load();
     } catch (err) {
       setActionError(errorMessage(err));
@@ -554,7 +599,20 @@ export default function WorkOrderDetailPage() {
             <div className="divide-y divide-gray-100">
               {workOrder.checklist.length > 0 ? (
                 workOrder.checklist.map((item) => (
-                  <ServiceLine key={item.id} item={item} workOrderId={workOrder.id} />
+                  <ServiceLine
+                    key={item.id}
+                    item={item}
+                    workOrderId={workOrder.id}
+                    actionBusy={actionBusy}
+                    blockDraftActive={blockOperationId === item.id}
+                    blockReason={blockOperationId === item.id ? blockReason : ''}
+                    onBlockReasonChange={setBlockReason}
+                    onCancelBlock={() => {
+                      setBlockOperationId(null);
+                      setBlockReason('');
+                    }}
+                    onTransition={(status) => void handleOperationTransition(item, status)}
+                  />
                 ))
               ) : (
                 <EmptyPanel text="No service operations are attached to this work order yet." />
@@ -783,47 +841,177 @@ function EmptyPanel({ text }: { text: string }) {
 function ServiceLine({
   item,
   workOrderId,
+  actionBusy,
+  blockDraftActive,
+  blockReason,
+  onBlockReasonChange,
+  onCancelBlock,
+  onTransition,
 }: {
   item: WoOrderDetail['checklist'][number];
   workOrderId: string;
+  actionBusy: string | null;
+  blockDraftActive: boolean;
+  blockReason: string;
+  onBlockReasonChange: (value: string) => void;
+  onCancelBlock: () => void;
+  onTransition: (status: WoOperationStatus) => void;
 }) {
-  const status = item.status ?? (item.done ? 'DONE' : 'OPEN');
+  const status = item.status ?? (item.done ? 'DONE' : 'PENDING');
+  const transitionActions = getOperationActions(status);
   return (
-    <div className="grid gap-3 px-4 py-3 md:grid-cols-[1fr_auto] md:items-center">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <CheckCircle2 size={18} className={item.done ? 'text-green-600' : 'text-gray-300'} />
-          <span className="text-sm font-semibold text-gray-900">{item.label}</span>
-          <StatusBadge status={status}>{displayStatus(status)}</StatusBadge>
-        </div>
-        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
-          {item.operationCode && <span className="font-mono">{item.operationCode}</span>}
-          {item.sequenceNo !== undefined && <span>Step {item.sequenceNo}</span>}
-          <span>{formatMinutes(item.estimatedMinutes)}</span>
-          {item.requiredSkillCode && <span>{item.requiredSkillCode}</span>}
-        </div>
-        {item.blockingReason && (
-          <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800">
-            {item.blockingReason}
+    <div className="px-4 py-3">
+      <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <CheckCircle2 size={18} className={item.done ? 'text-green-600' : 'text-gray-300'} />
+            <span className="text-sm font-semibold text-gray-900">{item.label}</span>
+            <StatusBadge status={status}>{displayStatus(status)}</StatusBadge>
           </div>
-        )}
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
+            {item.operationCode && <span className="font-mono">{item.operationCode}</span>}
+            {item.sequenceNo !== undefined && <span>Step {item.sequenceNo}</span>}
+            <span>{formatMinutes(item.estimatedMinutes)}</span>
+            {item.requiredSkillCode && <span>{item.requiredSkillCode}</span>}
+            {item.actualStartAt && <span>Started {formatDateTime(item.actualStartAt)}</span>}
+            {item.actualEndAt && <span>Closed {formatDateTime(item.actualEndAt)}</span>}
+          </div>
+          {item.blockingReason && (
+            <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800">
+              {item.blockingReason}
+            </div>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2 md:justify-end">
+          {transitionActions.map((action) => {
+            const Icon = action.icon;
+            const busy = actionBusy === `operation:${item.id}:${action.status}`;
+            return (
+              <Button
+                key={action.status}
+                type="button"
+                size="sm"
+                variant={action.variant}
+                disabled={Boolean(actionBusy)}
+                onClick={() => onTransition(action.status)}
+              >
+                <Icon data-icon="inline-start" />
+                {busy ? action.busyLabel : action.label}
+              </Button>
+            );
+          })}
+          <LinkButton href={erpRoute('sop-runner', { workOrderId, operationId: item.id })}>
+            <Wrench size={14} />
+            SOP
+          </LinkButton>
+          <LinkButton href={erpRoute('time-logging', { workOrderId, operationId: item.id })}>
+            <Timer size={14} />
+            Time
+          </LinkButton>
+          <LinkButton href={erpRoute('qc-checklist', { workOrderId, operationId: item.id })}>
+            <ShieldCheck size={14} />
+            QC
+          </LinkButton>
+        </div>
       </div>
-      <div className="flex flex-wrap gap-2 md:justify-end">
-        <LinkButton href={erpRoute('sop-runner', { workOrderId, operationId: item.id })}>
-          <Wrench size={14} />
-          SOP
-        </LinkButton>
-        <LinkButton href={erpRoute('time-logging', { workOrderId, operationId: item.id })}>
-          <Timer size={14} />
-          Time
-        </LinkButton>
-        <LinkButton href={erpRoute('qc-checklist', { workOrderId, operationId: item.id })}>
-          <ShieldCheck size={14} />
-          QC
-        </LinkButton>
-      </div>
+      {blockDraftActive && (
+        <div className="mt-3 grid gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 md:grid-cols-[1fr_auto] md:items-start">
+          <Textarea
+            value={blockReason}
+            onChange={(event) => onBlockReasonChange(event.target.value)}
+            placeholder="What is blocking this service operation?"
+            className="min-h-20 bg-white text-sm"
+          />
+          <div className="flex flex-wrap gap-2 md:justify-end">
+            <Button
+              type="button"
+              size="sm"
+              disabled={Boolean(actionBusy) || !blockReason.trim()}
+              onClick={() => onTransition('BLOCKED')}
+            >
+              <Ban data-icon="inline-start" />
+              Block
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={onCancelBlock}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+interface OperationAction {
+  status: WoOperationStatus;
+  label: string;
+  busyLabel: string;
+  icon: typeof Play;
+  variant: React.ComponentProps<typeof Button>['variant'];
+}
+
+function getOperationActions(status: WoOperationStatus): OperationAction[] {
+  switch (status) {
+    case 'PENDING':
+      return [
+        {
+          status: 'READY',
+          label: 'Ready',
+          busyLabel: 'Marking Ready',
+          icon: CheckCircle2,
+          variant: 'outline',
+        },
+        {
+          status: 'CANCELLED',
+          label: 'Cancel',
+          busyLabel: 'Cancelling',
+          icon: CircleSlash,
+          variant: 'destructive',
+        },
+      ];
+    case 'READY':
+      return [
+        { status: 'IN_PROGRESS', label: 'Start', busyLabel: 'Starting', icon: Play, variant: 'default' },
+        { status: 'BLOCKED', label: 'Block', busyLabel: 'Blocking', icon: Ban, variant: 'outline' },
+        {
+          status: 'CANCELLED',
+          label: 'Cancel',
+          busyLabel: 'Cancelling',
+          icon: CircleSlash,
+          variant: 'destructive',
+        },
+      ];
+    case 'IN_PROGRESS':
+      return [
+        {
+          status: 'DONE',
+          label: 'Done',
+          busyLabel: 'Completing',
+          icon: CheckCircle2,
+          variant: 'default',
+        },
+        { status: 'BLOCKED', label: 'Block', busyLabel: 'Blocking', icon: Ban, variant: 'outline' },
+      ];
+    case 'BLOCKED':
+      return [
+        {
+          status: 'IN_PROGRESS',
+          label: 'Resume',
+          busyLabel: 'Resuming',
+          icon: Undo2,
+          variant: 'default',
+        },
+        {
+          status: 'CANCELLED',
+          label: 'Cancel',
+          busyLabel: 'Cancelling',
+          icon: CircleSlash,
+          variant: 'destructive',
+        },
+      ];
+    default:
+      return [];
+  }
 }
 
 function PanelError({ message, onRetry }: { message: string; onRetry: () => void }) {

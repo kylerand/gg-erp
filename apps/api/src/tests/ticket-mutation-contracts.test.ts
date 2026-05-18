@@ -1,17 +1,21 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
+import type { PrismaClient } from '@prisma/client';
 import {
   createReworkHandler,
   createTaskHandler,
   createTimeEntryHandler,
   deleteTimeEntryHandler,
   disconnectTicketHandlerDependencies,
+  setTicketHandlerPrismaForTests,
   setTicketHandlerTimeEntryServiceForTests,
   transitionTaskHandler,
+  transitionWoOperationHandler,
   updateTimeEntryHandler,
 } from '../lambda/tickets/handlers.js';
 
 after(async () => {
+  setTicketHandlerPrismaForTests(undefined);
   setTicketHandlerTimeEntryServiceForTests(undefined);
   await disconnectTicketHandlerDependencies();
 });
@@ -76,6 +80,166 @@ test('transitionTaskHandler returns identifier and body validation errors before
     (JSON.parse(missingState.body) as { message: string }).message,
     'state is required.',
   );
+});
+
+test('transitionWoOperationHandler validates identifiers and operation status input', async () => {
+  const missingWorkOrder = await transitionWoOperationHandler({
+    body: JSON.stringify({ status: 'IN_PROGRESS' }),
+    pathParameters: { operationId: 'operation-1' },
+  });
+  assert.equal(missingWorkOrder.statusCode, 400);
+  assert.equal(
+    (JSON.parse(missingWorkOrder.body) as { message: string }).message,
+    'Work order ID is required.',
+  );
+
+  const missingOperation = await transitionWoOperationHandler({
+    body: JSON.stringify({ status: 'IN_PROGRESS' }),
+    pathParameters: { workOrderId: 'work-order-1' },
+  });
+  assert.equal(missingOperation.statusCode, 400);
+  assert.equal(
+    (JSON.parse(missingOperation.body) as { message: string }).message,
+    'Operation ID is required.',
+  );
+
+  const invalidJson = await transitionWoOperationHandler({
+    body: '{invalid-json',
+    pathParameters: { workOrderId: 'work-order-1', operationId: 'operation-1' },
+  });
+  assert.equal(invalidJson.statusCode, 400);
+
+  const missingStatus = await transitionWoOperationHandler({
+    body: JSON.stringify({}),
+    pathParameters: { workOrderId: 'work-order-1', operationId: 'operation-1' },
+  });
+  assert.equal(missingStatus.statusCode, 422);
+  assert.equal(
+    (JSON.parse(missingStatus.body) as { message: string }).message,
+    'status is required.',
+  );
+
+  const blockedWithoutReason = await transitionWoOperationHandler({
+    body: JSON.stringify({ status: 'BLOCKED' }),
+    pathParameters: { workOrderId: 'work-order-1', operationId: 'operation-1' },
+  });
+  assert.equal(blockedWithoutReason.statusCode, 422);
+  assert.equal(
+    (JSON.parse(blockedWithoutReason.body) as { message: string }).message,
+    'blockingReason is required when blocking an operation.',
+  );
+});
+
+test('transitionWoOperationHandler updates operation status and parent work-order activity', async () => {
+  const WORK_ORDER_ID = '00000000-0000-4000-8000-000000000101';
+  const OPERATION_ID = '00000000-0000-4000-8000-000000000102';
+  const ACTOR_ID = '00000000-0000-4000-8000-000000000103';
+  const updatedAt = new Date('2026-05-18T12:00:00.000Z');
+  let operationStatus = 'READY';
+  let workOrderStatus = 'READY';
+  const historyCreates: Array<{
+    workOrderId: string;
+    fromStatus: string;
+    toStatus: string;
+    reasonCode: string;
+    actorUserId?: string;
+    correlationId: string;
+  }> = [];
+
+  setTicketHandlerPrismaForTests({
+    woOperation: {
+      async findUnique() {
+        return {
+          id: OPERATION_ID,
+          workOrderId: WORK_ORDER_ID,
+          operationCode: 'BUILD-010',
+          sequenceNo: 10,
+          operationName: 'Install lift kit',
+          operationStatus,
+          requiredSkillCode: 'MECHANICAL',
+          estimatedMinutes: 60,
+          actualStartAt: null,
+          actualEndAt: null,
+          blockingReason: null,
+          updatedAt,
+          workOrder: {
+            id: WORK_ORDER_ID,
+            status: workOrderStatus,
+            completedAt: null,
+            updatedAt,
+          },
+        };
+      },
+      async update(args: { data: { operationStatus: string; actualStartAt?: Date } }) {
+        operationStatus = args.data.operationStatus;
+        return {
+          id: OPERATION_ID,
+          workOrderId: WORK_ORDER_ID,
+          operationCode: 'BUILD-010',
+          sequenceNo: 10,
+          operationName: 'Install lift kit',
+          operationStatus,
+          requiredSkillCode: 'MECHANICAL',
+          estimatedMinutes: 60,
+          actualStartAt: args.data.actualStartAt ?? null,
+          actualEndAt: null,
+          blockingReason: null,
+          updatedAt,
+        };
+      },
+      async findMany() {
+        return [{ operationStatus }, { operationStatus: 'DONE' }];
+      },
+    },
+    woOrder: {
+      async update(args: { data: { status: string; completedAt?: Date; updatedAt: Date } }) {
+        workOrderStatus = args.data.status;
+        return {
+          id: WORK_ORDER_ID,
+          status: workOrderStatus,
+          completedAt: args.data.completedAt ?? null,
+          updatedAt: args.data.updatedAt,
+        };
+      },
+    },
+    woStatusHistory: {
+      async create(args: { data: (typeof historyCreates)[number] }) {
+        historyCreates.push(args.data);
+        return args.data;
+      },
+    },
+  } as unknown as Partial<PrismaClient>);
+
+  try {
+    const response = await transitionWoOperationHandler({
+      body: JSON.stringify({
+        status: 'IN_PROGRESS',
+        actorUserId: ACTOR_ID,
+      }),
+      headers: { 'x-correlation-id': 'operation-transition-correlation' },
+      pathParameters: { workOrderId: WORK_ORDER_ID, operationId: OPERATION_ID },
+    });
+
+    assert.equal(response.statusCode, 200);
+    const payload = JSON.parse(response.body) as {
+      operation: { id: string; status: string; actualStartAt?: string };
+      workOrder: { id: string; status: string };
+    };
+
+    assert.equal(payload.operation.id, OPERATION_ID);
+    assert.equal(payload.operation.status, 'IN_PROGRESS');
+    assert.ok(payload.operation.actualStartAt);
+    assert.equal(payload.workOrder.id, WORK_ORDER_ID);
+    assert.equal(payload.workOrder.status, 'IN_PROGRESS');
+    assert.equal(historyCreates.length, 1);
+    assert.equal(historyCreates[0].fromStatus, 'READY');
+    assert.equal(historyCreates[0].toStatus, 'IN_PROGRESS');
+    assert.equal(historyCreates[0].reasonCode, 'OPERATION_IN_PROGRESS');
+    assert.equal(historyCreates[0].actorUserId, ACTOR_ID);
+    assert.equal(historyCreates[0].correlationId, 'operation-transition-correlation');
+  } finally {
+    setTicketHandlerPrismaForTests(undefined);
+  }
 });
 
 test('createReworkHandler returns 422 for missing contract fields', async () => {

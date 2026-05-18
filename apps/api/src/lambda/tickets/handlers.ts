@@ -494,10 +494,13 @@ type WoStatus =
 
 const ACTIVE_WO_STATUSES: WoStatus[] = ['READY', 'SCHEDULED', 'IN_PROGRESS', 'BLOCKED'];
 
-function mapWoStatus(status: string): 'READY' | 'IN_PROGRESS' | 'BLOCKED' {
-  if (status === 'IN_PROGRESS') return 'IN_PROGRESS';
-  if (status === 'BLOCKED') return 'BLOCKED';
+function mapWoStatus(status: string): WoStatus {
+  if (isWoStatus(status)) return status;
   return 'READY';
+}
+
+function isWoStatus(value: string): value is WoStatus {
+  return ['DRAFT', 'READY', 'SCHEDULED', 'IN_PROGRESS', 'BLOCKED', 'COMPLETED', 'CANCELLED'].includes(value);
 }
 
 function formatAge(date: Date | null): string {
@@ -519,6 +522,71 @@ interface WoOperation {
   requiredSkillCode?: string | null;
   estimatedMinutes?: number;
   blockingReason?: string | null;
+  actualStartAt?: Date | null;
+  actualEndAt?: Date | null;
+  updatedAt?: Date | null;
+}
+
+type WoOperationStatus =
+  | 'PENDING'
+  | 'READY'
+  | 'IN_PROGRESS'
+  | 'BLOCKED'
+  | 'DONE'
+  | 'SKIPPED'
+  | 'CANCELLED';
+
+const WO_OPERATION_STATUSES: WoOperationStatus[] = [
+  'PENDING',
+  'READY',
+  'IN_PROGRESS',
+  'BLOCKED',
+  'DONE',
+  'SKIPPED',
+  'CANCELLED',
+];
+
+const TERMINAL_WO_OPERATION_STATUSES: WoOperationStatus[] = ['DONE', 'SKIPPED', 'CANCELLED'];
+
+const WO_OPERATION_TRANSITIONS: Record<WoOperationStatus, WoOperationStatus[]> = {
+  PENDING: ['READY', 'CANCELLED'],
+  READY: ['IN_PROGRESS', 'BLOCKED', 'SKIPPED', 'CANCELLED'],
+  IN_PROGRESS: ['BLOCKED', 'DONE', 'SKIPPED', 'CANCELLED'],
+  BLOCKED: ['IN_PROGRESS', 'CANCELLED'],
+  DONE: [],
+  SKIPPED: [],
+  CANCELLED: [],
+};
+
+function isWoOperationStatus(value: string): value is WoOperationStatus {
+  return WO_OPERATION_STATUSES.includes(value as WoOperationStatus);
+}
+
+function deriveWoStatusFromOperations(
+  currentStatus: WoStatus,
+  operations: Array<{ operationStatus: string }>,
+): WoStatus {
+  if (currentStatus === 'CANCELLED') return currentStatus;
+  if (operations.length === 0) return currentStatus;
+
+  if (operations.some((operation) => operation.operationStatus === 'BLOCKED')) {
+    return 'BLOCKED';
+  }
+  if (operations.some((operation) => operation.operationStatus === 'IN_PROGRESS')) {
+    return 'IN_PROGRESS';
+  }
+  if (operations.every((operation) => operation.operationStatus === 'CANCELLED')) {
+    return 'CANCELLED';
+  }
+  if (
+    operations.every((operation) =>
+      TERMINAL_WO_OPERATION_STATUSES.includes(operation.operationStatus as WoOperationStatus),
+    )
+  ) {
+    return 'COMPLETED';
+  }
+
+  return currentStatus === 'SCHEDULED' ? 'SCHEDULED' : 'READY';
 }
 
 interface WoPart {
@@ -816,6 +884,35 @@ function toStatusHistoryResponse(r: WoStatusHistoryRecord) {
   };
 }
 
+function toOperationChecklistResponse(operation: {
+  id: string;
+  operationCode?: string | null;
+  sequenceNo?: number | null;
+  operationName: string;
+  operationStatus: string;
+  requiredSkillCode?: string | null;
+  estimatedMinutes?: number | null;
+  blockingReason?: string | null;
+  actualStartAt?: Date | null;
+  actualEndAt?: Date | null;
+  updatedAt?: Date | null;
+}) {
+  return {
+    id: operation.id,
+    label: operation.operationName,
+    done: TERMINAL_WO_OPERATION_STATUSES.includes(operation.operationStatus as WoOperationStatus),
+    operationCode: operation.operationCode ?? undefined,
+    sequenceNo: operation.sequenceNo ?? undefined,
+    status: operation.operationStatus,
+    requiredSkillCode: operation.requiredSkillCode ?? undefined,
+    estimatedMinutes: operation.estimatedMinutes ?? undefined,
+    blockingReason: operation.blockingReason ?? undefined,
+    actualStartAt: optionalIso(operation.actualStartAt),
+    actualEndAt: optionalIso(operation.actualEndAt),
+    updatedAt: optionalIso(operation.updatedAt),
+  };
+}
+
 async function resolveCustomerProfile(reference?: string | null) {
   if (!reference?.trim()) return undefined;
   const value = reference.trim();
@@ -986,17 +1083,7 @@ function toDetailItem(
     materialReadiness,
     shortageCount: shortageCount || undefined,
     reworkLoop: 0,
-    checklist: ops.map((op) => ({
-      id: op.id,
-      label: op.operationName,
-      done: ['DONE', 'SKIPPED'].includes(op.operationStatus),
-      operationCode: op.operationCode,
-      sequenceNo: op.sequenceNo,
-      status: op.operationStatus,
-      requiredSkillCode: op.requiredSkillCode ?? undefined,
-      estimatedMinutes: op.estimatedMinutes,
-      blockingReason: op.blockingReason ?? undefined,
-    })),
+    checklist: ops.map(toOperationChecklistResponse),
     parts: partLines.map((p) => {
       const requestedQuantity = numberFromDb(p.requestedQuantity);
       const reservedQuantity = numberFromDb(p.reservedQuantity);
@@ -1022,6 +1109,156 @@ function toDetailItem(
     ),
   };
 }
+
+export const transitionWoOperationHandler = wrapHandler(
+  async (ctx) => {
+    const workOrderId = ctx.event.pathParameters?.workOrderId;
+    const operationId = ctx.event.pathParameters?.operationId ?? ctx.event.pathParameters?.id;
+    if (!workOrderId) return jsonResponse(400, { message: 'Work order ID is required.' });
+    if (!operationId) return jsonResponse(400, { message: 'Operation ID is required.' });
+
+    const body = parseBody<{
+      status?: string;
+      state?: string;
+      blockingReason?: string;
+      reasonCode?: string;
+      reasonNote?: string;
+      actorUserId?: string;
+    }>(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
+
+    const nextStatus = body.value.status ?? body.value.state;
+    if (!nextStatus) return jsonResponse(422, { message: 'status is required.' });
+    if (!isWoOperationStatus(nextStatus)) {
+      return jsonResponse(422, { message: `Invalid operation status: ${nextStatus}` });
+    }
+
+    const blockingReason = body.value.blockingReason?.trim();
+    if (nextStatus === 'BLOCKED' && !blockingReason) {
+      return jsonResponse(422, {
+        message: 'blockingReason is required when blocking an operation.',
+      });
+    }
+
+    const operation = await getPrisma().woOperation.findUnique({
+      where: { id: operationId },
+      include: {
+        workOrder: { select: { id: true, status: true, completedAt: true, updatedAt: true } },
+      },
+    });
+    if (!operation || operation.workOrderId !== workOrderId) {
+      return jsonResponse(404, { message: `Operation not found: ${operationId}` });
+    }
+
+    const workOrderStatus = mapWoStatus(operation.workOrder.status);
+    if (['COMPLETED', 'CANCELLED'].includes(workOrderStatus)) {
+      return jsonResponse(409, {
+        message: `Cannot change operations on ${workOrderStatus.toLowerCase()} work orders.`,
+      });
+    }
+
+    const currentStatus = operation.operationStatus;
+    if (!isWoOperationStatus(currentStatus)) {
+      return jsonResponse(409, { message: `Operation has unsupported status: ${currentStatus}` });
+    }
+
+    if (currentStatus === nextStatus) {
+      return jsonResponse(200, {
+        operation: toOperationChecklistResponse(operation),
+        workOrder: {
+          id: operation.workOrder.id,
+          status: workOrderStatus,
+          completedAt: optionalIso(operation.workOrder.completedAt),
+          updatedAt: optionalIso(operation.workOrder.updatedAt),
+        },
+      });
+    }
+
+    const allowedTransitions = WO_OPERATION_TRANSITIONS[currentStatus];
+    if (!allowedTransitions.includes(nextStatus)) {
+      return jsonResponse(409, {
+        message: `Cannot transition operation from ${currentStatus} to ${nextStatus}.`,
+        allowedTransitions,
+      });
+    }
+
+    const now = new Date();
+    const updatedOperation = await getPrisma().woOperation.update({
+      where: { id: operationId },
+      data: {
+        operationStatus: nextStatus,
+        updatedAt: now,
+        correlationId: ctx.correlationId,
+        version: { increment: 1 },
+        ...(nextStatus === 'IN_PROGRESS' && !operation.actualStartAt
+          ? { actualStartAt: now }
+          : {}),
+        ...(TERMINAL_WO_OPERATION_STATUSES.includes(nextStatus) ? { actualEndAt: now } : {}),
+        ...(nextStatus === 'BLOCKED'
+          ? { blockingReason }
+          : currentStatus === 'BLOCKED'
+            ? { blockingReason: null }
+            : {}),
+      },
+    });
+
+    const operations = await getPrisma().woOperation.findMany({
+      where: { workOrderId },
+      select: { operationStatus: true },
+    });
+    const nextWorkOrderStatus = deriveWoStatusFromOperations(workOrderStatus, operations);
+    let updatedWorkOrder: {
+      id: string;
+      status: string;
+      completedAt?: Date | null;
+      updatedAt?: Date | null;
+    } = {
+      id: operation.workOrder.id,
+      status: workOrderStatus,
+      completedAt: operation.workOrder.completedAt,
+      updatedAt: operation.workOrder.updatedAt,
+    };
+
+    if (nextWorkOrderStatus !== workOrderStatus) {
+      updatedWorkOrder = await getPrisma().woOrder.update({
+        where: { id: workOrderId },
+        data: {
+          status: nextWorkOrderStatus,
+          updatedAt: now,
+          completedAt: nextWorkOrderStatus === 'COMPLETED' ? now : undefined,
+          correlationId: ctx.correlationId,
+          version: { increment: 1 },
+        },
+        select: { id: true, status: true, completedAt: true, updatedAt: true },
+      });
+
+      const actorUserId = uuidOrNull(body.value.actorUserId) ?? uuidOrNull(ctx.actorUserId);
+      await getPrisma().woStatusHistory.create({
+        data: {
+          id: randomUUID(),
+          workOrderId,
+          fromStatus: workOrderStatus,
+          toStatus: nextWorkOrderStatus,
+          reasonCode: body.value.reasonCode?.trim() || `OPERATION_${nextStatus}`,
+          reasonNote: body.value.reasonNote?.trim() || blockingReason,
+          ...(actorUserId ? { actorUserId } : {}),
+          correlationId: ctx.correlationId,
+        },
+      });
+    }
+
+    return jsonResponse(200, {
+      operation: toOperationChecklistResponse(updatedOperation),
+      workOrder: {
+        id: updatedWorkOrder.id,
+        status: mapWoStatus(updatedWorkOrder.status),
+        completedAt: optionalIso(updatedWorkOrder.completedAt),
+        updatedAt: optionalIso(updatedWorkOrder.updatedAt),
+      },
+    });
+  },
+  { requireAuth: false },
+);
 
 export const listWoQueueHandler = wrapHandler(
   async (ctx) => {

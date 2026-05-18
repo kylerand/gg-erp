@@ -96,6 +96,8 @@ test('work-order detail page wires live execution panels', () => {
     'createLaborTimeEntry',
     'listWorkOrderQcGates',
     'submitWorkOrderQcGates',
+    'transitionWoOperation',
+    'getOperationActions',
     'CustomerProfileDrawer',
     'CartProfileDrawer',
     'SalesContextPanel',

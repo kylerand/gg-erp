@@ -209,6 +209,7 @@ test('dashboard KPI cards deep-link to filtered destination views', () => {
 
 test('reporting catalog is registry-backed with filtered drill-through destinations', () => {
   const reportingSource = readSource('app/reporting/page.tsx');
+  const reportingExportSource = readSource('app/reporting/ReportingExportActions.tsx');
   const assignmentsSource = readSource('app/training/assignments/page.tsx');
   const auditSource = readSource('app/admin/audit/page.tsx');
   const reportRegistrySource = readFileSync(
@@ -224,6 +225,9 @@ test('reporting catalog is registry-backed with filtered drill-through destinati
       'report-open-accounts-receivable',
       'report-overdue-training',
       'report-audit-events',
+      'ERP_SAVED_REPORT_VIEWS',
+      'saved-report-daily-shop-pulse',
+      'saved-report-accounting-exceptions',
       '/training/assignments?status=OVERDUE',
       '/admin/audit?search=DENIED',
     ].filter((snippet) => !reportRegistrySource.includes(snippet)),
@@ -233,6 +237,9 @@ test('reporting catalog is registry-backed with filtered drill-through destinati
   assert.deepEqual(
     [
       'getLiveErpReports',
+      'getErpSavedReportViews',
+      'ReportingExportActions',
+      'Saved Views',
       'reportingHref',
       'ReportCard',
       'allowMockFallback: false',
@@ -240,6 +247,16 @@ test('reporting catalog is registry-backed with filtered drill-through destinati
       "listInventoryReservations(\n        { status: 'OPEN'",
       "listAuditEvents({ search: 'DENIED'",
     ].filter((snippet) => !reportingSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      'downloadCsv',
+      'Export visible reports',
+      'Export saved views',
+      'Copy drill-through links',
+    ].filter((snippet) => !reportingExportSource.includes(snippet)),
     [],
   );
 

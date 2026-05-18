@@ -26,6 +26,19 @@ export interface ErpReportDescriptor {
   keywords: readonly string[];
 }
 
+export interface ErpSavedReportViewDescriptor {
+  key: string;
+  label: string;
+  description: string;
+  route: string;
+  category: ErpReportCategory | 'all';
+  ownerContext: string;
+  cadence: ErpReportCadence;
+  reportKeys: readonly string[];
+  exportFilename: string;
+  keywords: readonly string[];
+}
+
 export const ERP_REPORTS = [
   {
     key: 'report-work-order-blockers',
@@ -182,6 +195,62 @@ export const ERP_REPORTS = [
   },
 ] as const satisfies readonly ErpReportDescriptor[];
 
+export const ERP_SAVED_REPORT_VIEWS = [
+  {
+    key: 'saved-report-daily-shop-pulse',
+    label: 'Daily Shop Pulse',
+    description: 'Open blockers, active shop load, material shortages, and open reservations.',
+    route: '/reporting?category=operations',
+    category: 'operations',
+    ownerContext: 'build-planning',
+    cadence: 'daily',
+    reportKeys: [
+      'report-work-order-blockers',
+      'report-active-shop-load',
+      'report-material-shortages',
+      'report-open-reservations',
+    ],
+    exportFilename: 'daily-shop-pulse',
+    keywords: ['daily', 'shop', 'operations', 'blockers', 'shortages'],
+  },
+  {
+    key: 'saved-report-inventory-risk',
+    label: 'Inventory Risk',
+    description: 'Short parts and unfulfilled reservations that can interrupt production.',
+    route: '/reporting?category=inventory',
+    category: 'inventory',
+    ownerContext: 'inventory',
+    cadence: 'daily',
+    reportKeys: ['report-material-shortages', 'report-open-reservations'],
+    exportFilename: 'inventory-risk',
+    keywords: ['inventory', 'risk', 'shortage', 'reservation'],
+  },
+  {
+    key: 'saved-report-accounting-exceptions',
+    label: 'Accounting Exceptions',
+    description: 'Open AR and QuickBooks sync failures that need accounting follow-up.',
+    route: '/reporting?category=accounting',
+    category: 'accounting',
+    ownerContext: 'accounting',
+    cadence: 'daily',
+    reportKeys: ['report-open-accounts-receivable', 'report-quickbooks-sync-failures'],
+    exportFilename: 'accounting-exceptions',
+    keywords: ['accounting', 'quickbooks', 'ar', 'sync', 'exceptions'],
+  },
+  {
+    key: 'saved-report-compliance-review',
+    label: 'Compliance Review',
+    description: 'Training and audit signals for weekly management review.',
+    route: '/reporting?query=training',
+    category: 'all',
+    ownerContext: 'admin',
+    cadence: 'weekly',
+    reportKeys: ['report-overdue-training', 'report-audit-events'],
+    exportFilename: 'compliance-review',
+    keywords: ['training', 'audit', 'compliance', 'weekly'],
+  },
+] as const satisfies readonly ErpSavedReportViewDescriptor[];
+
 export const ERP_REPORTS_BY_KEY = Object.fromEntries(
   ERP_REPORTS.map((report) => [report.key, report]),
 ) as Record<(typeof ERP_REPORTS)[number]['key'], (typeof ERP_REPORTS)[number]>;
@@ -198,4 +267,8 @@ export function getLiveErpReportsByCategory(
   category: ErpReportCategory,
 ): readonly ErpReportDescriptor[] {
   return getLiveErpReports().filter((report) => report.category === category);
+}
+
+export function getErpSavedReportViews(): readonly ErpSavedReportViewDescriptor[] {
+  return ERP_SAVED_REPORT_VIEWS;
 }

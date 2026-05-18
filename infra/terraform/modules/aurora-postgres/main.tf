@@ -52,6 +52,12 @@ variable "deletion_protection" {
   description = "Enable deletion protection (set true for prod)"
 }
 
+variable "engine_version" {
+  type        = string
+  default     = "15.15"
+  description = "Aurora PostgreSQL engine version. Keep aligned with the live cluster to avoid downgrade plans."
+}
+
 resource "random_password" "db_master" {
   length           = 32
   special          = true
@@ -91,7 +97,7 @@ resource "aws_db_subnet_group" "main" {
 resource "aws_rds_cluster" "main" {
   cluster_identifier     = "${var.name_prefix}-aurora"
   engine                 = "aurora-postgresql"
-  engine_version         = "15.8"
+  engine_version         = var.engine_version
   database_name          = var.db_name
   master_username        = var.db_username
   master_password        = random_password.db_master.result

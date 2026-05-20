@@ -2,8 +2,15 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { getQuote, sendQuote, acceptQuote, rejectQuote, type Quote } from '@/lib/api-client';
-import { erpRoute } from '@/lib/erp-routes';
+import {
+  getQuote,
+  sendQuote,
+  acceptQuote,
+  convertQuoteToWorkOrder,
+  rejectQuote,
+  type Quote,
+} from '@/lib/api-client';
+import { erpRoute, erpRecordRoute } from '@/lib/erp-routes';
 import { PageHeader, LoadingSkeleton } from '@gg-erp/ui';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -20,11 +27,17 @@ export default function QuoteDetailPage() {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [convertedWorkOrder, setConvertedWorkOrder] = useState<{
+    id: string;
+    workOrderNumber: string;
+    title: string;
+    status: string;
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getQuote(params.id);
+      const data = await getQuote(params.id, { allowMockFallback: false });
       setQuote(data);
     } finally {
       setLoading(false);
@@ -66,6 +79,17 @@ export default function QuoteDetailPage() {
     }
   };
 
+  const handleConvertToWorkOrder = async () => {
+    setActionLoading(true);
+    try {
+      const result = await convertQuoteToWorkOrder(params.id);
+      setQuote(result.quote);
+      setConvertedWorkOrder(result.workOrder);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div>
@@ -86,6 +110,7 @@ export default function QuoteDetailPage() {
 
   const statusColor = STATUS_COLORS[quote.status] ?? 'bg-gray-100 text-gray-700';
   const lines = quote.lines ?? [];
+  const convertedWorkOrderId = convertedWorkOrder?.id ?? quote.convertedWoId;
 
   return (
     <div>
@@ -138,6 +163,29 @@ export default function QuoteDetailPage() {
         <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
           <div className="text-xs text-gray-500 mb-1">Notes</div>
           <p className="text-sm text-gray-700">{quote.notes}</p>
+        </div>
+      )}
+
+      {convertedWorkOrderId && (
+        <div className="bg-green-50 rounded-lg border border-green-200 p-4 mb-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-green-700">
+                Work order created
+              </div>
+              <div className="text-sm text-green-900 mt-1">
+                {convertedWorkOrder
+                  ? `${convertedWorkOrder.workOrderNumber} is ready for shop execution.`
+                  : 'This quote has been converted and is ready for shop execution.'}
+              </div>
+            </div>
+            <Link
+              href={erpRecordRoute('work-order', convertedWorkOrderId)}
+              className="inline-flex items-center justify-center rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-green-800"
+            >
+              View Work Order
+            </Link>
+          </div>
         </div>
       )}
 
@@ -234,9 +282,26 @@ export default function QuoteDetailPage() {
           </>
         )}
         {quote.status === 'ACCEPTED' && (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
-            Accepted
-          </span>
+          <>
+            <button
+              onClick={handleConvertToWorkOrder}
+              disabled={actionLoading || Boolean(convertedWorkOrderId)}
+              className="bg-purple-700 hover:bg-purple-800 disabled:opacity-50 text-white font-semibold px-4 py-2 rounded-lg text-sm transition-colors"
+            >
+              {actionLoading ? 'Creating Work Order...' : 'Convert to Work Order'}
+            </button>
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
+              Accepted
+            </span>
+          </>
+        )}
+        {quote.status === 'CONVERTED' && convertedWorkOrderId && (
+          <Link
+            href={erpRecordRoute('work-order', convertedWorkOrderId)}
+            className="bg-purple-700 hover:bg-purple-800 text-white font-semibold px-4 py-2 rounded-lg text-sm transition-colors"
+          >
+            Open Work Order
+          </Link>
         )}
       </div>
     </div>

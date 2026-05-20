@@ -154,6 +154,7 @@ import {
   updateQuoteLinesHandler,
   sendQuoteHandler,
   acceptQuoteHandler,
+  convertQuoteToWorkOrderHandler,
   rejectQuoteHandler,
   listActivitiesHandler,
   createActivityHandler,
@@ -597,6 +598,8 @@ async function route(
     result = await sendQuoteHandler({ ...event, pathParameters: { id: salesQuoteMatch[1] } });
   } else if (salesQuoteMatch && pathname.endsWith('/accept') && method === 'POST') {
     result = await acceptQuoteHandler({ ...event, pathParameters: { id: salesQuoteMatch[1] } });
+  } else if (salesQuoteMatch && pathname.endsWith('/convert-to-work-order') && method === 'POST') {
+    result = await convertQuoteToWorkOrderHandler({ ...event, pathParameters: { id: salesQuoteMatch[1] } });
   } else if (salesQuoteMatch && pathname.endsWith('/reject') && method === 'POST') {
     result = await rejectQuoteHandler({ ...event, pathParameters: { id: salesQuoteMatch[1] } });
   } else if (salesQuoteMatch && method === 'GET') {

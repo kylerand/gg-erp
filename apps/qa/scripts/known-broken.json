@@ -6,6 +6,13 @@
       "path": "/accounting/webhook",
       "expectStatus": 500,
       "note": "Webhook signature validation throws when no body/headers; needs explicit 400 path for unsigned probes."
+    },
+    {
+      "method": "POST",
+      "path": "/sales/quotes/{id}/convert-to-work-order",
+      "expectStatus": 404,
+      "expectRouteMiss": true,
+      "note": "Pending deploy for quote-to-work-order conversion route added in PR75."
     }
   ]
 }

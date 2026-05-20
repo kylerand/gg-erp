@@ -3119,8 +3119,14 @@ export async function listQuotes(
   );
 }
 
-export async function getQuote(id: string): Promise<Quote> {
-  return apiFetch(`/sales/quotes/${id}`);
+export async function getQuote(id: string, options?: ApiDataOptions): Promise<Quote> {
+  const data = await apiFetch<{ quote: Quote }>(
+    `/sales/quotes/${id}`,
+    undefined,
+    undefined,
+    options,
+  );
+  return data.quote;
 }
 
 export async function createQuote(input: {
@@ -3136,22 +3142,44 @@ export async function createQuote(input: {
     discountPercent?: number;
   }>;
 }): Promise<Quote> {
-  return apiFetch('/sales/quotes', { method: 'POST', body: JSON.stringify(input) });
+  const data = await apiFetch<{ quote: Quote }>('/sales/quotes', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return data.quote;
 }
 
 export async function sendQuote(id: string): Promise<Quote> {
-  return apiFetch(`/sales/quotes/${id}/send`, { method: 'POST' });
+  const data = await apiFetch<{ quote: Quote }>(`/sales/quotes/${id}/send`, { method: 'POST' });
+  return data.quote;
 }
 
 export async function acceptQuote(id: string): Promise<Quote> {
-  return apiFetch(`/sales/quotes/${id}/accept`, { method: 'POST' });
+  const data = await apiFetch<{ quote: Quote }>(`/sales/quotes/${id}/accept`, { method: 'POST' });
+  return data.quote;
+}
+
+export async function convertQuoteToWorkOrder(
+  id: string,
+): Promise<{
+  quote: Quote;
+  workOrder: { id: string; workOrderNumber: string; title: string; status: string };
+  operationsCreated?: number;
+  partLinesCreated?: number;
+  alreadyConverted?: boolean;
+}> {
+  return apiFetch(`/sales/quotes/${id}/convert-to-work-order`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
 }
 
 export async function rejectQuote(id: string, reason?: string): Promise<Quote> {
-  return apiFetch(`/sales/quotes/${id}/reject`, {
+  const data = await apiFetch<{ quote: Quote }>(`/sales/quotes/${id}/reject`, {
     method: 'POST',
     body: JSON.stringify({ reason }),
   });
+  return data.quote;
 }
 
 export async function listActivities(params?: {

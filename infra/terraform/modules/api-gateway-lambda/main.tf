@@ -4944,6 +4944,45 @@ resource "aws_lambda_permission" "sales_accept_quote" {
   source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
 }
 
+resource "aws_lambda_function" "sales_convert_quote_to_work_order" {
+  function_name    = "${var.name_prefix}-sales-convert-quote-to-work-order"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "convert-quote-to-work-order.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sales-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sales_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.sales_lambda_zip_path)
+  timeout          = 30
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "sales_convert_quote_to_work_order" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.sales_convert_quote_to_work_order.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "sales_convert_quote_to_work_order" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /sales/quotes/{id}/convert-to-work-order"
+  target             = "integrations/${aws_apigatewayv2_integration.sales_convert_quote_to_work_order.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_lambda_permission" "sales_convert_quote_to_work_order" {
+  function_name = aws_lambda_function.sales_convert_quote_to_work_order.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.erp.execution_arn}/*/*"
+}
+
 resource "aws_lambda_function" "sales_reject_quote" {
   function_name    = "${var.name_prefix}-sales-reject-quote"
   role             = aws_iam_role.erp_lambda.arn

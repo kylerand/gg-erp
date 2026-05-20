@@ -9,10 +9,22 @@ import { wrapHandler, parseBody, jsonResponse } from '../../shared/lambda/index.
 // ---------------------------------------------------------------------------
 
 let salesPrisma: PrismaClient | undefined;
+let salesPrismaOverride: Partial<PrismaClient> | undefined;
 
 function getSalesPrisma(): PrismaClient {
+  if (salesPrismaOverride) return salesPrismaOverride as PrismaClient;
   salesPrisma ??= new PrismaClient();
   return salesPrisma;
+}
+
+export function setSalesHandlerPrismaForTests(client: Partial<PrismaClient> | undefined): void {
+  salesPrismaOverride = client;
+}
+
+export async function disconnectSalesHandlerDependencies(): Promise<void> {
+  await salesPrisma?.$disconnect();
+  salesPrisma = undefined;
+  salesPrismaOverride = undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -312,8 +324,23 @@ function generateQuoteNumber(): string {
   return `Q-${ymd}-${hex}`;
 }
 
+function generateWorkOrderNumber(quoteNumber: string, quoteId: string): string {
+  const quoteSuffix = quoteNumber.replace(/^Q-/i, '').replace(/[^a-z0-9-]/gi, '').slice(0, 24);
+  return `WO-${quoteSuffix || 'QUOTE'}-${quoteId.slice(0, 4)}`.toUpperCase();
+}
+
 function computeLineTotal(qty: number, price: number, discountPct: number): number {
   return qty * price * (1 - discountPct / 100);
+}
+
+function clampPriority(value: number | undefined): number {
+  if (value == null || Number.isNaN(value)) return 3;
+  return Math.min(5, Math.max(1, Math.round(value)));
+}
+
+function parseOptionalBody<T>(event: Parameters<typeof parseBody<T>>[0]): { ok: true; value: Partial<T> } | { ok: false; error: string } {
+  if (!event.body?.trim()) return { ok: true, value: {} };
+  return parseBody<Partial<T>>(event);
 }
 
 // ---------------------------------------------------------------------------
@@ -639,6 +666,208 @@ export const acceptQuoteHandler = wrapHandler(
     }
 
     return jsonResponse(200, { quote: toQuoteResponse(updated as unknown as Record<string, unknown>) });
+  },
+  { requireAuth: true },
+);
+
+interface ConvertQuoteBody {
+  title?: string;
+  description?: string;
+  dueAt?: string;
+  assetReference?: string;
+  stockLocationId?: string;
+  priority?: number;
+}
+
+export const convertQuoteToWorkOrderHandler = wrapHandler(
+  async (ctx) => {
+    const id = ctx.event.pathParameters?.id;
+    if (!id) return jsonResponse(400, { message: 'Quote ID is required.' });
+
+    const body = parseOptionalBody<ConvertQuoteBody>(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
+
+    const prisma = getSalesPrisma();
+    const quote = await prisma.quote.findUnique({
+      where: { id },
+      include: { lines: { orderBy: { sortOrder: 'asc' } } },
+    });
+
+    if (!quote) return jsonResponse(404, { message: `Quote not found: ${id}` });
+
+    if (quote.convertedWoId) {
+      const workOrder = await prisma.woOrder.findUnique({
+        where: { id: quote.convertedWoId },
+        select: { id: true, workOrderNumber: true, title: true, status: true },
+      });
+      return jsonResponse(200, {
+        quote: toQuoteResponse(quote as unknown as Record<string, unknown>),
+        workOrder,
+        alreadyConverted: true,
+      });
+    }
+
+    if (quote.status !== 'ACCEPTED') {
+      return jsonResponse(409, {
+        message: 'Only ACCEPTED quotes can be converted to work orders.',
+        requiredStatus: 'ACCEPTED',
+        currentStatus: quote.status,
+      });
+    }
+
+    const partIds = Array.from(
+      new Set(
+        quote.lines
+          .map((line) => line.partId)
+          .filter((partId): partId is string => Boolean(partId)),
+      ),
+    );
+    if (partIds.length > 0) {
+      const parts = await prisma.part.findMany({
+        where: { id: { in: partIds } },
+        select: { id: true },
+      });
+      const validPartIds = new Set(parts.map((part) => part.id));
+      const invalidPartIds = partIds.filter((partId) => !validPartIds.has(partId));
+      if (invalidPartIds.length > 0) {
+        return jsonResponse(422, {
+          message: 'Quote contains part lines that do not exist in inventory.',
+          invalidPartIds,
+        });
+      }
+    }
+
+    const now = new Date();
+    const workOrderId = randomUUID();
+    const operationRows = (quote.lines.length > 0 ? quote.lines : [{ description: `Review quote ${quote.quoteNumber}`, quantity: 1 }]).map(
+      (line, idx) => ({
+        id: randomUUID(),
+        workOrderId,
+        operationCode: `QUOTE-L${String(idx + 1).padStart(2, '0')}`,
+        sequenceNo: (idx + 1) * 10,
+        operationName: line.description.trim() || `Quote line ${idx + 1}`,
+        estimatedMinutes: 60,
+        operationStatus: 'READY' as const,
+        correlationId: ctx.correlationId,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+    const operationIdByLineIndex = new Map(operationRows.map((operation, idx) => [idx, operation.id]));
+    const partRows = quote.lines
+      .map((line, idx) => ({ line, idx }))
+      .filter(({ line }) => Boolean(line.partId))
+      .map(({ line, idx }) => ({
+        id: randomUUID(),
+        workOrderId,
+        workOrderOperationId: operationIdByLineIndex.get(idx) ?? null,
+        partId: line.partId as string,
+        requestedQuantity: line.quantity,
+        reservedQuantity: 0,
+        consumedQuantity: 0,
+        partStatus: 'REQUESTED' as const,
+        correlationId: ctx.correlationId,
+        createdAt: now,
+        updatedAt: now,
+      }));
+    const workOrderNumber = generateWorkOrderNumber(quote.quoteNumber, quote.id);
+    const bodyValue = body.value;
+    const title = bodyValue.title?.trim() || `Accepted quote ${quote.quoteNumber}`;
+    const defaultDescription = [
+      `Converted from sales quote ${quote.quoteNumber}.`,
+      `Quote total: $${Number(quote.total).toFixed(2)}.`,
+      quote.notes?.trim() ? `Notes: ${quote.notes.trim()}` : undefined,
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const result = await prisma.$transaction(async (tx) => {
+      const workOrder = await tx.woOrder.create({
+        data: {
+          id: workOrderId,
+          workOrderNumber,
+          customerReference: quote.customerId,
+          assetReference: bodyValue.assetReference?.trim() || null,
+          title,
+          description: bodyValue.description?.trim() || defaultDescription,
+          status: 'READY' as const,
+          priority: clampPriority(bodyValue.priority),
+          stockLocationId: bodyValue.stockLocationId || null,
+          dueAt: bodyValue.dueAt ? new Date(bodyValue.dueAt) : quote.validUntil,
+          createdByUserId: ctx.actorUserId!,
+          updatedByUserId: ctx.actorUserId!,
+          correlationId: ctx.correlationId,
+          openedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        },
+        select: { id: true, workOrderNumber: true, title: true, status: true },
+      });
+
+      await tx.woOperation.createMany({ data: operationRows });
+      if (partRows.length > 0) {
+        await tx.woPartLine.createMany({ data: partRows });
+      }
+      await tx.woStatusHistory.create({
+        data: {
+          id: randomUUID(),
+          workOrderId,
+          fromStatus: null,
+          toStatus: 'READY',
+          reasonCode: 'QUOTE_CONVERTED',
+          reasonNote: `Converted from quote ${quote.quoteNumber}`,
+          actorUserId: ctx.actorUserId!,
+          correlationId: ctx.correlationId,
+          createdAt: now,
+        },
+      });
+
+      if (quote.opportunityId) {
+        await tx.salesOpportunity.update({
+          where: { id: quote.opportunityId },
+          data: {
+            stage: 'CLOSED_WON' as const,
+            probability: 100,
+            wonWorkOrderId: workOrderId,
+            updatedAt: now,
+            version: { increment: 1 },
+          },
+        });
+      }
+
+      await tx.salesActivity.create({
+        data: {
+          id: randomUUID(),
+          opportunityId: quote.opportunityId,
+          customerId: quote.customerId,
+          activityType: 'NOTE' as const,
+          subject: `Quote ${quote.quoteNumber} converted to ${workOrder.workOrderNumber}`,
+          body: `${operationRows.length} operation${operationRows.length === 1 ? '' : 's'} and ${partRows.length} part demand line${partRows.length === 1 ? '' : 's'} created.`,
+          createdByUserId: ctx.actorUserId ?? null,
+          createdAt: now,
+        },
+      });
+
+      const updatedQuote = await tx.quote.update({
+        where: { id },
+        data: {
+          status: 'CONVERTED' as const,
+          convertedWoId: workOrderId,
+          updatedAt: now,
+          version: { increment: 1 },
+        },
+        include: { lines: { orderBy: { sortOrder: 'asc' } } },
+      });
+
+      return { quote: updatedQuote, workOrder };
+    });
+
+    return jsonResponse(201, {
+      quote: toQuoteResponse(result.quote as unknown as Record<string, unknown>),
+      workOrder: result.workOrder,
+      operationsCreated: operationRows.length,
+      partLinesCreated: partRows.length,
+    });
   },
   { requireAuth: true },
 );

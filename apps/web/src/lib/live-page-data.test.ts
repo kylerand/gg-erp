@@ -28,6 +28,7 @@ const truthCriticalPages = [
   'app/training/my-ojt/page.tsx',
   'app/work-orders/[id]/page.tsx',
   'app/work-orders/new/page.tsx',
+  'app/sales/quotes/[id]/page.tsx',
   'app/sales/quotes/new/page.tsx',
 ] as const;
 
@@ -148,6 +149,21 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
   );
 
   assert.deepEqual(rawIdUses, []);
+});
+
+test('quote detail exposes live conversion into shop execution', () => {
+  const source = readSource('app/sales/quotes/[id]/page.tsx');
+  const requiredCalls = [
+    'convertQuoteToWorkOrder',
+    "erpRecordRoute('work-order'",
+    'Convert to Work Order',
+    'allowMockFallback: false',
+  ];
+
+  assert.deepEqual(
+    requiredCalls.filter((call) => !source.includes(call)),
+    [],
+  );
 });
 
 test('dashboard KPI cards deep-link to filtered destination views', () => {

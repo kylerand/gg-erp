@@ -198,6 +198,7 @@ const lambdas: LambdaEntry[] = [
   { context: 'sales', handler: 'update-quote-lines',      entry: 'apps/api/src/lambda/sales/update-quote-lines.handler.ts' },
   { context: 'sales', handler: 'send-quote',              entry: 'apps/api/src/lambda/sales/send-quote.handler.ts' },
   { context: 'sales', handler: 'accept-quote',            entry: 'apps/api/src/lambda/sales/accept-quote.handler.ts' },
+  { context: 'sales', handler: 'convert-quote-to-work-order', entry: 'apps/api/src/lambda/sales/convert-quote-to-work-order.handler.ts' },
   { context: 'sales', handler: 'reject-quote',            entry: 'apps/api/src/lambda/sales/reject-quote.handler.ts' },
   { context: 'sales', handler: 'list-activities',         entry: 'apps/api/src/lambda/sales/list-activities.handler.ts' },
   { context: 'sales', handler: 'create-activity',         entry: 'apps/api/src/lambda/sales/create-activity.handler.ts' },

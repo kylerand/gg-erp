@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import {
   Ban,
   Car,
+  Check,
   CheckCircle2,
   CircleSlash,
   ClipboardCheck,
@@ -18,6 +19,7 @@ import {
   MessageCircle,
   Package,
   PackageCheck,
+  Pencil,
   Phone,
   Play,
   Printer,
@@ -29,6 +31,7 @@ import {
   Undo2,
   UserRound,
   Wrench,
+  X,
 } from 'lucide-react';
 import {
   consumeInventoryReservation,
@@ -41,12 +44,18 @@ import {
   releaseInventoryReservation,
   submitWorkOrderQcGates,
   transitionWoOperation,
+  updateCartVehicle,
+  updateCustomer,
   type InventoryLot,
   type InventoryReservation,
   type LaborTimeEntry,
   type QcGateResult,
+  type CartVehicleState,
   type SubmitWorkOrderQcResponse,
+  type UpdateCustomerInput,
   type WoOrderDetail,
+  type WoOrderCartProfile,
+  type WoOrderCustomerProfile,
   type WoOrderPartLine,
   type WoOperationStatus,
   type WorkOrderQcGate,
@@ -77,6 +86,24 @@ interface TimeDraft {
   description: string;
 }
 
+interface CustomerProfileDraft {
+  fullName: string;
+  companyName: string;
+  email: string;
+  phone: string;
+  preferredContactMethod: 'EMAIL' | 'PHONE' | 'SMS';
+  billingAddress: string;
+  shippingAddress: string;
+}
+
+interface CartProfileDraft {
+  vin: string;
+  serialNumber: string;
+  modelCode: string;
+  modelYear: string;
+  state: CartVehicleState;
+}
+
 interface ExecutionErrors {
   time?: string;
   qc?: string;
@@ -85,6 +112,9 @@ interface ExecutionErrors {
 type QcOutcome =
   | { status: 'PASSED' }
   | { status: 'FAILED'; openReworkCount: number; reworkLoopCount: number };
+
+const CONTACT_METHOD_OPTIONS = ['EMAIL', 'PHONE', 'SMS'] as const;
+const CART_STATE_OPTIONS = ['REGISTERED', 'IN_BUILD', 'QUALITY_HOLD', 'COMPLETED', 'RETIRED'] as const;
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Request failed.';
@@ -130,6 +160,38 @@ function qcStatusFromResponse(response: SubmitWorkOrderQcResponse): 'PASSED' | '
 
 function displayStatus(value: string): string {
   return value.replace(/_/g, ' ');
+}
+
+function optionalText(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function customerDraftFromProfile(profile: WoOrderCustomerProfile): CustomerProfileDraft {
+  return {
+    fullName: profile.fullName,
+    companyName: profile.companyName ?? '',
+    email: profile.email,
+    phone: profile.phone ?? '',
+    preferredContactMethod: CONTACT_METHOD_OPTIONS.includes(
+      profile.preferredContactMethod as CustomerProfileDraft['preferredContactMethod'],
+    )
+      ? (profile.preferredContactMethod as CustomerProfileDraft['preferredContactMethod'])
+      : 'EMAIL',
+    billingAddress: profile.billingAddress ?? '',
+    shippingAddress: profile.shippingAddress ?? '',
+  };
+}
+
+function cartDraftFromProfile(profile: WoOrderCartProfile): CartProfileDraft {
+  const state = profile.state as CartVehicleState;
+  return {
+    vin: profile.vin,
+    serialNumber: profile.serialNumber,
+    modelCode: profile.modelCode,
+    modelYear: String(profile.modelYear),
+    state: CART_STATE_OPTIONS.includes(state) ? state : 'REGISTERED',
+  };
 }
 
 function customerDisplayName(workOrder: WoOrderDetail): string {
@@ -714,8 +776,8 @@ export default function WorkOrderDetailPage() {
         </div>
 
         <aside className="space-y-4">
-          <CustomerProfileDrawer workOrder={workOrder} />
-          <CartProfileDrawer workOrder={workOrder} />
+          <CustomerProfileDrawer workOrder={workOrder} onUpdated={load} />
+          <CartProfileDrawer workOrder={workOrder} onUpdated={load} />
           <SalesContextPanel workOrder={workOrder} />
 
           <section id="messages" className="rounded-lg border border-gray-200 bg-white p-4">
@@ -1026,13 +1088,66 @@ function PanelError({ message, onRetry }: { message: string; onRetry: () => void
   );
 }
 
-function CustomerProfileDrawer({ workOrder }: { workOrder: WoOrderDetail }) {
+function CustomerProfileDrawer({
+  workOrder,
+  onUpdated,
+}: {
+  workOrder: WoOrderDetail;
+  onUpdated: () => Promise<void>;
+}) {
   const profile = workOrder.customerProfile;
   const searchValue =
     profile?.externalReference ??
     profile?.fullName ??
     workOrder.customerReference ??
     workOrder.customer;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<CustomerProfileDraft | null>(
+    profile ? customerDraftFromProfile(profile) : null,
+  );
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  function beginEdit() {
+    if (!profile) return;
+    setDraft(customerDraftFromProfile(profile));
+    setSaveError(null);
+    setEditing(true);
+  }
+
+  async function saveCustomerProfile() {
+    if (!profile || !draft) return;
+    if (!draft.fullName.trim()) {
+      setSaveError('Customer name is required.');
+      return;
+    }
+    if (!draft.email.trim()) {
+      setSaveError('Customer email is required.');
+      return;
+    }
+
+    const payload: UpdateCustomerInput = {
+      fullName: draft.fullName.trim(),
+      companyName: optionalText(draft.companyName),
+      email: draft.email.trim(),
+      phone: optionalText(draft.phone),
+      preferredContactMethod: draft.preferredContactMethod,
+      billingAddress: optionalText(draft.billingAddress),
+      shippingAddress: optionalText(draft.shippingAddress),
+    };
+
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await updateCustomer(profile.id, payload);
+      setEditing(false);
+      await onUpdated();
+    } catch (err) {
+      setSaveError(errorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <details id="commercial" open className="rounded-lg border border-gray-200 bg-white p-4">
@@ -1046,40 +1161,195 @@ function CustomerProfileDrawer({ workOrder }: { workOrder: WoOrderDetail }) {
       <div className="mt-4 space-y-3 text-sm">
         {profile ? (
           <>
-            <div>
-              <div className="font-semibold text-gray-900">
-                {profile.companyName ?? profile.fullName}
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="font-semibold text-gray-900">
+                  {profile.companyName ?? profile.fullName}
+                </div>
+                {profile.companyName && (
+                  <div className="text-xs text-gray-500">{profile.fullName}</div>
+                )}
               </div>
-              {profile.companyName && (
-                <div className="text-xs text-gray-500">{profile.fullName}</div>
+              {!editing && (
+                <Button type="button" size="sm" variant="outline" onClick={beginEdit}>
+                  <Pencil size={14} />
+                  Edit
+                </Button>
               )}
             </div>
-            <DetailLine label="Lifecycle" value={displayStatus(profile.state)} />
-            <DetailLine label="Preferred" value={profile.preferredContactMethod} />
-            {profile.externalReference && (
-              <DetailLine label="External Ref" value={profile.externalReference} />
+            {editing && draft ? (
+              <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/40 p-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Name
+                    </span>
+                    <Input
+                      value={draft.fullName}
+                      onChange={(event) =>
+                        setDraft((current) =>
+                          current ? { ...current, fullName: event.target.value } : current,
+                        )
+                      }
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Company
+                    </span>
+                    <Input
+                      value={draft.companyName}
+                      onChange={(event) =>
+                        setDraft((current) =>
+                          current ? { ...current, companyName: event.target.value } : current,
+                        )
+                      }
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Email
+                    </span>
+                    <Input
+                      type="email"
+                      value={draft.email}
+                      onChange={(event) =>
+                        setDraft((current) =>
+                          current ? { ...current, email: event.target.value } : current,
+                        )
+                      }
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Phone
+                    </span>
+                    <Input
+                      value={draft.phone}
+                      onChange={(event) =>
+                        setDraft((current) =>
+                          current ? { ...current, phone: event.target.value } : current,
+                        )
+                      }
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Preferred
+                    </span>
+                    <select
+                      className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
+                      value={draft.preferredContactMethod}
+                      onChange={(event) =>
+                        setDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                preferredContactMethod: event.target
+                                  .value as CustomerProfileDraft['preferredContactMethod'],
+                              }
+                            : current,
+                        )
+                      }
+                    >
+                      {CONTACT_METHOD_OPTIONS.map((method) => (
+                        <option key={method} value={method}>
+                          {method}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <label className="block space-y-1">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Billing Address
+                  </span>
+                  <Textarea
+                    rows={2}
+                    value={draft.billingAddress}
+                    onChange={(event) =>
+                      setDraft((current) =>
+                        current ? { ...current, billingAddress: event.target.value } : current,
+                      )
+                    }
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Shipping Address
+                  </span>
+                  <Textarea
+                    rows={2}
+                    value={draft.shippingAddress}
+                    onChange={(event) =>
+                      setDraft((current) =>
+                        current ? { ...current, shippingAddress: event.target.value } : current,
+                      )
+                    }
+                  />
+                </label>
+                {saveError && <p className="text-xs text-red-700">{saveError}</p>}
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={saveCustomerProfile}
+                    disabled={saving}
+                  >
+                    <Check size={14} />
+                    {saving ? 'Saving' : 'Save'}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setEditing(false);
+                      setSaveError(null);
+                    }}
+                    disabled={saving}
+                  >
+                    <X size={14} />
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <DetailLine label="Lifecycle" value={displayStatus(profile.state)} />
+                <DetailLine label="Preferred" value={profile.preferredContactMethod} />
+                {profile.externalReference && (
+                  <DetailLine label="External Ref" value={profile.externalReference} />
+                )}
+                {profile.billingAddress && (
+                  <DetailLine label="Billing" value={profile.billingAddress} />
+                )}
+                {profile.shippingAddress && (
+                  <DetailLine label="Shipping" value={profile.shippingAddress} />
+                )}
+                <div className="grid gap-2">
+                  <ContactLink href={`mailto:${profile.email}`} icon={Mail} label={profile.email} />
+                  {profile.phone && (
+                    <ContactLink href={`tel:${profile.phone}`} icon={Phone} label={profile.phone} />
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <LinkButton href={erpRoute('customer', { search: searchValue })}>
+                    <UserRound size={14} />
+                    Customer List
+                  </LinkButton>
+                  <LinkButton
+                    href={erpRoute('create-quote', {
+                      customerId: profile.id,
+                      workOrderId: workOrder.id,
+                    })}
+                  >
+                    <DollarSign size={14} />
+                    New Quote
+                  </LinkButton>
+                </div>
+              </>
             )}
-            <div className="grid gap-2">
-              <ContactLink href={`mailto:${profile.email}`} icon={Mail} label={profile.email} />
-              {profile.phone && (
-                <ContactLink href={`tel:${profile.phone}`} icon={Phone} label={profile.phone} />
-              )}
-            </div>
-            <div className="flex flex-wrap gap-2 pt-1">
-              <LinkButton href={erpRoute('customer', { search: searchValue })}>
-                <UserRound size={14} />
-                Customer List
-              </LinkButton>
-              <LinkButton
-                href={erpRoute('create-quote', {
-                  customerId: profile.id,
-                  workOrderId: workOrder.id,
-                })}
-              >
-                <DollarSign size={14} />
-                New Quote
-              </LinkButton>
-            </div>
           </>
         ) : (
           <>
@@ -1101,8 +1371,66 @@ function CustomerProfileDrawer({ workOrder }: { workOrder: WoOrderDetail }) {
   );
 }
 
-function CartProfileDrawer({ workOrder }: { workOrder: WoOrderDetail }) {
+function CartProfileDrawer({
+  workOrder,
+  onUpdated,
+}: {
+  workOrder: WoOrderDetail;
+  onUpdated: () => Promise<void>;
+}) {
   const profile = workOrder.cartProfile;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<CartProfileDraft | null>(
+    profile ? cartDraftFromProfile(profile) : null,
+  );
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  function beginEdit() {
+    if (!profile) return;
+    setDraft(cartDraftFromProfile(profile));
+    setSaveError(null);
+    setEditing(true);
+  }
+
+  async function saveCartProfile() {
+    if (!profile || !draft) return;
+    const modelYear = Number(draft.modelYear);
+    if (!draft.serialNumber.trim()) {
+      setSaveError('Cart serial number is required.');
+      return;
+    }
+    if (!draft.vin.trim()) {
+      setSaveError('Cart VIN is required.');
+      return;
+    }
+    if (!draft.modelCode.trim()) {
+      setSaveError('Cart model is required.');
+      return;
+    }
+    if (!Number.isInteger(modelYear) || modelYear < 1950 || modelYear > 2100) {
+      setSaveError('Model year must be an integer between 1950 and 2100.');
+      return;
+    }
+
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await updateCartVehicle(profile.id, {
+        vin: draft.vin.trim(),
+        serialNumber: draft.serialNumber.trim(),
+        modelCode: draft.modelCode.trim(),
+        modelYear,
+        state: draft.state,
+      });
+      setEditing(false);
+      await onUpdated();
+    } catch (err) {
+      setSaveError(errorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <details open className="rounded-lg border border-gray-200 bg-white p-4">
@@ -1116,12 +1444,127 @@ function CartProfileDrawer({ workOrder }: { workOrder: WoOrderDetail }) {
       <div className="mt-4 space-y-3 text-sm">
         {profile ? (
           <>
-            <div className="font-semibold text-gray-900">
-              {profile.modelYear} {profile.modelCode}
+            <div className="flex items-start justify-between gap-3">
+              <div className="font-semibold text-gray-900">
+                {profile.modelYear} {profile.modelCode}
+              </div>
+              {!editing && (
+                <Button type="button" size="sm" variant="outline" onClick={beginEdit}>
+                  <Pencil size={14} />
+                  Edit
+                </Button>
+              )}
             </div>
-            <DetailLine label="Serial" value={profile.serialNumber} />
-            <DetailLine label="VIN" value={profile.vin} />
-            <DetailLine label="State" value={displayStatus(profile.state)} />
+            {editing && draft ? (
+              <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/40 p-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Serial
+                    </span>
+                    <Input
+                      value={draft.serialNumber}
+                      onChange={(event) =>
+                        setDraft((current) =>
+                          current ? { ...current, serialNumber: event.target.value } : current,
+                        )
+                      }
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      VIN
+                    </span>
+                    <Input
+                      value={draft.vin}
+                      onChange={(event) =>
+                        setDraft((current) =>
+                          current ? { ...current, vin: event.target.value } : current,
+                        )
+                      }
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Model
+                    </span>
+                    <Input
+                      value={draft.modelCode}
+                      onChange={(event) =>
+                        setDraft((current) =>
+                          current ? { ...current, modelCode: event.target.value } : current,
+                        )
+                      }
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Year
+                    </span>
+                    <Input
+                      inputMode="numeric"
+                      value={draft.modelYear}
+                      onChange={(event) =>
+                        setDraft((current) =>
+                          current ? { ...current, modelYear: event.target.value } : current,
+                        )
+                      }
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      State
+                    </span>
+                    <select
+                      className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
+                      value={draft.state}
+                      onChange={(event) =>
+                        setDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                state: event.target.value as CartVehicleState,
+                              }
+                            : current,
+                        )
+                      }
+                    >
+                      {CART_STATE_OPTIONS.map((state) => (
+                        <option key={state} value={state}>
+                          {displayStatus(state)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                {saveError && <p className="text-xs text-red-700">{saveError}</p>}
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" onClick={saveCartProfile} disabled={saving}>
+                    <Check size={14} />
+                    {saving ? 'Saving' : 'Save'}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setEditing(false);
+                      setSaveError(null);
+                    }}
+                    disabled={saving}
+                  >
+                    <X size={14} />
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <DetailLine label="Serial" value={profile.serialNumber} />
+                <DetailLine label="VIN" value={profile.vin} />
+                <DetailLine label="State" value={displayStatus(profile.state)} />
+              </>
+            )}
           </>
         ) : (
           <>

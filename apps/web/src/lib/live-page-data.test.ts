@@ -101,6 +101,8 @@ test('work-order detail page wires live execution panels', () => {
     'getOperationActions',
     'CustomerProfileDrawer',
     'CartProfileDrawer',
+    'updateCustomer',
+    'updateCartVehicle',
     'SalesContextPanel',
     "erpRoute('create-quote'",
     "erpRoute('quote'",

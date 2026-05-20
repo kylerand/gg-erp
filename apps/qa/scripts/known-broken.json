@@ -6,6 +6,20 @@
       "path": "/accounting/webhook",
       "expectStatus": 500,
       "note": "Webhook signature validation throws when no body/headers; needs explicit 400 path for unsigned probes."
+    },
+    {
+      "method": "PATCH",
+      "path": "/identity/customers/{id}",
+      "expectStatus": 404,
+      "expectRouteMiss": true,
+      "note": "Pending deploy for customer profile update route added in PR77."
+    },
+    {
+      "method": "PATCH",
+      "path": "/planning/vehicles/{id}",
+      "expectStatus": 404,
+      "expectRouteMiss": true,
+      "note": "Pending deploy for cart profile update route added in PR77."
     }
   ]
 }

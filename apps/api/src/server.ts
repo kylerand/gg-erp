@@ -23,6 +23,7 @@ import {
   listCustomersHandler,
   getCustomerHandler,
   createCustomerHandler,
+  updateCustomerHandler,
   transitionCustomerStateHandler,
 } from './lambda/customers/handlers.js';
 import {
@@ -171,7 +172,7 @@ import { handler as copilotSessionDetailHandler } from './lambda/copilot/session
 import { listAuditEventsHandler } from './lambda/audit/handlers.js';
 import { listBuildSlotsHandler, listLaborCapacityHandler } from './lambda/scheduling/handlers.js';
 import { getWorkspaceTodayHandler } from './lambda/workspace/handlers.js';
-import { listVehiclesHandler } from './lambda/vehicles/handlers.js';
+import { listVehiclesHandler, updateVehicleHandler } from './lambda/vehicles/handlers.js';
 
 const env = loadApiEnv();
 const PORT = env.apiPort;
@@ -239,6 +240,7 @@ async function route(
   // ── Path parameter extraction helpers ────────────────────────────────────
   const migrationBatchMatch = pathname.match(/^\/migration\/batches\/([^/]+)/);
   const customerMatch = pathname.match(/^\/identity\/customers\/([^/]+)/);
+  const vehicleMatch = pathname.match(/^\/planning\/vehicles\/([^/]+)$/);
   const partMatch = pathname.match(/^\/inventory\/parts\/([^/]+)(?:\/([^/]+))?/);
   const purchaseOrderMatch = pathname.match(/^\/inventory\/purchase-orders\/([^/]+)$/);
   const purchaseOrderActionMatch = pathname.match(/^\/inventory\/purchase-orders\/([^/]+)\/([^/]+)$/);
@@ -293,6 +295,8 @@ async function route(
     result = await listWorkOrdersHandler(event);
   } else if (pathname === '/planning/vehicles' && method === 'GET') {
     result = await listVehiclesHandler(event);
+  } else if (vehicleMatch && method === 'PATCH') {
+    result = await updateVehicleHandler({ ...event, pathParameters: { id: vehicleMatch[1] } });
 
   // ── Customers ─────────────────────────────────────────────────────────────
   } else if (pathname === '/identity/customers' && method === 'GET') {
@@ -303,6 +307,8 @@ async function route(
     result = await createCustomerHandler(event);
   } else if (customerMatch && method === 'GET') {
     result = await getCustomerHandler({ ...event, pathParameters: { id: customerMatch[1] } });
+  } else if (customerMatch && method === 'PATCH' && !pathname.endsWith('/state')) {
+    result = await updateCustomerHandler({ ...event, pathParameters: { id: customerMatch[1] } });
   } else if (customerMatch && (
     (pathname.endsWith('/transition') && method === 'POST') ||
     (pathname.endsWith('/state') && method === 'PATCH')

@@ -42,11 +42,13 @@ const lambdas: LambdaEntry[] = [
   { context: 'work-orders', handler: 'list',        entry: 'apps/api/src/lambda/work-orders/list.handler.ts' },
   { context: 'work-orders', handler: 'transition',  entry: 'apps/api/src/lambda/work-orders/transition.handler.ts' },
   { context: 'work-orders', handler: 'list-vehicles', entry: 'apps/api/src/lambda/vehicles/list.handler.ts' },
+  { context: 'work-orders', handler: 'update-vehicle', entry: 'apps/api/src/lambda/vehicles/update.handler.ts' },
 
   // customers
   { context: 'customers', handler: 'create',      entry: 'apps/api/src/lambda/customers/create.handler.ts' },
   { context: 'customers', handler: 'get',          entry: 'apps/api/src/lambda/customers/get.handler.ts' },
   { context: 'customers', handler: 'list',          entry: 'apps/api/src/lambda/customers/list.handler.ts' },
+  { context: 'customers', handler: 'update',        entry: 'apps/api/src/lambda/customers/update.handler.ts' },
   { context: 'customers', handler: 'transition',    entry: 'apps/api/src/lambda/customers/transition.handler.ts' },
 
   // inventory

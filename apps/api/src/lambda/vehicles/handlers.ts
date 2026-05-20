@@ -37,6 +37,15 @@ function getPrisma(): PrismaClient {
   return prisma;
 }
 
+export function setVehiclesHandlerPrismaForTests(next: PrismaClient): void {
+  prisma = next;
+}
+
+export async function disconnectVehiclesHandlerDependencies(): Promise<void> {
+  await prisma?.$disconnect?.();
+  prisma = undefined;
+}
+
 const routes = createVehicleRoutes(
   new VehicleService({
     repository,
@@ -132,21 +141,107 @@ export async function listVehiclesHandler(
   ]);
 
   return json(200, {
-    items: items.map((vehicle) => ({
-      id: vehicle.id,
-      vin: vehicle.vin,
-      serialNumber: vehicle.serialNumber,
-      modelCode: vehicle.modelCode,
-      modelYear: vehicle.modelYear,
-      customerId: vehicle.customerId,
-      state: vehicle.state,
-      createdAt: vehicle.createdAt.toISOString(),
-      updatedAt: vehicle.updatedAt.toISOString(),
-    })),
+    items: items.map(toVehicleApiResponse),
     total,
     limit,
     offset,
   });
+}
+
+interface UpdateVehicleBody {
+  vin?: string;
+  serialNumber?: string;
+  modelCode?: string;
+  modelYear?: number;
+  state?: string;
+}
+
+export async function updateVehicleHandler(
+  event: ApiGatewayProxyEventLike,
+): Promise<ApiGatewayProxyResultLike> {
+  const correlationId = resolveCorrelationId(event);
+  const id = event.pathParameters?.id;
+  if (!id) {
+    return json(400, { message: 'Vehicle ID is required.', correlationId });
+  }
+
+  const parseResult = parseJsonBody<UpdateVehicleBody>(event.body);
+  if (!parseResult.ok) {
+    return json(400, { message: 'Invalid JSON payload.', correlationId });
+  }
+
+  const existing = await getPrisma().cartVehicle.findUnique({ where: { id } });
+  if (!existing) {
+    return json(404, { message: `Vehicle '${id}' not found.`, correlationId });
+  }
+
+  const patch: Record<string, unknown> = {};
+
+  if ('serialNumber' in parseResult.value) {
+    const serialNumber = parseResult.value.serialNumber?.trim();
+    if (!serialNumber) {
+      return json(422, { message: 'serialNumber cannot be empty.', correlationId });
+    }
+    const duplicate = await getPrisma().cartVehicle.findFirst({
+      where: { id: { not: id }, serialNumber },
+    });
+    if (duplicate) {
+      return json(409, { message: `Vehicle with serial number ${serialNumber} already exists.`, correlationId });
+    }
+    patch.serialNumber = serialNumber;
+  }
+
+  if ('vin' in parseResult.value) {
+    const vin = parseResult.value.vin?.trim();
+    if (!vin) {
+      return json(422, { message: 'vin cannot be empty.', correlationId });
+    }
+    const duplicate = await getPrisma().cartVehicle.findFirst({
+      where: { id: { not: id }, vin },
+    });
+    if (duplicate) {
+      return json(409, { message: `Vehicle with VIN ${vin} already exists.`, correlationId });
+    }
+    patch.vin = vin;
+  }
+
+  if ('modelCode' in parseResult.value) {
+    const modelCode = parseResult.value.modelCode?.trim();
+    if (!modelCode) {
+      return json(422, { message: 'modelCode cannot be empty.', correlationId });
+    }
+    patch.modelCode = modelCode;
+  }
+
+  if ('modelYear' in parseResult.value) {
+    const modelYear = parseResult.value.modelYear;
+    if (typeof modelYear !== 'number' || !Number.isInteger(modelYear) || modelYear < 1950 || modelYear > 2100) {
+      return json(422, { message: 'modelYear must be an integer between 1950 and 2100.', correlationId });
+    }
+    patch.modelYear = modelYear;
+  }
+
+  if ('state' in parseResult.value) {
+    const state = parseResult.value.state?.trim().toUpperCase();
+    if (!state || !Object.values(CartVehicleStatus).includes(state as CartVehicleStatus)) {
+      return json(422, { message: `Invalid vehicle state: ${parseResult.value.state}.`, correlationId });
+    }
+    patch.state = state as CartVehicleStatus;
+  }
+
+  if (Object.keys(patch).length === 0) {
+    return json(422, { message: 'At least one vehicle field is required.', correlationId });
+  }
+
+  const updated = await getPrisma().cartVehicle.update({
+    where: { id },
+    data: {
+      ...patch,
+      updatedAt: new Date(),
+    },
+  });
+
+  return json(200, { vehicle: toVehicleApiResponse(updated) });
 }
 
 function resolveCorrelationId(event: ApiGatewayProxyEventLike): string {
@@ -180,6 +275,30 @@ function parsePositiveInteger(value: string | undefined, fallback: number): numb
   if (!value) return fallback;
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function toVehicleApiResponse(vehicle: {
+  id: string;
+  vin: string;
+  serialNumber: string;
+  modelCode: string;
+  modelYear: number;
+  customerId: string;
+  state: CartVehicleStatus | string;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    id: vehicle.id,
+    vin: vehicle.vin,
+    serialNumber: vehicle.serialNumber,
+    modelCode: vehicle.modelCode,
+    modelYear: vehicle.modelYear,
+    customerId: vehicle.customerId,
+    state: vehicle.state,
+    createdAt: vehicle.createdAt.toISOString(),
+    updatedAt: vehicle.updatedAt.toISOString(),
+  };
 }
 
 function json(statusCode: number, payload: unknown): ApiGatewayProxyResultLike {

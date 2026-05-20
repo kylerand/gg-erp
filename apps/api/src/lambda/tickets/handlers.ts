@@ -631,6 +631,8 @@ interface WorkOrderCommercialContext {
     companyName?: string;
     email: string;
     phone?: string;
+    billingAddress?: string;
+    shippingAddress?: string;
     state: string;
     preferredContactMethod: string;
     externalReference?: string;
@@ -773,6 +775,8 @@ function toCustomerProfileResponse(r: {
   companyName?: string | null;
   email: string;
   phone?: string | null;
+  billingAddress?: string | null;
+  shippingAddress?: string | null;
   state: string;
   preferredContactMethod: string;
   externalReference?: string | null;
@@ -783,6 +787,8 @@ function toCustomerProfileResponse(r: {
     companyName: r.companyName ?? undefined,
     email: r.email,
     phone: r.phone ?? undefined,
+    billingAddress: r.billingAddress ?? undefined,
+    shippingAddress: r.shippingAddress ?? undefined,
     state: r.state,
     preferredContactMethod: r.preferredContactMethod,
     externalReference: r.externalReference ?? undefined,

@@ -373,6 +373,14 @@ export interface CartVehicle {
   updatedAt: string;
 }
 
+export interface UpdateCartVehicleInput {
+  vin?: string;
+  serialNumber?: string;
+  modelCode?: string;
+  modelYear?: number;
+  state?: CartVehicleState;
+}
+
 export const MOCK_WORK_ORDERS: WorkOrder[] = [
   {
     id: 'wo-1',
@@ -460,6 +468,17 @@ export async function listCartVehicles(
     { items: [], total: 0, limit: params?.limit ?? 25, offset: params?.offset ?? 0 },
     options,
   );
+}
+
+export async function updateCartVehicle(
+  id: string,
+  input: UpdateCartVehicleInput,
+): Promise<CartVehicle> {
+  const data = await apiFetch<{ vehicle: CartVehicle }>(`/planning/vehicles/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return data.vehicle;
 }
 
 export async function transitionWorkOrderState(
@@ -551,6 +570,8 @@ export interface WoOrderCustomerProfile {
   companyName?: string;
   email: string;
   phone?: string;
+  billingAddress?: string;
+  shippingAddress?: string;
   state: string;
   preferredContactMethod: string;
   externalReference?: string;
@@ -913,6 +934,8 @@ export interface Customer {
   companyName?: string;
   email: string;
   phone?: string;
+  billingAddress?: string;
+  shippingAddress?: string;
   state: 'LEAD' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
   preferredContactMethod: 'EMAIL' | 'PHONE' | 'SMS';
   externalReference?: string;
@@ -925,7 +948,20 @@ export interface CreateCustomerInput {
   email: string;
   companyName?: string;
   phone?: string;
+  billingAddress?: string;
+  shippingAddress?: string;
   preferredContactMethod?: 'EMAIL' | 'PHONE' | 'SMS';
+}
+
+export interface UpdateCustomerInput {
+  fullName?: string;
+  email?: string;
+  companyName?: string | null;
+  phone?: string | null;
+  billingAddress?: string | null;
+  shippingAddress?: string | null;
+  preferredContactMethod?: Customer['preferredContactMethod'];
+  externalReference?: string | null;
 }
 
 export const MOCK_CUSTOMERS: Customer[] = [
@@ -997,6 +1033,14 @@ export async function getCustomer(id: string, options?: ApiDataOptions): Promise
 export async function createCustomer(input: CreateCustomerInput): Promise<Customer> {
   const data = await apiFetch<{ customer: Customer }>('/identity/customers', {
     method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return data.customer;
+}
+
+export async function updateCustomer(id: string, input: UpdateCustomerInput): Promise<Customer> {
+  const data = await apiFetch<{ customer: Customer }>(`/identity/customers/${id}`, {
+    method: 'PATCH',
     body: JSON.stringify(input),
   });
   return data.customer;

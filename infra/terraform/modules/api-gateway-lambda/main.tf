@@ -309,6 +309,33 @@ resource "aws_lambda_function" "planning_list_vehicles" {
   }
 }
 
+resource "aws_lambda_function" "planning_update_vehicle" {
+  function_name    = "${var.name_prefix}-planning-update-vehicle"
+  role             = aws_iam_role.work_orders_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "update-vehicle.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/work-orders-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.work_orders_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.work_orders_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+
+  environment {
+    variables = {
+      NODE_ENV                    = "production"
+      PRISMA_QUERY_ENGINE_LIBRARY = "/var/task/libquery_engine-rhel-openssl-3.0.x.so.node"
+      DATABASE_URL                = var.database_url
+      DB_DATABASE_URL             = var.database_url
+    }
+  }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
 resource "aws_lambda_function" "work_orders_transition" {
   function_name    = "${var.name_prefix}-work-orders-transition"
   role             = aws_iam_role.work_orders_lambda.arn
@@ -415,6 +442,22 @@ resource "aws_apigatewayv2_route" "planning_list_vehicles" {
   api_id    = aws_apigatewayv2_api.erp.id
   route_key = "GET /planning/vehicles"
   target    = "integrations/${aws_apigatewayv2_integration.planning_list_vehicles.id}"
+}
+
+resource "aws_apigatewayv2_integration" "planning_update_vehicle" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.planning_update_vehicle.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "planning_update_vehicle" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /planning/vehicles/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.planning_update_vehicle.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "work_orders_transition" {
@@ -685,6 +728,25 @@ resource "aws_lambda_function" "customers_get" {
   role             = aws_iam_role.erp_lambda.arn
   runtime          = "nodejs20.x"
   handler          = "get.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/customers-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.customers_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.customers_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "customers_update" {
+  function_name    = "${var.name_prefix}-customers-update"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "update.handler"
   s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
   s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/customers-lambda.zip" : null
   filename         = var.lambda_artifacts_bucket_name == "" ? var.customers_lambda_zip_path : null
@@ -1707,6 +1769,21 @@ resource "aws_apigatewayv2_route" "customers_get" {
   route_key          = "GET /identity/customers/{id}"
   target             = "integrations/${aws_apigatewayv2_integration.customers_get.id}"
   authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "customers_update" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.customers_update.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "customers_update" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /identity/customers/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.customers_update.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "customers_transition" {
@@ -4347,9 +4424,11 @@ locals {
     identity_list_employees               = aws_lambda_function.identity_list_employees
     work_orders_get                       = aws_lambda_function.work_orders_get
     planning_list_vehicles                = aws_lambda_function.planning_list_vehicles
+    planning_update_vehicle               = aws_lambda_function.planning_update_vehicle
     customers_list                        = aws_lambda_function.customers_list
     customers_create                      = aws_lambda_function.customers_create
     customers_get                         = aws_lambda_function.customers_get
+    customers_update                      = aws_lambda_function.customers_update
     customers_transition                  = aws_lambda_function.customers_transition
     inventory_list_parts                  = aws_lambda_function.inventory_list_parts
     inventory_create_part                 = aws_lambda_function.inventory_create_part

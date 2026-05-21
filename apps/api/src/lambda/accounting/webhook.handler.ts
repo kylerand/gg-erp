@@ -292,3 +292,5 @@ export const webhookHandler = wrapHandler(async (ctx) => {
     correlationId,
   });
 }, { requireAuth: false });
+
+export const handler = webhookHandler;

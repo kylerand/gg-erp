@@ -12,6 +12,7 @@ import {
 import {
   verifyWebhookSignature,
   extractPaymentEntities,
+  handler as webhookLambdaHandler,
   webhookHandler,
 } from '../lambda/accounting/webhook.handler.js';
 import type { LambdaEvent } from '../shared/lambda/index.js';
@@ -21,6 +22,10 @@ import {
 } from '../../../../packages/domain/src/model/accounting.js';
 
 // ─── Test helpers ────────────────────────────────────────────────────────────
+
+test('accounting webhook Lambda entry exports the handler name Terraform invokes', () => {
+  assert.equal(webhookLambdaHandler, webhookHandler);
+});
 
 function createMockPaymentSyncQueries(): PaymentSyncQueries {
   const records = new Map<string, PaymentSyncRecord>();

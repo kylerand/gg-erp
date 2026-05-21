@@ -1546,6 +1546,101 @@ resource "aws_lambda_function" "scheduling_demand_projection" {
   }
 }
 
+resource "aws_lambda_function" "scheduling_list_capacity_slots" {
+  function_name    = "${var.name_prefix}-scheduling-list-capacity-slots"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-capacity-slots.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/scheduling-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.scheduling_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.scheduling_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "scheduling_create_capacity_slot" {
+  function_name    = "${var.name_prefix}-scheduling-create-capacity-slot"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "create-capacity-slot.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/scheduling-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.scheduling_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.scheduling_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "scheduling_update_capacity_slot" {
+  function_name    = "${var.name_prefix}-scheduling-update-capacity-slot"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "update-capacity-slot.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/scheduling-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.scheduling_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.scheduling_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "scheduling_cancel_capacity_slot" {
+  function_name    = "${var.name_prefix}-scheduling-cancel-capacity-slot"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "cancel-capacity-slot.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/scheduling-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.scheduling_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.scheduling_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "scheduling_import_capacity_slots" {
+  function_name    = "${var.name_prefix}-scheduling-import-capacity-slots"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "import-capacity-slots.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/scheduling-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.scheduling_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.scheduling_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
 # ─── API GW Integrations + Routes — Identity ──────────────────────────────────
 
 resource "aws_apigatewayv2_integration" "identity_me" {
@@ -2458,6 +2553,80 @@ resource "aws_apigatewayv2_route" "scheduling_demand_projection" {
   route_key          = "GET /scheduling/demand-projection"
   target             = "integrations/${aws_apigatewayv2_integration.scheduling_demand_projection.id}"
   authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "scheduling_list_capacity_slots" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.scheduling_list_capacity_slots.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "scheduling_list_capacity_slots" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /scheduling/capacity-slots"
+  target             = "integrations/${aws_apigatewayv2_integration.scheduling_list_capacity_slots.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "scheduling_create_capacity_slot" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.scheduling_create_capacity_slot.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "scheduling_create_capacity_slot" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /scheduling/capacity-slots"
+  target             = "integrations/${aws_apigatewayv2_integration.scheduling_create_capacity_slot.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "scheduling_update_capacity_slot" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.scheduling_update_capacity_slot.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "scheduling_update_capacity_slot" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /scheduling/capacity-slots/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.scheduling_update_capacity_slot.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "scheduling_cancel_capacity_slot" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.scheduling_cancel_capacity_slot.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "scheduling_cancel_capacity_slot" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /scheduling/capacity-slots/{id}/cancel"
+  target             = "integrations/${aws_apigatewayv2_integration.scheduling_cancel_capacity_slot.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "scheduling_import_capacity_slots" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.scheduling_import_capacity_slots.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "scheduling_import_capacity_slots" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /scheduling/capacity-slots/import"
+  target             = "integrations/${aws_apigatewayv2_integration.scheduling_import_capacity_slots.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
 # ─── Attachments Lambda Functions ────────────────────────────────────────────
@@ -4504,6 +4673,11 @@ locals {
     scheduling_list_slots                 = aws_lambda_function.scheduling_list_slots
     scheduling_list_labor_capacity        = aws_lambda_function.scheduling_list_labor_capacity
     scheduling_demand_projection          = aws_lambda_function.scheduling_demand_projection
+    scheduling_list_capacity_slots        = aws_lambda_function.scheduling_list_capacity_slots
+    scheduling_create_capacity_slot       = aws_lambda_function.scheduling_create_capacity_slot
+    scheduling_update_capacity_slot       = aws_lambda_function.scheduling_update_capacity_slot
+    scheduling_cancel_capacity_slot       = aws_lambda_function.scheduling_cancel_capacity_slot
+    scheduling_import_capacity_slots      = aws_lambda_function.scheduling_import_capacity_slots
     attachments_presign_upload            = aws_lambda_function.attachments_presign_upload
     attachments_confirm_upload            = aws_lambda_function.attachments_confirm_upload
     attachments_list                      = aws_lambda_function.attachments_list

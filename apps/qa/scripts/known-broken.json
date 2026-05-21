@@ -1,4 +1,40 @@
 {
   "_doc": "Routes with an expected non-healthy API smoke status in the currently deployed QA API. Smoke fails when this list drifts in EITHER direction — a new bug joins, OR an existing bug gets fixed/deployed (so we know to remove the entry). File a Linear ticket when adding long-lived handler bugs; remove pending-deploy entries after the route is live. Use expectRouteMiss for pending Terraform routes that are not deployed yet.",
-  "broken": []
+  "broken": [
+    {
+      "method": "GET",
+      "path": "/scheduling/capacity-slots",
+      "expectStatus": 404,
+      "expectRouteMiss": true,
+      "note": "Pending deploy for persisted planning.capacity_slots list route added in capacity management slice."
+    },
+    {
+      "method": "POST",
+      "path": "/scheduling/capacity-slots",
+      "expectStatus": 404,
+      "expectRouteMiss": true,
+      "note": "Pending deploy for persisted planning.capacity_slots create route added in capacity management slice."
+    },
+    {
+      "method": "PATCH",
+      "path": "/scheduling/capacity-slots/{id}",
+      "expectStatus": 404,
+      "expectRouteMiss": true,
+      "note": "Pending deploy for persisted planning.capacity_slots update route added in capacity management slice."
+    },
+    {
+      "method": "POST",
+      "path": "/scheduling/capacity-slots/{id}/cancel",
+      "expectStatus": 404,
+      "expectRouteMiss": true,
+      "note": "Pending deploy for persisted planning.capacity_slots cancel route added in capacity management slice."
+    },
+    {
+      "method": "POST",
+      "path": "/scheduling/capacity-slots/import",
+      "expectStatus": 404,
+      "expectRouteMiss": true,
+      "note": "Pending deploy for persisted planning.capacity_slots CSV import route added in capacity management slice."
+    }
+  ]
 }

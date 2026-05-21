@@ -12,7 +12,9 @@ import {
 import {
   verifyWebhookSignature,
   extractPaymentEntities,
+  webhookHandler,
 } from '../lambda/accounting/webhook.handler.js';
+import type { LambdaEvent } from '../shared/lambda/index.js';
 import {
   PaymentSyncState,
   type PaymentSyncRecord,
@@ -91,6 +93,35 @@ const context = {
   actorId: 'system',
   module: 'test',
 };
+
+function signWebhookBody(payload: string, token: string): string {
+  return createHmac('sha256', token).update(payload).digest('base64');
+}
+
+async function withWebhookVerifierToken<T>(
+  token: string | undefined,
+  run: () => Promise<T>,
+): Promise<T> {
+  const previous = process.env.QB_WEBHOOK_VERIFIER_TOKEN;
+  if (token === undefined) {
+    delete process.env.QB_WEBHOOK_VERIFIER_TOKEN;
+  } else {
+    process.env.QB_WEBHOOK_VERIFIER_TOKEN = token;
+  }
+  try {
+    return await run();
+  } finally {
+    if (previous === undefined) {
+      delete process.env.QB_WEBHOOK_VERIFIER_TOKEN;
+    } else {
+      process.env.QB_WEBHOOK_VERIFIER_TOKEN = previous;
+    }
+  }
+}
+
+function parseResultBody(result: { body: string }): Record<string, unknown> {
+  return JSON.parse(result.body) as Record<string, unknown>;
+}
 
 // ─── createFromWebhook ──────────────────────────────────────────────────────
 
@@ -304,6 +335,49 @@ test('webhook signature validation rejects tampered payload', () => {
     !verifyWebhookSignature(tamperedPayload, signature, token),
     'Expected tampered payload to be rejected',
   );
+});
+
+test('webhook handler rejects unsigned non-empty probes with bad request', async () => {
+  await withWebhookVerifierToken(undefined, async () => {
+    const event: LambdaEvent = {
+      httpMethod: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+      requestContext: { requestId: 'webhook-unsigned-test' },
+    };
+
+    const result = await webhookHandler(event);
+    assert.equal(result.statusCode, 400);
+    assert.equal(
+      parseResultBody(result).message,
+      'intuit-signature header is required.',
+    );
+  });
+});
+
+test('webhook handler rejects malformed signed payloads with bad request', async () => {
+  const token = 'test-verifier-token';
+  const payload = JSON.stringify({});
+  const signature = signWebhookBody(payload, token);
+
+  await withWebhookVerifierToken(token, async () => {
+    const event: LambdaEvent = {
+      httpMethod: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'Intuit-Signature': signature,
+      },
+      body: payload,
+      requestContext: { requestId: 'webhook-malformed-test' },
+    };
+
+    const result = await webhookHandler(event);
+    assert.equal(result.statusCode, 400);
+    assert.equal(
+      parseResultBody(result).message,
+      'eventNotifications must be an array.',
+    );
+  });
 });
 
 // ─── Webhook handler: entity extraction ─────────────────────────────────────

@@ -1527,6 +1527,25 @@ resource "aws_lambda_function" "scheduling_list_labor_capacity" {
   }
 }
 
+resource "aws_lambda_function" "scheduling_demand_projection" {
+  function_name    = "${var.name_prefix}-scheduling-demand-projection"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "demand-projection.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/scheduling-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.scheduling_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.scheduling_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
 # ─── API GW Integrations + Routes — Identity ──────────────────────────────────
 
 resource "aws_apigatewayv2_integration" "identity_me" {
@@ -2424,6 +2443,20 @@ resource "aws_apigatewayv2_route" "scheduling_list_labor_capacity" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "GET /scheduling/labor-capacity"
   target             = "integrations/${aws_apigatewayv2_integration.scheduling_list_labor_capacity.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "scheduling_demand_projection" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.scheduling_demand_projection.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "scheduling_demand_projection" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /scheduling/demand-projection"
+  target             = "integrations/${aws_apigatewayv2_integration.scheduling_demand_projection.id}"
   authorization_type = "NONE"
 }
 
@@ -4470,6 +4503,7 @@ locals {
     tickets_transition_wo_operation       = aws_lambda_function.tickets_transition_wo_operation
     scheduling_list_slots                 = aws_lambda_function.scheduling_list_slots
     scheduling_list_labor_capacity        = aws_lambda_function.scheduling_list_labor_capacity
+    scheduling_demand_projection          = aws_lambda_function.scheduling_demand_projection
     attachments_presign_upload            = aws_lambda_function.attachments_presign_upload
     attachments_confirm_upload            = aws_lambda_function.attachments_confirm_upload
     attachments_list                      = aws_lambda_function.attachments_list

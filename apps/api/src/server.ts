@@ -170,7 +170,11 @@ import { handler as copilotChatHandler } from './lambda/copilot/chat.handler.js'
 import { handler as copilotSessionsHandler } from './lambda/copilot/sessions.handler.js';
 import { handler as copilotSessionDetailHandler } from './lambda/copilot/session-detail.handler.js';
 import { listAuditEventsHandler } from './lambda/audit/handlers.js';
-import { listBuildSlotsHandler, listLaborCapacityHandler } from './lambda/scheduling/handlers.js';
+import {
+  getBuildSlotDemandProjectionHandler,
+  listBuildSlotsHandler,
+  listLaborCapacityHandler,
+} from './lambda/scheduling/handlers.js';
 import { getWorkspaceTodayHandler } from './lambda/workspace/handlers.js';
 import { listVehiclesHandler, updateVehicleHandler } from './lambda/vehicles/handlers.js';
 
@@ -650,6 +654,8 @@ async function route(
     result = await listBuildSlotsHandler(event);
   } else if (pathname === '/scheduling/labor-capacity' && method === 'GET') {
     result = await listLaborCapacityHandler(event);
+  } else if (pathname === '/scheduling/demand-projection' && method === 'GET') {
+    result = await getBuildSlotDemandProjectionHandler(event);
 
   // ── OJT / Training Assignments (aliases for /sop) ─────────────────────────
   } else if (pathname === '/ojt/assignments' && method === 'GET') {
@@ -698,5 +704,6 @@ server.listen(PORT, () => {
   console.log(`   Customers   GET|POST /accounting/customers`);
   console.log(`   Reconcile   GET|POST /accounting/reconciliation/runs, GET /:id, GET /mismatches`);
   console.log(`   Accounts    GET /accounting/integration-accounts, PUT /:id/status`);
+  console.log(`   Scheduling  GET /scheduling/slots, /labor-capacity, /demand-projection`);
   console.log(`   Failures    GET /accounting/failures/summary, POST /accounting/failures/retry\n`);
 });

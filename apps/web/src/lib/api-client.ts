@@ -3098,6 +3098,177 @@ export async function getBuildSlotDemandProjection(
   );
 }
 
+export type CapacitySlotStatus = 'OPEN' | 'LOCKED' | 'EXECUTING' | 'CLOSED' | 'CANCELLED';
+
+export interface CapacityStockLocationOption {
+  id: string;
+  locationCode: string;
+  locationName: string;
+  locationType: string;
+}
+
+export interface CapacitySlot {
+  id: string;
+  slotStart: string;
+  slotEnd: string;
+  date: string;
+  stockLocationId: string;
+  stockLocationCode: string;
+  stockLocationName: string;
+  stockLocationType: string;
+  bayCode?: string;
+  teamCode?: string;
+  slotStatus: CapacitySlotStatus;
+  capacityMinutes: number;
+  allocatedMinutes: number;
+  remainingMinutes: number;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+}
+
+export interface CapacitySlotListResponse {
+  items: CapacitySlot[];
+  total: number;
+  limit: number;
+  offset: number;
+  stockLocations: CapacityStockLocationOption[];
+}
+
+export interface CapacitySlotMutationInput {
+  slotStart: string;
+  slotEnd: string;
+  stockLocationId: string;
+  bayCode?: string;
+  teamCode?: string;
+  slotStatus?: CapacitySlotStatus;
+  capacityMinutes: number;
+}
+
+export interface CapacitySlotImportRow {
+  rowNumber?: number;
+  slotStart?: string;
+  slotEnd?: string;
+  date?: string;
+  startTime?: string;
+  endTime?: string;
+  stockLocationId?: string;
+  locationCode?: string;
+  bayCode?: string;
+  teamCode?: string;
+  capacityMinutes?: number;
+  capacityHours?: number;
+  slotStatus?: CapacitySlotStatus;
+}
+
+export interface CapacitySlotImportResult {
+  imported: number;
+  updated: number;
+  skipped: number;
+  errors: Array<{ rowNumber: number; message: string }>;
+  items: CapacitySlot[];
+  projection: BuildSlotDemandProjection;
+}
+
+export async function listCapacitySlots(
+  params?: {
+    startDate?: string;
+    endDate?: string;
+    status?: CapacitySlotStatus;
+    stockLocationId?: string;
+    bayCode?: string;
+    teamCode?: string;
+    limit?: number;
+    offset?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<CapacitySlotListResponse> {
+  const qs = new URLSearchParams();
+  if (params?.startDate) qs.set('startDate', params.startDate);
+  if (params?.endDate) qs.set('endDate', params.endDate);
+  if (params?.status) qs.set('status', params.status);
+  if (params?.stockLocationId) qs.set('stockLocationId', params.stockLocationId);
+  if (params?.bayCode) qs.set('bayCode', params.bayCode);
+  if (params?.teamCode) qs.set('teamCode', params.teamCode);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  return apiFetch<CapacitySlotListResponse>(
+    `/scheduling/capacity-slots${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    { items: [], total: 0, limit: params?.limit ?? 100, offset: params?.offset ?? 0, stockLocations: [] },
+    options,
+  );
+}
+
+export async function createCapacitySlot(
+  input: CapacitySlotMutationInput,
+  options?: ApiDataOptions,
+): Promise<CapacitySlot> {
+  const data = await apiFetch<{ item: CapacitySlot }>(
+    '/scheduling/capacity-slots',
+    {
+      method: 'POST',
+      body: JSON.stringify(input),
+      headers: mutationHeaders(),
+    },
+    undefined,
+    options,
+  );
+  return data.item;
+}
+
+export async function updateCapacitySlot(
+  id: string,
+  input: Partial<CapacitySlotMutationInput> & { expectedVersion: number },
+  options?: ApiDataOptions,
+): Promise<CapacitySlot> {
+  const data = await apiFetch<{ item: CapacitySlot }>(
+    `/scheduling/capacity-slots/${id}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+      headers: mutationHeaders(),
+    },
+    undefined,
+    options,
+  );
+  return data.item;
+}
+
+export async function cancelCapacitySlot(
+  id: string,
+  input: { expectedVersion: number },
+  options?: ApiDataOptions,
+): Promise<CapacitySlot> {
+  const data = await apiFetch<{ item: CapacitySlot }>(
+    `/scheduling/capacity-slots/${id}/cancel`,
+    {
+      method: 'POST',
+      body: JSON.stringify(input),
+      headers: mutationHeaders(),
+    },
+    undefined,
+    options,
+  );
+  return data.item;
+}
+
+export async function importCapacitySlots(
+  input: { startDate: string; endDate: string; rows: CapacitySlotImportRow[] },
+  options?: ApiDataOptions,
+): Promise<CapacitySlotImportResult> {
+  return apiFetch<CapacitySlotImportResult>(
+    '/scheduling/capacity-slots/import',
+    {
+      method: 'POST',
+      body: JSON.stringify(input),
+      headers: mutationHeaders(),
+    },
+    undefined,
+    options,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Sales
 // ---------------------------------------------------------------------------

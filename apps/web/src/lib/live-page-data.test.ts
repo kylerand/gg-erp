@@ -175,10 +175,16 @@ test('build-slot planner renders live demand projection instead of visualization
   assert.deepEqual(
     [
       'getBuildSlotDemandProjection',
+      'listCapacitySlots',
+      'createCapacitySlot',
+      'importCapacitySlots',
+      'cancelCapacitySlot',
       'allowMockFallback: false',
       "erpRecordRoute('work-order'",
       "erpRoute('dispatch-board')",
       'Unscheduled demand',
+      'Capacity management',
+      'Import CSV',
     ].filter((snippet) => !source.includes(snippet)),
     [],
   );

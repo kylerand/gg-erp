@@ -184,6 +184,11 @@ const lambdas: LambdaEntry[] = [
   { context: 'scheduling', handler: 'list-slots',            entry: 'apps/api/src/lambda/scheduling/list-slots.handler.ts' },
   { context: 'scheduling', handler: 'list-labor-capacity',   entry: 'apps/api/src/lambda/scheduling/list-labor-capacity.handler.ts' },
   { context: 'scheduling', handler: 'demand-projection',     entry: 'apps/api/src/lambda/scheduling/demand-projection.handler.ts' },
+  { context: 'scheduling', handler: 'list-capacity-slots',   entry: 'apps/api/src/lambda/scheduling/list-capacity-slots.handler.ts' },
+  { context: 'scheduling', handler: 'create-capacity-slot',  entry: 'apps/api/src/lambda/scheduling/create-capacity-slot.handler.ts' },
+  { context: 'scheduling', handler: 'update-capacity-slot',  entry: 'apps/api/src/lambda/scheduling/update-capacity-slot.handler.ts' },
+  { context: 'scheduling', handler: 'cancel-capacity-slot',  entry: 'apps/api/src/lambda/scheduling/cancel-capacity-slot.handler.ts' },
+  { context: 'scheduling', handler: 'import-capacity-slots', entry: 'apps/api/src/lambda/scheduling/import-capacity-slots.handler.ts' },
 
   // audit
   { context: 'audit', handler: 'list-audit-events', entry: 'apps/api/src/lambda/audit/list-audit-events.handler.ts' },

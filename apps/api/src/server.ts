@@ -171,9 +171,14 @@ import { handler as copilotSessionsHandler } from './lambda/copilot/sessions.han
 import { handler as copilotSessionDetailHandler } from './lambda/copilot/session-detail.handler.js';
 import { listAuditEventsHandler } from './lambda/audit/handlers.js';
 import {
+  cancelCapacitySlotHandler,
+  createCapacitySlotHandler,
   getBuildSlotDemandProjectionHandler,
+  importCapacitySlotsHandler,
+  listCapacitySlotsHandler,
   listBuildSlotsHandler,
   listLaborCapacityHandler,
+  updateCapacitySlotHandler,
 } from './lambda/scheduling/handlers.js';
 import { getWorkspaceTodayHandler } from './lambda/workspace/handlers.js';
 import { listVehiclesHandler, updateVehicleHandler } from './lambda/vehicles/handlers.js';
@@ -281,6 +286,7 @@ async function route(
   const qbIntegrationAccountMatch = pathname.match(/^\/accounting\/integration-accounts\/([^/]+)/);
   const qbReconciliationRunMatch = pathname.match(/^\/accounting\/reconciliation\/runs\/([^/]+)/);
   const qbReconciliationRecordMatch = pathname.match(/^\/accounting\/reconciliation\/records\/([^/]+)/);
+  const capacitySlotMatch = pathname.match(/^\/scheduling\/capacity-slots\/([^/]+)(?:\/([^/]+))?$/);
 
   // ── Auth ───────────────────────────────────────────────────────────────────
   if (pathname === '/auth/me' && method === 'GET') {
@@ -656,6 +662,16 @@ async function route(
     result = await listLaborCapacityHandler(event);
   } else if (pathname === '/scheduling/demand-projection' && method === 'GET') {
     result = await getBuildSlotDemandProjectionHandler(event);
+  } else if (pathname === '/scheduling/capacity-slots' && method === 'GET') {
+    result = await listCapacitySlotsHandler(event);
+  } else if (pathname === '/scheduling/capacity-slots' && method === 'POST') {
+    result = await createCapacitySlotHandler(event);
+  } else if (pathname === '/scheduling/capacity-slots/import' && method === 'POST') {
+    result = await importCapacitySlotsHandler(event);
+  } else if (capacitySlotMatch && method === 'PATCH') {
+    result = await updateCapacitySlotHandler({ ...event, pathParameters: { id: capacitySlotMatch[1] } });
+  } else if (capacitySlotMatch && capacitySlotMatch[2] === 'cancel' && method === 'POST') {
+    result = await cancelCapacitySlotHandler({ ...event, pathParameters: { id: capacitySlotMatch[1] } });
 
   // ── OJT / Training Assignments (aliases for /sop) ─────────────────────────
   } else if (pathname === '/ojt/assignments' && method === 'GET') {
@@ -704,6 +720,6 @@ server.listen(PORT, () => {
   console.log(`   Customers   GET|POST /accounting/customers`);
   console.log(`   Reconcile   GET|POST /accounting/reconciliation/runs, GET /:id, GET /mismatches`);
   console.log(`   Accounts    GET /accounting/integration-accounts, PUT /:id/status`);
-  console.log(`   Scheduling  GET /scheduling/slots, /labor-capacity, /demand-projection`);
+  console.log(`   Scheduling  GET /scheduling/slots, /labor-capacity, /demand-projection, /capacity-slots`);
   console.log(`   Failures    GET /accounting/failures/summary, POST /accounting/failures/retry\n`);
 });

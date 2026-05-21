@@ -13,11 +13,23 @@ import {
 import { WorkOrderService } from '../contexts/build-planning/workOrder.service.js';
 import { createWorkOrderRoutes } from '../contexts/build-planning/workOrder.routes.js';
 import {
+  cancelCapacitySlotHandler,
+  createCapacitySlotHandler,
   getBuildSlotDemandProjectionHandler,
+  importCapacitySlotsHandler,
+  listCapacitySlotsHandler,
   listBuildSlotsHandler,
   listLaborCapacityHandler,
+  setSchedulingCapacityStoreForTests,
   setSchedulingProjectionQueriesForTests,
+  updateCapacitySlotHandler,
   type ApiGatewayProxyEventLike,
+  type CapacitySlotListInput,
+  type CapacitySlotListResult,
+  type CapacitySlotResponse,
+  type CreateCapacitySlotInput,
+  type SchedulingCapacitySlotStore,
+  type UpdateCapacitySlotInput,
 } from '../lambda/scheduling/handlers.js';
 import { buildSlotDemandProjection } from '../contexts/build-planning/buildSlotProjection.js';
 
@@ -44,6 +56,136 @@ const defaultContext = {
 
 function parseResponseBody(response: { body: string }): Record<string, unknown> {
   return JSON.parse(response.body) as Record<string, unknown>;
+}
+
+function createCapacityStoreForTests(): SchedulingCapacitySlotStore & {
+  items: CapacitySlotResponse[];
+} {
+  const stockLocations = [
+    {
+      id: '00000000-0000-4000-8000-000000000111',
+      locationCode: 'MAIN',
+      locationName: 'Main Shop',
+      locationType: 'WAREHOUSE',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000112',
+      locationCode: 'BAY-1',
+      locationName: 'Bay 1',
+      locationType: 'BAY',
+    },
+  ];
+  const items: CapacitySlotResponse[] = [];
+  let nextSlotNumber = 1;
+
+  function makeItem(
+    input: CreateCapacitySlotInput,
+    id = `00000000-0000-4000-8000-${String(nextSlotNumber++).padStart(12, '0')}`,
+  ): CapacitySlotResponse {
+    const location = stockLocations.find((entry) => entry.id === input.stockLocationId);
+    if (!location) throw new Error('stock location not found');
+    return {
+      id,
+      slotStart: input.slotStart,
+      slotEnd: input.slotEnd,
+      date: input.slotStart.slice(0, 10),
+      stockLocationId: location.id,
+      stockLocationCode: location.locationCode,
+      stockLocationName: location.locationName,
+      stockLocationType: location.locationType,
+      bayCode: input.bayCode,
+      teamCode: input.teamCode,
+      slotStatus: input.slotStatus ?? 'OPEN',
+      capacityMinutes: input.capacityMinutes,
+      allocatedMinutes: 0,
+      remainingMinutes: input.capacityMinutes,
+      createdAt: '2026-05-18T12:00:00.000Z',
+      updatedAt: '2026-05-18T12:00:00.000Z',
+      version: 0,
+    };
+  }
+
+  const store: SchedulingCapacitySlotStore & { items: CapacitySlotResponse[] } = {
+    items,
+    async listCapacitySlots(input: CapacitySlotListInput): Promise<CapacitySlotListResult> {
+      const filtered = items.filter((item) => {
+        if (item.slotStart.slice(0, 10) < input.startDate) return false;
+        if (item.slotStart.slice(0, 10) > input.endDate) return false;
+        if (input.status && item.slotStatus !== input.status) return false;
+        return true;
+      });
+      return {
+        items: filtered.slice(input.offset, input.offset + input.limit),
+        total: filtered.length,
+        limit: input.limit,
+        offset: input.offset,
+        stockLocations,
+      };
+    },
+    async createCapacitySlot(input) {
+      if (items.some((item) =>
+        item.stockLocationId === input.stockLocationId &&
+        (item.bayCode ?? '') === (input.bayCode ?? '') &&
+        item.slotStart === input.slotStart &&
+        item.slotEnd === input.slotEnd
+      )) {
+        throw new Error('duplicate');
+      }
+      const item = makeItem(input);
+      items.push(item);
+      return item;
+    },
+    async updateCapacitySlot(id: string, input: UpdateCapacitySlotInput) {
+      const index = items.findIndex((item) => item.id === id);
+      if (index === -1 || items[index].version !== input.expectedVersion) {
+        throw new Error('version mismatch');
+      }
+      const next: CapacitySlotResponse = {
+        ...items[index],
+        slotStart: input.slotStart ?? items[index].slotStart,
+        slotEnd: input.slotEnd ?? items[index].slotEnd,
+        date: (input.slotStart ?? items[index].slotStart).slice(0, 10),
+        stockLocationId: input.stockLocationId ?? items[index].stockLocationId,
+        bayCode: 'bayCode' in input ? input.bayCode ?? undefined : items[index].bayCode,
+        teamCode: 'teamCode' in input ? input.teamCode ?? undefined : items[index].teamCode,
+        slotStatus: input.slotStatus ?? items[index].slotStatus,
+        capacityMinutes: input.capacityMinutes ?? items[index].capacityMinutes,
+        remainingMinutes: (input.capacityMinutes ?? items[index].capacityMinutes) - items[index].allocatedMinutes,
+        version: items[index].version + 1,
+        updatedAt: '2026-05-18T13:00:00.000Z',
+      };
+      items[index] = next;
+      return next;
+    },
+    async cancelCapacitySlot(id: string, input) {
+      return store.updateCapacitySlot(
+        id,
+        { expectedVersion: input.expectedVersion, slotStatus: 'CANCELLED' },
+        { correlationId: 'test' },
+      );
+    },
+    async upsertCapacitySlot(input) {
+      const existing = items.find((item) =>
+        item.stockLocationId === input.stockLocationId &&
+        (item.bayCode ?? '') === (input.bayCode ?? '') &&
+        item.slotStart === input.slotStart &&
+        item.slotEnd === input.slotEnd
+      );
+      if (existing) {
+        const item = await store.updateCapacitySlot(existing.id, {
+          expectedVersion: existing.version,
+          teamCode: input.teamCode,
+          slotStatus: input.slotStatus ?? 'OPEN',
+          capacityMinutes: input.capacityMinutes,
+        }, { correlationId: 'test' });
+        return { item, created: false };
+      }
+      const item = makeItem(input);
+      items.push(item);
+      return { item, created: true };
+    },
+  };
+  return store;
 }
 
 // ─── Build Slot Service Tests ───────────────────────────────────────────────
@@ -501,6 +643,142 @@ test('getBuildSlotDemandProjectionHandler returns projection from live query con
   }
 });
 
+test('capacity slot handlers create, list, update, and cancel persisted slots', async () => {
+  const store = createCapacityStoreForTests();
+  setSchedulingCapacityStoreForTests(store);
+
+  try {
+    const createResponse = await createCapacitySlotHandler({
+      body: JSON.stringify({
+        slotStart: '2026-05-18T13:00:00.000Z',
+        slotEnd: '2026-05-18T21:00:00.000Z',
+        stockLocationId: '00000000-0000-4000-8000-000000000111',
+        bayCode: 'BAY-1',
+        teamCode: 'BUILD',
+        capacityMinutes: 480,
+      }),
+      headers: { 'x-correlation-id': 'capacity-test-1' },
+    });
+    assert.equal(createResponse.statusCode, 201);
+
+    const listResponse = await listCapacitySlotsHandler({
+      queryStringParameters: { startDate: '2026-05-18', endDate: '2026-05-22' },
+    });
+    assert.equal(listResponse.statusCode, 200);
+    const listBody = parseResponseBody(listResponse) as unknown as CapacitySlotListResult;
+    assert.equal(listBody.items.length, 1);
+    assert.equal(listBody.stockLocations[0].locationCode, 'MAIN');
+
+    const updateResponse = await updateCapacitySlotHandler({
+      pathParameters: { id: listBody.items[0].id },
+      body: JSON.stringify({ expectedVersion: 0, capacityMinutes: 540 }),
+      headers: { 'x-correlation-id': 'capacity-test-2' },
+    });
+    assert.equal(updateResponse.statusCode, 200);
+    const updateBody = parseResponseBody(updateResponse) as unknown as { item: CapacitySlotResponse };
+    assert.equal(updateBody.item.capacityMinutes, 540);
+    assert.equal(updateBody.item.version, 1);
+
+    const cancelResponse = await cancelCapacitySlotHandler({
+      pathParameters: { id: updateBody.item.id },
+      body: JSON.stringify({ expectedVersion: 1 }),
+      headers: { 'x-correlation-id': 'capacity-test-3' },
+    });
+    assert.equal(cancelResponse.statusCode, 200);
+    const cancelBody = parseResponseBody(cancelResponse) as unknown as { item: CapacitySlotResponse };
+    assert.equal(cancelBody.item.slotStatus, 'CANCELLED');
+  } finally {
+    setSchedulingCapacityStoreForTests(undefined);
+  }
+});
+
+test('importCapacitySlotsHandler upserts rows and returns refreshed projection', async () => {
+  const store = createCapacityStoreForTests();
+  setSchedulingCapacityStoreForTests(store);
+  setSchedulingProjectionQueriesForTests({
+    async listCapacitySlots() {
+      throw new Error('capacity should come from capacity store override');
+    },
+    async listOperationDemand() {
+      return [
+        {
+          workOrderId: 'wo-1',
+          workOrderNumber: 'WO-001',
+          title: 'Lift kit build',
+          status: 'READY',
+          priority: 5,
+          materialReadiness: 'READY',
+          operationId: 'op-1',
+          operationCode: 'BUILD-010',
+          operationName: 'Install lift kit',
+          sequenceNo: 10,
+          operationStatus: 'READY',
+          estimatedMinutes: 180,
+        },
+      ];
+    },
+  });
+
+  try {
+    const response = await importCapacitySlotsHandler({
+      body: JSON.stringify({
+        startDate: '2026-05-18',
+        endDate: '2026-05-22',
+        rows: [
+          {
+            rowNumber: 2,
+            date: '2026-05-18',
+            startTime: '08:00',
+            endTime: '16:00',
+            locationCode: 'MAIN',
+            bayCode: 'BAY-1',
+            teamCode: 'BUILD',
+            capacityHours: 8,
+          },
+          {
+            rowNumber: 3,
+            date: '2026-05-18',
+            startTime: '08:00',
+            endTime: '16:00',
+            locationCode: 'MAIN',
+            bayCode: 'BAY-1',
+            teamCode: 'BUILD',
+            capacityHours: 8,
+          },
+        ],
+      }),
+      headers: { 'x-correlation-id': 'capacity-import-test' },
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = parseResponseBody(response) as unknown as {
+      imported: number;
+      updated: number;
+      skipped: number;
+      errors: Array<{ rowNumber: number; message: string }>;
+      projection: { totals: { scheduledCount: number; capacityMinutes: number } };
+    };
+    assert.equal(body.imported, 1);
+    assert.equal(body.updated, 0);
+    assert.equal(body.skipped, 1);
+    assert.equal(body.errors[0].rowNumber, 3);
+    assert.equal(body.projection.totals.scheduledCount, 1);
+    assert.equal(body.projection.totals.capacityMinutes, 480);
+  } finally {
+    setSchedulingCapacityStoreForTests(undefined);
+    setSchedulingProjectionQueriesForTests(undefined);
+  }
+});
+
+test('capacity slot import validates body shape', async () => {
+  const response = await importCapacitySlotsHandler({
+    body: JSON.stringify({ rows: [] }),
+  });
+  assert.equal(response.statusCode, 422);
+  const body = parseResponseBody(response);
+  assert.equal(body.message, 'At least one capacity row is required.');
+});
+
 test('demand projection is wired into lambda build and terraform route discovery', () => {
   const tf = readFileSync(
     new URL('../../../../infra/terraform/modules/api-gateway-lambda/main.tf', import.meta.url),
@@ -514,6 +792,9 @@ test('demand projection is wired into lambda build and terraform route discovery
   assert.match(tf, /route_key\s+=\s+"GET \/scheduling\/demand-projection"/);
   assert.match(tf, /aws_lambda_function" "scheduling_demand_projection"/);
   assert.match(buildScript, /demand-projection\.handler\.ts/);
+  assert.match(tf, /route_key\s+=\s+"GET \/scheduling\/capacity-slots"/);
+  assert.match(tf, /route_key\s+=\s+"POST \/scheduling\/capacity-slots\/import"/);
+  assert.match(buildScript, /import-capacity-slots\.handler\.ts/);
 });
 
 // ─── Routes integration ─────────────────────────────────────────────────────

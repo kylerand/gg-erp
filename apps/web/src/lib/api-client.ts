@@ -2996,6 +2996,108 @@ export async function listBuildSlots(params?: {
   });
 }
 
+export type BuildSlotMaterialReadiness = 'READY' | 'PARTIAL' | 'NOT_READY';
+
+export type BuildSlotDemandReason =
+  | 'PROJECTED_TO_SLOT'
+  | 'NO_CAPACITY'
+  | 'OVER_CAPACITY'
+  | 'MATERIAL_NOT_READY'
+  | 'OPERATION_BLOCKED'
+  | 'MISSING_ESTIMATE';
+
+export interface BuildSlotDemandItem {
+  workOrderId: string;
+  workOrderNumber: string;
+  title: string;
+  status: string;
+  priority: number;
+  dueAt?: string;
+  materialReadiness: BuildSlotMaterialReadiness;
+  operationId: string;
+  operationCode: string;
+  operationName: string;
+  sequenceNo: number;
+  operationStatus: string;
+  requiredSkillCode?: string;
+  estimatedMinutes: number;
+  plannedStartAt?: string;
+  plannedEndAt?: string;
+  reason: BuildSlotDemandReason;
+}
+
+export interface BuildSlotProjectionWarning {
+  code: 'OVER_CAPACITY' | 'MISSING_ESTIMATE' | 'NO_SLOT' | 'UNSCHEDULED' | 'BLOCKED';
+  message: string;
+}
+
+export interface BuildSlotProjectionSlot {
+  slotId: string;
+  date: string;
+  slotStart: string;
+  slotEnd: string;
+  stockLocationId?: string;
+  bayCode?: string;
+  teamCode?: string;
+  status: string;
+  capacityMinutes: number;
+  allocatedMinutes: number;
+  projectedDemandMinutes: number;
+  remainingMinutes: number;
+  overCapacityMinutes: number;
+  utilizationPct: number;
+  updatedAt?: string;
+  demand: BuildSlotDemandItem[];
+  warnings: BuildSlotProjectionWarning[];
+}
+
+export interface BuildSlotDemandProjection {
+  startDate: string;
+  endDate: string;
+  generatedAt: string;
+  source: {
+    workOrderStatuses: string[];
+    operationStatuses: string[];
+    capacitySource: 'planning.capacity_slots' | 'none';
+  };
+  totals: {
+    demandMinutes: number;
+    capacityMinutes: number;
+    allocatedMinutes: number;
+    projectedDemandMinutes: number;
+    remainingMinutes: number;
+    unscheduledDemandMinutes: number;
+    overCapacityMinutes: number;
+    demandCount: number;
+    scheduledCount: number;
+    unscheduledCount: number;
+    blockedByMaterialCount: number;
+    blockedOperationCount: number;
+    missingEstimateCount: number;
+  };
+  slots: BuildSlotProjectionSlot[];
+  unscheduled: BuildSlotDemandItem[];
+  warnings: BuildSlotProjectionWarning[];
+}
+
+export async function getBuildSlotDemandProjection(
+  params?: {
+    startDate?: string;
+    endDate?: string;
+  },
+  options?: ApiDataOptions,
+): Promise<BuildSlotDemandProjection> {
+  const qs = new URLSearchParams();
+  if (params?.startDate) qs.set('startDate', params.startDate);
+  if (params?.endDate) qs.set('endDate', params.endDate);
+  return apiFetch<BuildSlotDemandProjection>(
+    `/scheduling/demand-projection${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    undefined,
+    options,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Sales
 // ---------------------------------------------------------------------------

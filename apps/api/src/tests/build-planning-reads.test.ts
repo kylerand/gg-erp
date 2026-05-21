@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { InMemoryAuditSink } from '../audit/recorder.js';
 import { InMemoryEventPublisher, InMemoryOutbox } from '../events/index.js';
 import { ConsoleObservabilityHooks } from '../observability/index.js';
@@ -12,10 +13,13 @@ import {
 import { WorkOrderService } from '../contexts/build-planning/workOrder.service.js';
 import { createWorkOrderRoutes } from '../contexts/build-planning/workOrder.routes.js';
 import {
+  getBuildSlotDemandProjectionHandler,
   listBuildSlotsHandler,
   listLaborCapacityHandler,
+  setSchedulingProjectionQueriesForTests,
   type ApiGatewayProxyEventLike,
 } from '../lambda/scheduling/handlers.js';
+import { buildSlotDemandProjection } from '../contexts/build-planning/buildSlotProjection.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -317,6 +321,199 @@ test('listLaborCapacityHandler returns 422 for invalid endDate', async () => {
 
   const body = parseResponseBody(response);
   assert.equal(body.message, 'endDate must be a valid ISO-8601 date.');
+});
+
+// ─── Demand Projection Tests ────────────────────────────────────────────────
+
+test('buildSlotDemandProjection schedules ready operations and reports overflow', () => {
+  const projection = buildSlotDemandProjection({
+    startDate: '2026-05-18',
+    endDate: '2026-05-22',
+    generatedAt: '2026-05-18T12:00:00.000Z',
+    slots: [
+      {
+        slotId: 'slot-1',
+        slotStart: '2026-05-18T13:00:00.000Z',
+        slotEnd: '2026-05-18T21:00:00.000Z',
+        bayCode: 'BAY-1',
+        teamCode: 'BUILD',
+        status: 'OPEN',
+        capacityMinutes: 480,
+        allocatedMinutes: 0,
+      },
+    ],
+    demand: [
+      {
+        workOrderId: 'wo-1',
+        workOrderNumber: 'WO-001',
+        title: 'Lift kit build',
+        status: 'READY',
+        priority: 5,
+        materialReadiness: 'READY',
+        operationId: 'op-1',
+        operationCode: 'BUILD-010',
+        operationName: 'Install lift kit',
+        sequenceNo: 10,
+        operationStatus: 'READY',
+        estimatedMinutes: 360,
+      },
+      {
+        workOrderId: 'wo-2',
+        workOrderNumber: 'WO-002',
+        title: 'Lighting install',
+        status: 'READY',
+        priority: 3,
+        materialReadiness: 'READY',
+        operationId: 'op-2',
+        operationCode: 'ELEC-010',
+        operationName: 'Install lighting',
+        sequenceNo: 10,
+        operationStatus: 'READY',
+        estimatedMinutes: 240,
+      },
+    ],
+  });
+
+  assert.equal(projection.source.capacitySource, 'planning.capacity_slots');
+  assert.equal(projection.slots[0].demand.length, 1);
+  assert.equal(projection.slots[0].demand[0].workOrderNumber, 'WO-001');
+  assert.equal(projection.slots[0].projectedDemandMinutes, 360);
+  assert.equal(projection.unscheduled.length, 1);
+  assert.equal(projection.unscheduled[0].reason, 'OVER_CAPACITY');
+  assert.equal(projection.totals.overCapacityMinutes, 120);
+});
+
+test('buildSlotDemandProjection keeps blocked and material-short operations out of slots', () => {
+  const projection = buildSlotDemandProjection({
+    startDate: '2026-05-18',
+    endDate: '2026-05-22',
+    generatedAt: '2026-05-18T12:00:00.000Z',
+    slots: [
+      {
+        slotId: 'slot-1',
+        slotStart: '2026-05-18T13:00:00.000Z',
+        slotEnd: '2026-05-18T21:00:00.000Z',
+        status: 'OPEN',
+        capacityMinutes: 480,
+        allocatedMinutes: 0,
+      },
+    ],
+    demand: [
+      {
+        workOrderId: 'wo-1',
+        workOrderNumber: 'WO-001',
+        title: 'Blocked build',
+        status: 'BLOCKED',
+        priority: 5,
+        materialReadiness: 'READY',
+        operationId: 'op-1',
+        operationCode: 'BUILD-010',
+        operationName: 'Install kit',
+        sequenceNo: 10,
+        operationStatus: 'BLOCKED',
+        estimatedMinutes: 120,
+      },
+      {
+        workOrderId: 'wo-2',
+        workOrderNumber: 'WO-002',
+        title: 'Parts shortage',
+        status: 'READY',
+        priority: 4,
+        materialReadiness: 'NOT_READY',
+        operationId: 'op-2',
+        operationCode: 'ELEC-010',
+        operationName: 'Wire accessories',
+        sequenceNo: 10,
+        operationStatus: 'READY',
+        estimatedMinutes: 120,
+      },
+    ],
+  });
+
+  assert.equal(projection.slots[0].demand.length, 0);
+  assert.deepEqual(
+    projection.unscheduled.map((item) => item.reason).sort(),
+    ['MATERIAL_NOT_READY', 'OPERATION_BLOCKED'],
+  );
+  assert.equal(projection.totals.blockedByMaterialCount, 1);
+  assert.equal(projection.totals.blockedOperationCount, 1);
+});
+
+test('getBuildSlotDemandProjectionHandler validates date range', async () => {
+  const response = await getBuildSlotDemandProjectionHandler({
+    queryStringParameters: { startDate: '2026-05-22', endDate: '2026-05-18' },
+  });
+
+  assert.equal(response.statusCode, 422);
+  const body = parseResponseBody(response);
+  assert.equal(body.message, 'startDate cannot be after endDate.');
+});
+
+test('getBuildSlotDemandProjectionHandler returns projection from live query contract', async () => {
+  setSchedulingProjectionQueriesForTests({
+    async listCapacitySlots() {
+      return [
+        {
+          slotId: 'slot-1',
+          slotStart: '2026-05-18T13:00:00.000Z',
+          slotEnd: '2026-05-18T21:00:00.000Z',
+          status: 'OPEN',
+          capacityMinutes: 480,
+          allocatedMinutes: 60,
+        },
+      ];
+    },
+    async listOperationDemand() {
+      return [
+        {
+          workOrderId: 'wo-1',
+          workOrderNumber: 'WO-001',
+          title: 'Lift kit build',
+          status: 'READY',
+          priority: 5,
+          materialReadiness: 'READY',
+          operationId: 'op-1',
+          operationCode: 'BUILD-010',
+          operationName: 'Install lift kit',
+          sequenceNo: 10,
+          operationStatus: 'READY',
+          estimatedMinutes: 180,
+        },
+      ];
+    },
+  });
+
+  try {
+    const response = await getBuildSlotDemandProjectionHandler({
+      queryStringParameters: { startDate: '2026-05-18', endDate: '2026-05-22' },
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = parseResponseBody(response) as unknown as {
+      totals: { scheduledCount: number; allocatedMinutes: number };
+      slots: Array<{ demand: Array<{ workOrderNumber: string }> }>;
+    };
+    assert.equal(body.totals.scheduledCount, 1);
+    assert.equal(body.totals.allocatedMinutes, 60);
+    assert.equal(body.slots[0].demand[0].workOrderNumber, 'WO-001');
+  } finally {
+    setSchedulingProjectionQueriesForTests(undefined);
+  }
+});
+
+test('demand projection is wired into lambda build and terraform route discovery', () => {
+  const tf = readFileSync(
+    new URL('../../../../infra/terraform/modules/api-gateway-lambda/main.tf', import.meta.url),
+    'utf8',
+  );
+  const buildScript = readFileSync(
+    new URL('../../../../scripts/build-lambdas.ts', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(tf, /route_key\s+=\s+"GET \/scheduling\/demand-projection"/);
+  assert.match(tf, /aws_lambda_function" "scheduling_demand_projection"/);
+  assert.match(buildScript, /demand-projection\.handler\.ts/);
 });
 
 // ─── Routes integration ─────────────────────────────────────────────────────

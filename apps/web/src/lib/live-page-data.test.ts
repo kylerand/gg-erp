@@ -15,6 +15,7 @@ const truthCriticalPages = [
   'app/inventory/purchase-orders/[id]/page.tsx',
   'app/inventory/receiving/page.tsx',
   'app/inventory/reservations/page.tsx',
+  'app/planning/slots/page.tsx',
   'app/reporting/page.tsx',
   'app/admin/accounting/page.tsx',
   'app/admin/audit/page.tsx',
@@ -166,6 +167,24 @@ test('quote detail exposes live conversion into shop execution', () => {
     requiredCalls.filter((call) => !source.includes(call)),
     [],
   );
+});
+
+test('build-slot planner renders live demand projection instead of visualization filler', () => {
+  const source = readSource('app/planning/slots/page.tsx');
+
+  assert.deepEqual(
+    [
+      'getBuildSlotDemandProjection',
+      'allowMockFallback: false',
+      "erpRecordRoute('work-order'",
+      "erpRoute('dispatch-board')",
+      'Unscheduled demand',
+    ].filter((snippet) => !source.includes(snippet)),
+    [],
+  );
+  assert.equal(source.includes("idx % 5"), false);
+  assert.equal(source.includes("toast.success('Plan published"), false);
+  assert.equal(source.includes('Assign work to'), false);
 });
 
 test('dashboard KPI cards deep-link to filtered destination views', () => {

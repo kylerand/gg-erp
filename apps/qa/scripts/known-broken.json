@@ -4,37 +4,8 @@
     {
       "method": "GET",
       "path": "/scheduling/capacity-slots",
-      "expectStatus": 404,
-      "expectRouteMiss": true,
-      "note": "Pending deploy for persisted planning.capacity_slots list route added in capacity management slice."
-    },
-    {
-      "method": "POST",
-      "path": "/scheduling/capacity-slots",
-      "expectStatus": 404,
-      "expectRouteMiss": true,
-      "note": "Pending deploy for persisted planning.capacity_slots create route added in capacity management slice."
-    },
-    {
-      "method": "PATCH",
-      "path": "/scheduling/capacity-slots/{id}",
-      "expectStatus": 404,
-      "expectRouteMiss": true,
-      "note": "Pending deploy for persisted planning.capacity_slots update route added in capacity management slice."
-    },
-    {
-      "method": "POST",
-      "path": "/scheduling/capacity-slots/{id}/cancel",
-      "expectStatus": 404,
-      "expectRouteMiss": true,
-      "note": "Pending deploy for persisted planning.capacity_slots cancel route added in capacity management slice."
-    },
-    {
-      "method": "POST",
-      "path": "/scheduling/capacity-slots/import",
-      "expectStatus": 404,
-      "expectRouteMiss": true,
-      "note": "Pending deploy for persisted planning.capacity_slots CSV import route added in capacity management slice."
+      "expectStatus": 500,
+      "note": "Pending deploy for planning.capacity_slots migration after capacity management routes deployed."
     }
   ]
 }

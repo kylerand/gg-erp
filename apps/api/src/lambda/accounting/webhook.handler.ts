@@ -52,6 +52,70 @@ interface QbWebhookPayload {
   eventNotifications: QbWebhookNotification[];
 }
 
+const WEBHOOK_OPERATIONS = new Set(['Create', 'Update', 'Delete', 'Merge', 'Void']);
+
+function getHeader(
+  headers: Record<string, string | undefined> | null | undefined,
+  name: string,
+): string | undefined {
+  if (!headers) return undefined;
+  const needle = name.toLowerCase();
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === needle) return value;
+  }
+  return undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseWebhookPayload(
+  rawBody: string,
+): { ok: true; value: QbWebhookPayload } | { ok: false; error: string } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawBody);
+  } catch {
+    return { ok: false, error: 'Invalid JSON payload' };
+  }
+
+  if (!isRecord(parsed) || !Array.isArray(parsed.eventNotifications)) {
+    return { ok: false, error: 'eventNotifications must be an array.' };
+  }
+
+  const eventNotifications = parsed.eventNotifications;
+
+  for (const notification of eventNotifications) {
+    if (!isRecord(notification) || typeof notification.realmId !== 'string') {
+      return { ok: false, error: 'Each event notification must include a realmId.' };
+    }
+
+    const dataChangeEvent = notification.dataChangeEvent;
+    if (!isRecord(dataChangeEvent) || !Array.isArray(dataChangeEvent.entities)) {
+      return { ok: false, error: 'Each event notification must include entities.' };
+    }
+
+    for (const entity of dataChangeEvent.entities) {
+      if (
+        !isRecord(entity) ||
+        typeof entity.name !== 'string' ||
+        typeof entity.id !== 'string' ||
+        typeof entity.operation !== 'string' ||
+        !WEBHOOK_OPERATIONS.has(entity.operation) ||
+        typeof entity.lastUpdated !== 'string'
+      ) {
+        return { ok: false, error: 'Each webhook entity must include valid entity fields.' };
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    value: { eventNotifications: eventNotifications as QbWebhookNotification[] },
+  };
+}
+
 /**
  * Verify the QB webhook HMAC signature.
  */
@@ -103,28 +167,31 @@ function createPaymentSyncServiceForWebhook(): PaymentSyncService {
 }
 
 export const webhookHandler = wrapHandler(async (ctx) => {
-  const verifierToken = process.env.QB_WEBHOOK_VERIFIER_TOKEN;
-  if (!verifierToken) {
-    return jsonResponse(500, { message: 'QB webhook verifier token not configured' });
-  }
-
   const rawBody = ctx.event.body ?? '';
-  const signature = ctx.event.headers?.['intuit-signature'] ?? '';
+  const signature = getHeader(ctx.event.headers, 'intuit-signature')?.trim() ?? '';
 
   // QB sends a validation request with empty body during setup
   if (!rawBody) {
     return jsonResponse(200, { message: 'OK' });
   }
 
-  if (!verifyWebhookSignature(rawBody, signature, verifierToken)) {
-    return jsonResponse(401, { message: 'Invalid webhook signature' });
+  if (!signature) {
+    return jsonResponse(400, { message: 'intuit-signature header is required.' });
   }
 
-  let payload: QbWebhookPayload;
-  try {
-    payload = JSON.parse(rawBody) as QbWebhookPayload;
-  } catch {
-    return jsonResponse(400, { message: 'Invalid JSON payload' });
+  const payloadResult = parseWebhookPayload(rawBody);
+  if (!payloadResult.ok) {
+    return jsonResponse(400, { message: payloadResult.error });
+  }
+  const payload = payloadResult.value;
+
+  const verifierToken = process.env.QB_WEBHOOK_VERIFIER_TOKEN;
+  if (!verifierToken) {
+    return jsonResponse(500, { message: 'QB webhook verifier token not configured' });
+  }
+
+  if (!verifyWebhookSignature(rawBody, signature, verifierToken)) {
+    return jsonResponse(401, { message: 'Invalid webhook signature' });
   }
 
   const correlationId = randomUUID();

@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import test, { mock } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { getMeHandler, identityQueries } from '../lambda/identity/handlers.js';
+
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
+const API_GATEWAY_TF = resolve(REPO_ROOT, 'infra/terraform/modules/api-gateway-lambda/main.tf');
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -107,7 +113,29 @@ function buildDbUser(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function terraformRouteBlock(resourceName: string): string {
+  const tf = readFileSync(API_GATEWAY_TF, 'utf8');
+  const match = tf.match(
+    new RegExp(
+      `resource\\s+"aws_apigatewayv2_route"\\s+"${resourceName}"\\s+\\{([\\s\\S]*?)\\n\\}`,
+    ),
+  );
+  assert.ok(match, `Terraform route ${resourceName} should exist`);
+  return match[1]!;
+}
+
 // ─── Tests ──────────────────────────────────────────────────────────────────
+
+test('GET /auth/me API Gateway route uses the Cognito JWT authorizer when configured', () => {
+  const block = terraformRouteBlock('identity_me');
+
+  assert.match(block, /route_key\s+=\s+"GET \/auth\/me"/);
+  assert.match(block, /authorizer_id\s+=\s+local\.authorizer_id/);
+  assert.match(
+    block,
+    /authorization_type\s+=\s+local\.authorizer_id\s+!=\s+null\s+\?\s+"JWT"\s+:\s+"NONE"/,
+  );
+});
 
 test('GET /auth/me returns 401 when no Authorization / actor is present', async () => {
   const response = await getMeHandler(buildEvent());

@@ -1540,7 +1540,8 @@ resource "aws_apigatewayv2_route" "identity_me" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "GET /auth/me"
   target             = "integrations/${aws_apigatewayv2_integration.identity_me.id}"
-  authorization_type = "NONE"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "identity_list_dealers" {

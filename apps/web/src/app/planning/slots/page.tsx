@@ -2,23 +2,27 @@
 
 import Link from 'next/link';
 import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CheckSquare, Download, FileUp, Plus, RefreshCw, X } from 'lucide-react';
+import { CalendarCheck, CheckSquare, Download, FileUp, Plus, RefreshCw, X } from 'lucide-react';
 import { PageHeader, EmptyState } from '@gg-erp/ui';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   cancelCapacitySlot,
   createCapacitySlot,
+  getSchedulePreview,
   importCapacitySlots,
+  listScheduleAssignments,
   listCapacitySlots,
+  publishSchedule,
   type CapacitySlot,
   type CapacitySlotImportRow,
   type CapacitySlotListResponse,
   type CapacityStockLocationOption,
-  getBuildSlotDemandProjection,
   type BuildSlotDemandItem,
   type BuildSlotDemandProjection,
   type BuildSlotProjectionSlot,
+  type ScheduleAssignment,
+  type SchedulePreviewResponse,
 } from '@/lib/api-client';
 import { downloadCsv, normalizeCsvHeader, parseCsv } from '@/lib/csv-client';
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
@@ -86,6 +90,8 @@ function getWeekDates(): WeekRange {
 
 export default function BuildSlotPlannerPage() {
   const [projection, setProjection] = useState<BuildSlotDemandProjection | null>(null);
+  const [schedulePreview, setSchedulePreview] = useState<SchedulePreviewResponse | null>(null);
+  const [publishedAssignments, setPublishedAssignments] = useState<ScheduleAssignment[]>([]);
   const [capacity, setCapacity] = useState<CapacitySlotListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -102,6 +108,8 @@ export default function BuildSlotPlannerPage() {
   const [capacityMessage, setCapacityMessage] = useState<string | null>(null);
   const [importRows, setImportRows] = useState<CapacityImportDraftRow[]>([]);
   const [importing, setImporting] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [publishMessage, setPublishMessage] = useState<string | null>(null);
   const week = useMemo(() => getWeekDates(), []);
 
   const loadPlannerData = useCallback(() => {
@@ -110,7 +118,7 @@ export default function BuildSlotPlannerPage() {
     setLoadError(null);
 
     Promise.all([
-      getBuildSlotDemandProjection(
+      getSchedulePreview(
         { startDate: week.start, endDate: week.end },
         { allowMockFallback: false },
       ),
@@ -118,11 +126,17 @@ export default function BuildSlotPlannerPage() {
         { startDate: week.start, endDate: week.end, limit: 200 },
         { allowMockFallback: false },
       ),
+      listScheduleAssignments(
+        { startDate: week.start, endDate: week.end, state: 'PUBLISHED', limit: 200 },
+        { allowMockFallback: false },
+      ),
     ])
-      .then(([projectionData, capacityData]) => {
+      .then(([previewData, capacityData, assignmentData]) => {
         if (cancelled) return;
-        setProjection(projectionData);
+        setSchedulePreview(previewData);
+        setProjection(previewData.projection);
         setCapacity(capacityData);
+        setPublishedAssignments(assignmentData.items);
         setCapacityForm((current) => ({
           ...current,
           date: current.date || week.start,
@@ -131,8 +145,10 @@ export default function BuildSlotPlannerPage() {
       })
       .catch((error) => {
         if (cancelled) return;
+        setSchedulePreview(null);
         setProjection(null);
         setCapacity(null);
+        setPublishedAssignments([]);
         setLoadError(error instanceof Error ? error.message : 'Unable to load build-slot demand.');
       })
       .finally(() => {
@@ -219,10 +235,36 @@ export default function BuildSlotPlannerPage() {
       setCapacityMessage(
         `Capacity import complete: ${result.imported} new, ${result.updated} updated, ${result.skipped} skipped.`,
       );
+      loadPlannerData();
     } catch (error) {
       setCapacityMessage(error instanceof Error ? error.message : 'Unable to import capacity slots.');
     } finally {
       setImporting(false);
+    }
+  }
+
+  async function handlePublishSchedule() {
+    setPublishing(true);
+    setPublishMessage(null);
+    try {
+      const result = await publishSchedule(
+        {
+          startDate: week.start,
+          endDate: week.end,
+          notes: 'Published from Build Slot Planner',
+        },
+        { allowMockFallback: false },
+      );
+      setProjection(result.projection);
+      setPublishedAssignments(result.assignments);
+      setPublishMessage(
+        `Published ${result.assignmentCount} operation${result.assignmentCount === 1 ? '' : 's'} (${formatMinutes(result.scheduledMinutes)}).`,
+      );
+      loadPlannerData();
+    } catch (error) {
+      setPublishMessage(error instanceof Error ? error.message : 'Unable to publish schedule.');
+    } finally {
+      setPublishing(false);
     }
   }
 
@@ -280,6 +322,16 @@ export default function BuildSlotPlannerPage() {
       )}
 
       {!loading && projection && actions.length > 0 && <ActionQueue actions={actions} />}
+
+      {!loadError && projection && schedulePreview && (
+        <SchedulePublicationPanel
+          assignments={publishedAssignments}
+          message={publishMessage}
+          preview={schedulePreview}
+          publishing={publishing}
+          onPublish={handlePublishSchedule}
+        />
+      )}
 
       {!loadError && (
         <CapacityManagementPanel
@@ -339,6 +391,103 @@ export default function BuildSlotPlannerPage() {
           </details>
         </div>
       )}
+    </div>
+  );
+}
+
+function SchedulePublicationPanel({
+  assignments,
+  message,
+  preview,
+  publishing,
+  onPublish,
+}: {
+  assignments: ScheduleAssignment[];
+  message: string | null;
+  preview: SchedulePreviewResponse;
+  publishing: boolean;
+  onPublish: () => void;
+}) {
+  const canPublish = preview.totals.assignmentCount > 0 && !publishing;
+  const hasOpenIssues = preview.totals.unscheduledCount > 0 || preview.totals.overCapacityMinutes > 0;
+
+  return (
+    <section id="schedule-publication" className="mb-6 rounded-lg border border-gray-200 bg-white">
+      <header className="flex flex-col gap-3 border-b border-gray-100 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-gray-900">Schedule publication</h2>
+          <p className="text-xs text-gray-500">
+            Persist projected operations into work-order planned times and dispatch-ready slot assignments.
+          </p>
+        </div>
+        <Button type="button" onClick={onPublish} disabled={!canPublish}>
+          <CalendarCheck data-icon="inline-start" />
+          {publishing ? 'Publishing...' : 'Publish schedule'}
+        </Button>
+      </header>
+
+      <div className="grid gap-4 p-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.2fr)]">
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4 xl:grid-cols-2">
+            <MetricPill label="Ready to publish" value={String(preview.totals.assignmentCount)} />
+            <MetricPill label="Scheduled load" value={formatMinutes(preview.totals.scheduledMinutes)} />
+            <MetricPill label="Unscheduled" value={String(preview.totals.unscheduledCount)} />
+            <MetricPill label="Overflow" value={formatMinutes(preview.totals.overCapacityMinutes)} />
+          </div>
+
+          {hasOpenIssues && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              Publishing will persist the operations that fit now. Overflow, blocked, material-short, or missing-estimate
+              work remains in the action queue.
+            </div>
+          )}
+
+          {message && (
+            <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-700">
+              {message}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-md border border-gray-200">
+          <div className="border-b border-gray-100 px-3 py-2 text-xs font-semibold text-gray-700">
+            Published assignments
+          </div>
+          {assignments.length === 0 ? (
+            <div className="p-3 text-xs text-gray-500">No published build assignments for this week yet.</div>
+          ) : (
+            <ul className="max-h-72 divide-y divide-gray-100 overflow-auto">
+              {assignments.map((assignment) => (
+                <li key={assignment.id} className="grid gap-2 px-3 py-2 text-xs md:grid-cols-[1fr_auto]">
+                  <div className="min-w-0">
+                    <Link
+                      href={erpRecordRoute('work-order', assignment.workOrderId)}
+                      className="font-mono font-semibold text-gray-900 hover:underline"
+                    >
+                      #{assignment.workOrderNumber}
+                    </Link>
+                    <span className="ml-2 text-gray-700">{assignment.operationName}</span>
+                    <div className="truncate text-gray-400">{assignment.title}</div>
+                  </div>
+                  <div className="text-gray-500 md:text-right">
+                    <div>{formatTime(assignment.plannedStartAt)} to {formatTime(assignment.plannedEndAt)}</div>
+                    <div>{assignment.stockLocationCode}{assignment.bayCode ? ` · ${assignment.bayCode}` : ''}</div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MetricPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{label}</div>
+      <div className="mt-1 text-sm font-semibold text-gray-900">{value}</div>
     </div>
   );
 }

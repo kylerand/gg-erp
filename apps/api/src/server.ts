@@ -174,10 +174,13 @@ import {
   cancelCapacitySlotHandler,
   createCapacitySlotHandler,
   getBuildSlotDemandProjectionHandler,
+  getSchedulePreviewHandler,
   importCapacitySlotsHandler,
   listCapacitySlotsHandler,
   listBuildSlotsHandler,
   listLaborCapacityHandler,
+  listScheduleAssignmentsHandler,
+  publishScheduleHandler,
   updateCapacitySlotHandler,
 } from './lambda/scheduling/handlers.js';
 import { getWorkspaceTodayHandler } from './lambda/workspace/handlers.js';
@@ -662,6 +665,12 @@ async function route(
     result = await listLaborCapacityHandler(event);
   } else if (pathname === '/scheduling/demand-projection' && method === 'GET') {
     result = await getBuildSlotDemandProjectionHandler(event);
+  } else if (pathname === '/scheduling/schedule-preview' && method === 'GET') {
+    result = await getSchedulePreviewHandler(event);
+  } else if (pathname === '/scheduling/schedule-publications' && method === 'POST') {
+    result = await publishScheduleHandler(event);
+  } else if (pathname === '/scheduling/schedule-assignments' && method === 'GET') {
+    result = await listScheduleAssignmentsHandler(event);
   } else if (pathname === '/scheduling/capacity-slots' && method === 'GET') {
     result = await listCapacitySlotsHandler(event);
   } else if (pathname === '/scheduling/capacity-slots' && method === 'POST') {
@@ -720,6 +729,6 @@ server.listen(PORT, () => {
   console.log(`   Customers   GET|POST /accounting/customers`);
   console.log(`   Reconcile   GET|POST /accounting/reconciliation/runs, GET /:id, GET /mismatches`);
   console.log(`   Accounts    GET /accounting/integration-accounts, PUT /:id/status`);
-  console.log(`   Scheduling  GET /scheduling/slots, /labor-capacity, /demand-projection, /capacity-slots`);
+  console.log(`   Scheduling  GET /scheduling/slots, /labor-capacity, /demand-projection, /schedule-preview, /schedule-assignments, /capacity-slots`);
   console.log(`   Failures    GET /accounting/failures/summary, POST /accounting/failures/retry\n`);
 });

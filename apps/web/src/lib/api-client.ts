@@ -3098,6 +3098,171 @@ export async function getBuildSlotDemandProjection(
   );
 }
 
+export interface SchedulePreviewTotals {
+  assignmentCount: number;
+  scheduledMinutes: number;
+  unscheduledCount: number;
+  unscheduledMinutes: number;
+  overCapacityMinutes: number;
+}
+
+export interface SchedulePreviewAssignment {
+  workOrderId: string;
+  workOrderNumber: string;
+  title: string;
+  status: string;
+  priority: number;
+  dueAt?: string;
+  materialReadiness: string;
+  operationId: string;
+  operationCode: string;
+  operationName: string;
+  operationSequenceNo: number;
+  operationStatus: string;
+  requiredSkillCode?: string;
+  estimatedMinutes: number;
+  capacitySlotId: string;
+  slotStart: string;
+  slotEnd: string;
+  stockLocationId?: string;
+  bayCode?: string;
+  teamCode?: string;
+  plannedStartAt: string;
+  plannedEndAt: string;
+  slotSequenceNo: number;
+  reason: 'PROJECTED_TO_SLOT';
+}
+
+export interface SchedulePreviewResponse {
+  startDate: string;
+  endDate: string;
+  generatedAt: string;
+  projection: BuildSlotDemandProjection;
+  assignments: SchedulePreviewAssignment[];
+  totals: SchedulePreviewTotals;
+  warnings: BuildSlotProjectionWarning[];
+}
+
+export type ScheduleAssignmentState =
+  | 'PROPOSED'
+  | 'PUBLISHED'
+  | 'DISPATCHED'
+  | 'REJECTED'
+  | 'SUPERSEDED';
+
+export interface ScheduleAssignment {
+  id: string;
+  plannerRunId: string;
+  assignmentState: ScheduleAssignmentState;
+  workOrderId: string;
+  workOrderNumber: string;
+  title: string;
+  workOrderStatus: string;
+  operationId: string;
+  operationCode: string;
+  operationName: string;
+  operationSequenceNo: number;
+  operationStatus: string;
+  estimatedMinutes: number;
+  capacitySlotId: string;
+  slotStart: string;
+  slotEnd: string;
+  stockLocationId: string;
+  stockLocationCode: string;
+  stockLocationName: string;
+  bayCode?: string;
+  teamCode?: string;
+  plannedStartAt: string;
+  plannedEndAt: string;
+  slotSequenceNo: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScheduleAssignmentListResponse {
+  items: ScheduleAssignment[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface SchedulePublicationResponse {
+  run: {
+    id: string;
+    runStatus: string;
+    algorithmVersion: string;
+    inputHash: string;
+    startedAt: string;
+    completedAt: string;
+    createdAt: string;
+  };
+  publishedAt: string;
+  assignmentCount: number;
+  scheduledMinutes: number;
+  projection: BuildSlotDemandProjection;
+  assignments: ScheduleAssignment[];
+  totals: SchedulePreviewTotals;
+  warnings: BuildSlotProjectionWarning[];
+}
+
+export async function getSchedulePreview(
+  params?: {
+    startDate?: string;
+    endDate?: string;
+  },
+  options?: ApiDataOptions,
+): Promise<SchedulePreviewResponse> {
+  const qs = new URLSearchParams();
+  if (params?.startDate) qs.set('startDate', params.startDate);
+  if (params?.endDate) qs.set('endDate', params.endDate);
+  return apiFetch<SchedulePreviewResponse>(
+    `/scheduling/schedule-preview${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    undefined,
+    options,
+  );
+}
+
+export async function listScheduleAssignments(
+  params?: {
+    startDate?: string;
+    endDate?: string;
+    state?: ScheduleAssignmentState;
+    limit?: number;
+    offset?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<ScheduleAssignmentListResponse> {
+  const qs = new URLSearchParams();
+  if (params?.startDate) qs.set('startDate', params.startDate);
+  if (params?.endDate) qs.set('endDate', params.endDate);
+  if (params?.state) qs.set('state', params.state);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  return apiFetch<ScheduleAssignmentListResponse>(
+    `/scheduling/schedule-assignments${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    { items: [], total: 0, limit: params?.limit ?? 100, offset: params?.offset ?? 0 },
+    options,
+  );
+}
+
+export async function publishSchedule(
+  input: { startDate: string; endDate: string; notes?: string },
+  options?: ApiDataOptions,
+): Promise<SchedulePublicationResponse> {
+  return apiFetch<SchedulePublicationResponse>(
+    '/scheduling/schedule-publications',
+    {
+      method: 'POST',
+      body: JSON.stringify(input),
+      headers: mutationHeaders(),
+    },
+    undefined,
+    options,
+  );
+}
+
 export type CapacitySlotStatus = 'OPEN' | 'LOCKED' | 'EXECUTING' | 'CLOSED' | 'CANCELLED';
 
 export interface CapacityStockLocationOption {

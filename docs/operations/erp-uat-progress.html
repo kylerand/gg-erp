@@ -228,12 +228,12 @@
           <p class="muted">Production readiness tracker</p>
           <h1>ERP Actionability UAT Progress</h1>
         </div>
-        <div class="stamp">Last updated: 2026-05-07</div>
+        <div class="stamp">Last updated: 2026-05-22</div>
       </header>
 
       <div class="summary">
-        <div class="metric"><strong>9</strong><span>Tracked delivery slices</span></div>
-        <div class="metric"><strong>6</strong><span>Done</span></div>
+        <div class="metric"><strong>10</strong><span>Tracked delivery slices</span></div>
+        <div class="metric"><strong>7</strong><span>Done</span></div>
         <div class="metric"><strong>3</strong><span>In progress</span></div>
         <div class="metric"><strong>0</strong><span>Not started</span></div>
       </div>
@@ -241,9 +241,9 @@
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: SSO handoff and remaining selector gaps.
+          Current focus: schedule publication, dispatch execution, and remaining selector gaps.
         </p>
-        <div class="progress" aria-label="99 percent complete"><div style="width: 99%"></div></div>
+        <div class="progress" aria-label="84 percent complete"><div style="width: 84%"></div></div>
       </section>
 
       <section>
@@ -303,6 +303,15 @@
                 Add dedicated build configuration, BOM, vendor, and technician selectors once those
                 catalogs are exposed through stable APIs.
               </td>
+            </tr>
+            <tr>
+              <td>Build-slot schedule publication</td>
+              <td><span class="pill doing">In progress</span></td>
+              <td>
+                Capacity slots and deterministic demand projection are being promoted into
+                persisted planner runs, published slot assignments, and work-order planned times.
+              </td>
+              <td>Merge the schedule-publication slice, wait for QA/CD, then remove pending-deploy route exceptions.</td>
             </tr>
             <tr>
               <td>Training repair</td>

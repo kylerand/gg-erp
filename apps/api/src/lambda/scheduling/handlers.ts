@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Prisma, PrismaClient } from '@prisma/client';
 import {
   BuildSlotState,
@@ -12,9 +13,12 @@ import { WorkOrderService } from '../../contexts/build-planning/workOrder.servic
 import { InMemoryEventPublisher, InMemoryOutbox } from '../../events/index.js';
 import { ConsoleObservabilityHooks } from '../../observability/index.js';
 import {
+  buildScheduleAssignmentsFromProjection,
   buildSlotDemandProjection,
+  type BuildSlotDemandProjection,
   type BuildSlotCapacityInput,
   type BuildSlotDemandInput,
+  type BuildSlotScheduleAssignment,
   type MaterialReadiness,
 } from '../../contexts/build-planning/buildSlotProjection.js';
 
@@ -48,6 +52,7 @@ const routes = createWorkOrderRoutes(
 let schedulingPrisma: PrismaClient | undefined;
 let schedulingProjectionQueriesOverride: SchedulingProjectionQueries | undefined;
 let schedulingCapacityStoreOverride: SchedulingCapacitySlotStore | undefined;
+let schedulingPublicationStoreOverride: SchedulingPublicationStore | undefined;
 
 function getPrisma(): PrismaClient {
   schedulingPrisma ??= new PrismaClient();
@@ -171,6 +176,109 @@ export interface SchedulingCapacitySlotStore {
   upsertCapacitySlot(input: CreateCapacitySlotInput, context: MutationContext): Promise<{ item: CapacitySlotResponse; created: boolean }>;
 }
 
+export type ScheduleAssignmentState =
+  | 'PROPOSED'
+  | 'PUBLISHED'
+  | 'DISPATCHED'
+  | 'REJECTED'
+  | 'SUPERSEDED';
+
+export type SchedulePreviewAssignment = BuildSlotScheduleAssignment;
+
+export interface SchedulePreviewTotals {
+  assignmentCount: number;
+  scheduledMinutes: number;
+  unscheduledCount: number;
+  unscheduledMinutes: number;
+  overCapacityMinutes: number;
+}
+
+export interface SchedulePreviewResult {
+  startDate: string;
+  endDate: string;
+  generatedAt: string;
+  projection: BuildSlotDemandProjection;
+  assignments: SchedulePreviewAssignment[];
+  totals: SchedulePreviewTotals;
+  warnings: BuildSlotDemandProjection['warnings'];
+}
+
+export interface SchedulePublishInput extends DateRange {
+  notes?: string;
+}
+
+export interface ScheduleRunResponse {
+  id: string;
+  runStatus: string;
+  algorithmVersion: string;
+  inputHash: string;
+  startedAt: string;
+  completedAt: string;
+  createdAt: string;
+}
+
+export interface ScheduleAssignmentResponse {
+  id: string;
+  plannerRunId: string;
+  assignmentState: ScheduleAssignmentState;
+  workOrderId: string;
+  workOrderNumber: string;
+  title: string;
+  workOrderStatus: string;
+  operationId: string;
+  operationCode: string;
+  operationName: string;
+  operationSequenceNo: number;
+  operationStatus: string;
+  estimatedMinutes: number;
+  capacitySlotId: string;
+  slotStart: string;
+  slotEnd: string;
+  stockLocationId: string;
+  stockLocationCode: string;
+  stockLocationName: string;
+  bayCode?: string;
+  teamCode?: string;
+  plannedStartAt: string;
+  plannedEndAt: string;
+  slotSequenceNo: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SchedulePublicationResult {
+  run: ScheduleRunResponse;
+  publishedAt: string;
+  assignmentCount: number;
+  scheduledMinutes: number;
+  projection: BuildSlotDemandProjection;
+  assignments: ScheduleAssignmentResponse[];
+  totals: SchedulePreviewTotals;
+  warnings: BuildSlotDemandProjection['warnings'];
+}
+
+export interface ScheduleAssignmentListInput extends DateRange {
+  state?: ScheduleAssignmentState;
+  limit: number;
+  offset: number;
+}
+
+export interface ScheduleAssignmentListResult {
+  items: ScheduleAssignmentResponse[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface SchedulingPublicationStore {
+  publishSchedule(
+    input: SchedulePublishInput,
+    preview: SchedulePreviewResult,
+    context: MutationContext,
+  ): Promise<SchedulePublicationResult>;
+  listScheduleAssignments(input: ScheduleAssignmentListInput): Promise<ScheduleAssignmentListResult>;
+}
+
 export function setSchedulingProjectionQueriesForTests(
   next: SchedulingProjectionQueries | undefined,
 ): void {
@@ -183,11 +291,18 @@ export function setSchedulingCapacityStoreForTests(
   schedulingCapacityStoreOverride = next;
 }
 
+export function setSchedulingPublicationStoreForTests(
+  next: SchedulingPublicationStore | undefined,
+): void {
+  schedulingPublicationStoreOverride = next;
+}
+
 export async function disconnectSchedulingHandlerDependencies(): Promise<void> {
   await schedulingPrisma?.$disconnect();
   schedulingPrisma = undefined;
   schedulingProjectionQueriesOverride = undefined;
   schedulingCapacityStoreOverride = undefined;
+  schedulingPublicationStoreOverride = undefined;
 }
 
 // ─── GET /scheduling/slots ──────────────────────────────────────────────────
@@ -396,6 +511,60 @@ export async function importCapacitySlotsHandler(
   }
 }
 
+// ─── planning.schedule publication ──────────────────────────────────────────
+
+export async function getSchedulePreviewHandler(
+  event: ApiGatewayProxyEventLike,
+): Promise<ApiGatewayProxyResultLike> {
+  try {
+    const normalized = normalizeDateRange(event.queryStringParameters ?? {});
+    if ('error' in normalized) {
+      return json(422, { message: normalized.error });
+    }
+
+    return json(200, await buildSchedulePreview(normalized));
+  } catch (error) {
+    return capacityErrorResponse(error);
+  }
+}
+
+export async function publishScheduleHandler(
+  event: ApiGatewayProxyEventLike,
+): Promise<ApiGatewayProxyResultLike> {
+  try {
+    const body = parseJsonObject(event.body);
+    const input = parseSchedulePublishInput(body);
+    const preview = await buildSchedulePreview(input);
+    if (preview.assignments.length === 0) {
+      throw new CapacitySlotError(409, 'No schedulable operations fit the selected capacity window.');
+    }
+
+    const result = await getSchedulingPublicationStore().publishSchedule(
+      input,
+      preview,
+      mutationContext(event),
+    );
+    return json(201, result);
+  } catch (error) {
+    return capacityErrorResponse(error);
+  }
+}
+
+export async function listScheduleAssignmentsHandler(
+  event: ApiGatewayProxyEventLike,
+): Promise<ApiGatewayProxyResultLike> {
+  try {
+    const parsed = parseScheduleAssignmentListInput(event.queryStringParameters ?? {});
+    if ('error' in parsed) {
+      return json(422, { message: parsed.error });
+    }
+
+    return json(200, await getSchedulingPublicationStore().listScheduleAssignments(parsed));
+  } catch (error) {
+    return capacityErrorResponse(error);
+  }
+}
+
 // ─── Response mappers ───────────────────────────────────────────────────────
 
 function toBuildSlotResponse(slot: BuildSlot) {
@@ -479,6 +648,49 @@ interface StockLocationRow {
   locationType: string;
 }
 
+interface PlannerRunRow {
+  id: string;
+  runStatus: string;
+  algorithmVersion: string;
+  inputHash: string;
+  startedAt: Date | string;
+  completedAt: Date | string;
+  createdAt: Date | string;
+}
+
+interface ScheduleAssignmentRow {
+  id: string;
+  plannerRunId: string;
+  assignmentState: ScheduleAssignmentState;
+  workOrderId: string;
+  workOrderNumber: string;
+  title: string;
+  workOrderStatus: string;
+  operationId: string;
+  operationCode: string;
+  operationName: string;
+  operationSequenceNo: number;
+  operationStatus: string;
+  estimatedMinutes: number;
+  capacitySlotId: string;
+  slotStart: Date | string;
+  slotEnd: Date | string;
+  stockLocationId: string;
+  stockLocationCode: string;
+  stockLocationName: string;
+  bayCode: string | null;
+  teamCode: string | null;
+  plannedStartAt: Date | string;
+  plannedEndAt: Date | string;
+  slotSequenceNo: number;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
+
+interface ScheduleAssignmentCountRow {
+  total: number | bigint;
+}
+
 const ACTIVE_WO_STATUSES = ['READY', 'SCHEDULED', 'IN_PROGRESS', 'BLOCKED'] as const;
 const ACTIVE_OPERATION_STATUSES = ['PENDING', 'READY', 'IN_PROGRESS', 'BLOCKED'] as const;
 const CAPACITY_SLOT_STATUSES: CapacitySlotStatus[] = [
@@ -488,6 +700,14 @@ const CAPACITY_SLOT_STATUSES: CapacitySlotStatus[] = [
   'CLOSED',
   'CANCELLED',
 ];
+const SCHEDULE_ASSIGNMENT_STATES: ScheduleAssignmentState[] = [
+  'PROPOSED',
+  'PUBLISHED',
+  'DISPATCHED',
+  'REJECTED',
+  'SUPERSEDED',
+];
+const SCHEDULE_ALGORITHM_VERSION = 'deterministic-slot-v1';
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -502,6 +722,250 @@ class CapacitySlotError extends Error {
 
 function getCapacitySlotStore(): SchedulingCapacitySlotStore {
   return schedulingCapacityStoreOverride ?? createPrismaCapacitySlotStore();
+}
+
+function getSchedulingPublicationStore(): SchedulingPublicationStore {
+  return schedulingPublicationStoreOverride ?? createPrismaSchedulePublicationStore();
+}
+
+function createPrismaSchedulePublicationStore(): SchedulingPublicationStore {
+  return {
+    async publishSchedule(input, preview, context) {
+      const start = startOfDate(input.startDate);
+      const end = addDays(startOfDate(input.endDate), 1);
+      const inputHash = hashScheduleInput(input, preview.assignments);
+      const publishedAt = new Date().toISOString();
+      const affectedSlotIds = new Set(preview.assignments.map((assignment) => assignment.capacitySlotId));
+
+      const run = await getPrisma().$transaction(async (tx) => {
+        const [runRow] = await tx.$queryRaw<PlannerRunRow[]>`
+          INSERT INTO planning.planner_runs (
+            run_status,
+            algorithm_version,
+            input_hash,
+            started_at,
+            completed_at,
+            runtime_ms,
+            correlation_id,
+            request_id
+          )
+          VALUES (
+            'SUCCEEDED',
+            ${SCHEDULE_ALGORITHM_VERSION},
+            ${inputHash},
+            now(),
+            now(),
+            0,
+            ${context.correlationId},
+            ${context.requestId ?? null}
+          )
+          RETURNING
+            id::text AS "id",
+            run_status AS "runStatus",
+            algorithm_version AS "algorithmVersion",
+            input_hash AS "inputHash",
+            started_at AS "startedAt",
+            completed_at AS "completedAt",
+            created_at AS "createdAt"
+        `;
+        if (!runRow) {
+          throw new CapacitySlotError(500, 'Schedule planner run could not be created.');
+        }
+
+        const supersededRows = await tx.$queryRaw<Array<{ capacitySlotId: string }>>`
+          WITH superseded AS (
+            UPDATE planning.plan_assignments
+            SET
+              assignment_state = 'SUPERSEDED',
+              updated_at = now(),
+              correlation_id = ${context.correlationId},
+              request_id = ${context.requestId ?? null},
+              version = version + 1
+            WHERE planned_start_at >= ${start}
+              AND planned_start_at < ${end}
+              AND assignment_state IN ('PROPOSED', 'PUBLISHED')
+            RETURNING capacity_slot_id::text AS "capacitySlotId"
+          )
+          SELECT "capacitySlotId" FROM superseded
+        `;
+        for (const row of supersededRows) affectedSlotIds.add(row.capacitySlotId);
+
+        for (const assignment of preview.assignments) {
+          const operationSupersededRows = await tx.$queryRaw<Array<{ capacitySlotId: string }>>`
+            WITH superseded AS (
+              UPDATE planning.plan_assignments
+              SET
+                assignment_state = 'SUPERSEDED',
+                updated_at = now(),
+                correlation_id = ${context.correlationId},
+                request_id = ${context.requestId ?? null},
+                version = version + 1
+              WHERE work_order_operation_id = ${assignment.operationId}::uuid
+                AND assignment_state IN ('PROPOSED', 'PUBLISHED')
+              RETURNING capacity_slot_id::text AS "capacitySlotId"
+            )
+            SELECT "capacitySlotId" FROM superseded
+          `;
+          for (const row of operationSupersededRows) affectedSlotIds.add(row.capacitySlotId);
+
+          const rationale = {
+            source: 'build-slot-projection',
+            reason: assignment.reason,
+            notes: input.notes ?? null,
+          };
+          await tx.$executeRaw`
+            INSERT INTO planning.plan_assignments (
+              planner_run_id,
+              work_order_operation_id,
+              capacity_slot_id,
+              assignment_state,
+              planned_start_at,
+              planned_end_at,
+              slot_sequence_no,
+              score,
+              rationale,
+              correlation_id,
+              request_id
+            )
+            VALUES (
+              ${runRow.id}::uuid,
+              ${assignment.operationId}::uuid,
+              ${assignment.capacitySlotId}::uuid,
+              'PUBLISHED',
+              ${new Date(assignment.plannedStartAt)},
+              ${new Date(assignment.plannedEndAt)},
+              ${assignment.slotSequenceNo},
+              ${assignment.priority},
+              ${JSON.stringify(rationale)}::jsonb,
+              ${context.correlationId},
+              ${context.requestId ?? null}
+            )
+          `;
+
+          await tx.$executeRaw`
+            UPDATE work_orders.work_order_operations
+            SET
+              planned_start_at = ${new Date(assignment.plannedStartAt)},
+              planned_end_at = ${new Date(assignment.plannedEndAt)},
+              operation_status = CASE
+                WHEN operation_status = 'PENDING'::work_orders."WoOperationStatus"
+                  THEN 'READY'::work_orders."WoOperationStatus"
+                ELSE operation_status
+              END,
+              correlation_id = ${context.correlationId},
+              version = version + 1
+            WHERE id = ${assignment.operationId}::uuid
+              AND operation_status NOT IN (
+                'DONE'::work_orders."WoOperationStatus",
+                'SKIPPED'::work_orders."WoOperationStatus",
+                'CANCELLED'::work_orders."WoOperationStatus"
+              )
+          `;
+
+          await tx.$executeRaw`
+            UPDATE work_orders.work_orders
+            SET
+              status = 'SCHEDULED'::work_orders."WoStatus",
+              updated_at = now(),
+              correlation_id = ${context.correlationId},
+              version = version + 1
+            WHERE id = ${assignment.workOrderId}::uuid
+              AND status IN ('DRAFT'::work_orders."WoStatus", 'READY'::work_orders."WoStatus")
+          `;
+        }
+
+        for (const slotId of affectedSlotIds) {
+          await tx.$executeRaw`
+            UPDATE planning.capacity_slots s
+            SET
+              allocated_minutes = LEAST(
+                s.capacity_minutes,
+                COALESCE((
+                  SELECT SUM(op.estimated_minutes)::int
+                  FROM planning.plan_assignments pa
+                  JOIN work_orders.work_order_operations op ON op.id = pa.work_order_operation_id
+                  WHERE pa.capacity_slot_id = s.id
+                    AND pa.assignment_state IN ('PUBLISHED', 'DISPATCHED')
+                ), 0)
+              ),
+              updated_at = now(),
+              correlation_id = ${context.correlationId},
+              request_id = ${context.requestId ?? null},
+              version = version + 1
+            WHERE s.id = ${slotId}::uuid
+          `;
+        }
+
+        return toPlannerRunResponse(runRow);
+      });
+
+      const assignmentList = await this.listScheduleAssignments({
+        startDate: input.startDate,
+        endDate: input.endDate,
+        state: 'PUBLISHED',
+        limit: 500,
+        offset: 0,
+      });
+
+      return {
+        run,
+        publishedAt,
+        assignmentCount: preview.assignments.length,
+        scheduledMinutes: preview.totals.scheduledMinutes,
+        projection: preview.projection,
+        assignments: assignmentList.items,
+        totals: preview.totals,
+        warnings: preview.warnings,
+      };
+    },
+
+    async listScheduleAssignments(input) {
+      const start = startOfDate(input.startDate);
+      const end = addDays(startOfDate(input.endDate), 1);
+      const where: Prisma.Sql[] = [
+        Prisma.sql`pa.planned_start_at >= ${start}`,
+        Prisma.sql`pa.planned_start_at < ${end}`,
+      ];
+      if (input.state) {
+        where.push(Prisma.sql`pa.assignment_state = ${input.state}`);
+      }
+
+      try {
+        const [rows, countRows] = await Promise.all([
+          getPrisma().$queryRaw<ScheduleAssignmentRow[]>(Prisma.sql`
+            SELECT ${scheduleAssignmentSelectColumns()}
+            FROM planning.plan_assignments pa
+            JOIN planning.capacity_slots s ON s.id = pa.capacity_slot_id
+            JOIN inventory.stock_locations loc ON loc.id = s.stock_location_id
+            JOIN work_orders.work_order_operations op ON op.id = pa.work_order_operation_id
+            JOIN work_orders.work_orders wo ON wo.id = op.work_order_id
+            WHERE ${Prisma.join(where, ' AND ')}
+            ORDER BY pa.planned_start_at ASC, s.slot_start ASC, pa.slot_sequence_no ASC, wo.work_order_number ASC
+            LIMIT ${input.limit}
+            OFFSET ${input.offset}
+          `),
+          getPrisma().$queryRaw<ScheduleAssignmentCountRow[]>(Prisma.sql`
+            SELECT COUNT(*)::int AS "total"
+            FROM planning.plan_assignments pa
+            JOIN planning.capacity_slots s ON s.id = pa.capacity_slot_id
+            WHERE ${Prisma.join(where, ' AND ')}
+          `),
+        ]);
+
+        return {
+          items: rows.map(toScheduleAssignmentResponse),
+          total: Number(countRows[0]?.total ?? rows.length),
+          limit: input.limit,
+          offset: input.offset,
+        };
+      } catch (error) {
+        if (isMissingSchedulePublicationTableError(error)) {
+          return { items: [], total: 0, limit: input.limit, offset: input.offset };
+        }
+        throw error;
+      }
+    },
+  };
 }
 
 function createPrismaCapacitySlotStore(): SchedulingCapacitySlotStore {
@@ -723,6 +1187,37 @@ function capacitySlotSelectColumns(alias: string): Prisma.Sql {
   `;
 }
 
+function scheduleAssignmentSelectColumns(): Prisma.Sql {
+  return Prisma.sql`
+    pa.id::text AS "id",
+    pa.planner_run_id::text AS "plannerRunId",
+    pa.assignment_state AS "assignmentState",
+    wo.id::text AS "workOrderId",
+    wo.work_order_number AS "workOrderNumber",
+    wo.title AS "title",
+    wo.status::text AS "workOrderStatus",
+    op.id::text AS "operationId",
+    op.operation_code AS "operationCode",
+    op.operation_name AS "operationName",
+    op.sequence_no AS "operationSequenceNo",
+    op.operation_status::text AS "operationStatus",
+    op.estimated_minutes AS "estimatedMinutes",
+    s.id::text AS "capacitySlotId",
+    s.slot_start AS "slotStart",
+    s.slot_end AS "slotEnd",
+    s.stock_location_id::text AS "stockLocationId",
+    loc.location_code AS "stockLocationCode",
+    loc.location_name AS "stockLocationName",
+    s.bay_code AS "bayCode",
+    s.team_code AS "teamCode",
+    pa.planned_start_at AS "plannedStartAt",
+    pa.planned_end_at AS "plannedEndAt",
+    pa.slot_sequence_no AS "slotSequenceNo",
+    pa.created_at AS "createdAt",
+    pa.updated_at AS "updatedAt"
+  `;
+}
+
 function capacitySlotUpdateSetClauses(input: UpdateCapacitySlotInput): Prisma.Sql[] {
   const clauses: Prisma.Sql[] = [];
   if (input.slotStart) clauses.push(Prisma.sql`slot_start = ${new Date(input.slotStart)}`);
@@ -826,6 +1321,30 @@ async function buildProjectionForRange(range: DateRange): Promise<ReturnType<typ
   return buildSlotDemandProjection({ ...range, slots, demand });
 }
 
+async function buildSchedulePreview(range: DateRange): Promise<SchedulePreviewResult> {
+  const projection = await buildProjectionForRange(range);
+  const assignments = buildScheduleAssignmentsFromProjection(projection);
+  const scheduledMinutes = assignments.reduce(
+    (sum, assignment) => sum + Math.max(assignment.estimatedMinutes, 0),
+    0,
+  );
+  return {
+    startDate: range.startDate,
+    endDate: range.endDate,
+    generatedAt: projection.generatedAt,
+    projection,
+    assignments,
+    totals: {
+      assignmentCount: assignments.length,
+      scheduledMinutes,
+      unscheduledCount: projection.totals.unscheduledCount,
+      unscheduledMinutes: projection.totals.unscheduledDemandMinutes,
+      overCapacityMinutes: projection.totals.overCapacityMinutes,
+    },
+    warnings: projection.warnings,
+  };
+}
+
 async function listProjectionCapacitySlots(range: DateRange): Promise<BuildSlotCapacityInput[]> {
   if (!schedulingCapacityStoreOverride) {
     return createPrismaProjectionQueries().listCapacitySlots(range);
@@ -888,6 +1407,7 @@ function createPrismaProjectionQueries(): SchedulingProjectionQueries {
     async listOperationDemand(input) {
       const start = startOfDate(input.startDate);
       const end = addDays(startOfDate(input.endDate), 1);
+      const publishedOperationIds = await listPublishedOperationIds(input);
 
       const orders = await getPrisma().woOrder.findMany({
         where: {
@@ -912,27 +1432,49 @@ function createPrismaProjectionQueries(): SchedulingProjectionQueries {
 
       return orders.flatMap((order) => {
         const materialReadiness = summarizeMaterialReadiness(order.parts ?? []);
-        return (order.operations ?? []).map((operation) => ({
-          workOrderId: order.id,
-          workOrderNumber: order.workOrderNumber,
-          title: order.title,
-          status: order.status,
-          priority: order.priority,
-          dueAt: toOptionalIso(order.dueAt),
-          materialReadiness,
-          operationId: operation.id,
-          operationCode: operation.operationCode,
-          operationName: operation.operationName,
-          sequenceNo: operation.sequenceNo,
-          operationStatus: operation.operationStatus,
-          requiredSkillCode: operation.requiredSkillCode ?? undefined,
-          estimatedMinutes: operation.estimatedMinutes,
-          plannedStartAt: toOptionalIso(operation.plannedStartAt),
-          plannedEndAt: toOptionalIso(operation.plannedEndAt),
-        }));
+        return (order.operations ?? [])
+          .filter((operation) => !publishedOperationIds.has(operation.id))
+          .map((operation) => ({
+            workOrderId: order.id,
+            workOrderNumber: order.workOrderNumber,
+            title: order.title,
+            status: order.status,
+            priority: order.priority,
+            dueAt: toOptionalIso(order.dueAt),
+            materialReadiness,
+            operationId: operation.id,
+            operationCode: operation.operationCode,
+            operationName: operation.operationName,
+            sequenceNo: operation.sequenceNo,
+            operationStatus: operation.operationStatus,
+            requiredSkillCode: operation.requiredSkillCode ?? undefined,
+            estimatedMinutes: operation.estimatedMinutes,
+            plannedStartAt: toOptionalIso(operation.plannedStartAt),
+            plannedEndAt: toOptionalIso(operation.plannedEndAt),
+          }));
       });
     },
   };
+}
+
+async function listPublishedOperationIds(range: DateRange): Promise<Set<string>> {
+  const start = startOfDate(range.startDate);
+  const end = addDays(startOfDate(range.endDate), 1);
+  try {
+    const rows = await getPrisma().$queryRaw<Array<{ operationId: string }>>`
+      SELECT DISTINCT work_order_operation_id::text AS "operationId"
+      FROM planning.plan_assignments
+      WHERE planned_start_at >= ${start}
+        AND planned_start_at < ${end}
+        AND assignment_state IN ('PUBLISHED', 'DISPATCHED')
+    `;
+    return new Set(rows.map((row) => row.operationId));
+  } catch (error) {
+    if (isMissingSchedulePublicationTableError(error)) {
+      return new Set();
+    }
+    throw error;
+  }
 }
 
 function normalizeDateRange(
@@ -990,6 +1532,51 @@ function parseCapacitySlotListInput(
     status,
     limit: limit.value,
     offset: offset.value,
+  };
+}
+
+function parseScheduleAssignmentListInput(
+  qs: Record<string, string | undefined>,
+): ScheduleAssignmentListInput | { error: string } {
+  const range = normalizeDateRange(qs);
+  if ('error' in range) return range;
+
+  const limit = parseInteger(qs.limit, 100, 'limit');
+  if ('error' in limit) return limit;
+  const offset = parseInteger(qs.offset, 0, 'offset');
+  if ('error' in offset) return offset;
+  if (limit.value <= 0 || limit.value > 500) {
+    return { error: 'limit must be between 1 and 500.' };
+  }
+  if (offset.value < 0) {
+    return { error: 'offset must be a non-negative integer.' };
+  }
+
+  const state = qs.state?.trim().toUpperCase() as ScheduleAssignmentState | undefined;
+  if (state && !SCHEDULE_ASSIGNMENT_STATES.includes(state)) {
+    return { error: `state must be one of: ${SCHEDULE_ASSIGNMENT_STATES.join(', ')}.` };
+  }
+
+  return {
+    ...range,
+    state,
+    limit: limit.value,
+    offset: offset.value,
+  };
+}
+
+function parseSchedulePublishInput(body: Record<string, unknown>): SchedulePublishInput {
+  const range = normalizeDateRange({
+    startDate: typeof body.startDate === 'string' ? body.startDate : undefined,
+    endDate: typeof body.endDate === 'string' ? body.endDate : undefined,
+  });
+  if ('error' in range) {
+    throw new CapacitySlotError(422, range.error);
+  }
+
+  return {
+    ...range,
+    notes: normalizeOptionalText(body.notes),
   };
 }
 
@@ -1297,6 +1884,49 @@ function toPersistedCapacitySlotResponse(row: PersistedCapacitySlotRow): Capacit
   };
 }
 
+function toPlannerRunResponse(row: PlannerRunRow): ScheduleRunResponse {
+  return {
+    id: row.id,
+    runStatus: row.runStatus,
+    algorithmVersion: row.algorithmVersion,
+    inputHash: row.inputHash,
+    startedAt: toIso(row.startedAt),
+    completedAt: toIso(row.completedAt),
+    createdAt: toIso(row.createdAt),
+  };
+}
+
+function toScheduleAssignmentResponse(row: ScheduleAssignmentRow): ScheduleAssignmentResponse {
+  return {
+    id: row.id,
+    plannerRunId: row.plannerRunId,
+    assignmentState: row.assignmentState,
+    workOrderId: row.workOrderId,
+    workOrderNumber: row.workOrderNumber,
+    title: row.title,
+    workOrderStatus: row.workOrderStatus,
+    operationId: row.operationId,
+    operationCode: row.operationCode,
+    operationName: row.operationName,
+    operationSequenceNo: Number(row.operationSequenceNo),
+    operationStatus: row.operationStatus,
+    estimatedMinutes: Number(row.estimatedMinutes),
+    capacitySlotId: row.capacitySlotId,
+    slotStart: toIso(row.slotStart),
+    slotEnd: toIso(row.slotEnd),
+    stockLocationId: row.stockLocationId,
+    stockLocationCode: row.stockLocationCode,
+    stockLocationName: row.stockLocationName,
+    bayCode: row.bayCode ?? undefined,
+    teamCode: row.teamCode ?? undefined,
+    plannedStartAt: toIso(row.plannedStartAt),
+    plannedEndAt: toIso(row.plannedEndAt),
+    slotSequenceNo: Number(row.slotSequenceNo),
+    createdAt: toIso(row.createdAt),
+    updatedAt: toIso(row.updatedAt),
+  };
+}
+
 function toCapacityInput(row: CapacitySlotRow): BuildSlotCapacityInput {
   return {
     slotId: row.slotId,
@@ -1351,6 +1981,24 @@ function capacityErrorResponse(error: unknown): ApiGatewayProxyResultLike {
   throw error;
 }
 
+function hashScheduleInput(
+  input: SchedulePublishInput,
+  assignments: SchedulePreviewAssignment[],
+): string {
+  const payload = {
+    startDate: input.startDate,
+    endDate: input.endDate,
+    assignments: assignments.map((assignment) => ({
+      operationId: assignment.operationId,
+      capacitySlotId: assignment.capacitySlotId,
+      plannedStartAt: assignment.plannedStartAt,
+      plannedEndAt: assignment.plannedEndAt,
+      slotSequenceNo: assignment.slotSequenceNo,
+    })),
+  };
+  return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+}
+
 function summarizeMaterialReadiness(parts: unknown[]): MaterialReadiness {
   if (parts.length === 0) return 'READY';
 
@@ -1395,6 +2043,14 @@ function isMissingCapacityTableError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return (
     message.includes('planning.capacity_slots') &&
+    (message.includes('does not exist') || message.includes('relation'))
+  );
+}
+
+function isMissingSchedulePublicationTableError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    (message.includes('planning.plan_assignments') || message.includes('planning.planner_runs')) &&
     (message.includes('does not exist') || message.includes('relation'))
   );
 }

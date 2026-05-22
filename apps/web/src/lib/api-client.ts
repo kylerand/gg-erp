@@ -786,6 +786,7 @@ export async function transitionWoOperation(
   workOrderId: string,
   operationId: string,
   input: TransitionWoOperationInput,
+  options?: ApiDataOptions,
 ): Promise<TransitionWoOperationResponse> {
   return apiFetch<TransitionWoOperationResponse>(
     `/tickets/work-orders/${workOrderId}/operations/${operationId}/state`,
@@ -794,6 +795,8 @@ export async function transitionWoOperation(
       headers: mutationHeaders(),
       body: JSON.stringify(input),
     },
+    undefined,
+    options,
   );
 }
 
@@ -1854,12 +1857,20 @@ export interface Employee {
   skills?: string[];
 }
 
-export async function listEmployees(params?: {
-  employmentState?: string;
-}): Promise<{ items: Employee[]; total: number }> {
+export async function listEmployees(
+  params?: {
+    employmentState?: string;
+  },
+  options?: ApiDataOptions,
+): Promise<{ items: Employee[]; total: number }> {
   const qs = new URLSearchParams();
   if (params?.employmentState) qs.set('state', params.employmentState);
-  return apiFetch(`/hr/employees${qs.size ? `?${qs}` : ''}`, undefined, { items: [], total: 0 });
+  return apiFetch(
+    `/hr/employees${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    { items: [], total: 0 },
+    options,
+  );
 }
 
 // ─── Technician Tasks ─────────────────────────────────────────────────────────────────
@@ -1950,22 +1961,30 @@ export function mutationHeaders(): { 'X-Correlation-Id': string; 'Idempotency-Ke
   };
 }
 
-export async function listTechnicianTasks(params: {
-  workOrderId?: string;
-  technicianId?: string;
-  state?: string;
-  assignedOnly?: boolean;
-  limit?: number;
-}): Promise<{ items: TechnicianTask[] }> {
+export async function listTechnicianTasks(
+  params: {
+    workOrderId?: string;
+    technicianId?: string;
+    state?: string;
+    assignedOnly?: boolean;
+    limit?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<{ items: TechnicianTask[] }> {
   const qs = new URLSearchParams();
   if (params.workOrderId) qs.set('workOrderId', params.workOrderId);
   if (params.technicianId) qs.set('technicianId', params.technicianId);
   if (params.state) qs.set('state', params.state);
   if (params.assignedOnly !== undefined) qs.set('assignedOnly', String(params.assignedOnly));
   if (params.limit) qs.set('limit', String(params.limit));
-  return apiFetch(`/tickets/technician-tasks${qs.size ? `?${qs}` : ''}`, undefined, {
-    items: MOCK_TASKS,
-  });
+  return apiFetch(
+    `/tickets/technician-tasks${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    {
+      items: MOCK_TASKS,
+    },
+    options,
+  );
 }
 
 export async function transitionTechnicianTask(

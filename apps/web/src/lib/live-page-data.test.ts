@@ -28,6 +28,7 @@ const truthCriticalPages = [
   'app/training/assignments/page.tsx',
   'app/training/my-ojt/page.tsx',
   'app/work-orders/[id]/page.tsx',
+  'app/work-orders/dispatch/DispatchClient.tsx',
   'app/work-orders/new/page.tsx',
   'app/sales/quotes/[id]/page.tsx',
   'app/sales/quotes/new/page.tsx',
@@ -195,6 +196,41 @@ test('build-slot planner renders live demand projection instead of visualization
   assert.equal(source.includes("idx % 5"), false);
   assert.equal(source.includes("toast.success('Plan published"), false);
   assert.equal(source.includes('Assign work to'), false);
+});
+
+test('dispatch board executes published schedule assignments from live APIs', () => {
+  const source = readSource('app/work-orders/dispatch/DispatchClient.tsx');
+  const apiClientSource = readSource('lib/api-client.ts');
+
+  assert.deepEqual(
+    [
+      'listScheduleAssignments',
+      'transitionWoOperation',
+      'listTechnicianTasks',
+      'listEmployees',
+      'STRICT_LIVE_DATA',
+      'allowMockFallback: false',
+      'Published schedule',
+      'Action queue',
+      'Start operation',
+      'Complete',
+      'Block Operation',
+      "erpRoute('build-slot')",
+      "erpRecordRoute('work-order'",
+    ].filter((snippet) => !source.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      'export async function listEmployees(',
+      'export async function listTechnicianTasks(',
+      'transitionWoOperation(',
+      'options?: ApiDataOptions',
+    ].filter((snippet) => !apiClientSource.includes(snippet)),
+    [],
+  );
+  assert.equal(source.includes('{ task: { ...selectedTask'), false);
 });
 
 test('dashboard KPI cards deep-link to filtered destination views', () => {

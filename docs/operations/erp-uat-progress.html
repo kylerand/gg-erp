@@ -232,19 +232,19 @@
       </header>
 
       <div class="summary">
-        <div class="metric"><strong>14</strong><span>Tracked delivery slices</span></div>
-        <div class="metric"><strong>8</strong><span>Done</span></div>
-        <div class="metric"><strong>6</strong><span>In progress</span></div>
+        <div class="metric"><strong>15</strong><span>Tracked delivery slices</span></div>
+        <div class="metric"><strong>11</strong><span>Done</span></div>
+        <div class="metric"><strong>4</strong><span>In progress</span></div>
         <div class="metric"><strong>0</strong><span>Not started</span></div>
       </div>
 
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: remaining accounting sync actionability, stable selectors, and real
+          Current focus: remaining accounting sync actionability, stable selectors, and ERP
           execution behind polished secondary actions.
         </p>
-        <div class="progress" aria-label="90 percent complete"><div style="width: 90%"></div></div>
+        <div class="progress" aria-label="94 percent complete"><div style="width: 94%"></div></div>
       </section>
 
       <section>
@@ -267,9 +267,13 @@
             </tr>
             <tr>
               <td>Global shell actionability</td>
-              <td><span class="pill doing">In progress</span></td>
-              <td>Command search, quick create, recent routes, notification deep links.</td>
-              <td>Add true floor-tech SSO handoff.</td>
+              <td><span class="pill done">Done</span></td>
+              <td>
+                Command search, quick create, recent routes, notification deep links, server-backed
+                session bootstrap, and one-click ERP-to-floor-tech Cognito handoff through the
+                floor app auth entrypoint.
+              </td>
+              <td>Keep shell destinations on the route registry as new workspaces become stable.</td>
             </tr>
             <tr>
               <td>Unified work-order command center</td>
@@ -369,29 +373,23 @@
             </tr>
             <tr>
               <td>Build-slot schedule publication</td>
-              <td><span class="pill doing">In progress</span></td>
+              <td><span class="pill done">Done</span></td>
               <td>
-                Capacity slots and deterministic demand projection are being promoted into persisted
+                Capacity slots and deterministic demand projection are promoted into persisted
                 planner runs, published slot assignments, and work-order planned times.
               </td>
-              <td>
-                Merge the schedule-publication slice, wait for QA/CD, then remove pending-deploy
-                route exceptions.
-              </td>
+              <td>Keep planner-to-dispatch links focused on exact published work.</td>
             </tr>
             <tr>
               <td>Dispatch schedule execution</td>
-              <td><span class="pill doing">In progress</span></td>
+              <td><span class="pill done">Done</span></td>
               <td>
                 `/work-orders/dispatch` now reads live published/dispatched schedule assignments,
                 shows an action queue, deep-links to work orders, and lets dispatch start, complete,
                 resume, or block planned operations through live work-order operation transitions
                 with mock fallback disabled.
               </td>
-              <td>
-                Open the stacked PR after schedule publication, wait for CI, then QA the live
-                dispatch board against published schedule data.
-              </td>
+              <td>Keep validating dispatch actions against newly published schedule data.</td>
             </tr>
             <tr>
               <td>Training repair</td>

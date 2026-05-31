@@ -4,9 +4,10 @@ import { useEffect, useState, type ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ClipboardList, Clock3, RefreshCcw, TimerReset } from 'lucide-react';
+import { ClipboardList, Clock3, ExternalLink, RefreshCcw, TimerReset } from 'lucide-react';
 import { useAuth } from '@/lib/auth-provider';
 import { doSignOut } from '@/lib/auth';
+import { FLOOR_HANDOFF_RETURN_KEY, sanitizeErpReturnUrl } from '@/lib/handoff';
 
 // Bounce to /auth if the shell's auth check hasn't resolved within this window.
 // Mirrors the web AppShell — see AUTH_LOADING_DEADLINE_MS there.
@@ -27,6 +28,20 @@ export function TechShell({ children }: { children: ReactNode }) {
   // (/auth/callback) can finish its token exchange without racing the shell.
   const isAuthRoute = pathname === '/auth' || pathname.startsWith('/auth/');
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+  const [erpReturnTo, setErpReturnTo] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      setErpReturnTo(
+        sanitizeErpReturnUrl(
+          sessionStorage.getItem(FLOOR_HANDOFF_RETURN_KEY),
+          [process.env.NEXT_PUBLIC_ERP_URL ?? ''],
+        ),
+      );
+    } catch {
+      setErpReturnTo(null);
+    }
+  }, []);
 
   useEffect(() => {
     if (!loading || isAuthRoute) return;
@@ -81,6 +96,15 @@ export function TechShell({ children }: { children: ReactNode }) {
               {user.name ?? user.email}
             </div>
           </div>
+          {erpReturnTo && (
+            <a
+              href={erpReturnTo}
+              className="hidden items-center gap-1.5 rounded-2xl border border-[#D9CCBE] bg-white px-3 py-2 text-xs font-semibold text-[#4F4641] sm:flex"
+            >
+              <ExternalLink size={14} />
+              <span>ERP</span>
+            </a>
+          )}
           <button
             onClick={handleSignOut}
             className="rounded-2xl border border-[#D9CCBE] bg-white px-3 py-2 text-xs font-semibold text-[#4F4641]"

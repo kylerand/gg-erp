@@ -6,6 +6,7 @@ import { Hub } from 'aws-amplify/utils';
 // short version: import signInWithRedirect to force-load Amplify v6's
 // OAuth response handler module so it can process the `?code=` URL.
 import { fetchAuthSession, signInWithRedirect as _ensureOAuthHandler } from 'aws-amplify/auth';
+import { FLOOR_HANDOFF_NEXT_KEY, sanitizeFloorNextPath } from '@/lib/handoff';
 void _ensureOAuthHandler;
 
 const POLL_INTERVAL_MS = 250;
@@ -72,7 +73,16 @@ export default function AuthCallbackPage() {
           );
         }
         if (session?.tokens?.idToken) {
-          if (!cancelled) window.location.replace('/');
+          if (!cancelled) {
+            let nextPath = '/';
+            try {
+              nextPath = sanitizeFloorNextPath(sessionStorage.getItem(FLOOR_HANDOFF_NEXT_KEY));
+              sessionStorage.removeItem(FLOOR_HANDOFF_NEXT_KEY);
+            } catch {
+              nextPath = '/';
+            }
+            window.location.replace(nextPath);
+          }
           return;
         }
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));

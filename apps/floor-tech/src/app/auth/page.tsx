@@ -1,11 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { signInWithRedirect } from 'aws-amplify/auth';
 import { doSignIn } from '@/lib/auth';
 import { useAuth } from '@/lib/auth-provider';
+import {
+  FLOOR_HANDOFF_NEXT_KEY,
+  FLOOR_HANDOFF_RETURN_KEY,
+  sanitizeErpReturnUrl,
+  sanitizeFloorNextPath,
+} from '@/lib/handoff';
 import { Eye, EyeOff } from 'lucide-react';
 
 const GOOGLE_ENABLED =
@@ -13,20 +19,88 @@ const GOOGLE_ENABLED =
   (process.env.NEXT_PUBLIC_COGNITO_DOMAIN ?? '') !== '';
 
 const SSO_DOMAIN = 'golfingarage.com';
+const IS_MOCK = process.env.NEXT_PUBLIC_AUTH_MODE === 'mock';
 
 function isSsoEmail(email: string): boolean {
   return GOOGLE_ENABLED && email.trim().toLowerCase().endsWith(`@${SSO_DOMAIN}`);
 }
 
 export default function AuthPage() {
+  return (
+    <Suspense fallback={<AuthPageFallback />}>
+      <AuthPageInner />
+    </Suspense>
+  );
+}
+
+function AuthPageFallback() {
+  return (
+    <div className="min-h-screen bg-[#211F1E] text-white relative overflow-hidden">
+      <div className="relative mx-auto flex min-h-screen max-w-md flex-col justify-center px-5 py-8">
+        <div className="tech-card rounded-2xl bg-white/95 p-6 text-center text-[#211F1E]">
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-[#E37125] border-t-transparent" />
+          <p className="mt-4 text-sm font-semibold text-[#6E625A]">Loading sign-in…</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AuthPageInner() {
   const router = useRouter();
-  const { refresh } = useAuth();
+  const searchParams = useSearchParams();
+  const { refresh, user, loading: authLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [phase, setPhase] = useState<'email' | 'password'>('email');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const handoffStartedRef = useRef(false);
+
+  const isErpHandoff = searchParams.get('handoff') === 'erp';
+  const handoffNext = sanitizeFloorNextPath(searchParams.get('next'));
+  const handoffReturnTo = sanitizeErpReturnUrl(
+    searchParams.get('returnTo'),
+    [process.env.NEXT_PUBLIC_ERP_URL ?? ''],
+  );
+
+  useEffect(() => {
+    if (!isErpHandoff) return;
+    try {
+      sessionStorage.setItem(FLOOR_HANDOFF_NEXT_KEY, handoffNext);
+      if (handoffReturnTo) {
+        sessionStorage.setItem(FLOOR_HANDOFF_RETURN_KEY, handoffReturnTo);
+      }
+    } catch {
+      // Session storage is a convenience for redirect recovery; auth still works without it.
+    }
+  }, [handoffNext, handoffReturnTo, isErpHandoff]);
+
+  useEffect(() => {
+    if (!isErpHandoff || authLoading || !user) return;
+    router.replace(handoffNext);
+  }, [authLoading, handoffNext, isErpHandoff, router, user]);
+
+  useEffect(() => {
+    if (
+      !isErpHandoff ||
+      authLoading ||
+      user ||
+      IS_MOCK ||
+      !GOOGLE_ENABLED ||
+      handoffStartedRef.current
+    ) {
+      return;
+    }
+
+    handoffStartedRef.current = true;
+    setLoading(true);
+    void signInWithRedirect({ provider: 'Google' }).catch((err) => {
+      setLoading(false);
+      setError(err instanceof Error ? err.message : 'Google sign-in failed');
+    });
+  }, [authLoading, isErpHandoff, user]);
 
   async function handleContinueFromEmail(e: React.FormEvent) {
     e.preventDefault();
@@ -95,7 +169,9 @@ export default function AuthPage() {
             Floor technician sign-in
           </h1>
           <p className="mt-2 text-center text-sm text-[#6E625A]">
-            Built for gloves, thumbs, and quick updates between bays.
+            {isErpHandoff
+              ? 'Connecting your ERP session to the floor queue.'
+              : 'Built for gloves, thumbs, and quick updates between bays.'}
           </p>
 
           {error && (
@@ -125,13 +201,13 @@ export default function AuthPage() {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || (isErpHandoff && GOOGLE_ENABLED && !IS_MOCK && !error)}
                 className="mt-2 flex min-h-[56px] w-full items-center justify-center rounded-2xl bg-[#E37125] text-lg font-bold text-white transition-colors hover:bg-[#C75F1D] disabled:opacity-60"
               >
                 {loading ? (
                   <span className="flex items-center gap-2">
                     <span className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    Redirecting…
+                    {isErpHandoff ? 'Opening SSO…' : 'Redirecting…'}
                   </span>
                 ) : (
                   'Continue'

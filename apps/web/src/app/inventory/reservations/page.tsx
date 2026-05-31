@@ -13,6 +13,8 @@ import {
   listInventoryReservations,
   listWorkOrders,
   releaseInventoryReservation,
+  workOrderCustomerDisplayName,
+  workOrderVehicleDisplayName,
   type InventoryLot,
   type InventoryReservation,
   type InventoryReservationStatus,
@@ -66,9 +68,13 @@ function workOrderOption(workOrder: WorkOrder): SearchableSelectOption {
   return {
     id: workOrder.id,
     label: workOrder.workOrderNumber,
-    description: workOrder.description ?? workOrder.state,
+    description:
+      [workOrder.description, workOrderVehicleDisplayName(workOrder)]
+        .filter(Boolean)
+        .join(' · ') || workOrder.state,
     meta: [
       workOrder.state,
+      workOrder.customerProfile ? workOrderCustomerDisplayName(workOrder) : undefined,
       workOrder.scheduledDate
         ? `Scheduled ${new Date(workOrder.scheduledDate).toLocaleDateString()}`
         : undefined,

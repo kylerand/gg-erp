@@ -9,7 +9,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
-import { apiFetch, listWorkOrders, type WorkOrder } from '@/lib/api-client';
+import {
+  apiFetch,
+  listWorkOrders,
+  workOrderCustomerDisplayName,
+  workOrderVehicleDisplayName,
+  type WorkOrder,
+} from '@/lib/api-client';
 import { useRole } from '@/lib/role-context';
 
 const STRICT_LIVE_DATA = { allowMockFallback: false } as const;
@@ -41,7 +47,13 @@ function workOrderOption(workOrder: WorkOrder): SearchableSelectOption {
   return {
     id: workOrder.id,
     label: workOrder.workOrderNumber,
-    description: [workOrder.description, `Cart ${workOrder.vehicleId}`].filter(Boolean).join(' · '),
+    description: [
+      workOrder.description,
+      workOrderVehicleDisplayName(workOrder),
+      workOrder.customerProfile ? workOrderCustomerDisplayName(workOrder) : undefined,
+    ]
+      .filter(Boolean)
+      .join(' · '),
     meta: workOrder.state.replace(/_/g, ' '),
   };
 }

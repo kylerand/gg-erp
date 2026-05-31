@@ -8,6 +8,8 @@ import {
   listCartVehicles,
   listCustomers,
   listWorkOrders,
+  workOrderCustomerDisplayName,
+  workOrderVehicleDisplayName,
   type CartVehicle,
   type Customer,
   type WorkOrder,
@@ -57,8 +59,12 @@ function buildPackageOptions(workOrders: WorkOrder[]): BuildPackageOption[] {
       buildConfigurationId: workOrder.buildConfigurationId,
       bomId: workOrder.bomId,
       label: `Build package from ${workOrder.workOrderNumber}`,
-      description: `Configuration ${workOrder.buildConfigurationId} · BOM ${workOrder.bomId}`,
-      meta: `Last used on vehicle ${workOrder.vehicleId}`,
+      description: [workOrder.description, workOrderVehicleDisplayName(workOrder)]
+        .filter(Boolean)
+        .join(' · '),
+      meta: workOrder.customerProfile
+        ? `Last used by ${workOrderCustomerDisplayName(workOrder)}`
+        : 'Recently used package',
     });
   }
 

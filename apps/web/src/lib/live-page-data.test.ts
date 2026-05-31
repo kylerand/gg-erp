@@ -611,10 +611,17 @@ test('reporting catalog is registry-backed with filtered drill-through destinati
       'useSearchParams',
       "searchParams.get('search')",
       'buildAuditHref',
+      'AUDIT_RESOURCE_DESTINATIONS',
+      'resolveAuditResource',
+      "erpRecordRoute('work-order'",
+      "erpRecordRoute('purchase-order'",
+      "erpRoute('customer', { search: event.entityId })",
+      'No direct workspace route yet',
       'allowMockFallback: false',
     ].filter((snippet) => !auditSource.includes(snippet)),
     [],
   );
+  assert.equal(auditSource.includes('entityId.slice(0, 8)'), false);
 });
 
 test('training content keeps notes, bookmarks, and media wired to live APIs', () => {

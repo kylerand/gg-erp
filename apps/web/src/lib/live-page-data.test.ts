@@ -583,6 +583,14 @@ test('floor execution pages resolve task and work-order context instead of raw I
     myQueueSource,
     /erpRoute\('sop-runner',[\s\S]*\{[\s\S]*taskId: task\.id,[\s\S]*workOrderId: task\.workOrderId[\s\S]*\}/,
   );
+  assert.deepEqual(
+    [
+      'async function refreshAfterRejectedTransition',
+      'Queue refreshed from server.',
+      'await refreshAfterRejectedTransition(message)',
+    ].filter((snippet) => !myQueueSource.includes(snippet)),
+    [],
+  );
 
   assert.deepEqual(
     [

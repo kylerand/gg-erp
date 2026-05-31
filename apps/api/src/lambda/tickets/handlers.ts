@@ -154,9 +154,19 @@ export const transitionTaskHandler = wrapHandler(
 
     const { state: nextState, blockedReason, technicianId } = body.value;
     if (!nextState) return jsonResponse(422, { message: 'state is required.' });
+    if (technicianId && !UUID_RE.test(technicianId)) {
+      return jsonResponse(422, { message: 'technicianId must be a valid UUID.' });
+    }
 
     const existing = await getPrisma().technicianTask.findUnique({ where: { id } });
     if (!existing) return jsonResponse(404, { message: `Task not found: ${id}` });
+
+    if (nextState === 'IN_PROGRESS' && !(technicianId ?? existing.technicianId)) {
+      return jsonResponse(409, {
+        message: 'Assign a technician before starting this task.',
+        requiredAction: 'ASSIGN_TECHNICIAN',
+      });
+    }
 
     if (nextState === existing.state && technicianId) {
       const task = await getPrisma().technicianTask.update({

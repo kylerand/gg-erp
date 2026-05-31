@@ -80,6 +80,129 @@ test('transitionTaskHandler returns identifier and body validation errors before
   );
 });
 
+test('transitionTaskHandler rejects invalid technician assignment input', async () => {
+  const response = await transitionTaskHandler({
+    body: JSON.stringify({ state: 'READY', technicianId: 'emp-1' }),
+    pathParameters: { id: '00000000-0000-4000-8000-000000000301' },
+  });
+
+  assert.equal(response.statusCode, 422);
+  assert.equal(
+    (JSON.parse(response.body) as { message: string }).message,
+    'technicianId must be a valid UUID.',
+  );
+});
+
+test('transitionTaskHandler rejects starting an unassigned technician task', async () => {
+  const TASK_ID = '00000000-0000-4000-8000-000000000301';
+  const updatedAt = new Date('2026-05-31T12:00:00.000Z');
+
+  setTicketHandlerPrismaForTests({
+    technicianTask: {
+      async findUnique(args: { where: { id: string } }) {
+        assert.equal(args.where.id, TASK_ID);
+        return {
+          id: TASK_ID,
+          workOrderId: '00000000-0000-4000-8000-000000000302',
+          routingStepId: '00000000-0000-4000-8000-000000000303',
+          technicianId: null,
+          state: 'READY',
+          startedAt: null,
+          completedAt: null,
+          blockedReason: null,
+          updatedAt,
+        };
+      },
+      async update() {
+        throw new Error('update should not run for unassigned start');
+      },
+    },
+  } as unknown as Partial<PrismaClient>);
+
+  try {
+    const response = await transitionTaskHandler({
+      body: JSON.stringify({ state: 'IN_PROGRESS' }),
+      pathParameters: { id: TASK_ID },
+    });
+
+    assert.equal(response.statusCode, 409);
+    const payload = JSON.parse(response.body) as { message: string; requiredAction: string };
+    assert.equal(payload.message, 'Assign a technician before starting this task.');
+    assert.equal(payload.requiredAction, 'ASSIGN_TECHNICIAN');
+  } finally {
+    setTicketHandlerPrismaForTests(undefined);
+  }
+});
+
+test('transitionTaskHandler can assign and start a technician task atomically', async () => {
+  const TASK_ID = '00000000-0000-4000-8000-000000000311';
+  const TECHNICIAN_ID = '00000000-0000-4000-8000-000000000312';
+  const WORK_ORDER_ID = '00000000-0000-4000-8000-000000000313';
+  const STEP_ID = '00000000-0000-4000-8000-000000000314';
+  const updatedAt = new Date('2026-05-31T12:00:00.000Z');
+
+  setTicketHandlerPrismaForTests({
+    technicianTask: {
+      async findUnique() {
+        return {
+          id: TASK_ID,
+          workOrderId: WORK_ORDER_ID,
+          routingStepId: STEP_ID,
+          technicianId: null,
+          state: 'READY',
+          startedAt: null,
+          completedAt: null,
+          blockedReason: null,
+          updatedAt,
+        };
+      },
+      async update(args: {
+        where: { id: string };
+        data: {
+          state: string;
+          technicianId?: string;
+          startedAt?: Date;
+          updatedAt: Date;
+        };
+      }) {
+        assert.equal(args.where.id, TASK_ID);
+        assert.equal(args.data.state, 'IN_PROGRESS');
+        assert.equal(args.data.technicianId, TECHNICIAN_ID);
+        assert.ok(args.data.startedAt instanceof Date);
+        return {
+          id: TASK_ID,
+          workOrderId: WORK_ORDER_ID,
+          routingStepId: STEP_ID,
+          technicianId: TECHNICIAN_ID,
+          state: 'IN_PROGRESS',
+          startedAt: args.data.startedAt,
+          completedAt: null,
+          blockedReason: null,
+          updatedAt: args.data.updatedAt,
+        };
+      },
+    },
+  } as unknown as Partial<PrismaClient>);
+
+  try {
+    const response = await transitionTaskHandler({
+      body: JSON.stringify({ state: 'IN_PROGRESS', technicianId: TECHNICIAN_ID }),
+      pathParameters: { id: TASK_ID },
+    });
+
+    assert.equal(response.statusCode, 200);
+    const payload = JSON.parse(response.body) as {
+      task: { id: string; technicianId?: string; state: string; startedAt?: string };
+    };
+    assert.equal(payload.task.id, TASK_ID);
+    assert.equal(payload.task.technicianId, TECHNICIAN_ID);
+    assert.equal(payload.task.state, 'IN_PROGRESS');
+    assert.ok(payload.task.startedAt);
+  } finally {
+    setTicketHandlerPrismaForTests(undefined);
+  }
+});
+
 test('listTasksHandler enriches technician tasks with work-order and routing-step context', async () => {
   const TASK_ID = '00000000-0000-4000-8000-000000000201';
   const WORK_ORDER_ID = '00000000-0000-4000-8000-000000000202';

@@ -3,6 +3,7 @@ import test, { mock } from 'node:test';
 import {
   inventoryLedgerQueries,
   inventoryLotQueries,
+  inventoryReservationQueries,
   listInventoryLedgerHandler,
   listLotsHandler,
   listPartsHandler,
@@ -10,6 +11,13 @@ import {
   setInventoryHandlerPrismaForTests,
   updatePartHandler,
 } from '../lambda/inventory/handlers.js';
+
+const TEST_STOCK_LOT_ID = '00000000-0000-4000-8000-000000000001';
+const TEST_WORK_ORDER_ID = '00000000-0000-4000-8000-000000000002';
+const TEST_WORK_ORDER_PART_ID = '00000000-0000-4000-8000-000000000003';
+const TEST_RESERVATION_ID = '00000000-0000-4000-8000-000000000004';
+const TEST_PART_ID = '00000000-0000-4000-8000-000000000005';
+const TEST_LOCATION_ID = '00000000-0000-4000-8000-000000000006';
 
 test('listLotsHandler returns inventory lot details for the web contract', async () => {
   const listLotsMock = mock.method(inventoryLotQueries, 'listLots', async () => ({
@@ -179,6 +187,55 @@ test('listInventoryLedgerHandler rejects unsupported movement filters', async ()
   assert.match(response.body, /Unsupported inventory ledger movement type/);
 });
 
+test('reservation mutations append inventory ledger consequences', async () => {
+  const harness = createInventoryReservationLedgerHarness();
+  setInventoryHandlerPrismaForTests(harness.prisma as never);
+
+  try {
+    await inventoryReservationQueries.createReservation(
+      {
+        stockLotId: TEST_STOCK_LOT_ID,
+        quantity: 2,
+        workOrderId: TEST_WORK_ORDER_ID,
+        workOrderPartId: TEST_WORK_ORDER_PART_ID,
+      },
+      'create-correlation',
+    );
+
+    await inventoryReservationQueries.releaseReservation(
+      TEST_RESERVATION_ID,
+      { quantity: 1 },
+      'release-correlation',
+    );
+
+    await inventoryReservationQueries.consumeReservation(
+      TEST_RESERVATION_ID,
+      {},
+      'issue-correlation',
+    );
+
+    const ledgerCalls = harness.executeCalls.filter((call) =>
+      call.sql.includes('INSERT INTO inventory.inventory_ledger_entries'),
+    );
+    assert.equal(ledgerCalls.length, 3);
+    assert.ok(ledgerCalls.some((call) => call.values.includes('RESERVATION')));
+    assert.ok(ledgerCalls.some((call) => call.values.includes('INVENTORY_RESERVED')));
+    assert.ok(ledgerCalls.some((call) => call.values.includes('RELEASE')));
+    assert.ok(ledgerCalls.some((call) => call.values.includes('RESERVATION_RELEASED')));
+    assert.ok(ledgerCalls.some((call) => call.values.includes('ISSUE')));
+    assert.ok(ledgerCalls.some((call) => call.values.includes('RESERVATION_CONSUMED')));
+    assert.ok(ledgerCalls.every((call) => call.values.includes('INVENTORY_RESERVATION')));
+
+    const balanceUpdates = harness.queryCalls.filter((call) =>
+      call.sql.includes('UPDATE inventory.inventory_balances'),
+    );
+    assert.equal(balanceUpdates.length, 3);
+    assert.ok(balanceUpdates.every((call) => call.sql.includes('last_ledger_entry_id')));
+  } finally {
+    setInventoryHandlerPrismaForTests(undefined);
+  }
+});
+
 test('listLotsHandler returns an empty page when no lots are available', async () => {
   const listLotsMock = mock.method(inventoryLotQueries, 'listLots', async () => ({
     items: [],
@@ -332,3 +389,102 @@ test('listVendorsHandler filters on the vendorState Prisma field', async () => {
     setInventoryHandlerPrismaForTests(undefined);
   }
 });
+
+interface RawSqlCall {
+  sql: string;
+  values: unknown[];
+}
+
+function sqlText(strings: TemplateStringsArray): string {
+  return strings.join('?').replace(/\s+/g, ' ').trim();
+}
+
+function reservationDetailRow() {
+  return {
+    id: TEST_RESERVATION_ID,
+    status: 'ACTIVE',
+    reservedQuantity: 2,
+    consumedQuantity: 0,
+    allocatedQuantity: 0,
+    reservationPriority: 100,
+    shortageReason: null,
+    expiresAt: null,
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    partId: TEST_PART_ID,
+    partSku: 'GG-LIFT',
+    partName: 'Lift kit',
+    unitOfMeasure: 'EA',
+    stockLocationId: TEST_LOCATION_ID,
+    locationName: 'Main Warehouse',
+    stockLotId: TEST_STOCK_LOT_ID,
+    lotNumber: 'LOT-001',
+    serialNumber: null,
+    workOrderId: TEST_WORK_ORDER_ID,
+    workOrderNumber: 'WO-1001',
+    workOrderTitle: 'Test build',
+    workOrderPartId: TEST_WORK_ORDER_PART_ID,
+  };
+}
+
+function createInventoryReservationLedgerHarness() {
+  const queryCalls: RawSqlCall[] = [];
+  const executeCalls: RawSqlCall[] = [];
+
+  const tx = {
+    $queryRaw: mock.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const sql = sqlText(strings);
+      queryCalls.push({ sql, values });
+
+      if (sql.includes('FROM inventory.stock_lots')) {
+        return [
+          {
+            id: TEST_STOCK_LOT_ID,
+            partId: TEST_PART_ID,
+            stockLocationId: TEST_LOCATION_ID,
+            lotState: 'AVAILABLE',
+          },
+        ];
+      }
+
+      if (sql.includes('UPDATE inventory.inventory_balances')) {
+        return [{ id: 'balance-1' }];
+      }
+
+      if (sql.includes('FROM inventory.inventory_reservations r')) {
+        return [reservationDetailRow()];
+      }
+
+      if (sql.includes('FROM inventory.inventory_reservations')) {
+        return [
+          {
+            id: TEST_RESERVATION_ID,
+            status: 'ACTIVE',
+            reservedQuantity: 2,
+            consumedQuantity: 0,
+            allocatedQuantity: 0,
+            partId: TEST_PART_ID,
+            stockLocationId: TEST_LOCATION_ID,
+            stockLotId: TEST_STOCK_LOT_ID,
+            workOrderId: TEST_WORK_ORDER_ID,
+            workOrderPartId: TEST_WORK_ORDER_PART_ID,
+          },
+        ];
+      }
+
+      throw new Error(`Unhandled query: ${sql}`);
+    }),
+    $executeRaw: mock.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      executeCalls.push({ sql: sqlText(strings), values });
+      return 1;
+    }),
+  };
+
+  const prisma = {
+    $transaction: mock.fn(async (callback: (transaction: typeof tx) => Promise<unknown>) =>
+      callback(tx),
+    ),
+  };
+
+  return { prisma, queryCalls, executeCalls };
+}

@@ -822,6 +822,22 @@ interface InventoryLedgerSummaryRow {
   valueDelta: unknown;
 }
 
+interface AppendInventoryLedgerEntryInput {
+  partId: string;
+  stockLocationId: string;
+  stockLotId?: string | null;
+  reservationId?: string | null;
+  workOrderId?: string | null;
+  movementType: InventoryLedgerMovementType;
+  quantityDelta: number;
+  unitCost?: number | null;
+  valueDelta?: number | null;
+  reasonCode: string;
+  sourceDocumentType?: string | null;
+  sourceDocumentId?: string | null;
+  correlationId: string;
+}
+
 interface InventoryLotBalanceRow {
   stockLotId: string;
   quantityOnHand: unknown;
@@ -1127,24 +1143,6 @@ export const inventoryReservationQueries = {
         throw new ReservationCommandError(409, `Stock lot is not available: ${input.stockLotId}`);
       }
 
-      const updatedBalances = await tx.$queryRaw<Array<{ id: string }>>`
-        UPDATE inventory.inventory_balances
-        SET
-          quantity_reserved = quantity_reserved + ${input.quantity},
-          updated_at = now(),
-          last_correlation_id = ${correlationId},
-          version = version + 1
-        WHERE stock_lot_id = ${input.stockLotId}::uuid
-          AND quantity_on_hand - quantity_reserved >= ${input.quantity}
-        RETURNING id::text AS "id"
-      `;
-      if (updatedBalances.length === 0) {
-        throw new ReservationCommandError(
-          409,
-          `Insufficient available inventory for lot ${input.stockLotId}.`,
-        );
-      }
-
       await tx.$executeRaw`
         INSERT INTO inventory.inventory_reservations (
           id,
@@ -1176,6 +1174,39 @@ export const inventoryReservationQueries = {
         )
       `;
 
+      const ledgerEntryId = await appendInventoryLedgerEntry(tx, {
+        partId: lot.partId,
+        stockLocationId: lot.stockLocationId,
+        stockLotId: input.stockLotId,
+        reservationId: id,
+        workOrderId: input.workOrderId ?? null,
+        movementType: 'RESERVATION',
+        quantityDelta: input.quantity,
+        reasonCode: 'INVENTORY_RESERVED',
+        sourceDocumentType: 'INVENTORY_RESERVATION',
+        sourceDocumentId: id,
+        correlationId,
+      });
+
+      const updatedBalances = await tx.$queryRaw<Array<{ id: string }>>`
+        UPDATE inventory.inventory_balances
+        SET
+          quantity_reserved = quantity_reserved + ${input.quantity},
+          last_ledger_entry_id = ${ledgerEntryId}::uuid,
+          updated_at = now(),
+          last_correlation_id = ${correlationId},
+          version = version + 1
+        WHERE stock_lot_id = ${input.stockLotId}::uuid
+          AND quantity_on_hand - quantity_reserved >= ${input.quantity}
+        RETURNING id::text AS "id"
+      `;
+      if (updatedBalances.length === 0) {
+        throw new ReservationCommandError(
+          409,
+          `Insufficient available inventory for lot ${input.stockLotId}.`,
+        );
+      }
+
       if (input.workOrderPartId) {
         await tx.$executeRaw`
           UPDATE work_orders.work_order_parts
@@ -1200,10 +1231,25 @@ export const inventoryReservationQueries = {
       const quantity = input.quantity ?? openQuantity;
       validateActionQuantity(quantity, openQuantity, 'release');
 
+      const ledgerEntryId = await appendInventoryLedgerEntry(tx, {
+        partId: reservation.partId,
+        stockLocationId: reservation.stockLocationId,
+        stockLotId: reservation.stockLotId,
+        reservationId: id,
+        workOrderId: reservation.workOrderId,
+        movementType: 'RELEASE',
+        quantityDelta: -quantity,
+        reasonCode: 'RESERVATION_RELEASED',
+        sourceDocumentType: 'INVENTORY_RESERVATION',
+        sourceDocumentId: id,
+        correlationId,
+      });
+
       const updatedBalances = await tx.$queryRaw<Array<{ id: string }>>`
         UPDATE inventory.inventory_balances
         SET
           quantity_reserved = quantity_reserved - ${quantity},
+          last_ledger_entry_id = ${ledgerEntryId}::uuid,
           updated_at = now(),
           last_correlation_id = ${correlationId},
           version = version + 1
@@ -1262,12 +1308,27 @@ export const inventoryReservationQueries = {
       const quantity = input.quantity ?? openQuantity;
       validateActionQuantity(quantity, openQuantity, 'consume');
 
+      const ledgerEntryId = await appendInventoryLedgerEntry(tx, {
+        partId: reservation.partId,
+        stockLocationId: reservation.stockLocationId,
+        stockLotId: reservation.stockLotId,
+        reservationId: id,
+        workOrderId: reservation.workOrderId,
+        movementType: 'ISSUE',
+        quantityDelta: -quantity,
+        reasonCode: 'RESERVATION_CONSUMED',
+        sourceDocumentType: 'INVENTORY_RESERVATION',
+        sourceDocumentId: id,
+        correlationId,
+      });
+
       const updatedBalances = await tx.$queryRaw<Array<{ id: string }>>`
         UPDATE inventory.inventory_balances
         SET
           quantity_on_hand = quantity_on_hand - ${quantity},
           quantity_reserved = quantity_reserved - ${quantity},
           quantity_consumed = COALESCE(quantity_consumed, 0) + ${quantity},
+          last_ledger_entry_id = ${ledgerEntryId}::uuid,
           updated_at = now(),
           last_correlation_id = ${correlationId},
           version = version + 1
@@ -1323,8 +1384,57 @@ interface ActionReservation {
   reservedQuantity: number;
   consumedQuantity: number;
   allocatedQuantity: number;
+  partId: string;
+  stockLocationId: string;
   stockLotId: string;
+  workOrderId: string | null;
   workOrderPartId: string | null;
+}
+
+async function appendInventoryLedgerEntry(
+  tx: Prisma.TransactionClient,
+  input: AppendInventoryLedgerEntryInput,
+): Promise<string> {
+  const id = randomUUID();
+
+  await tx.$executeRaw`
+    INSERT INTO inventory.inventory_ledger_entries (
+      id,
+      part_id,
+      stock_location_id,
+      stock_lot_id,
+      reservation_id,
+      work_order_id,
+      movement_type,
+      quantity_delta,
+      unit_cost,
+      value_delta,
+      reason_code,
+      source_document_type,
+      source_document_id,
+      correlation_id,
+      created_at
+    )
+    VALUES (
+      ${id}::uuid,
+      ${input.partId}::uuid,
+      ${input.stockLocationId}::uuid,
+      ${input.stockLotId ?? null}::uuid,
+      ${input.reservationId ?? null}::uuid,
+      ${input.workOrderId ?? null}::uuid,
+      ${input.movementType},
+      ${input.quantityDelta},
+      ${input.unitCost ?? null},
+      ${input.valueDelta ?? null},
+      ${input.reasonCode},
+      ${input.sourceDocumentType ?? null},
+      ${input.sourceDocumentId ?? null},
+      ${input.correlationId},
+      now()
+    )
+  `;
+
+  return id;
 }
 
 async function queryReservationById(
@@ -1377,7 +1487,10 @@ async function lockReservationForAction(
       reservedQuantity: unknown;
       consumedQuantity: unknown;
       allocatedQuantity: unknown;
+      partId: string;
+      stockLocationId: string;
       stockLotId: string | null;
+      workOrderId: string | null;
       workOrderPartId: string | null;
     }>
   >`
@@ -1387,7 +1500,10 @@ async function lockReservationForAction(
       reserved_quantity AS "reservedQuantity",
       consumed_quantity AS "consumedQuantity",
       COALESCE(allocated_quantity, 0) AS "allocatedQuantity",
+      part_id::text AS "partId",
+      stock_location_id::text AS "stockLocationId",
       stock_lot_id::text AS "stockLotId",
+      work_order_id::text AS "workOrderId",
       work_order_part_id::text AS "workOrderPartId"
     FROM inventory.inventory_reservations
     WHERE id = ${id}::uuid
@@ -1407,7 +1523,10 @@ async function lockReservationForAction(
     reservedQuantity: numberFromDb(row.reservedQuantity),
     consumedQuantity: numberFromDb(row.consumedQuantity),
     allocatedQuantity: numberFromDb(row.allocatedQuantity),
+    partId: row.partId,
+    stockLocationId: row.stockLocationId,
     stockLotId: row.stockLotId,
+    workOrderId: row.workOrderId,
     workOrderPartId: row.workOrderPartId,
   };
 }

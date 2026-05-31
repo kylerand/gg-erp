@@ -346,10 +346,7 @@ test('sales quote and opportunity views resolve customer and user display profil
     quoteDetailSource.includes("{ label: 'Created By', value: quote.createdByUserId"),
     false,
   );
-  assert.equal(
-    quoteCreateSource.includes('Prepared from work order ${sourceWorkOrderId}'),
-    false,
-  );
+  assert.equal(quoteCreateSource.includes('Prepared from work order ${sourceWorkOrderId}'), false);
   assert.equal(quoteCreateSource.includes('Source work order: {sourceWorkOrderId}'), false);
   assert.equal(
     opportunityDetailSource.includes("{ label: 'Customer', value: opportunity.customerId }"),
@@ -416,11 +413,69 @@ test('dispatch board executes published schedule assignments from live APIs', ()
       'export async function listEmployees(',
       'export async function listTechnicianTasks(',
       'transitionWoOperation(',
+      'workOrderTitle?: string',
+      'routingStepCode?: string',
       'options?: ApiDataOptions',
     ].filter((snippet) => !apiClientSource.includes(snippet)),
     [],
   );
   assert.equal(source.includes('{ task: { ...selectedTask'), false);
+  assert.equal(source.includes('task.workOrderNumber ?? task.workOrderId'), false);
+  assert.equal(source.includes('task.routingStepTitle ?? task.routingStepId'), false);
+  assert.equal(source.includes('selectedTask.workOrderNumber ?? selectedTask.workOrderId'), false);
+  assert.equal(source.includes('{selectedTask.routingStepTitle}'), false);
+});
+
+test('floor execution pages resolve task and work-order context instead of raw IDs', () => {
+  const myQueueSource = readSource('app/work-orders/my-queue/page.tsx');
+  const qcSource = readSource('app/work-orders/qc-checklists/page.tsx');
+  const sopSource = readSource('app/work-orders/sop-runner/page.tsx');
+  const apiClientSource = readSource('lib/api-client.ts');
+  const ticketHandlersSource = readFileSync(
+    path.resolve(WEB_SRC_DIR, '../../../apps/api/src/lambda/tickets/handlers.ts'),
+    'utf8',
+  );
+
+  assert.match(
+    myQueueSource,
+    /erpRoute\('sop-runner',[\s\S]*\{[\s\S]*taskId: task\.id,[\s\S]*workOrderId: task\.workOrderId[\s\S]*\}/,
+  );
+
+  assert.deepEqual(
+    [
+      'getWoOrder(workOrderId, { allowMockFallback: false })',
+      "erpRoute('my-work-queue')",
+      "erpRecordRoute('work-order', workOrderId)",
+      'workOrderContextDescription',
+    ].filter((snippet) => !qcSource.includes(snippet)),
+    [],
+  );
+  assert.deepEqual(
+    [
+      'getWoOrder(workOrderId, { allowMockFallback: false })',
+      "erpRecordRoute('work-order', workOrderId)",
+      'workOrderContextDescription',
+    ].filter((snippet) => !sopSource.includes(snippet)),
+    [],
+  );
+  assert.deepEqual(
+    ['workOrderTitle?: string', 'routingStepCode?: string'].filter(
+      (snippet) => !apiClientSource.includes(snippet),
+    ),
+    [],
+  );
+  assert.deepEqual(
+    ['buildTaskResponses', 'workOrderNumber', 'workOrderTitle', 'routingStepTitle'].filter(
+      (snippet) => !ticketHandlersSource.includes(snippet),
+    ),
+    [],
+  );
+
+  assert.equal(myQueueSource.includes('Step ${task.routingStepId}'), false);
+  assert.equal(myQueueSource.includes('Step ${blockDialogTask.routingStepId}'), false);
+  assert.equal(qcSource.includes('WO ${workOrderId}'), false);
+  assert.equal(sopSource.includes('WO ${workOrderId}'), false);
+  assert.equal(sopSource.includes('Task ${taskId}'), false);
 });
 
 test('dashboard KPI cards deep-link to filtered destination views', () => {

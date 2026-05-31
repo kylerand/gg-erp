@@ -66,6 +66,10 @@ function uuidOrNull(value: string | undefined): string | null {
   return UUID_RE.test(value) ? value : null;
 }
 
+function compactUuidIds(ids: string[]): string[] {
+  return Array.from(new Set(ids.filter((id) => UUID_RE.test(id))));
+}
+
 export const listTasksHandler = wrapHandler(
   async (ctx) => {
     const qs = ctx.event.queryStringParameters ?? {};
@@ -97,7 +101,7 @@ export const listTasksHandler = wrapHandler(
       take: limit,
     });
 
-    return jsonResponse(200, { items: items.map(toTaskResponse) });
+    return jsonResponse(200, { items: await buildTaskResponses(items) });
   },
   { requireAuth: false },
 );
@@ -125,7 +129,7 @@ export const createTaskHandler = wrapHandler(
       },
     });
 
-    return jsonResponse(201, { task: toTaskResponse(task) });
+    return jsonResponse(201, { task: await buildTaskResponse(task) });
   },
   { requireAuth: false },
 );
@@ -162,7 +166,7 @@ export const transitionTaskHandler = wrapHandler(
           updatedAt: new Date(),
         },
       });
-      return jsonResponse(200, { task: toTaskResponse(task) });
+      return jsonResponse(200, { task: await buildTaskResponse(task) });
     }
 
     const allowed = TASK_TRANSITIONS[existing.state as string] ?? [];
@@ -186,7 +190,7 @@ export const transitionTaskHandler = wrapHandler(
       },
     });
 
-    return jsonResponse(200, { task: toTaskResponse(task) });
+    return jsonResponse(200, { task: await buildTaskResponse(task) });
   },
   { requireAuth: false },
 );
@@ -403,21 +407,33 @@ export const deleteTimeEntryHandler = wrapHandler(
 
 // ─── Response mappers ─────────────────────────────────────────────────────────
 
-function toTaskResponse(r: {
-  id: string;
-  workOrderId: string;
-  routingStepId: string;
-  technicianId: string | null;
-  state: string;
-  startedAt?: Date | null;
-  completedAt?: Date | null;
-  blockedReason?: string | null;
-  updatedAt: Date;
-}) {
+function toTaskResponse(
+  r: {
+    id: string;
+    workOrderId: string;
+    routingStepId: string;
+    technicianId: string | null;
+    state: string;
+    startedAt?: Date | null;
+    completedAt?: Date | null;
+    blockedReason?: string | null;
+    updatedAt: Date;
+  },
+  context?: {
+    workOrder?: { workOrderNumber: string; title: string };
+    routingStep?: { stepName: string; stepCode: string; sequenceNo: number };
+  },
+) {
   return {
     id: r.id,
     workOrderId: r.workOrderId,
+    workOrderNumber: context?.workOrder?.workOrderNumber,
+    workOrderTitle: context?.workOrder?.title,
     routingStepId: r.routingStepId,
+    routingStepTitle: context?.routingStep
+      ? `${context.routingStep.sequenceNo}. ${context.routingStep.stepName}`
+      : undefined,
+    routingStepCode: context?.routingStep?.stepCode,
     technicianId: r.technicianId ?? undefined,
     state: r.state,
     startedAt: r.startedAt?.toISOString(),
@@ -425,6 +441,73 @@ function toTaskResponse(r: {
     blockedReason: r.blockedReason ?? undefined,
     updatedAt: r.updatedAt.toISOString(),
   };
+}
+
+type TechnicianTaskRecord = Parameters<typeof toTaskResponse>[0];
+
+interface TechnicianTaskWorkOrderSummary {
+  id: string;
+  workOrderNumber: string;
+  title: string;
+}
+
+interface TechnicianTaskRoutingStepSummary {
+  id: string;
+  stepName: string;
+  stepCode: string;
+  sequenceNo: number;
+}
+
+interface TechnicianTaskContextPrisma {
+  woOrder?: {
+    findMany(args: {
+      where: { id: { in: string[] } };
+      select: { id: true; workOrderNumber: true; title: true };
+    }): Promise<TechnicianTaskWorkOrderSummary[]>;
+  };
+  routingSopStep?: {
+    findMany(args: {
+      where: { id: { in: string[] } };
+      select: { id: true; stepName: true; stepCode: true; sequenceNo: true };
+    }): Promise<TechnicianTaskRoutingStepSummary[]>;
+  };
+}
+
+async function buildTaskResponse(task: TechnicianTaskRecord) {
+  const [response] = await buildTaskResponses([task]);
+  return response ?? toTaskResponse(task);
+}
+
+async function buildTaskResponses(tasks: TechnicianTaskRecord[]) {
+  if (tasks.length === 0) return [];
+  const db = getPrisma() as unknown as TechnicianTaskContextPrisma;
+  const workOrderIds = compactUuidIds(tasks.map((task) => task.workOrderId));
+  const routingStepIds = compactUuidIds(tasks.map((task) => task.routingStepId));
+
+  const [workOrders, routingSteps] = await Promise.all([
+    db.woOrder?.findMany && workOrderIds.length > 0
+      ? db.woOrder.findMany({
+          where: { id: { in: workOrderIds } },
+          select: { id: true, workOrderNumber: true, title: true },
+        })
+      : Promise.resolve([]),
+    db.routingSopStep?.findMany && routingStepIds.length > 0
+      ? db.routingSopStep.findMany({
+          where: { id: { in: routingStepIds } },
+          select: { id: true, stepName: true, stepCode: true, sequenceNo: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const workOrdersById = new Map(workOrders.map((workOrder) => [workOrder.id, workOrder]));
+  const routingStepsById = new Map(routingSteps.map((step) => [step.id, step]));
+
+  return tasks.map((task) =>
+    toTaskResponse(task, {
+      workOrder: workOrdersById.get(task.workOrderId),
+      routingStep: routingStepsById.get(task.routingStepId),
+    }),
+  );
 }
 
 function toReworkResponse(r: {
@@ -500,7 +583,15 @@ function mapWoStatus(status: string): WoStatus {
 }
 
 function isWoStatus(value: string): value is WoStatus {
-  return ['DRAFT', 'READY', 'SCHEDULED', 'IN_PROGRESS', 'BLOCKED', 'COMPLETED', 'CANCELLED'].includes(value);
+  return [
+    'DRAFT',
+    'READY',
+    'SCHEDULED',
+    'IN_PROGRESS',
+    'BLOCKED',
+    'COMPLETED',
+    'CANCELLED',
+  ].includes(value);
 }
 
 function formatAge(date: Date | null): string {
@@ -1196,9 +1287,7 @@ export const transitionWoOperationHandler = wrapHandler(
         updatedAt: now,
         correlationId: ctx.correlationId,
         version: { increment: 1 },
-        ...(nextStatus === 'IN_PROGRESS' && !operation.actualStartAt
-          ? { actualStartAt: now }
-          : {}),
+        ...(nextStatus === 'IN_PROGRESS' && !operation.actualStartAt ? { actualStartAt: now } : {}),
         ...(TERMINAL_WO_OPERATION_STATUSES.includes(nextStatus) ? { actualEndAt: now } : {}),
         ...(nextStatus === 'BLOCKED'
           ? { blockingReason }

@@ -9,8 +9,8 @@ import type { EvidenceFile } from '@gg-erp/ui';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
-import { apiFetch, uploadAttachment } from '@/lib/api-client';
-import { erpRoute } from '@/lib/erp-routes';
+import { apiFetch, getWoOrder, uploadAttachment, type WoOrderDetail } from '@/lib/api-client';
+import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 import { useRole } from '@/lib/role-context';
 
 interface SopStep {
@@ -69,6 +69,30 @@ function formatElapsed(seconds: number): string {
   return [h, m, s].map((v) => String(v).padStart(2, '0')).join(':');
 }
 
+function workOrderDisplayName(workOrder: WoOrderDetail): string {
+  return `${workOrder.number}: ${workOrder.title}`;
+}
+
+function workOrderContextDescription(
+  workOrder: WoOrderDetail | null,
+  workOrderId: string,
+  lookupComplete: boolean,
+): string {
+  if (workOrder) {
+    const customer =
+      workOrder.customerProfile?.companyName ??
+      workOrder.customerProfile?.fullName ??
+      'Customer unresolved';
+    const cart = workOrder.cartProfile
+      ? `${workOrder.cartProfile.modelYear} ${workOrder.cartProfile.modelCode} · ${workOrder.cartProfile.serialNumber}`
+      : 'Cart unresolved';
+    return `${workOrderDisplayName(workOrder)} · ${customer} · ${cart}`;
+  }
+  if (workOrderId && !lookupComplete) return 'Loading work order context...';
+  if (workOrderId) return 'Work order context unavailable';
+  return 'Select a task from My Queue';
+}
+
 function SOPRunnerContent() {
   const params = useSearchParams();
   const taskId = params.get('taskId') ?? '';
@@ -84,6 +108,8 @@ function SOPRunnerContent() {
   const [evidenceMap, setEvidenceMap] = useState<Record<string, EvidenceFile[]>>({});
   const [elapsed, setElapsed] = useState(0);
   const [timerStartedAt, setTimerStartedAt] = useState<number | null>(null);
+  const [workOrder, setWorkOrder] = useState<WoOrderDetail | null>(null);
+  const [workOrderLookupComplete, setWorkOrderLookupComplete] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Restore timer from localStorage
@@ -163,6 +189,32 @@ function SOPRunnerContent() {
   useEffect(() => {
     void loadSteps();
   }, [loadSteps]);
+
+  useEffect(() => {
+    if (!workOrderId) {
+      setWorkOrder(null);
+      setWorkOrderLookupComplete(true);
+      return;
+    }
+
+    let cancelled = false;
+    setWorkOrder(null);
+    setWorkOrderLookupComplete(false);
+    void getWoOrder(workOrderId, { allowMockFallback: false })
+      .then((loaded) => {
+        if (!cancelled) setWorkOrder(loaded);
+      })
+      .catch(() => {
+        if (!cancelled) setWorkOrder(null);
+      })
+      .finally(() => {
+        if (!cancelled) setWorkOrderLookupComplete(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [workOrderId]);
 
   // Autosave active step index on each change
   useEffect(() => {
@@ -341,7 +393,7 @@ function SOPRunnerContent() {
       <div className="max-w-2xl space-y-6">
         <PageHeader
           title="SOP Runner"
-          description={`Task ${taskId}${workOrderId ? ` · WO ${workOrderId}` : ''}`}
+          description={workOrderContextDescription(workOrder, workOrderId, workOrderLookupComplete)}
         />
         <Card>
           <CardContent className="py-10 text-center text-sm text-gray-500">
@@ -356,8 +408,18 @@ function SOPRunnerContent() {
     <div className="max-w-2xl space-y-6">
       <PageHeader
         title="SOP Runner"
-        description={`Task ${taskId}${workOrderId ? ` · WO ${workOrderId}` : ''}`}
+        description={workOrderContextDescription(workOrder, workOrderId, workOrderLookupComplete)}
       />
+
+      {workOrderId && (
+        <div>
+          <Link href={erpRecordRoute('work-order', workOrderId)}>
+            <Button variant="outline" size="sm" className="min-h-[48px]">
+              Open Work Order
+            </Button>
+          </Link>
+        </div>
+      )}
 
       {error && (
         <Card className="border-red-300 bg-red-50">

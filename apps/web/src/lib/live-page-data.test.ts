@@ -114,6 +114,11 @@ test('work-order detail page wires live execution panels', () => {
     'SalesContextPanel',
     "erpRoute('create-quote'",
     "erpRoute('quote'",
+    'useSearchParams',
+    "searchParams.get('operationId')",
+    'operationElementId',
+    'Planner focus',
+    'scrollIntoView',
     'allowMockFallback: false',
   ];
 
@@ -371,6 +376,10 @@ test('build-slot planner renders live demand projection instead of visualization
       'cancelCapacitySlot',
       'allowMockFallback: false',
       "erpRecordRoute('work-order'",
+      'workOrderOperationHref',
+      'workOrderOperationHref(item)',
+      'workOrderOperationHref(assignment)',
+      'operationId: item.operationId',
       "erpRoute('dispatch-board')",
       'Unscheduled demand',
       'Capacity management',

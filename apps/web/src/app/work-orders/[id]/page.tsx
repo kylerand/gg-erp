@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import {
   Ban,
   Car,
@@ -156,6 +156,10 @@ function formatDateTime(value?: string): string {
   });
 }
 
+function operationElementId(operationId: string): string {
+  return `operation-${operationId}`;
+}
+
 function qcStatusFromResponse(response: SubmitWorkOrderQcResponse): 'PASSED' | 'FAILED' {
   return response.status ?? response.overallResult ?? 'FAILED';
 }
@@ -239,7 +243,9 @@ function createDrafts(parts: WoOrderPartLine[], lotsByPartLine: Record<string, I
 
 export default function WorkOrderDetailPage() {
   const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const id = params.id;
+  const focusedOperationId = searchParams.get('operationId');
   const { user, loading: roleLoading } = useRole();
   const [workOrder, setWorkOrder] = useState<WoOrderDetail | null>(null);
   const [availableLots, setAvailableLots] = useState<Record<string, InventoryLot[]>>({});
@@ -338,6 +344,16 @@ export default function WorkOrderDetailPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!focusedOperationId || loading || !workOrder?.id) return;
+    const frame = window.requestAnimationFrame(() => {
+      document
+        .getElementById(operationElementId(focusedOperationId))
+        ?.scrollIntoView({ block: 'center' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusedOperationId, loading, workOrder?.id]);
 
   const employeeById = useMemo(
     () => new Map(employees.map((employee) => [employee.id, employee])),
@@ -697,6 +713,7 @@ export default function WorkOrderDetailPage() {
                     item={item}
                     workOrderId={workOrder.id}
                     actionBusy={actionBusy}
+                    focused={item.id === focusedOperationId}
                     blockDraftActive={blockOperationId === item.id}
                     blockReason={blockOperationId === item.id ? blockReason : ''}
                     onBlockReasonChange={setBlockReason}
@@ -942,6 +959,7 @@ function ServiceLine({
   item,
   workOrderId,
   actionBusy,
+  focused,
   blockDraftActive,
   blockReason,
   onBlockReasonChange,
@@ -951,6 +969,7 @@ function ServiceLine({
   item: WoOrderDetail['checklist'][number];
   workOrderId: string;
   actionBusy: string | null;
+  focused: boolean;
   blockDraftActive: boolean;
   blockReason: string;
   onBlockReasonChange: (value: string) => void;
@@ -960,13 +979,23 @@ function ServiceLine({
   const status = item.status ?? (item.done ? 'DONE' : 'PENDING');
   const transitionActions = getOperationActions(status);
   return (
-    <div className="px-4 py-3">
+    <div
+      id={operationElementId(item.id)}
+      className={`scroll-mt-24 px-4 py-3 ${
+        focused ? 'bg-yellow-50 ring-1 ring-inset ring-yellow-300' : ''
+      }`}
+    >
       <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <CheckCircle2 size={18} className={item.done ? 'text-green-600' : 'text-gray-300'} />
             <span className="text-sm font-semibold text-gray-900">{item.label}</span>
             <StatusBadge status={status}>{displayStatus(status)}</StatusBadge>
+            {focused && (
+              <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-semibold text-yellow-800">
+                Planner focus
+              </span>
+            )}
           </div>
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
             {item.operationCode && <span className="font-mono">{item.operationCode}</span>}

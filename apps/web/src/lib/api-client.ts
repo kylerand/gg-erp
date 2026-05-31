@@ -2806,6 +2806,35 @@ export async function listMyAssignments(
   );
 }
 
+export interface CreateTrainingAssignmentsInput {
+  moduleId: string;
+  employeeId?: string;
+  employeeIds?: string[];
+  dueAt?: string;
+}
+
+export interface CreateTrainingAssignmentsResult {
+  items: TrainingAssignment[];
+  skipped: TrainingAssignment[];
+  totalCreated: number;
+  totalSkipped: number;
+}
+
+export async function createTrainingAssignments(
+  input: CreateTrainingAssignmentsInput,
+  options?: ApiDataOptions,
+): Promise<CreateTrainingAssignmentsResult> {
+  return apiFetch<CreateTrainingAssignmentsResult>(
+    '/ojt/assignments',
+    {
+      method: 'POST',
+      body: JSON.stringify(input),
+    },
+    undefined,
+    options,
+  );
+}
+
 export async function completeAssignment(
   id: string,
   score?: number,

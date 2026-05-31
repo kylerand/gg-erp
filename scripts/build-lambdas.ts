@@ -102,6 +102,7 @@ const lambdas: LambdaEntry[] = [
 
   // sop
   { context: 'sop', handler: 'complete-assignment',  entry: 'apps/api/src/lambda/sop/complete-assignment.handler.ts' },
+  { context: 'sop', handler: 'create-assignments',  entry: 'apps/api/src/lambda/sop/create-assignments.handler.ts' },
   { context: 'sop', handler: 'create',                entry: 'apps/api/src/lambda/sop/create.handler.ts' },
   { context: 'sop', handler: 'get',                    entry: 'apps/api/src/lambda/sop/get.handler.ts' },
   { context: 'sop', handler: 'list',                  entry: 'apps/api/src/lambda/sop/list.handler.ts' },

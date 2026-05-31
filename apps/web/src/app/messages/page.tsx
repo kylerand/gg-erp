@@ -17,8 +17,11 @@ import {
   listChannelTodos,
   createChannelTodo,
   updateChannelTodo,
+  uploadAttachment,
+  getAttachmentDownloadUrl,
   type Channel,
   type ChannelMessage,
+  type ChannelMessageAttachment,
   type ChannelTodo,
 } from '@/lib/api-client';
 import { Input } from '@/components/ui/input';
@@ -245,13 +248,27 @@ export default function MessagesPage() {
   async function handleSend() {
     if ((!composeText.trim() && selectedFiles.length === 0) || !selectedChannelId) return;
     const text = composeText;
-    const _filesToUpload = [...selectedFiles];
+    const filesToUpload = [...selectedFiles];
     setComposeText('');
     setSelectedFiles([]);
     setSending(true);
     try {
-      // TODO: Upload files to S3 and attach to message
-      const msg = await sendMessage(selectedChannelId, { content: text });
+      const uploadedFiles = await Promise.all(
+        filesToUpload.map((file) =>
+          uploadAttachment({
+            entityType: 'communication-channel',
+            entityId: selectedChannelId,
+            file,
+          }),
+        ),
+      );
+      const content =
+        text.trim() ||
+        `Attached ${uploadedFiles.map((file) => file.fileName).join(', ')}`;
+      const msg = await sendMessage(selectedChannelId, {
+        content,
+        attachmentIds: uploadedFiles.map((file) => file.attachmentId),
+      });
       setMessages((prev) => [...prev, { ...msg, replyCount: 0, reactions: [] }]);
       // Update channel's unread/message count
       setChannels((prev) =>
@@ -263,10 +280,19 @@ export default function MessagesPage() {
       );
     } catch (err) {
       setComposeText(text);
-      setSelectedFiles(_filesToUpload);
+      setSelectedFiles(filesToUpload);
       toast.error(err instanceof Error ? err.message : 'Failed to send');
     } finally {
       setSending(false);
+    }
+  }
+
+  async function handleOpenAttachment(attachment: ChannelMessageAttachment) {
+    try {
+      const { downloadUrl } = await getAttachmentDownloadUrl(attachment.fileAttachmentId);
+      window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to open attachment');
     }
   }
 
@@ -587,6 +613,7 @@ export default function MessagesPage() {
                             )
                           }
                           onReaction={(emoji) => handleReaction(msg.id, emoji)}
+                          onOpenAttachment={(attachment) => void handleOpenAttachment(attachment)}
                         />
                       ))
                     )}
@@ -646,6 +673,7 @@ export default function MessagesPage() {
                         type="button"
                         variant="ghost"
                         onClick={() => fileInputRef.current?.click()}
+                        disabled={sending}
                         className="h-10 w-10 p-0 flex-shrink-0 text-gray-500 hover:text-gray-700"
                         aria-label="Attach files"
                       >
@@ -823,6 +851,7 @@ interface MessageBubbleProps {
   showEmojiPicker: boolean;
   onToggleEmojiPicker: () => void;
   onReaction: (emoji: string) => void;
+  onOpenAttachment: (attachment: ChannelMessageAttachment) => void;
 }
 
 function MessageBubble({
@@ -839,6 +868,7 @@ function MessageBubble({
   showEmojiPicker,
   onToggleEmojiPicker,
   onReaction,
+  onOpenAttachment,
 }: MessageBubbleProps) {
   const time = new Date(message.createdAt).toLocaleTimeString([], {
     hour: '2-digit',
@@ -847,7 +877,7 @@ function MessageBubble({
 
   return (
     <div className={`group flex gap-2 py-1.5 px-2 rounded-lg hover:bg-gray-50 ${isOwn ? '' : ''}`}>
-      {/* Avatar placeholder */}
+      {/* Author avatar */}
       <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-medium text-gray-500 mt-0.5">
         {message.authorId.slice(0, 2).toUpperCase()}
       </div>
@@ -892,6 +922,32 @@ function MessageBubble({
           <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">
             {message.content}
           </p>
+        )}
+
+        {message.attachments.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {message.attachments.map((attachment) => (
+              <button
+                key={attachment.id}
+                type="button"
+                onClick={() => onOpenAttachment(attachment)}
+                className="inline-flex max-w-[220px] items-center gap-2 rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-left text-xs text-gray-700 transition-colors hover:border-yellow-300 hover:bg-yellow-50"
+                title={attachment.fileName ?? attachment.fileAttachmentId}
+              >
+                <FileIcon size={14} className="flex-shrink-0 text-gray-500" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium">
+                    {attachment.fileName ?? attachment.fileAttachmentId}
+                  </span>
+                  {attachment.sizeBytes !== undefined && (
+                    <span className="block text-gray-400">
+                      {formatFileSize(attachment.sizeBytes)}
+                    </span>
+                  )}
+                </span>
+              </button>
+            ))}
+          </div>
         )}
 
         {/* Reactions */}

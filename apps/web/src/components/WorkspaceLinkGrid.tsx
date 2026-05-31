@@ -54,6 +54,7 @@ const ICON_BY_ITEM_KEY: Partial<Record<string, LucideIcon>> = {
   'sop-library': BookOpen,
   'training-admin': Settings2,
   'build-slot': ListChecks,
+  'build-package': PackageCheck,
   'accounting-sync': Receipt,
   'accounting-reconciliation': Scale,
   'quickbooks-customer': Users,

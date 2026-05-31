@@ -40,6 +40,7 @@ const lambdas: LambdaEntry[] = [
   { context: 'work-orders', handler: 'create',     entry: 'apps/api/src/lambda/work-orders/create.handler.ts' },
   { context: 'work-orders', handler: 'get',         entry: 'apps/api/src/lambda/work-orders/get.handler.ts' },
   { context: 'work-orders', handler: 'list',        entry: 'apps/api/src/lambda/work-orders/list.handler.ts' },
+  { context: 'work-orders', handler: 'list-build-packages', entry: 'apps/api/src/lambda/work-orders/list-build-packages.handler.ts' },
   { context: 'work-orders', handler: 'transition',  entry: 'apps/api/src/lambda/work-orders/transition.handler.ts' },
   { context: 'work-orders', handler: 'list-vehicles', entry: 'apps/api/src/lambda/vehicles/list.handler.ts' },
   { context: 'work-orders', handler: 'update-vehicle', entry: 'apps/api/src/lambda/vehicles/update.handler.ts' },

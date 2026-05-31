@@ -1,12 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
-import { InvariantViolationError, WorkOrderState } from '../../../../../packages/domain/src/model/index.js';
+import {
+  InvariantViolationError,
+  WorkOrderState,
+} from '../../../../../packages/domain/src/model/index.js';
 import { InMemoryAuditSink } from '../../audit/index.js';
 import { createWorkOrderRoutes } from '../../contexts/build-planning/workOrder.routes.js';
 import {
   toWorkOrderCreatedEvent,
   toWorkOrderResponse,
   type CreateWorkOrderRequest,
+  type ListBuildPackagesQuery,
+  type ListBuildPackagesResponse,
   type CreateWorkOrderResponse,
   type ListWorkOrdersQuery,
   type ListWorkOrdersResponse,
@@ -221,6 +226,71 @@ export function summarizeBuildPackages(
   );
 }
 
+function matchesBuildPackageSearch(pkg: WorkOrderBuildPackageResponse, search: string): boolean {
+  const query = search.trim().toLowerCase();
+  if (!query) return true;
+
+  return [
+    pkg.label,
+    pkg.description,
+    pkg.buildConfigurationId,
+    pkg.bomId,
+    pkg.lastWorkOrderNumber,
+    pkg.lastVehicleDisplayName,
+    pkg.lastCustomerDisplayName,
+  ].some((value) => value?.toLowerCase().includes(query));
+}
+
+export async function listBuildPackagesHandler(
+  event: ApiGatewayProxyEventLike,
+): Promise<ApiGatewayProxyResultLike> {
+  const query = toBuildPackageListQuery(event.queryStringParameters ?? {});
+
+  if (query.limit !== undefined && (!Number.isInteger(query.limit) || query.limit <= 0)) {
+    return json(422, {
+      message: 'Build package query validation failed.',
+      issues: [{ field: 'limit', message: 'limit must be a positive integer.' }],
+    });
+  }
+  if (query.offset !== undefined && (!Number.isInteger(query.offset) || query.offset < 0)) {
+    return json(422, {
+      message: 'Build package query validation failed.',
+      issues: [{ field: 'offset', message: 'offset must be a non-negative integer.' }],
+    });
+  }
+
+  const limit = Math.min(query.limit ?? 100, 500);
+  const offset = query.offset ?? 0;
+
+  const items = await routes.listWorkOrders({ limit: 500, offset: 0 });
+  const responseItems = items.map(toWorkOrderResponse);
+  const context = await loadWorkOrderListContext(responseItems);
+  const enrichedItems = responseItems.map((item) => {
+    const vehicleProfile = context.vehiclesById.get(item.vehicleId) ?? null;
+    const customerProfile = vehicleProfile
+      ? (context.customersById.get(vehicleProfile.customerId) ?? null)
+      : null;
+    return {
+      ...item,
+      vehicleProfile,
+      customerProfile,
+    };
+  });
+
+  const filteredPackages = summarizeBuildPackages(enrichedItems).filter((pkg) =>
+    matchesBuildPackageSearch(pkg, query.search ?? ''),
+  );
+  const response: ListBuildPackagesResponse = {
+    items: filteredPackages.slice(offset, offset + limit),
+    total: filteredPackages.length,
+    limit,
+    offset,
+    source: 'WORK_ORDER_HISTORY',
+  };
+
+  return json(200, response);
+}
+
 export async function createWorkOrderHandler(
   event: ApiGatewayProxyEventLike,
 ): Promise<ApiGatewayProxyResultLike> {
@@ -376,6 +446,20 @@ function toListQuery(
     offset: offsetParam ? Number(offsetParam) : undefined,
     includeBuildPackages:
       includeBuildPackagesParam === 'true' || includeBuildPackagesParam === '1' || undefined,
+  };
+}
+
+function toBuildPackageListQuery(
+  queryStringParameters: Record<string, string | undefined>,
+): ListBuildPackagesQuery {
+  const search = queryStringParameters.search?.trim();
+  const limit = queryStringParameters.limit?.trim();
+  const offset = queryStringParameters.offset?.trim();
+
+  return {
+    search: search || undefined,
+    limit: limit ? Number(limit) : undefined,
+    offset: offset ? Number(offset) : undefined,
   };
 }
 

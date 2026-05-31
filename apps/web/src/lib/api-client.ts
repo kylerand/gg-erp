@@ -490,19 +490,27 @@ export async function listWorkOrders(
   );
 }
 
-export async function listWorkOrderBuildPackages(
-  params?: { limit?: number },
+export async function listBuildPackages(
+  params?: { search?: string; limit?: number; offset?: number },
   options?: ApiDataOptions,
 ): Promise<{ items: WorkOrderBuildPackage[]; total: number }> {
-  const result = await listWorkOrders(
-    { limit: params?.limit ?? 250, includeBuildPackages: true },
+  const qs = new URLSearchParams();
+  if (params?.search) qs.set('search', params.search);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  return apiFetch(
+    `/planning/build-packages${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    { items: [], total: 0 },
     options,
   );
+}
 
-  return {
-    items: result.buildPackages ?? [],
-    total: result.buildPackages?.length ?? 0,
-  };
+export async function listWorkOrderBuildPackages(
+  params?: { search?: string; limit?: number; offset?: number },
+  options?: ApiDataOptions,
+): Promise<{ items: WorkOrderBuildPackage[]; total: number }> {
+  return listBuildPackages(params, options);
 }
 
 export async function createWorkOrder(input: CreateWorkOrderInput): Promise<WorkOrder> {

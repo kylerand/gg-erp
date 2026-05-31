@@ -3,6 +3,7 @@ import test from 'node:test';
 import { WorkOrderState } from '../../../../packages/domain/src/model/buildPlanning.js';
 import {
   createWorkOrderHandler,
+  listBuildPackagesHandler,
   listWorkOrdersHandler,
   summarizeBuildPackages,
 } from '../lambda/work-orders/handlers.js';
@@ -31,6 +32,22 @@ test('listWorkOrdersHandler returns 422 for invalid pagination query', async () 
   };
   assert.equal(payload.message, 'Work order query validation failed.');
   assert.ok(payload.issues.some((issue) => issue.field === 'limit'));
+});
+
+test('listBuildPackagesHandler returns 422 for invalid pagination query', async () => {
+  const response = await listBuildPackagesHandler({
+    queryStringParameters: {
+      offset: '-1',
+    },
+  });
+
+  assert.equal(response.statusCode, 422);
+  const payload = JSON.parse(response.body) as {
+    message: string;
+    issues: Array<{ field: string }>;
+  };
+  assert.equal(payload.message, 'Build package query validation failed.');
+  assert.ok(payload.issues.some((issue) => issue.field === 'offset'));
 });
 
 test('summarizeBuildPackages creates live package catalog entries from enriched work orders', () => {

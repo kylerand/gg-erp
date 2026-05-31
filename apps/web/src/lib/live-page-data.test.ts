@@ -17,6 +17,7 @@ const truthCriticalPages = [
   'app/inventory/purchase-orders/[id]/page.tsx',
   'app/inventory/receiving/page.tsx',
   'app/inventory/reservations/page.tsx',
+  'app/planning/build-packages/page.tsx',
   'app/planning/slots/page.tsx',
   'app/reporting/page.tsx',
   'app/admin/accounting/page.tsx',
@@ -183,6 +184,8 @@ test('work-order detail page wires live execution panels', () => {
 
 test('create forms use live selectors instead of raw ID entry fields', () => {
   const workOrderSource = readSource('app/work-orders/new/page.tsx');
+  const buildPackagesSource = readSource('app/planning/build-packages/page.tsx');
+  const apiClientSource = readSource('lib/api-client.ts');
   const timeLoggingSource = readSource('app/work-orders/time-logging/page.tsx');
   const opportunitySource = readSource('app/sales/opportunities/new/page.tsx');
   const quoteSource = readSource('app/sales/quotes/new/page.tsx');
@@ -192,7 +195,7 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
     [
       'listCustomers',
       'listCartVehicles',
-      'listWorkOrderBuildPackages',
+      'listBuildPackages',
       'manualBuildConfigurationId',
       'manualBomId',
       'SearchableSelect',
@@ -200,6 +203,14 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
     ].filter((call) => !workOrderSource.includes(call)),
     [],
   );
+  assert.deepEqual(
+    ['listBuildPackages', 'allowMockFallback: false', "erpRoute('create-work-order'"].filter(
+      (call) => !buildPackagesSource.includes(call),
+    ),
+    [],
+  );
+  assert.ok(apiClientSource.includes('/planning/build-packages'));
+  assert.equal(workOrderSource.includes('listWorkOrderBuildPackages'), false);
   assert.deepEqual(
     ['listCustomers', 'getCustomer', 'listOpportunities', 'listParts', 'SearchableSelect'].filter(
       (call) => !quoteSource.includes(call),

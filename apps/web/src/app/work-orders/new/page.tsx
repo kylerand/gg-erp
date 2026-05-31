@@ -5,11 +5,11 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   createWorkOrder,
+  listBuildPackages,
   listCartVehicles,
   listCustomers,
   type CartVehicle,
   type Customer,
-  listWorkOrderBuildPackages,
   type WorkOrderBuildPackage,
 } from '@/lib/api-client';
 import { erpRoute } from '@/lib/erp-routes';
@@ -68,7 +68,7 @@ export default function NewWorkOrderPage() {
   const [workOrderNumber, setWorkOrderNumber] = useState('');
   const [customerId, setCustomerId] = useState(searchParams.get('customerId') ?? '');
   const [vehicleId, setVehicleId] = useState(searchParams.get('vehicleId') ?? '');
-  const [buildPackageId, setBuildPackageId] = useState('');
+  const [buildPackageId, setBuildPackageId] = useState(searchParams.get('buildPackageId') ?? '');
   const [manualBuildConfigurationId, setManualBuildConfigurationId] = useState('');
   const [manualBomId, setManualBomId] = useState('');
   const [scheduledDate, setScheduledDate] = useState('');
@@ -98,7 +98,10 @@ export default function NewWorkOrderPage() {
         },
         { allowMockFallback: false },
       ),
-      listWorkOrderBuildPackages({ limit: 250 }, { allowMockFallback: false }),
+      listBuildPackages(
+        { search: buildPackageSearch || undefined, limit: 100 },
+        { allowMockFallback: false },
+      ),
     ])
       .then(([customerResult, vehicleResult, buildPackageResult]) => {
         if (!active) return;
@@ -120,7 +123,7 @@ export default function NewWorkOrderPage() {
     return () => {
       active = false;
     };
-  }, [customerId, customerSearch, vehicleSearch]);
+  }, [buildPackageSearch, customerId, customerSearch, vehicleSearch]);
 
   const customerOptions = useMemo(() => customers.map(customerOption), [customers]);
   const vehicleOptions = useMemo(() => vehicles.map(vehicleOption), [vehicles]);
@@ -183,7 +186,7 @@ export default function NewWorkOrderPage() {
     <div className="max-w-3xl">
       <PageHeader
         title="New Work Order"
-        description="Select the customer, cart, and build package from live planning records."
+        description="Select the customer, cart, and released build package from the planning catalog."
       />
       <Card>
         <CardHeader>
@@ -269,7 +272,7 @@ export default function NewWorkOrderPage() {
               loading={referenceLoading}
               error={referenceError}
               placeholder="Search package, cart, customer, or reference"
-              emptyText="No package history matched. Enter released build references below."
+              emptyText="No released build packages matched. Enter engineering-approved references below."
               onSearchChange={setBuildPackageSearch}
               onChange={(nextPackageId) => {
                 setBuildPackageId(nextPackageId);
@@ -310,9 +313,7 @@ export default function NewWorkOrderPage() {
 
             {selectedBuildPackage && (
               <div className="rounded-lg border border-[#D9CCBE] bg-[#FFF8EF] px-4 py-3 text-sm text-[#6E625A]">
-                <span className="font-semibold text-[#211F1E]">
-                  {selectedBuildPackage.label}
-                </span>{' '}
+                <span className="font-semibold text-[#211F1E]">{selectedBuildPackage.label}</span>{' '}
                 has been used on {selectedBuildPackage.workOrderCount} work order
                 {selectedBuildPackage.workOrderCount === 1 ? '' : 's'}.
               </div>

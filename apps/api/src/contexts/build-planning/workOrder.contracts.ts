@@ -1,4 +1,7 @@
-import type { WorkOrder, WorkOrderState } from '../../../../../packages/domain/src/model/buildPlanning.js';
+import type {
+  WorkOrder,
+  WorkOrderState,
+} from '../../../../../packages/domain/src/model/buildPlanning.js';
 
 export interface CreateWorkOrderRequest {
   workOrderNumber: string;
@@ -14,6 +17,12 @@ export interface ListWorkOrdersQuery {
   limit?: number;
   offset?: number;
   includeBuildPackages?: boolean;
+}
+
+export interface ListBuildPackagesQuery {
+  search?: string;
+  limit?: number;
+  offset?: number;
 }
 
 export interface WorkOrderBuildPackageResponse {
@@ -86,6 +95,14 @@ export interface ListWorkOrdersResponse {
   limit: number;
   offset: number;
   buildPackages?: WorkOrderBuildPackageResponse[];
+}
+
+export interface ListBuildPackagesResponse {
+  items: WorkOrderBuildPackageResponse[];
+  total: number;
+  limit: number;
+  offset: number;
+  source: 'WORK_ORDER_HISTORY';
 }
 
 export function toWorkOrderResponse(workOrder: WorkOrder): WorkOrderResponse {

@@ -318,6 +318,15 @@ export const ERP_WORKSPACES = [
         objectKey: 'build-slot',
         keywords: ['slot', 'capacity', 'planner', 'schedule'],
       },
+      {
+        key: 'build-package',
+        label: 'Build Packages',
+        description: 'Review released build configuration and BOM pairs.',
+        route: '/planning/build-packages',
+        status: 'live',
+        objectKey: 'build-package',
+        keywords: ['build package', 'configuration', 'bom', 'catalog'],
+      },
     ],
   },
   {

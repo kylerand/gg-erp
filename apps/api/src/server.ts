@@ -10,6 +10,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { loadApiEnv } from './config/env.js';
 import {
   createWorkOrderHandler,
+  listBuildPackagesHandler,
   listWorkOrdersHandler,
   type ApiGatewayProxyEventLike,
 } from './lambda/work-orders/handlers.js';
@@ -311,6 +312,8 @@ async function route(
     result = await createWorkOrderHandler(event);
   } else if (pathname === '/planning/work-orders' && method === 'GET') {
     result = await listWorkOrdersHandler(event);
+  } else if (pathname === '/planning/build-packages' && method === 'GET') {
+    result = await listBuildPackagesHandler(event);
   } else if (pathname === '/planning/vehicles' && method === 'GET') {
     result = await listVehiclesHandler(event);
   } else if (vehicleMatch && method === 'PATCH') {
@@ -735,7 +738,7 @@ server.listen(PORT, () => {
   console.log(`   Queue       GET /tickets/wo-queue, GET /tickets/wo-queue/:id`);
   console.log(`   Time        GET /tickets/time-entries`);
   console.log(`   Routing     GET|PATCH /tickets/routing-steps/:id`);
-  console.log(`   Planning    GET|POST /planning/work-orders, GET /planning/vehicles`);
+  console.log(`   Planning    GET|POST /planning/work-orders, GET /planning/build-packages, GET /planning/vehicles`);
   console.log(`   SOP         GET|POST /sop, /sop/modules, /sop/modules/:id`);
   console.log(`   Training    PUT /sop/modules/:id/step-progress, POST /sop/modules/:id/quiz`);
   console.log(`   Migration   GET|POST /migration/batches, /:id, /:id/cancel`);

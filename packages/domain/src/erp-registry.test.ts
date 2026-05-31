@@ -40,6 +40,7 @@ test('ERP object registry exposes unique live route metadata', () => {
 test('registry route helper resolves module links and filtered routes', () => {
   assert.equal(getRequiredErpRoute('work-order'), '/work-orders');
   assert.equal(getRequiredErpRoute('create-work-order'), '/work-orders/new');
+  assert.equal(getRequiredErpRoute('build-package'), '/planning/build-packages');
   assert.equal(getRequiredErpRoute('create-sales-opportunity'), '/sales/opportunities/new');
   assert.equal(getRequiredErpRoute('quickbooks-customer'), '/accounting/quickbooks/customers');
   assert.equal(getRequiredErpRoute('accounting-settings'), '/admin/accounting');
@@ -101,6 +102,9 @@ test('workspace navigation items include live links and quick actions', () => {
   assert.ok(accountingItems.some((item) => item.key === 'quickbooks-invoice'));
   assert.ok(accountingItems.some((item) => item.key === 'quickbooks-chart-of-accounts'));
   assert.ok(trainingItems.some((item) => item.key === 'training-admin'));
+  assert.ok(
+    getErpWorkspaceNavigationItems('planning').some((item) => item.key === 'build-package'),
+  );
   assert.ok(
     getErpWorkspaceNavigationItems('admin').some((item) => item.key === 'accounting-settings'),
   );

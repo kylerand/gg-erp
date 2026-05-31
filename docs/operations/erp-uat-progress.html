@@ -305,19 +305,20 @@
             </tr>
             <tr>
               <td>Forms and selectors</td>
-              <td><span class="pill doing">In progress</span></td>
+              <td><span class="pill done">Done</span></td>
               <td>
                 Work-order, sales opportunity, quote create, time logging, inventory reservation,
                 and purchase-order create/edit screens use live customer, cart, opportunity, part,
                 vendor, work-order, active employee, and live build-package selectors with mock
-                fallback disabled. Work-order create now reads a first-class package summary from
-                live planning work orders and supports manual released build references when no
-                package history exists. Work-order list selectors resolve cart and customer
-                context instead of rendering vehicle/configuration IDs.
+                fallback disabled. Work-order create now reads released build package options from
+                the dedicated planning catalog and supports manual engineering-approved references
+                when no package is reusable. Work-order list selectors resolve cart and customer
+                context instead of rendering vehicle/configuration IDs, and Planning exposes the
+                build package catalog as an operator page.
               </td>
               <td>
-                Replace the derived build-package history with dedicated build configuration and
-                BOM management once those domain catalogs are exposed through stable APIs.
+                Add write-side build configuration and BOM authoring/versioning once dedicated
+                tables land.
               </td>
             </tr>
             <tr>

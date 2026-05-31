@@ -489,10 +489,10 @@
           <div class="module-card">
             <header>
               <h3>Work Orders And Shop Execution</h3>
-              <span class="pill doing">80%</span>
+              <span class="pill doing">82%</span>
             </header>
-            <div class="bar good"><span style="width: 80%"></span></div>
-            <p>Strongest operator surface. The command center now covers commercial context, service transitions, materials, labor, QC, SOP, activity, customer/cart editing, accepted quote conversion, and build-package selection from live planning history.</p>
+            <div class="bar good"><span style="width: 82%"></span></div>
+            <p>Strongest operator surface. The command center now covers commercial context, service transitions, materials, labor, QC, SOP, activity, customer/cart editing, accepted quote conversion, and build-package selection from the dedicated planning catalog.</p>
           </div>
 
           <div class="module-card">
@@ -510,7 +510,7 @@
               <span class="pill done">82%</span>
             </header>
             <div class="bar good"><span style="width: 82%"></span></div>
-            <p>Receiving, PO lifecycle, reservations, replenishment, default-vendor assignment from material planning, variance, payable handoff, import/export, and drill-through are live. Broader item editing and dedicated BOM management are the next practical gaps.</p>
+            <p>Receiving, PO lifecycle, reservations, replenishment, default-vendor assignment from material planning, variance, payable handoff, import/export, and drill-through are live. Broader item editing, BOM authoring, and inventory movement history are the next practical gaps.</p>
           </div>
 
           <div class="module-card">
@@ -620,7 +620,7 @@
           <li><strong>Reconcile status truth:</strong> update <code>docs/architecture/IMPLEMENTATION_STATUS.md</code> to reflect the PR 59-78 work so project reporting stops undercounting shipped functionality.</li>
           <li><strong>Finish registry-backed route coverage:</strong> land the active registry route coverage branch through CI so navigation, command palette, and QA share one source of truth.</li>
           <li><strong>Keep production blockers closed:</strong> continue verifying <code>GET /auth/me</code>, the accounting webhook 400 path, and floor-tech SSO handoff in live UAT runs.</li>
-          <li><strong>Complete remaining selector gaps:</strong> technician selectors should be catalog-backed with validation and useful empty states; build-package history should graduate into dedicated build configuration and BOM management.</li>
+          <li><strong>Extend planning masters:</strong> add write-side build configuration and BOM authoring/versioning now that selectors read from the dedicated planning catalog.</li>
           <li><strong>Move toward ERP ledgers:</strong> start inventory movement history and internal accounting ledger design before adding more financial-report UI.</li>
         </ol>
       </section>

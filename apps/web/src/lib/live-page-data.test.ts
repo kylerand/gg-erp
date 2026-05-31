@@ -96,6 +96,54 @@ test('apiFetch can reject local mock fallback data for truth-critical calls', as
   }
 });
 
+test('ERP to floor-tech link uses the Cognito handoff entrypoint', () => {
+  const topHeaderSource = readSource('components/TopHeader.tsx');
+  const floorAuthSource = readFileSync(
+    path.resolve(WEB_SRC_DIR, '../../../apps/floor-tech/src/app/auth/page.tsx'),
+    'utf8',
+  );
+  const floorCallbackSource = readFileSync(
+    path.resolve(WEB_SRC_DIR, '../../../apps/floor-tech/src/app/auth/callback/page.tsx'),
+    'utf8',
+  );
+  const floorShellSource = readFileSync(
+    path.resolve(WEB_SRC_DIR, '../../../apps/floor-tech/src/components/TechShell.tsx'),
+    'utf8',
+  );
+
+  assert.deepEqual(
+    [
+      "/auth?${floorTechParams.toString()}",
+      "handoff: 'erp'",
+      "next: '/work-orders/my-queue'",
+      "floorTechParams.set('returnTo', currentHref)",
+    ].filter((snippet) => !topHeaderSource.includes(snippet)),
+    [],
+  );
+  assert.deepEqual(
+    [
+      "searchParams.get('handoff') === 'erp'",
+      'FLOOR_HANDOFF_NEXT_KEY',
+      'FLOOR_HANDOFF_RETURN_KEY',
+      "signInWithRedirect({ provider: 'Google' })",
+      'router.replace(handoffNext)',
+    ].filter((snippet) => !floorAuthSource.includes(snippet)),
+    [],
+  );
+  assert.deepEqual(
+    ['FLOOR_HANDOFF_NEXT_KEY', 'window.location.replace(nextPath)'].filter(
+      (snippet) => !floorCallbackSource.includes(snippet),
+    ),
+    [],
+  );
+  assert.deepEqual(
+    ['FLOOR_HANDOFF_RETURN_KEY', '<span>ERP</span>'].filter(
+      (snippet) => !floorShellSource.includes(snippet),
+    ),
+    [],
+  );
+});
+
 test('work-order detail page wires live execution panels', () => {
   const source = readSource('app/work-orders/[id]/page.tsx');
   const requiredCalls = [

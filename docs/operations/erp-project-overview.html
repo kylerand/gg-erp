@@ -350,14 +350,14 @@
       <header>
         <h1>Golfin Garage ERP Project Overview</h1>
         <p class="lede">
-          High-level status with the schedule-publication slice in progress. The app has
+          High-level status after the floor-tech SSO handoff slice. The app has
           moved past polished static screens into a usable shop-ops ERP foundation, but it
           is not yet a complete ERPNext-grade operating system.
         </p>
         <div class="meta-row">
-          <span class="chip">Reviewed: May 22, 2026</span>
-          <span class="chip">Baseline: origin/main plus schedule-publication branch</span>
-          <span class="chip">Active slice: schedule publication</span>
+          <span class="chip">Reviewed: May 31, 2026</span>
+          <span class="chip">Baseline: origin/main plus floor-tech handoff branch</span>
+          <span class="chip">Active slice: floor-tech SSO handoff</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
@@ -402,12 +402,12 @@
             <h3>What still keeps this from full production confidence</h3>
             <ul>
               <li>Some core contract tracking is stale and needs reconciliation with the work that shipped after March 20, 2026.</li>
-              <li>Identity/auth session bootstrap and true floor-tech SSO handoff need to be closed cleanly.</li>
+              <li>Identity/auth session bootstrap is deployed; this slice closes the one-click floor-tech SSO handoff from the ERP shell.</li>
               <li>Build package selection now has a live planning-history catalog and manual released-reference fallback; material planning can assign default vendors, while technician selectors still need broader catalog-backed coverage.</li>
               <li>Schedule publication is being added now; dispatch execution is the next planning-to-shop handoff gap.</li>
               <li>Accounting is still integration-first; internal GL, financial reports, and ledger consequences are not mature yet.</li>
               <li>ShopMonkey migration validation, reference data seeding, and cutover proving remain open.</li>
-              <li>One known API smoke exception remains: unsigned accounting webhook probes return 500 instead of a clean 400.</li>
+              <li>Known API smoke route exceptions are now at zero; unsigned accounting webhook probes return a clean 400.</li>
             </ul>
           </div>
         </div>
@@ -438,7 +438,7 @@
                 <div class="bar warn"><span style="width: 72%"></span></div>
               </td>
               <td>Internal users can complete normal shop workflows without placeholder clicks or route misses.</td>
-              <td>Reconcile status docs, close auth/session contract gaps, finish remaining selectors, repair accounting webhook error path, and run live UAT scripts by role.</td>
+              <td>Reconcile remaining stale status docs, finish remaining selectors, and run live UAT scripts by role.</td>
             </tr>
             <tr>
               <td><strong>Shop-ops MVP rollout</strong><br /><span class="muted">30-day horizon</span></td>
@@ -607,8 +607,8 @@
             </tr>
             <tr>
               <td>Known route exceptions</td>
-              <td><span class="pill watch">1 Open</span></td>
-              <td><code>POST /accounting/webhook</code> still expects a 500 for unsigned smoke probes; this should become an explicit 400 path.</td>
+              <td><span class="pill done">0 Open</span></td>
+              <td><code>POST /accounting/webhook</code> returns an explicit 400 for unsigned non-empty probes; <code>known-broken.json</code> is empty.</td>
             </tr>
           </tbody>
         </table>
@@ -619,7 +619,7 @@
         <ol>
           <li><strong>Reconcile status truth:</strong> update <code>docs/architecture/IMPLEMENTATION_STATUS.md</code> to reflect the PR 59-78 work so project reporting stops undercounting shipped functionality.</li>
           <li><strong>Finish registry-backed route coverage:</strong> land the active registry route coverage branch through CI so navigation, command palette, and QA share one source of truth.</li>
-          <li><strong>Close production blockers:</strong> implement <code>GET /auth/me</code> if still absent in production API, fix the accounting webhook unsigned-probe path, and add true floor-tech SSO handoff.</li>
+          <li><strong>Keep production blockers closed:</strong> continue verifying <code>GET /auth/me</code>, the accounting webhook 400 path, and floor-tech SSO handoff in live UAT runs.</li>
           <li><strong>Complete remaining selector gaps:</strong> technician selectors should be catalog-backed with validation and useful empty states; build-package history should graduate into dedicated build configuration and BOM management.</li>
           <li><strong>Move toward ERP ledgers:</strong> start inventory movement history and internal accounting ledger design before adding more financial-report UI.</li>
         </ol>

@@ -48,12 +48,17 @@ export function TopHeader() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [commandOpen, setCommandOpen] = useState(false);
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+  const [currentHref, setCurrentHref] = useState('');
   const quickCreateRef = useRef<HTMLDivElement>(null);
   const queuedCount = useOfflineQueue(refreshKey);
 
   useEffect(() => {
     getAuthUser().then(setUser).catch(() => setUser(null));
   }, []);
+
+  useEffect(() => {
+    setCurrentHref(window.location.href);
+  }, [pathname]);
 
   useEffect(() => {
     setIsOnline(navigator.onLine);
@@ -103,7 +108,12 @@ export function TopHeader() {
   }, []);
 
   const floorTechBase = process.env.NEXT_PUBLIC_FLOOR_TECH_URL ?? 'http://localhost:3002';
-  const floorTechHref = `${floorTechBase}?source=erp&returnTo=${encodeURIComponent(pathname)}`;
+  const floorTechParams = new URLSearchParams({
+    handoff: 'erp',
+    next: '/work-orders/my-queue',
+  });
+  if (currentHref) floorTechParams.set('returnTo', currentHref);
+  const floorTechHref = `${floorTechBase.replace(/\/$/, '')}/auth?${floorTechParams.toString()}`;
 
   return (
     <header className="sticky top-0 z-20 border-b border-[#D9CCBE] bg-[#FFF8EF]/95 backdrop-blur flex items-center px-4 sm:px-6 py-3 gap-4 flex-shrink-0">
@@ -166,6 +176,7 @@ export function TopHeader() {
         </div>
         <a
           href={floorTechHref}
+          aria-label="Open Floor Tech App"
           className="hidden lg:flex items-center gap-2 rounded-2xl border border-[#D9CCBE] bg-white px-3 py-2 text-xs font-semibold text-[#4F4641] hover:border-[#E37125] hover:text-[#211F1E] transition-colors"
         >
           <Smartphone size={14} />

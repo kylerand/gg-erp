@@ -89,9 +89,7 @@ Click any assignment to see per-employee progress: current step, step-by-step co
 
 ### 5. Supervisor sign-off
 
-Modules with `requiresSupervisorSignoff: true` aren't complete when the tech finishes. They go into a **Pending Sign-off** state. You (or another supervisor) review the tech's work and click **Sign Off** to close the assignment.
-
-> **Note**: the sign-off UI is stubbed in the current build — your admin has a manual path until it's finished.
+Modules with `requiresSupervisorSignoff: true` aren't complete when the tech finishes. They go into a **Pending Sign-off** state. You (or another supervisor) review the tech's work from **Team Assignments** and click **Sign Off** to close the assignment.
 
 ### 6. Publishing workflow, end-to-end
 
@@ -226,7 +224,7 @@ Notes you take on steps live with the step. Revisit `/modules/{moduleCode}/step/
 |---|---|---|
 | Published an SOP but a tech can't see the module | Trainer | Module status is `ACTIVE`? SOP's `currentVersion` is set? SOP status is `PUBLISHED`, not `DRAFT`? |
 | "Assign Module" fails | Trainer | Confirm the employee registry and active training module list loaded, then retry. If the API returns a validation error, correct the module, employee, or due date shown in the error. |
-| Supervisor sign-off stuck | Trainer | UI stub in current build; admin has a manual path. |
+| Supervisor sign-off stuck | Trainer | Open **Team Assignments**, filter to **Pending Sign-off**, and click **Sign Off** after review. If it fails, confirm the assignment is still pending and retry after checking the API error toast. |
 | Tech says "quiz won't submit" | Tech | Retry: tap Submit again. If still failing, check they're online. Offline quiz submission isn't supported. |
 | "I completed the step but it didn't save" | Tech | Check network. The Training app is NOT offline-first (unlike Floor Tech). Redo once online. |
 | Can't find a module I was told I was assigned | Tech | Check **Assignments** tab — if not there, the assignment wasn't actually created. Ask your trainer. |

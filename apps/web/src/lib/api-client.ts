@@ -2772,10 +2772,13 @@ export interface TrainingAssignment {
   id: string;
   moduleId: string;
   employeeId: string;
-  assignmentStatus: 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'EXEMPT' | 'CANCELLED';
+  assignmentStatus: 'ASSIGNED' | 'IN_PROGRESS' | 'PENDING_SIGNOFF' | 'COMPLETED' | 'FAILED' | 'EXEMPT' | 'CANCELLED';
   dueAt?: string;
   startedAt?: string;
   completedAt?: string;
+  supervisorEmployeeId?: string;
+  supervisorSignoffAt?: string;
+  supervisorSignoffNote?: string;
   score?: number;
   module?: {
     moduleCode: string;
@@ -2783,6 +2786,7 @@ export interface TrainingAssignment {
     passScore?: number;
     validityDays?: number;
     isRequired: boolean;
+    requiresSupervisorSignoff: boolean;
     sopDocument?: { documentCode: string; title: string };
   };
   createdAt: string;
@@ -2843,6 +2847,23 @@ export async function completeAssignment(
   const data = await apiFetch<{ assignment: TrainingAssignment }>(
     `/ojt/assignments/${id}/complete`,
     { method: 'PATCH', body: JSON.stringify({ score }) },
+    undefined,
+    options,
+  );
+  return data.assignment;
+}
+
+export async function signOffAssignment(
+  id: string,
+  input?: { supervisorEmployeeId?: string; signoffNote?: string },
+  options?: ApiDataOptions,
+): Promise<TrainingAssignment> {
+  const data = await apiFetch<{ assignment: TrainingAssignment }>(
+    `/ojt/assignments/${id}/complete`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ action: 'SIGN_OFF', ...input }),
+    },
     undefined,
     options,
   );

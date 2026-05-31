@@ -9,6 +9,7 @@ import { listMyAssignments, type TrainingAssignment } from '@/lib/api-client';
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof CheckCircle2 }> = {
   ASSIGNED: { label: 'Assigned', color: 'text-blue-600 bg-blue-50 border-blue-200', icon: CalendarDays },
   IN_PROGRESS: { label: 'In Progress', color: 'text-primary bg-orange-50 border-orange-200', icon: Clock },
+  PENDING_SIGNOFF: { label: 'Pending Sign-off', color: 'text-amber-700 bg-amber-50 border-amber-200', icon: Clock },
   COMPLETED: { label: 'Completed', color: 'text-green-600 bg-green-50 border-green-200', icon: CheckCircle2 },
   FAILED: { label: 'Failed', color: 'text-red-600 bg-red-50 border-red-200', icon: AlertCircle },
   EXEMPT: { label: 'Exempt', color: 'text-gray-600 bg-gray-50 border-gray-200', icon: CheckCircle2 },
@@ -35,8 +36,8 @@ export default function AssignmentsPage() {
     );
   }
 
-  const active = assignments.filter((a) => ['ASSIGNED', 'IN_PROGRESS'].includes(a.assignmentStatus));
-  const past = assignments.filter((a) => !['ASSIGNED', 'IN_PROGRESS'].includes(a.assignmentStatus));
+  const active = assignments.filter((a) => ['ASSIGNED', 'IN_PROGRESS', 'PENDING_SIGNOFF'].includes(a.assignmentStatus));
+  const past = assignments.filter((a) => !['ASSIGNED', 'IN_PROGRESS', 'PENDING_SIGNOFF'].includes(a.assignmentStatus));
 
   return (
     <div className="space-y-6">
@@ -111,6 +112,9 @@ function AssignmentCard({ assignment: a }: { assignment: TrainingAssignment }) {
               )}
               {a.score !== undefined && a.score !== null && (
                 <span>Score: {a.score}%</span>
+              )}
+              {a.supervisorSignoffAt && (
+                <span>Signed off: {new Date(a.supervisorSignoffAt).toLocaleDateString()}</span>
               )}
             </div>
           </div>

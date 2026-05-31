@@ -185,10 +185,7 @@
 <h3>4. Review progress</h3>
 <p>Click any assignment to see per-employee progress: current step, step-by-step completion, quiz attempts, score history.</p>
 <h3>5. Supervisor sign-off</h3>
-<p>Modules with <code>requiresSupervisorSignoff: true</code> aren&#39;t complete when the tech finishes. They go into a <strong>Pending Sign-off</strong> state. You (or another supervisor) review the tech&#39;s work and click <strong>Sign Off</strong> to close the assignment.</p>
-<blockquote>
-<p><strong>Note</strong>: the sign-off UI is stubbed in the current build — your admin has a manual path until it&#39;s finished.</p>
-</blockquote>
+<p>Modules with <code>requiresSupervisorSignoff: true</code> aren&#39;t complete when the tech finishes. They go into a <strong>Pending Sign-off</strong> state. You (or another supervisor) review the tech&#39;s work from <strong>Team Assignments</strong> and click <strong>Sign Off</strong> to close the assignment.</p>
 <h3>6. Publishing workflow, end-to-end</h3>
 <ol>
 <li>Draft an SOP in the SOP Library. Paste in the written instructions.</li>
@@ -310,7 +307,7 @@
 <tr>
 <td>Supervisor sign-off stuck</td>
 <td>Trainer</td>
-<td>UI stub in current build; admin has a manual path.</td>
+<td>Open <strong>Team Assignments</strong>, filter to <strong>Pending Sign-off</strong>, and click <strong>Sign Off</strong> after review. If it fails, confirm the assignment is still pending and retry after checking the API error toast.</td>
 </tr>
 <tr>
 <td>Tech says &quot;quiz won&#39;t submit&quot;</td>

@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Loader2, UserPlus } from 'lucide-react';
+import { CheckCircle2, Loader2, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@gg-erp/ui';
 import { Card, CardContent } from '@/components/ui/card';
@@ -13,6 +13,7 @@ import {
   listEmployees,
   listMyAssignments,
   listTrainingModules,
+  signOffAssignment,
   type Employee,
   type TrainingAssignment,
   type TrainingModule,
@@ -26,12 +27,14 @@ const ASSIGNMENT_FILTERS: Array<{ label: string; value: AssignmentFilter }> = [
   { label: 'Overdue', value: 'OVERDUE' },
   { label: 'Assigned', value: 'ASSIGNED' },
   { label: 'In Progress', value: 'IN_PROGRESS' },
+  { label: 'Pending Sign-off', value: 'PENDING_SIGNOFF' },
   { label: 'Completed', value: 'COMPLETED' },
   { label: 'Failed', value: 'FAILED' },
 ];
 
 const STATUS_CLASSES: Record<string, string> = {
   COMPLETED: 'bg-green-100 text-green-800',
+  PENDING_SIGNOFF: 'bg-amber-100 text-amber-800',
   IN_PROGRESS: 'bg-yellow-100 text-yellow-800',
   ASSIGNED: 'bg-gray-100 text-gray-600',
   FAILED: 'bg-red-100 text-red-800',
@@ -101,6 +104,7 @@ export default function AssignmentsPage() {
   const [moduleLookupFailed, setModuleLookupFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [signingOffAssignmentId, setSigningOffAssignmentId] = useState<string | null>(null);
   const [searchText, setSearchText] = useState(activeSearch);
   const [selectedModuleId, setSelectedModuleId] = useState('');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
@@ -168,6 +172,7 @@ export default function AssignmentsPage() {
       ASSIGNED: 0,
       IN_PROGRESS: 0,
       COMPLETED: 0,
+      PENDING_SIGNOFF: 0,
       FAILED: 0,
       CANCELLED: 0,
       EXEMPT: 0,
@@ -228,6 +233,25 @@ export default function AssignmentsPage() {
       toast.error(error instanceof Error ? error.message : 'Failed to assign module');
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function approveSignoff(assignment: TrainingAssignment) {
+    setSigningOffAssignmentId(assignment.id);
+    try {
+      const updated = await signOffAssignment(
+        assignment.id,
+        { signoffNote: 'Approved from Team Assignments' },
+        { allowMockFallback: false },
+      );
+      setAssignments((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      toast.success('Assignment signed off');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to sign off assignment');
+    } finally {
+      setSigningOffAssignmentId(null);
     }
   }
 
@@ -359,6 +383,7 @@ export default function AssignmentsPage() {
             const overdue = isOverdue(assignment);
             const employee = employeeById.get(assignment.employeeId);
             const employeeName = formatEmployeeName(employee) ?? 'Unresolved employee';
+            const signoffPending = assignment.assignmentStatus === 'PENDING_SIGNOFF';
             return (
               <Card
                 key={assignment.id}
@@ -375,6 +400,14 @@ export default function AssignmentsPage() {
                           ? ` - Due ${new Date(assignment.dueAt).toLocaleDateString()}`
                           : ''}
                       </p>
+                      {assignment.module?.requiresSupervisorSignoff && (
+                        <p className="mt-1 text-xs font-medium text-amber-700">
+                          Supervisor sign-off required
+                          {assignment.supervisorSignoffAt
+                            ? ` - signed ${new Date(assignment.supervisorSignoffAt).toLocaleDateString()}`
+                            : ''}
+                        </p>
+                      )}
                       {!employee && employeeLookupFailed && (
                         <p className="text-xs text-red-600 mt-1">
                           Employee registry lookup failed. Retry after HR data is available.
@@ -394,8 +427,23 @@ export default function AssignmentsPage() {
                         STATUS_CLASSES[assignment.assignmentStatus] ?? 'bg-gray-100 text-gray-500'
                       }`}
                     >
-                      {assignment.assignmentStatus.replace('_', ' ')}
+                      {assignment.assignmentStatus.replace(/_/g, ' ')}
                     </span>
+                    {signoffPending && (
+                      <Button
+                        type="button"
+                        onClick={() => approveSignoff(assignment)}
+                        disabled={signingOffAssignmentId === assignment.id}
+                        className="h-8 bg-[#E37125] px-3 text-xs text-white hover:bg-[#c95f1d]"
+                      >
+                        {signingOffAssignmentId === assignment.id ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="size-3.5" />
+                        )}
+                        Sign Off
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>

@@ -213,7 +213,7 @@ export const listMyAssignmentsHandler = wrapHandler(async (ctx) => {
 
   const where = {
     ...(employeeId ? { employeeId } : {}),
-    ...(status ? { assignmentStatus: status as 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'EXEMPT' | 'CANCELLED' } : {}),
+    ...(status ? { assignmentStatus: status as 'ASSIGNED' | 'IN_PROGRESS' | 'PENDING_SIGNOFF' | 'COMPLETED' | 'FAILED' | 'EXEMPT' | 'CANCELLED' } : {}),
   };
 
   const [items, total] = await Promise.all([
@@ -230,6 +230,7 @@ export const listMyAssignmentsHandler = wrapHandler(async (ctx) => {
             passScore: true,
             validityDays: true,
             isRequired: true,
+            requiresSupervisorSignoff: true,
             sopDocument: { select: { documentCode: true, title: true } },
           },
         },
@@ -264,6 +265,7 @@ export const trainingAssignmentQueries = {
         passScore: true,
         validityDays: true,
         isRequired: true,
+        requiresSupervisorSignoff: true,
         sopDocument: { select: { documentCode: true, title: true } },
       },
     });
@@ -279,7 +281,7 @@ export const trainingAssignmentQueries = {
       where: {
         moduleId,
         employeeId: { in: employeeIds },
-        assignmentStatus: { in: ['ASSIGNED', 'IN_PROGRESS'] },
+        assignmentStatus: { in: ['ASSIGNED', 'IN_PROGRESS', 'PENDING_SIGNOFF'] },
       },
       include: {
         module: {
@@ -289,6 +291,7 @@ export const trainingAssignmentQueries = {
             passScore: true,
             validityDays: true,
             isRequired: true,
+            requiresSupervisorSignoff: true,
             sopDocument: { select: { documentCode: true, title: true } },
           },
         },
@@ -318,6 +321,7 @@ export const trainingAssignmentQueries = {
                 passScore: true,
                 validityDays: true,
                 isRequired: true,
+                requiresSupervisorSignoff: true,
                 sopDocument: { select: { documentCode: true, title: true } },
               },
             },
@@ -389,7 +393,64 @@ export const createTrainingAssignmentsHandler = wrapHandler(async (ctx) => {
 
 interface CompleteAssignmentBody {
   score?: number;
+  action?: 'COMPLETE' | 'SIGN_OFF';
+  supervisorEmployeeId?: string;
+  signoffNote?: string;
 }
+
+type TrainingAssignmentRecord = Parameters<typeof toAssignmentResponse>[0];
+
+export const trainingAssignmentCompletionQueries = {
+  findAssignment(id: string): Promise<TrainingAssignmentRecord | null> {
+    return prisma.trainingAssignment.findUnique({
+      where: { id },
+      include: {
+        module: {
+          select: {
+            moduleCode: true,
+            moduleName: true,
+            passScore: true,
+            validityDays: true,
+            isRequired: true,
+            requiresSupervisorSignoff: true,
+            sopDocument: { select: { documentCode: true, title: true } },
+          },
+        },
+      },
+    });
+  },
+  updateAssignment(
+    id: string,
+    data: {
+      assignmentStatus: 'COMPLETED' | 'FAILED' | 'PENDING_SIGNOFF';
+      completedAt?: Date | null;
+      score?: number | null;
+      supervisorEmployeeId?: string | null;
+      supervisorSignoffAt?: Date | null;
+      supervisorSignoffNote?: string | null;
+      updatedAt: Date;
+      version: { increment: number };
+    },
+  ): Promise<TrainingAssignmentRecord> {
+    return prisma.trainingAssignment.update({
+      where: { id },
+      data,
+      include: {
+        module: {
+          select: {
+            moduleCode: true,
+            moduleName: true,
+            passScore: true,
+            validityDays: true,
+            isRequired: true,
+            requiresSupervisorSignoff: true,
+            sopDocument: { select: { documentCode: true, title: true } },
+          },
+        },
+      },
+    });
+  },
+};
 
 export const completeAssignmentHandler = wrapHandler(async (ctx) => {
   const id = ctx.event.pathParameters?.id ?? ctx.event.pathParameters?.assignmentId;
@@ -397,11 +458,14 @@ export const completeAssignmentHandler = wrapHandler(async (ctx) => {
 
   const body = parseBody<CompleteAssignmentBody>(ctx.event);
   const score = body.ok ? body.value.score : undefined;
+  const supervisorEmployeeId = body.ok ? body.value.supervisorEmployeeId?.trim() : undefined;
+  const signoffNote = body.ok ? body.value.signoffNote?.trim() : undefined;
+  const signoffRequested = body.ok && (body.value.action === 'SIGN_OFF' || Boolean(supervisorEmployeeId) || Boolean(signoffNote));
+  if (supervisorEmployeeId && !UUID_RE.test(supervisorEmployeeId)) {
+    return jsonResponse(422, { message: 'supervisorEmployeeId must be a valid UUID.' });
+  }
 
-  const assignment = await prisma.trainingAssignment.findUnique({
-    where: { id },
-    include: { module: { select: { passScore: true } } },
-  });
+  const assignment = await trainingAssignmentCompletionQueries.findAssignment(id);
   if (!assignment) return jsonResponse(404, { message: `Assignment not found: ${id}` });
   if (assignment.assignmentStatus === 'COMPLETED') {
     return jsonResponse(409, { message: 'Assignment is already completed.' });
@@ -410,19 +474,37 @@ export const completeAssignmentHandler = wrapHandler(async (ctx) => {
     return jsonResponse(409, { message: `Cannot complete an assignment in ${assignment.assignmentStatus} status.` });
   }
 
-  const passScore = assignment.module.passScore;
-  const passed = passScore === null || score === undefined || score >= passScore;
-  const nextStatus = passed ? 'COMPLETED' : 'FAILED';
-
-  const updated = await prisma.trainingAssignment.update({
-    where: { id },
-    data: {
-      assignmentStatus: nextStatus,
-      completedAt: new Date(),
-      score: score !== undefined ? score : null,
-      updatedAt: new Date(),
+  if (assignment.assignmentStatus === 'PENDING_SIGNOFF') {
+    if (!signoffRequested) {
+      return jsonResponse(409, { message: 'Supervisor sign-off is required before this assignment can be completed.' });
+    }
+    const now = new Date();
+    const signedOff = await trainingAssignmentCompletionQueries.updateAssignment(id, {
+      assignmentStatus: 'COMPLETED',
+      completedAt: now,
+      supervisorEmployeeId: supervisorEmployeeId ?? null,
+      supervisorSignoffAt: now,
+      supervisorSignoffNote: signoffNote || null,
+      updatedAt: now,
       version: { increment: 1 },
-    },
+    });
+    return jsonResponse(200, { assignment: toAssignmentResponse(signedOff) });
+  }
+
+  const passScore = assignment.module?.passScore ?? null;
+  const passed = passScore === null || score === undefined || score >= passScore;
+  const needsSignoff = passed && Boolean(assignment.module?.requiresSupervisorSignoff);
+  const nextStatus = passed
+    ? needsSignoff ? 'PENDING_SIGNOFF' : 'COMPLETED'
+    : 'FAILED';
+  const completedAt = nextStatus === 'COMPLETED' || nextStatus === 'FAILED' ? new Date() : null;
+
+  const updated = await trainingAssignmentCompletionQueries.updateAssignment(id, {
+    assignmentStatus: nextStatus,
+    completedAt,
+    score: score !== undefined ? score : null,
+    updatedAt: new Date(),
+    version: { increment: 1 },
   });
 
   return jsonResponse(200, { assignment: toAssignmentResponse(updated) });
@@ -1113,6 +1195,9 @@ function toAssignmentResponse(r: {
   dueAt: Date | null;
   startedAt: Date | null;
   completedAt: Date | null;
+  supervisorEmployeeId?: string | null;
+  supervisorSignoffAt?: Date | null;
+  supervisorSignoffNote?: string | null;
   score?: { toNumber: () => number } | number | null;
   createdAt: Date;
   updatedAt: Date;
@@ -1123,6 +1208,7 @@ function toAssignmentResponse(r: {
     passScore: number | null;
     validityDays: number | null;
     isRequired: boolean;
+    requiresSupervisorSignoff?: boolean;
     sopDocument?: { documentCode: string; title: string } | null;
   };
 }) {
@@ -1137,6 +1223,9 @@ function toAssignmentResponse(r: {
     dueAt: r.dueAt?.toISOString(),
     startedAt: r.startedAt?.toISOString(),
     completedAt: r.completedAt?.toISOString(),
+    supervisorEmployeeId: r.supervisorEmployeeId ?? undefined,
+    supervisorSignoffAt: r.supervisorSignoffAt?.toISOString(),
+    supervisorSignoffNote: r.supervisorSignoffNote ?? undefined,
     score: scoreVal,
     module: r.module
       ? {
@@ -1145,6 +1234,7 @@ function toAssignmentResponse(r: {
           passScore: r.module.passScore ?? undefined,
           validityDays: r.module.validityDays ?? undefined,
           isRequired: r.module.isRequired,
+          requiresSupervisorSignoff: r.module.requiresSupervisorSignoff ?? false,
           sopDocument: r.module.sopDocument ?? undefined,
         }
       : undefined,

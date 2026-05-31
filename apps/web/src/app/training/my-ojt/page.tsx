@@ -7,11 +7,12 @@ import { Card, CardContent } from '@/components/ui/card';
 import { listMyAssignments, completeAssignment, type TrainingAssignment } from '@/lib/api-client';
 import { useRole } from '@/lib/role-context';
 
-type DisplayStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETE' | 'OVERDUE' | 'FAILED';
+type DisplayStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'PENDING_SIGNOFF' | 'COMPLETE' | 'OVERDUE' | 'FAILED';
 
 const STATUS_CONFIG: Record<DisplayStatus, { label: string; classes: string; icon: string }> = {
   COMPLETE:    { label: 'Complete',    classes: 'bg-green-100 text-green-800',   icon: '✅' },
   IN_PROGRESS: { label: 'In Progress', classes: 'bg-yellow-100 text-yellow-800', icon: '🔄' },
+  PENDING_SIGNOFF: { label: 'Pending Sign-off', classes: 'bg-amber-100 text-amber-800', icon: '⏳' },
   NOT_STARTED: { label: 'Not Started', classes: 'bg-gray-100 text-gray-600',     icon: '⏳' },
   OVERDUE:     { label: 'Overdue',     classes: 'bg-red-100 text-red-800',       icon: '⚠️' },
   FAILED:      { label: 'Failed',      classes: 'bg-red-100 text-red-800',       icon: '❌' },
@@ -20,6 +21,7 @@ const STATUS_CONFIG: Record<DisplayStatus, { label: string; classes: string; ico
 function toDisplayStatus(a: TrainingAssignment): DisplayStatus {
   if (a.assignmentStatus === 'COMPLETED') return 'COMPLETE';
   if (a.assignmentStatus === 'FAILED') return 'FAILED';
+  if (a.assignmentStatus === 'PENDING_SIGNOFF') return 'PENDING_SIGNOFF';
   if (a.assignmentStatus === 'IN_PROGRESS') return 'IN_PROGRESS';
   if (a.dueAt && new Date(a.dueAt) < new Date()) return 'OVERDUE';
   return 'NOT_STARTED';
@@ -52,7 +54,7 @@ export default function MyOJTPage() {
     try {
       const updated = await completeAssignment(id, undefined, { allowMockFallback: false });
       setAssignments(prev => prev.map(a => a.id === id ? updated : a));
-      toast.success('Module marked complete');
+      toast.success(updated.assignmentStatus === 'PENDING_SIGNOFF' ? 'Module sent for supervisor sign-off' : 'Module marked complete');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to complete module');
     } finally {
@@ -92,7 +94,7 @@ export default function MyOJTPage() {
             const displayStatus = toDisplayStatus(a);
             const cfg = STATUS_CONFIG[displayStatus];
             const moduleName = a.module?.moduleName ?? a.moduleId;
-            const isCompleted = a.assignmentStatus === 'COMPLETED' || a.assignmentStatus === 'FAILED';
+            const isCompleted = ['COMPLETED', 'FAILED', 'PENDING_SIGNOFF'].includes(a.assignmentStatus);
             return (
               <Card key={a.id} className={displayStatus === 'OVERDUE' ? 'border-red-300' : ''}>
                 <CardContent className="pt-4">
@@ -122,6 +124,9 @@ export default function MyOJTPage() {
                       )}
                       {a.completedAt && (
                         <p className="text-xs text-gray-400 mt-0.5">Completed {new Date(a.completedAt).toLocaleDateString()}</p>
+                      )}
+                      {a.assignmentStatus === 'PENDING_SIGNOFF' && (
+                        <p className="text-xs text-amber-700 mt-0.5">Waiting for supervisor review.</p>
                       )}
                     </div>
                     {!isCompleted && (

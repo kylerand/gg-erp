@@ -117,12 +117,15 @@ export interface TrainingAssignment {
   id: string;
   moduleId: string;
   employeeId: string;
-  assignmentStatus: 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'EXEMPT' | 'CANCELLED';
+  assignmentStatus: 'ASSIGNED' | 'IN_PROGRESS' | 'PENDING_SIGNOFF' | 'COMPLETED' | 'FAILED' | 'EXEMPT' | 'CANCELLED';
   dueAt?: string;
   startedAt?: string;
   completedAt?: string;
+  supervisorEmployeeId?: string;
+  supervisorSignoffAt?: string;
+  supervisorSignoffNote?: string;
   score?: number;
-  module?: { moduleCode: string; moduleName: string; passScore?: number; isRequired: boolean };
+  module?: { moduleCode: string; moduleName: string; passScore?: number; isRequired: boolean; requiresSupervisorSignoff?: boolean };
   createdAt: string;
   updatedAt: string;
 }

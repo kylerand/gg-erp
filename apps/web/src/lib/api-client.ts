@@ -2411,13 +2411,18 @@ export interface FailureSummary {
   total: number;
 }
 
-export async function getFailureSummary(): Promise<FailureSummary> {
-  return apiFetch('/accounting/failures/summary', undefined, {
-    invoice: 0,
-    customer: 0,
-    payment: 0,
-    total: 0,
-  });
+export async function getFailureSummary(options?: ApiDataOptions): Promise<FailureSummary> {
+  return apiFetch(
+    '/accounting/failures/summary',
+    undefined,
+    {
+      invoice: 0,
+      customer: 0,
+      payment: 0,
+      total: 0,
+    },
+    options,
+  );
 }
 
 // ─── Dealers (legacy alias) ───────────────────────────────────────────────────

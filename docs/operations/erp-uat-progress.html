@@ -326,11 +326,13 @@
               <td>Accounting sync actionability</td>
               <td><span class="pill doing">In progress</span></td>
               <td>
-                Sync monitor queue, failure, invoice, and customer rows now resolve live work-order
-                numbers and customer display profiles from API response context. Invoice sync rows
-                deep-link to work-order detail, customer sync rows deep-link to filtered customer
-                lists, and payable review already routes received POs into bill-review or receiving
-                actions.
+                Accounting dashboard and sync monitor use strict live reads for QuickBooks status,
+                sync records, reconciliation, integration accounts, failure summary, and payable
+                review; failed reads surface visibly instead of falling back to zeros. Sync monitor
+                queue, failure, invoice, and customer rows now resolve live work-order numbers and
+                customer display profiles from API response context. Invoice sync rows deep-link to
+                work-order detail, customer sync rows deep-link to filtered customer lists, and
+                payable review already routes received POs into bill-review or receiving actions.
               </td>
               <td>Extend row-level payment retry once payment sync row APIs are exposed.</td>
             </tr>

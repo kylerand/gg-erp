@@ -113,7 +113,7 @@ test('ERP to floor-tech link uses the Cognito handoff entrypoint', () => {
 
   assert.deepEqual(
     [
-      "/auth?${floorTechParams.toString()}",
+      '/auth?${floorTechParams.toString()}',
       "handoff: 'erp'",
       "next: '/work-orders/my-queue'",
       "floorTechParams.set('returnTo', currentHref)",
@@ -314,11 +314,9 @@ test('customer dealer ops views are backed by live customer and cart data', () =
     [],
   );
   assert.deepEqual(
-    [
-      'useSearchParams',
-      "searchParams.get('customerId')",
-      "searchParams.get('vehicleId')",
-    ].filter((snippet) => !workOrderCreateSource.includes(snippet)),
+    ['useSearchParams', "searchParams.get('customerId')", "searchParams.get('vehicleId')"].filter(
+      (snippet) => !workOrderCreateSource.includes(snippet),
+    ),
     [],
   );
   assert.deepEqual(
@@ -335,7 +333,7 @@ test('customer dealer ops views are backed by live customer and cart data', () =
       'getPrisma().customer.findMany',
       'companyName: { not: null }',
       'serviceRelationship',
-      'source: \'customer-company\'',
+      "source: 'customer-company'",
       'total',
     ].filter((snippet) => !dealerHandlerSource.includes(snippet)),
     [],
@@ -1036,10 +1034,15 @@ test('accounting sync monitor exposes live purchase-order payable handoff', () =
       'const STRICT_LIVE_DATA = { allowMockFallback: false } as const',
       'listInvoiceSyncRecords({ state: syncState, limit: 200 }, STRICT_LIVE_DATA)',
       'listCustomerSyncs({ state: syncState, limit: 200 }, STRICT_LIVE_DATA)',
+      'listPaymentSyncRecords({ state: syncState, limit: 200 }, STRICT_LIVE_DATA)',
       'listPurchaseOrders({ pageSize: 200 }, STRICT_LIVE_DATA)',
       'listIntegrationAccounts(STRICT_LIVE_DATA)',
       'getFailureSummary(STRICT_LIVE_DATA)',
       'getQbStatus(STRICT_LIVE_DATA)',
+      'PaymentTable',
+      'paymentSyncWorkOrderDisplayName',
+      'paymentSyncCustomerDisplayName',
+      'retryPaymentSync(id)',
     ].filter((snippet) => !syncSource.includes(snippet)),
     [],
   );
@@ -1057,9 +1060,11 @@ test('accounting sync monitor exposes live purchase-order payable handoff', () =
   );
 
   assert.deepEqual(
-    ['export async function getFailureSummary(options?: ApiDataOptions)'].filter(
-      (snippet) => !apiClientSource.includes(snippet),
-    ),
+    [
+      'export async function getFailureSummary(options?: ApiDataOptions)',
+      'export async function listPaymentSyncRecords',
+      'export async function retryPaymentSync',
+    ].filter((snippet) => !apiClientSource.includes(snippet)),
     [],
   );
 });
@@ -1171,9 +1176,7 @@ test('inventory procurement drill-in uses live PO/vendor reads and focused recei
       'vendorSelections',
       'handleAssignDefaultVendor',
       "'#replenishment-unassigned'",
-    ].filter(
-      (snippet) => !planningSource.includes(snippet),
-    ),
+    ].filter((snippet) => !planningSource.includes(snippet)),
     [],
   );
 

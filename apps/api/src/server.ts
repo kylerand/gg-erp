@@ -130,6 +130,8 @@ import {
   retryInvoiceSyncHandler,
   listCustomerSyncsHandler,
   triggerCustomerSyncHandler,
+  listPaymentSyncsHandler,
+  retryPaymentSyncHandler,
   listReconciliationRunsHandler,
   triggerReconciliationHandler,
   getReconciliationRunHandler,
@@ -288,6 +290,7 @@ async function route(
   const copilotSessionMatch = pathname.match(/^\/copilot\/sessions\/([^/]+)/);
   const ojtAssignmentMatch = pathname.match(/^\/ojt\/assignments\/([^/]+)\/complete/);
   const qbInvoiceSyncMatch = pathname.match(/^\/accounting\/(?:invoices|invoice-sync)\/([^/]+)/);
+  const qbPaymentSyncMatch = pathname.match(/^\/accounting\/(?:payments|payment-syncs)\/([^/]+)/);
   const qbIntegrationAccountMatch = pathname.match(/^\/accounting\/integration-accounts\/([^/]+)/);
   const qbReconciliationRunMatch = pathname.match(/^\/accounting\/reconciliation\/runs\/([^/]+)/);
   const qbReconciliationRecordMatch = pathname.match(/^\/accounting\/reconciliation\/records\/([^/]+)/);
@@ -527,6 +530,10 @@ async function route(
     result = await listCustomerSyncsHandler(event);
   } else if (pathname === '/accounting/customers' && method === 'POST') {
     result = await triggerCustomerSyncHandler(event);
+  } else if ((pathname === '/accounting/payment-syncs' || pathname === '/accounting/payments') && method === 'GET') {
+    result = await listPaymentSyncsHandler(event);
+  } else if (qbPaymentSyncMatch && pathname.endsWith('/retry') && method === 'POST') {
+    result = await retryPaymentSyncHandler({ ...event, pathParameters: { id: qbPaymentSyncMatch[1] } });
   } else if (pathname === '/accounting/reconciliation/runs' && method === 'GET') {
     result = await listReconciliationRunsHandler(event);
   } else if (pathname === '/accounting/reconciliation/runs' && method === 'POST') {
@@ -735,6 +742,7 @@ server.listen(PORT, () => {
   console.log(`   QB OAuth    GET /accounting/oauth/connect|callback, GET /accounting/status`);
   console.log(`   Invoices    GET|POST /accounting/invoice-sync, POST /:id/retry`);
   console.log(`   Customers   GET|POST /accounting/customers`);
+  console.log(`   Payments    GET /accounting/payment-syncs, POST /:id/retry`);
   console.log(`   Reconcile   GET|POST /accounting/reconciliation/runs, GET /:id, GET /mismatches`);
   console.log(`   Accounts    GET /accounting/integration-accounts, PUT /:id/status`);
   console.log(`   Scheduling  GET /scheduling/slots, /labor-capacity, /demand-projection, /schedule-preview, /schedule-assignments, /capacity-slots`);

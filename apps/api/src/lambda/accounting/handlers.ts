@@ -53,6 +53,7 @@ import { ConsoleObservabilityHooks } from '../../observability/index.js';
 import { EntityMappingService } from '../../contexts/accounting/entityMapping.service.js';
 import { InvoiceSyncState } from '../../../../../packages/domain/src/model/index.js';
 import { CustomerSyncState } from '../../../../../packages/domain/src/model/index.js';
+import { PaymentSyncState } from '../../../../../packages/domain/src/model/index.js';
 
 const prisma = new PrismaClient();
 const tokenManager = createTokenManager();
@@ -479,6 +480,7 @@ export function createPaymentSyncService(): PaymentSyncService {
 
 const VALID_INVOICE_SYNC_STATES = new Set<string>(Object.values(InvoiceSyncState));
 const VALID_CUSTOMER_SYNC_STATES = new Set<string>(Object.values(CustomerSyncState));
+const VALID_PAYMENT_SYNC_STATES = new Set<string>(Object.values(PaymentSyncState));
 
 // ─── Mockable list-query objects ──────────────────────────────────────────────
 
@@ -524,6 +526,25 @@ interface CustomerSyncCustomerSummary {
   email: string;
   phone: string | null;
   state: string;
+}
+
+interface PaymentSyncListItem {
+  id: string;
+  invoiceSyncId: string | null;
+  workOrderId: string;
+  customerId: string;
+  qbPaymentId: string | null;
+  qbInvoiceId: string | null;
+  amountCents: number;
+  paymentMethod: string | null;
+  paymentDate: Date | null;
+  state: string;
+  direction: string;
+  errorMessage: string | null;
+  attemptCount: number;
+  lastAttemptAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export const invoiceSyncListQueries = {
@@ -598,6 +619,20 @@ export const customerSyncListQueries = {
   },
   async count(where: Record<string, string>): Promise<number> {
     return prisma.customerSyncRecord.count({ where });
+  },
+};
+
+export const paymentSyncListQueries = {
+  async findMany(
+    where: Record<string, string>,
+    orderBy: Record<string, string>,
+    take: number,
+    skip: number,
+  ): Promise<PaymentSyncListItem[]> {
+    return prisma.paymentSyncRecord.findMany({ where, orderBy, take, skip });
+  },
+  async count(where: Record<string, string>): Promise<number> {
+    return prisma.paymentSyncRecord.count({ where });
   },
 };
 
@@ -786,6 +821,93 @@ export const listCustomerSyncsHandler = wrapHandler(async (ctx) => {
     total,
     limit,
     offset,
+  });
+}, { requireAuth: false });
+
+// ─── List payment syncs ──────────────────────────────────────────────────────
+
+export const listPaymentSyncsHandler = wrapHandler(async (ctx) => {
+  const qs = ctx.event.queryStringParameters ?? {};
+  const stateParam = qs.state;
+  const workOrderId = qs.workOrderId;
+  const customerId = qs.customerId;
+  const limit = Math.min(parseInt(qs.limit ?? '100', 10), 200);
+  const offset = parseInt(qs.offset ?? '0', 10);
+
+  if (stateParam && !VALID_PAYMENT_SYNC_STATES.has(stateParam)) {
+    return jsonResponse(400, {
+      message: `Invalid state filter. Must be one of: ${Array.from(VALID_PAYMENT_SYNC_STATES).join(', ')}`,
+    });
+  }
+
+  const where = {
+    ...(stateParam ? { state: stateParam } : {}),
+    ...(workOrderId ? { workOrderId } : {}),
+    ...(customerId ? { customerId } : {}),
+  };
+
+  const [items, total] = await Promise.all([
+    paymentSyncListQueries.findMany(where, { updatedAt: 'desc' }, limit, offset),
+    paymentSyncListQueries.count(where),
+  ]);
+  const [workOrdersById, customersById] = await Promise.all([
+    loadInvoiceWorkOrderSummaries(items.map((item) => item.workOrderId)),
+    loadCustomerSyncSummaries(items.map((item) => item.customerId)),
+  ]);
+
+  return jsonResponse(200, {
+    items: items.map((r) => ({
+      id: r.id,
+      invoiceSyncId: r.invoiceSyncId,
+      workOrderId: r.workOrderId,
+      workOrder: workOrdersById.get(r.workOrderId) ?? null,
+      customerId: r.customerId,
+      customer: customersById.get(r.customerId) ?? null,
+      qbPaymentId: r.qbPaymentId,
+      qbInvoiceId: r.qbInvoiceId,
+      amountCents: r.amountCents,
+      paymentMethod: r.paymentMethod,
+      paymentDate: r.paymentDate?.toISOString().split('T')[0] ?? null,
+      state: r.state,
+      direction: r.direction,
+      errorMessage: r.errorMessage,
+      attemptCount: r.attemptCount,
+      lastAttemptAt: r.lastAttemptAt?.toISOString() ?? null,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+    })),
+    total,
+    limit,
+    offset,
+  });
+}, { requireAuth: false });
+
+// ─── Retry payment sync ──────────────────────────────────────────────────────
+
+export const retryPaymentSyncHandler = wrapHandler(async (ctx) => {
+  const id = ctx.event.pathParameters?.id;
+  if (!id) return jsonResponse(400, { message: 'Payment sync record ID is required.' });
+
+  const service = createPaymentSyncService();
+  const context = {
+    correlationId: ctx.correlationId,
+    actorId: ctx.actorUserId ?? 'system',
+    module: 'accounting',
+  };
+
+  const record = await service.getRecord(id);
+  if (!record) return jsonResponse(404, { message: `Payment sync record not found: ${id}` });
+  if (record.state !== PaymentSyncState.FAILED) {
+    return jsonResponse(409, {
+      message: `Cannot retry a payment record in ${record.state} state.`,
+    });
+  }
+
+  const updated = await service.retryPayment(id, context);
+  return jsonResponse(200, {
+    id: updated.id,
+    state: updated.state,
+    message: 'Payment sync queued for retry.',
   });
 }, { requireAuth: false });
 

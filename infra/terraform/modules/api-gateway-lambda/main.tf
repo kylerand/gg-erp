@@ -3847,6 +3847,44 @@ resource "aws_lambda_function" "accounting_list_customer_syncs" {
   }
 }
 
+resource "aws_lambda_function" "accounting_list_payment_syncs" {
+  function_name    = "${var.name_prefix}-accounting-list-payment-syncs"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-payment-syncs.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_accounting_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "accounting_retry_payment_sync" {
+  function_name    = "${var.name_prefix}-accounting-retry-payment-sync"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "retry-payment-sync.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_accounting_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
 resource "aws_lambda_function" "accounting_list_reconciliation_runs" {
   function_name    = "${var.name_prefix}-accounting-list-reconciliation-runs"
   role             = aws_iam_role.erp_lambda.arn
@@ -3917,6 +3955,36 @@ resource "aws_apigatewayv2_route" "accounting_list_customer_syncs" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "GET /accounting/customers"
   target             = "integrations/${aws_apigatewayv2_integration.accounting_list_customer_syncs.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "accounting_list_payment_syncs" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.accounting_list_payment_syncs.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "accounting_list_payment_syncs" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /accounting/payment-syncs"
+  target             = "integrations/${aws_apigatewayv2_integration.accounting_list_payment_syncs.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "accounting_retry_payment_sync" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.accounting_retry_payment_sync.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "accounting_retry_payment_sync" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /accounting/payment-syncs/{id}/retry"
+  target             = "integrations/${aws_apigatewayv2_integration.accounting_retry_payment_sync.id}"
   authorizer_id      = local.authorizer_id
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
@@ -4886,6 +4954,8 @@ locals {
     accounting_trigger_sync               = aws_lambda_function.accounting_trigger_sync
     accounting_webhook                    = aws_lambda_function.accounting_webhook
     accounting_list_customer_syncs        = aws_lambda_function.accounting_list_customer_syncs
+    accounting_list_payment_syncs         = aws_lambda_function.accounting_list_payment_syncs
+    accounting_retry_payment_sync         = aws_lambda_function.accounting_retry_payment_sync
     accounting_list_reconciliation_runs   = aws_lambda_function.accounting_list_reconciliation_runs
     accounting_list_accounts              = aws_lambda_function.accounting_list_accounts
     accounting_get_failure_summary        = aws_lambda_function.accounting_get_failure_summary

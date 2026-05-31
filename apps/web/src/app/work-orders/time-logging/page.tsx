@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { PageHeader } from '@gg-erp/ui';
@@ -8,8 +8,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { apiFetch } from '@/lib/api-client';
+import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
+import { apiFetch, listWorkOrders, type WorkOrder } from '@/lib/api-client';
 import { useRole } from '@/lib/role-context';
+
+const STRICT_LIVE_DATA = { allowMockFallback: false } as const;
 
 interface TimeEntry {
   id: string;
@@ -34,6 +37,23 @@ function unwrapTimeEntry(data: TimeEntryMutationResponse): TimeEntry {
   return 'entry' in data ? data.entry : data;
 }
 
+function workOrderOption(workOrder: WorkOrder): SearchableSelectOption {
+  return {
+    id: workOrder.id,
+    label: workOrder.workOrderNumber,
+    description: [workOrder.description, `Cart ${workOrder.vehicleId}`].filter(Boolean).join(' · '),
+    meta: workOrder.state.replace(/_/g, ' '),
+  };
+}
+
+function optionMatches(option: SearchableSelectOption, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  return [option.label, option.description, option.meta].some((value) =>
+    value?.toLowerCase().includes(needle),
+  );
+}
+
 function checkOverlap(entries: TimeEntry[], startedAt: string, endedAt: string): boolean {
   const newStart = new Date(startedAt).getTime();
   const newEnd = new Date(endedAt).getTime();
@@ -46,13 +66,18 @@ function checkOverlap(entries: TimeEntry[], startedAt: string, endedAt: string):
 
 function TimeLoggingContent() {
   const params = useSearchParams();
-  const workOrderId = params.get('workOrderId') ?? '';
+  const initialWorkOrderId = params.get('workOrderId') ?? '';
   const { user, loading: roleLoading } = useRole();
   const technicianId = user?.userId ?? null;
 
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [referenceLoading, setReferenceLoading] = useState(true);
+  const [referenceError, setReferenceError] = useState<string | undefined>();
+  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
+  const [workOrderSearch, setWorkOrderSearch] = useState('');
+  const [selectedWorkOrderId, setSelectedWorkOrderId] = useState(initialWorkOrderId);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editHours, setEditHours] = useState('');
   const [editDesc, setEditDesc] = useState('');
@@ -62,14 +87,44 @@ function TimeLoggingContent() {
 
   const [addHours, setAddHours] = useState('');
   const [addDesc, setAddDesc] = useState('');
-  const [addWO, setAddWO] = useState(workOrderId || '');
+
+  const loadWorkOrders = useCallback(async (isActive: () => boolean = () => true) => {
+    setReferenceLoading(true);
+    setReferenceError(undefined);
+
+    try {
+      const result = await listWorkOrders({ limit: 100 }, STRICT_LIVE_DATA);
+      if (!isActive()) return;
+      setWorkOrders(result.items);
+    } catch (err) {
+      if (!isActive()) return;
+      setWorkOrders([]);
+      setReferenceError(err instanceof Error ? err.message : 'Failed to load work orders.');
+    } finally {
+      if (isActive()) setReferenceLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void loadWorkOrders(() => active);
+
+    return () => {
+      active = false;
+    };
+  }, [loadWorkOrders]);
+
+  useEffect(() => {
+    setSelectedWorkOrderId(initialWorkOrderId);
+    setWorkOrderSearch('');
+  }, [initialWorkOrderId]);
 
   const loadEntries = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const qs = new URLSearchParams();
-      if (workOrderId) qs.set('workOrderId', workOrderId);
+      if (selectedWorkOrderId) qs.set('workOrderId', selectedWorkOrderId);
       const data = await apiFetch<TimeEntriesResponse>(
         `/tickets/time-entries${qs.size ? `?${qs}` : ''}`,
       );
@@ -79,14 +134,28 @@ function TimeLoggingContent() {
     } finally {
       setLoading(false);
     }
-  }, [workOrderId]);
+  }, [selectedWorkOrderId]);
 
   useEffect(() => { void loadEntries(); }, [loadEntries]);
-  useEffect(() => { if (workOrderId) setAddWO(workOrderId); }, [workOrderId]);
+
+  const totalHours = entries.reduce((sum, e) => sum + e.computedHours, 0);
+  const workOrderOptions = useMemo(() => workOrders.map(workOrderOption), [workOrders]);
+  const filteredWorkOrderOptions = useMemo(
+    () => workOrderOptions.filter((option) => optionMatches(option, workOrderSearch)),
+    [workOrderOptions, workOrderSearch],
+  );
+  const selectedWorkOrder = workOrderOptions.find((option) => option.id === selectedWorkOrderId);
+  const pageDescription = `${totalHours.toFixed(1)}h total${
+    selectedWorkOrder ? ` · ${selectedWorkOrder.label}` : ''
+  }`;
 
   async function handleAdd() {
     if (!technicianId) {
       toast.error('Sign in required to log time');
+      return;
+    }
+    if (!selectedWorkOrderId) {
+      toast.error('Select a work order before logging time');
       return;
     }
     const h = parseFloat(addHours);
@@ -104,7 +173,7 @@ function TimeLoggingContent() {
         {
           method: 'POST',
           body: JSON.stringify({
-            workOrderId: addWO || workOrderId,
+            workOrderId: selectedWorkOrderId,
             technicianId,
             manualHours: h,
             description: addDesc,
@@ -154,8 +223,6 @@ function TimeLoggingContent() {
     }
   }
 
-  const totalHours = entries.reduce((sum, e) => sum + e.computedHours, 0);
-
   if (loading || roleLoading) {
     return (
       <div className="max-w-2xl space-y-6">
@@ -172,7 +239,7 @@ function TimeLoggingContent() {
       <div className="max-w-2xl space-y-6">
         <PageHeader
           title="Time Logging"
-          description={`${totalHours.toFixed(1)}h total${workOrderId ? ` · WO ${workOrderId}` : ''}`}
+          description={pageDescription}
         />
         <Card>
           <CardContent className="py-10 text-center text-sm text-gray-500">
@@ -187,14 +254,23 @@ function TimeLoggingContent() {
     <div className="max-w-2xl space-y-6">
       <PageHeader
         title="Time Logging"
-        description={`${totalHours.toFixed(1)}h total${workOrderId ? ` · WO ${workOrderId}` : ''}`}
+        description={pageDescription}
       />
 
-      {error && (
+      {(error || referenceError) && (
         <Card className="border-red-300 bg-red-50">
           <CardContent className="pt-4 flex items-center gap-3">
-            <span className="text-red-600 text-sm flex-1">{error}</span>
-            <Button size="sm" variant="outline" onClick={() => void loadEntries()}>Retry</Button>
+            <span className="text-red-600 text-sm flex-1">{error ?? referenceError}</span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                void loadEntries();
+                void loadWorkOrders();
+              }}
+            >
+              Retry
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -203,11 +279,25 @@ function TimeLoggingContent() {
       <Card>
         <CardHeader><CardTitle className="text-sm">Log Manual Time</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label>Work Order #</Label>
-              <Input value={addWO} onChange={e => setAddWO(e.target.value)} placeholder="WO-001" />
-            </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <SearchableSelect
+              id="time-work-order"
+              label="Work Order"
+              required
+              value={selectedWorkOrderId}
+              selectedOption={selectedWorkOrder}
+              searchValue={workOrderSearch}
+              options={filteredWorkOrderOptions}
+              loading={referenceLoading}
+              error={referenceError}
+              placeholder="Search work orders by number, description, or cart"
+              emptyText="No live work orders matched this search."
+              onSearchChange={setWorkOrderSearch}
+              onChange={(nextWorkOrderId) => {
+                setSelectedWorkOrderId(nextWorkOrderId);
+                setOverlapWarning(false);
+              }}
+            />
             <div className="space-y-1.5">
               <Label>Hours</Label>
               <Input

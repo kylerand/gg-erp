@@ -121,6 +121,7 @@ test('work-order detail page wires live execution panels', () => {
 
 test('create forms use live selectors instead of raw ID entry fields', () => {
   const workOrderSource = readSource('app/work-orders/new/page.tsx');
+  const timeLoggingSource = readSource('app/work-orders/time-logging/page.tsx');
   const opportunitySource = readSource('app/sales/opportunities/new/page.tsx');
   const quoteSource = readSource('app/sales/quotes/new/page.tsx');
 
@@ -142,6 +143,13 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
     ),
     [],
   );
+  assert.deepEqual(
+    ['listWorkOrders', 'SearchableSelect', 'allowMockFallback: false'].filter(
+      (call) => !timeLoggingSource.includes(call),
+    ),
+    [],
+  );
+  assert.equal(timeLoggingSource.includes('placeholder="WO-001"'), false);
 
   const rawIdLabels = [
     /Customer ID/i,

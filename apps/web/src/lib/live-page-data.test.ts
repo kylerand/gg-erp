@@ -764,8 +764,17 @@ test('accounting sync monitor exposes live purchase-order payable handoff', () =
       'PayablesList',
       "erpRecordRoute('purchase-order'",
       "erpRoute('receiving')",
+      "erpRecordRoute('work-order'",
+      "erpRoute('customer'",
+      'invoiceSyncWorkOrderDisplayName',
+      'customerSyncDisplayName',
       'listPurchaseOrders({ pageSize: 200 }, { allowMockFallback: false })',
     ].filter((snippet) => !syncSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    ['{r.workOrderId}', '{r.customerId}'].filter((snippet) => syncSource.includes(snippet)),
     [],
   );
 

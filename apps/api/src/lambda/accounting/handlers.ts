@@ -496,6 +496,13 @@ interface InvoiceSyncListItem {
   syncedAt: Date | null;
 }
 
+interface InvoiceSyncWorkOrderSummary {
+  id: string;
+  workOrderNumber: string;
+  state: string;
+  scheduledStartAt: Date | null;
+}
+
 interface CustomerSyncListItem {
   id: string;
   customerId: string;
@@ -507,6 +514,16 @@ interface CustomerSyncListItem {
   externalReference: string | null;
   createdAt: Date;
   syncedAt: Date | null;
+}
+
+interface CustomerSyncCustomerSummary {
+  id: string;
+  displayName: string;
+  fullName: string;
+  companyName: string | null;
+  email: string;
+  phone: string | null;
+  state: string;
 }
 
 export const invoiceSyncListQueries = {
@@ -523,6 +540,53 @@ export const invoiceSyncListQueries = {
   },
 };
 
+export const accountingSyncContextQueries = {
+  async findWorkOrders(ids: string[]): Promise<InvoiceSyncWorkOrderSummary[]> {
+    if (ids.length === 0) return [];
+    const records = await prisma.workOrder.findMany({
+      where: { id: { in: ids } },
+      select: {
+        id: true,
+        workOrderNumber: true,
+        state: true,
+        scheduledStartAt: true,
+      },
+    });
+
+    return records.map((record) => ({
+      id: record.id,
+      workOrderNumber: record.workOrderNumber,
+      state: String(record.state),
+      scheduledStartAt: record.scheduledStartAt,
+    }));
+  },
+
+  async findCustomers(ids: string[]): Promise<CustomerSyncCustomerSummary[]> {
+    if (ids.length === 0) return [];
+    const records = await prisma.customer.findMany({
+      where: { id: { in: ids } },
+      select: {
+        id: true,
+        fullName: true,
+        companyName: true,
+        email: true,
+        phone: true,
+        state: true,
+      },
+    });
+
+    return records.map((record) => ({
+      id: record.id,
+      displayName: record.companyName?.trim() || record.fullName,
+      fullName: record.fullName,
+      companyName: record.companyName,
+      email: record.email,
+      phone: record.phone,
+      state: String(record.state),
+    }));
+  },
+};
+
 export const customerSyncListQueries = {
   async findMany(
     where: Record<string, string>,
@@ -536,6 +600,26 @@ export const customerSyncListQueries = {
     return prisma.customerSyncRecord.count({ where });
   },
 };
+
+function compactSyncIds(ids: string[]): string[] {
+  return Array.from(new Set(ids.filter((id) => id.trim().length > 0)));
+}
+
+async function loadInvoiceWorkOrderSummaries(
+  workOrderIds: string[],
+): Promise<Map<string, InvoiceSyncWorkOrderSummary>> {
+  const workOrders = await accountingSyncContextQueries.findWorkOrders(
+    compactSyncIds(workOrderIds),
+  );
+  return new Map(workOrders.map((workOrder) => [workOrder.id, workOrder]));
+}
+
+async function loadCustomerSyncSummaries(
+  customerIds: string[],
+): Promise<Map<string, CustomerSyncCustomerSummary>> {
+  const customers = await accountingSyncContextQueries.findCustomers(compactSyncIds(customerIds));
+  return new Map(customers.map((customer) => [customer.id, customer]));
+}
 
 // ─── List invoice syncs (service-backed) ──────────────────────────────────────
 
@@ -563,12 +647,16 @@ export const listInvoiceSyncsHandler = wrapHandler(async (ctx) => {
     invoiceSyncListQueries.findMany(where, { createdAt: 'desc' }, limit, offset),
     invoiceSyncListQueries.count(where),
   ]);
+  const workOrdersById = await loadInvoiceWorkOrderSummaries(
+    items.map((item) => item.workOrderId),
+  );
 
   return jsonResponse(200, {
     items: items.map((r) => ({
       id: r.id,
       invoiceNumber: r.invoiceNumber,
       workOrderId: r.workOrderId,
+      workOrder: workOrdersById.get(r.workOrderId) ?? null,
       provider: r.provider,
       state: r.state,
       attemptCount: r.attemptCount,
@@ -679,11 +767,13 @@ export const listCustomerSyncsHandler = wrapHandler(async (ctx) => {
     customerSyncListQueries.findMany(where, { createdAt: 'desc' }, limit, offset),
     customerSyncListQueries.count(where),
   ]);
+  const customersById = await loadCustomerSyncSummaries(items.map((item) => item.customerId));
 
   return jsonResponse(200, {
     items: items.map((r) => ({
       id: r.id,
       customerId: r.customerId,
+      customer: customersById.get(r.customerId) ?? null,
       provider: r.provider,
       state: r.state,
       attemptCount: r.attemptCount,

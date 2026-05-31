@@ -2054,6 +2054,12 @@ export interface InvoiceSyncRecord {
   id: string;
   invoiceNumber: string;
   workOrderId: string;
+  workOrder?: {
+    id: string;
+    workOrderNumber: string;
+    state: string;
+    scheduledStartAt?: string | null;
+  } | null;
   provider: 'QUICKBOOKS' | 'GENERIC';
   state: 'PENDING' | 'IN_PROGRESS' | 'SYNCED' | 'FAILED' | 'CANCELLED';
   attemptCount: number;
@@ -2106,6 +2112,10 @@ export async function listInvoiceSyncRecords(
     options,
   );
   return { items: res.items };
+}
+
+export function invoiceSyncWorkOrderDisplayName(record: InvoiceSyncRecord): string {
+  return record.workOrder?.workOrderNumber || 'Unresolved work order';
 }
 
 export async function retryInvoiceSync(id: string): Promise<{ id: string; state: string }> {
@@ -2198,6 +2208,15 @@ export async function listReconciliationRuns(
 export interface CustomerSyncRecord {
   id: string;
   customerId: string;
+  customer?: {
+    id: string;
+    displayName: string;
+    fullName: string;
+    companyName?: string | null;
+    email: string;
+    phone?: string | null;
+    state: string;
+  } | null;
   provider: string;
   state: 'PENDING' | 'IN_PROGRESS' | 'SYNCED' | 'FAILED' | 'SKIPPED';
   attemptCount: number;
@@ -2226,6 +2245,16 @@ export async function listCustomerSyncs(
       total: 0,
     },
     options,
+  );
+}
+
+export function customerSyncDisplayName(record: CustomerSyncRecord): string {
+  return (
+    record.customer?.displayName?.trim() ||
+    record.customer?.companyName?.trim() ||
+    record.customer?.fullName ||
+    record.customer?.email ||
+    'Unresolved customer'
   );
 }
 

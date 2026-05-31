@@ -228,21 +228,21 @@
           <p class="muted">Production readiness tracker</p>
           <h1>ERP Actionability UAT Progress</h1>
         </div>
-        <div class="stamp">Last updated: 2026-05-22</div>
+        <div class="stamp">Last updated: 2026-05-31</div>
       </header>
 
       <div class="summary">
-        <div class="metric"><strong>12</strong><span>Tracked delivery slices</span></div>
+        <div class="metric"><strong>14</strong><span>Tracked delivery slices</span></div>
         <div class="metric"><strong>8</strong><span>Done</span></div>
-        <div class="metric"><strong>4</strong><span>In progress</span></div>
+        <div class="metric"><strong>6</strong><span>In progress</span></div>
         <div class="metric"><strong>0</strong><span>Not started</span></div>
       </div>
 
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: remaining identity-resolution gaps and real execution behind polished
-          secondary actions.
+          Current focus: remaining accounting sync actionability, stable selectors, and real
+          execution behind polished secondary actions.
         </p>
         <div class="progress" aria-label="90 percent complete"><div style="width: 90%"></div></div>
       </section>
@@ -310,14 +310,26 @@
             </tr>
             <tr>
               <td>Sales quote and pipeline actionability</td>
-              <td><span class="pill doing">In progress</span></td>
+              <td><span class="pill done">Done</span></td>
               <td>
                 Quote list/detail and opportunity detail views now resolve live customer display
                 profiles, assigned sales users, and quote creators instead of rendering raw IDs.
                 Opportunity detail reads unwrap the live API envelope before rendering the command
                 workspace, and quote detail links to the related opportunity route when present.
               </td>
-              <td>Wait for PR CI/CD, then continue remaining raw-ID remediation slices.</td>
+              <td>Keep extending sales display contexts as new sales entities land.</td>
+            </tr>
+            <tr>
+              <td>Accounting sync actionability</td>
+              <td><span class="pill doing">In progress</span></td>
+              <td>
+                Sync monitor queue, failure, invoice, and customer rows now resolve live work-order
+                numbers and customer display profiles from API response context. Invoice sync rows
+                deep-link to work-order detail, customer sync rows deep-link to filtered customer
+                lists, and payable review already routes received POs into bill-review or receiving
+                actions.
+              </td>
+              <td>Extend row-level payment retry once payment sync row APIs are exposed.</td>
             </tr>
             <tr>
               <td>Communication actionability</td>

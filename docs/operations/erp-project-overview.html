@@ -403,7 +403,7 @@
             <ul>
               <li>Some core contract tracking is stale and needs reconciliation with the work that shipped after March 20, 2026.</li>
               <li>Identity/auth session bootstrap and true floor-tech SSO handoff need to be closed cleanly.</li>
-              <li>Build configuration, BOM, vendor, and technician selectors still need stable catalog-backed implementations.</li>
+              <li>Build package selection now has a live planning-history catalog and manual released-reference fallback; vendor and technician selectors still need broader catalog-backed coverage.</li>
               <li>Schedule publication is being added now; dispatch execution is the next planning-to-shop handoff gap.</li>
               <li>Accounting is still integration-first; internal GL, financial reports, and ledger consequences are not mature yet.</li>
               <li>ShopMonkey migration validation, reference data seeding, and cutover proving remain open.</li>
@@ -489,10 +489,10 @@
           <div class="module-card">
             <header>
               <h3>Work Orders And Shop Execution</h3>
-              <span class="pill doing">78%</span>
+              <span class="pill doing">80%</span>
             </header>
-            <div class="bar good"><span style="width: 78%"></span></div>
-            <p>Strongest operator surface. The command center now covers commercial context, service transitions, materials, labor, QC, SOP, activity, customer/cart editing, and accepted quote conversion.</p>
+            <div class="bar good"><span style="width: 80%"></span></div>
+            <p>Strongest operator surface. The command center now covers commercial context, service transitions, materials, labor, QC, SOP, activity, customer/cart editing, accepted quote conversion, and build-package selection from live planning history.</p>
           </div>
 
           <div class="module-card">
@@ -510,7 +510,7 @@
               <span class="pill done">80%</span>
             </header>
             <div class="bar good"><span style="width: 80%"></span></div>
-            <p>Receiving, PO lifecycle, reservations, replenishment, variance, payable handoff, import/export, and drill-through are live. Item editing and vendor/BOM selectors are the next practical gaps.</p>
+            <p>Receiving, PO lifecycle, reservations, replenishment, variance, payable handoff, import/export, and drill-through are live. Item editing, vendor selectors, and dedicated BOM management are the next practical gaps.</p>
           </div>
 
           <div class="module-card">
@@ -620,7 +620,7 @@
           <li><strong>Reconcile status truth:</strong> update <code>docs/architecture/IMPLEMENTATION_STATUS.md</code> to reflect the PR 59-78 work so project reporting stops undercounting shipped functionality.</li>
           <li><strong>Finish registry-backed route coverage:</strong> land the active registry route coverage branch through CI so navigation, command palette, and QA share one source of truth.</li>
           <li><strong>Close production blockers:</strong> implement <code>GET /auth/me</code> if still absent in production API, fix the accounting webhook unsigned-probe path, and add true floor-tech SSO handoff.</li>
-          <li><strong>Complete selector gaps:</strong> build configuration, BOM, vendor, and technician selectors should be catalog-backed with validation and useful empty states.</li>
+          <li><strong>Complete selector gaps:</strong> vendor and technician selectors should be catalog-backed with validation and useful empty states; build-package history should graduate into dedicated build configuration and BOM management.</li>
           <li><strong>Move toward ERP ledgers:</strong> start inventory movement history and internal accounting ledger design before adding more financial-report UI.</li>
         </ol>
       </section>

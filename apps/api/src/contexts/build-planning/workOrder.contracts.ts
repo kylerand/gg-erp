@@ -13,6 +13,23 @@ export interface ListWorkOrdersQuery {
   state?: WorkOrderState;
   limit?: number;
   offset?: number;
+  includeBuildPackages?: boolean;
+}
+
+export interface WorkOrderBuildPackageResponse {
+  id: string;
+  buildConfigurationId: string;
+  bomId: string;
+  label: string;
+  description: string;
+  source: 'WORK_ORDER_HISTORY';
+  workOrderCount: number;
+  lastUsedAt: string;
+  lastWorkOrderId: string;
+  lastWorkOrderNumber: string;
+  lastVehicleDisplayName?: string;
+  lastCustomerDisplayName?: string;
+  stateCounts: Record<string, number>;
 }
 
 export interface WorkOrderResponse {
@@ -68,6 +85,7 @@ export interface ListWorkOrdersResponse {
   total: number;
   limit: number;
   offset: number;
+  buildPackages?: WorkOrderBuildPackageResponse[];
 }
 
 export function toWorkOrderResponse(workOrder: WorkOrder): WorkOrderResponse {

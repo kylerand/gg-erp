@@ -16,11 +16,15 @@ import {
   cancelCapacitySlotHandler,
   createCapacitySlotHandler,
   getBuildSlotDemandProjectionHandler,
+  getSchedulePreviewHandler,
   importCapacitySlotsHandler,
   listCapacitySlotsHandler,
   listBuildSlotsHandler,
   listLaborCapacityHandler,
+  listScheduleAssignmentsHandler,
+  publishScheduleHandler,
   setSchedulingCapacityStoreForTests,
+  setSchedulingPublicationStoreForTests,
   setSchedulingProjectionQueriesForTests,
   updateCapacitySlotHandler,
   type ApiGatewayProxyEventLike,
@@ -28,7 +32,13 @@ import {
   type CapacitySlotListResult,
   type CapacitySlotResponse,
   type CreateCapacitySlotInput,
+  type ScheduleAssignmentListInput,
+  type ScheduleAssignmentListResult,
+  type ScheduleAssignmentResponse,
+  type SchedulePublicationResult,
+  type SchedulePreviewResult,
   type SchedulingCapacitySlotStore,
+  type SchedulingPublicationStore,
   type UpdateCapacitySlotInput,
 } from '../lambda/scheduling/handlers.js';
 import { buildSlotDemandProjection } from '../contexts/build-planning/buildSlotProjection.js';
@@ -186,6 +196,83 @@ function createCapacityStoreForTests(): SchedulingCapacitySlotStore & {
     },
   };
   return store;
+}
+
+function createPublicationStoreForTests(): SchedulingPublicationStore & {
+  items: ScheduleAssignmentResponse[];
+} {
+  const items: ScheduleAssignmentResponse[] = [];
+
+  return {
+    items,
+    async publishSchedule(input, preview): Promise<SchedulePublicationResult> {
+      items.splice(
+        0,
+        items.length,
+        ...preview.assignments.map((assignment, index): ScheduleAssignmentResponse => ({
+          id: `assignment-${index + 1}`,
+          plannerRunId: 'run-1',
+          assignmentState: 'PUBLISHED',
+          workOrderId: assignment.workOrderId,
+          workOrderNumber: assignment.workOrderNumber,
+          title: assignment.title,
+          workOrderStatus: assignment.status,
+          operationId: assignment.operationId,
+          operationCode: assignment.operationCode,
+          operationName: assignment.operationName,
+          operationSequenceNo: assignment.operationSequenceNo,
+          operationStatus: assignment.operationStatus,
+          estimatedMinutes: assignment.estimatedMinutes,
+          capacitySlotId: assignment.capacitySlotId,
+          slotStart: assignment.slotStart,
+          slotEnd: assignment.slotEnd,
+          stockLocationId: assignment.stockLocationId ?? '00000000-0000-4000-8000-000000000111',
+          stockLocationCode: 'MAIN',
+          stockLocationName: 'Main Shop',
+          bayCode: assignment.bayCode,
+          teamCode: assignment.teamCode,
+          plannedStartAt: assignment.plannedStartAt,
+          plannedEndAt: assignment.plannedEndAt,
+          slotSequenceNo: assignment.slotSequenceNo,
+          createdAt: '2026-05-18T13:00:00.000Z',
+          updatedAt: '2026-05-18T13:00:00.000Z',
+        })),
+      );
+
+      return {
+        run: {
+          id: 'run-1',
+          runStatus: 'SUCCEEDED',
+          algorithmVersion: 'deterministic-slot-v1',
+          inputHash: `${input.startDate}-${input.endDate}`,
+          startedAt: '2026-05-18T13:00:00.000Z',
+          completedAt: '2026-05-18T13:00:00.000Z',
+          createdAt: '2026-05-18T13:00:00.000Z',
+        },
+        publishedAt: '2026-05-18T13:00:00.000Z',
+        assignmentCount: preview.assignments.length,
+        scheduledMinutes: preview.totals.scheduledMinutes,
+        projection: preview.projection,
+        assignments: items,
+        totals: preview.totals,
+        warnings: preview.warnings,
+      };
+    },
+    async listScheduleAssignments(input: ScheduleAssignmentListInput): Promise<ScheduleAssignmentListResult> {
+      const filtered = items.filter((item) => {
+        if (item.plannedStartAt.slice(0, 10) < input.startDate) return false;
+        if (item.plannedStartAt.slice(0, 10) > input.endDate) return false;
+        if (input.state && item.assignmentState !== input.state) return false;
+        return true;
+      });
+      return {
+        items: filtered.slice(input.offset, input.offset + input.limit),
+        total: filtered.length,
+        limit: input.limit,
+        offset: input.offset,
+      };
+    },
+  };
 }
 
 // ─── Build Slot Service Tests ───────────────────────────────────────────────
@@ -779,7 +866,184 @@ test('capacity slot import validates body shape', async () => {
   assert.equal(body.message, 'At least one capacity row is required.');
 });
 
-test('demand projection is wired into lambda build and terraform route discovery', () => {
+test('schedule preview turns projected demand into sequential planned assignments', async () => {
+  const store = createCapacityStoreForTests();
+  setSchedulingCapacityStoreForTests(store);
+  setSchedulingProjectionQueriesForTests({
+    async listCapacitySlots() {
+      throw new Error('capacity should come from capacity store override');
+    },
+    async listOperationDemand() {
+      return [
+        {
+          workOrderId: 'wo-1',
+          workOrderNumber: 'WO-001',
+          title: 'Lift kit build',
+          status: 'READY',
+          priority: 5,
+          materialReadiness: 'READY',
+          operationId: 'op-1',
+          operationCode: 'BUILD-010',
+          operationName: 'Install lift kit',
+          sequenceNo: 10,
+          operationStatus: 'READY',
+          estimatedMinutes: 60,
+        },
+        {
+          workOrderId: 'wo-1',
+          workOrderNumber: 'WO-001',
+          title: 'Lift kit build',
+          status: 'READY',
+          priority: 5,
+          materialReadiness: 'READY',
+          operationId: 'op-2',
+          operationCode: 'BUILD-020',
+          operationName: 'Torque suspension',
+          sequenceNo: 20,
+          operationStatus: 'READY',
+          estimatedMinutes: 90,
+        },
+      ];
+    },
+  });
+
+  try {
+    const slot = await store.createCapacitySlot({
+      slotStart: '2026-05-18T13:00:00.000Z',
+      slotEnd: '2026-05-18T16:00:00.000Z',
+      stockLocationId: '00000000-0000-4000-8000-000000000111',
+      bayCode: 'BAY-1',
+      teamCode: 'BUILD',
+      capacityMinutes: 180,
+    }, { correlationId: 'schedule-preview-test' });
+    store.items[0] = {
+      ...slot,
+      allocatedMinutes: 30,
+      remainingMinutes: 150,
+    };
+
+    const response = await getSchedulePreviewHandler({
+      queryStringParameters: { startDate: '2026-05-18', endDate: '2026-05-18' },
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = parseResponseBody(response) as unknown as SchedulePreviewResult;
+    assert.equal(body.totals.assignmentCount, 2);
+    assert.equal(body.totals.scheduledMinutes, 150);
+    assert.equal(body.assignments[0].plannedStartAt, '2026-05-18T13:30:00.000Z');
+    assert.equal(body.assignments[0].plannedEndAt, '2026-05-18T14:30:00.000Z');
+    assert.equal(body.assignments[1].plannedStartAt, '2026-05-18T14:30:00.000Z');
+    assert.equal(body.assignments[1].plannedEndAt, '2026-05-18T16:00:00.000Z');
+  } finally {
+    setSchedulingCapacityStoreForTests(undefined);
+    setSchedulingProjectionQueriesForTests(undefined);
+  }
+});
+
+test('publishScheduleHandler persists preview assignments through publication store', async () => {
+  const capacityStore = createCapacityStoreForTests();
+  const publicationStore = createPublicationStoreForTests();
+  setSchedulingCapacityStoreForTests(capacityStore);
+  setSchedulingPublicationStoreForTests(publicationStore);
+  setSchedulingProjectionQueriesForTests({
+    async listCapacitySlots() {
+      throw new Error('capacity should come from capacity store override');
+    },
+    async listOperationDemand() {
+      return [
+        {
+          workOrderId: 'wo-2',
+          workOrderNumber: 'WO-002',
+          title: 'Alignment',
+          status: 'READY',
+          priority: 4,
+          materialReadiness: 'READY',
+          operationId: 'op-3',
+          operationCode: 'BUILD-030',
+          operationName: 'Final alignment',
+          sequenceNo: 30,
+          operationStatus: 'PENDING',
+          estimatedMinutes: 120,
+        },
+      ];
+    },
+  });
+
+  try {
+    await capacityStore.createCapacitySlot({
+      slotStart: '2026-05-19T13:00:00.000Z',
+      slotEnd: '2026-05-19T17:00:00.000Z',
+      stockLocationId: '00000000-0000-4000-8000-000000000111',
+      bayCode: 'BAY-2',
+      teamCode: 'BUILD',
+      capacityMinutes: 240,
+    }, { correlationId: 'schedule-publish-test' });
+
+    const response = await publishScheduleHandler({
+      body: JSON.stringify({ startDate: '2026-05-19', endDate: '2026-05-19' }),
+      headers: { 'x-correlation-id': 'schedule-publish-test' },
+    });
+
+    assert.equal(response.statusCode, 201);
+    const body = parseResponseBody(response) as unknown as SchedulePublicationResult;
+    assert.equal(body.assignmentCount, 1);
+    assert.equal(body.assignments[0].assignmentState, 'PUBLISHED');
+    assert.equal(publicationStore.items[0].operationId, 'op-3');
+
+    const listResponse = await listScheduleAssignmentsHandler({
+      queryStringParameters: { startDate: '2026-05-19', endDate: '2026-05-19', state: 'PUBLISHED' },
+    });
+    assert.equal(listResponse.statusCode, 200);
+    const listBody = parseResponseBody(listResponse) as unknown as ScheduleAssignmentListResult;
+    assert.equal(listBody.total, 1);
+  } finally {
+    setSchedulingCapacityStoreForTests(undefined);
+    setSchedulingPublicationStoreForTests(undefined);
+    setSchedulingProjectionQueriesForTests(undefined);
+  }
+});
+
+test('publishScheduleHandler rejects empty schedule publications', async () => {
+  const capacityStore = createCapacityStoreForTests();
+  setSchedulingCapacityStoreForTests(capacityStore);
+  setSchedulingProjectionQueriesForTests({
+    async listCapacitySlots() {
+      throw new Error('capacity should come from capacity store override');
+    },
+    async listOperationDemand() {
+      return [
+        {
+          workOrderId: 'wo-3',
+          workOrderNumber: 'WO-003',
+          title: 'Material blocked build',
+          status: 'READY',
+          priority: 3,
+          materialReadiness: 'NOT_READY',
+          operationId: 'op-4',
+          operationCode: 'BUILD-040',
+          operationName: 'Install wheels',
+          sequenceNo: 40,
+          operationStatus: 'READY',
+          estimatedMinutes: 60,
+        },
+      ];
+    },
+  });
+
+  try {
+    const response = await publishScheduleHandler({
+      body: JSON.stringify({ startDate: '2026-05-20', endDate: '2026-05-20' }),
+    });
+    assert.equal(response.statusCode, 409);
+    const body = parseResponseBody(response);
+    assert.equal(body.message, 'No schedulable operations fit the selected capacity window.');
+  } finally {
+    setSchedulingCapacityStoreForTests(undefined);
+    setSchedulingProjectionQueriesForTests(undefined);
+  }
+});
+
+test('demand projection and schedule publication are wired into lambda build and terraform route discovery', () => {
   const tf = readFileSync(
     new URL('../../../../infra/terraform/modules/api-gateway-lambda/main.tf', import.meta.url),
     'utf8',
@@ -795,6 +1059,12 @@ test('demand projection is wired into lambda build and terraform route discovery
   assert.match(tf, /route_key\s+=\s+"GET \/scheduling\/capacity-slots"/);
   assert.match(tf, /route_key\s+=\s+"POST \/scheduling\/capacity-slots\/import"/);
   assert.match(buildScript, /import-capacity-slots\.handler\.ts/);
+  assert.match(tf, /route_key\s+=\s+"GET \/scheduling\/schedule-preview"/);
+  assert.match(tf, /route_key\s+=\s+"POST \/scheduling\/schedule-publications"/);
+  assert.match(tf, /route_key\s+=\s+"GET \/scheduling\/schedule-assignments"/);
+  assert.match(buildScript, /schedule-preview\.handler\.ts/);
+  assert.match(buildScript, /publish-schedule\.handler\.ts/);
+  assert.match(buildScript, /list-schedule-assignments\.handler\.ts/);
 });
 
 // ─── Routes integration ─────────────────────────────────────────────────────

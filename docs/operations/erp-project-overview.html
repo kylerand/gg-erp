@@ -350,39 +350,38 @@
       <header>
         <h1>Golfin Garage ERP Project Overview</h1>
         <p class="lede">
-          High-level status after the PR 77 customer/cart profile editing slice and PR 78
-          route allowlist cleanup. The app has moved past polished static screens into a
-          usable shop-ops ERP foundation, but it is not yet a complete ERPNext-grade
-          operating system.
+          High-level status with the schedule-publication slice in progress. The app has
+          moved past polished static screens into a usable shop-ops ERP foundation, but it
+          is not yet a complete ERPNext-grade operating system.
         </p>
         <div class="meta-row">
-          <span class="chip">Reviewed: May 21, 2026</span>
-          <span class="chip">Baseline: origin/main 529f4e9</span>
-          <span class="chip">Latest merged PR: 78</span>
+          <span class="chip">Reviewed: May 22, 2026</span>
+          <span class="chip">Baseline: origin/main plus schedule-publication branch</span>
+          <span class="chip">Active slice: schedule publication</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
 
       <div class="summary">
         <div class="metric">
-          <strong>68%</strong>
+          <strong>70%</strong>
           <span>Estimated production readiness for an internal ERP rollout.</span>
-          <div class="bar warn"><span style="width: 68%"></span></div>
+          <div class="bar warn"><span style="width: 70%"></span></div>
         </div>
         <div class="metric">
-          <strong>82%</strong>
+          <strong>84%</strong>
           <span>Actionability remediation from the UAT plan.</span>
-          <div class="bar good"><span style="width: 82%"></span></div>
+          <div class="bar good"><span style="width: 84%"></span></div>
         </div>
         <div class="metric">
-          <strong>61%</strong>
+          <strong>64%</strong>
           <span>Live workflow/API contract completeness.</span>
-          <div class="bar warn"><span style="width: 61%"></span></div>
+          <div class="bar warn"><span style="width: 64%"></span></div>
         </div>
         <div class="metric">
-          <strong>48%</strong>
+          <strong>50%</strong>
           <span>ERPNext-style breadth: ledgers, lifecycle, setup, reports.</span>
-          <div class="bar risk"><span style="width: 48%"></span></div>
+          <div class="bar risk"><span style="width: 50%"></span></div>
         </div>
       </div>
 
@@ -405,6 +404,7 @@
               <li>Some core contract tracking is stale and needs reconciliation with the work that shipped after March 20, 2026.</li>
               <li>Identity/auth session bootstrap and true floor-tech SSO handoff need to be closed cleanly.</li>
               <li>Build configuration, BOM, vendor, and technician selectors still need stable catalog-backed implementations.</li>
+              <li>Schedule publication is being added now; dispatch execution is the next planning-to-shop handoff gap.</li>
               <li>Accounting is still integration-first; internal GL, financial reports, and ledger consequences are not mature yet.</li>
               <li>ShopMonkey migration validation, reference data seeding, and cutover proving remain open.</li>
               <li>One known API smoke exception remains: unsigned accounting webhook probes return 500 instead of a clean 400.</li>
@@ -448,7 +448,7 @@
                 <div class="bar warn"><span style="width: 63%"></span></div>
               </td>
               <td>Sales, work orders, inventory, purchasing, training, reporting, and admin can run a real internal pilot.</td>
-              <td>Finish build-slot/labor-capacity read models, technician/rework contract coverage, manager training assignment creation, migration validation, and role permissions audit.</td>
+              <td>Finish schedule publication, dispatch execution, technician/rework contract coverage, manager training assignment creation, migration validation, and role permissions audit.</td>
             </tr>
             <tr>
               <td><strong>Integrated ERP operating model</strong><br /><span class="muted">60-day horizon</span></td>

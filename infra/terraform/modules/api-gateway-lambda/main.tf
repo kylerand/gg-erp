@@ -1546,6 +1546,63 @@ resource "aws_lambda_function" "scheduling_demand_projection" {
   }
 }
 
+resource "aws_lambda_function" "scheduling_schedule_preview" {
+  function_name    = "${var.name_prefix}-scheduling-schedule-preview"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "schedule-preview.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/scheduling-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.scheduling_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.scheduling_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "scheduling_publish_schedule" {
+  function_name    = "${var.name_prefix}-scheduling-publish-schedule"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "publish-schedule.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/scheduling-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.scheduling_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.scheduling_lambda_zip_path)
+  timeout          = 30
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "scheduling_list_schedule_assignments" {
+  function_name    = "${var.name_prefix}-scheduling-list-schedule-assignments"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-schedule-assignments.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/scheduling-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.scheduling_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.scheduling_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
 resource "aws_lambda_function" "scheduling_list_capacity_slots" {
   function_name    = "${var.name_prefix}-scheduling-list-capacity-slots"
   role             = aws_iam_role.erp_lambda.arn
@@ -2552,6 +2609,49 @@ resource "aws_apigatewayv2_route" "scheduling_demand_projection" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "GET /scheduling/demand-projection"
   target             = "integrations/${aws_apigatewayv2_integration.scheduling_demand_projection.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "scheduling_schedule_preview" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.scheduling_schedule_preview.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "scheduling_schedule_preview" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /scheduling/schedule-preview"
+  target             = "integrations/${aws_apigatewayv2_integration.scheduling_schedule_preview.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "scheduling_publish_schedule" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.scheduling_publish_schedule.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "scheduling_publish_schedule" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /scheduling/schedule-publications"
+  target             = "integrations/${aws_apigatewayv2_integration.scheduling_publish_schedule.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "scheduling_list_schedule_assignments" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.scheduling_list_schedule_assignments.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "scheduling_list_schedule_assignments" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /scheduling/schedule-assignments"
+  target             = "integrations/${aws_apigatewayv2_integration.scheduling_list_schedule_assignments.id}"
   authorization_type = "NONE"
 }
 
@@ -4673,6 +4773,9 @@ locals {
     scheduling_list_slots                 = aws_lambda_function.scheduling_list_slots
     scheduling_list_labor_capacity        = aws_lambda_function.scheduling_list_labor_capacity
     scheduling_demand_projection          = aws_lambda_function.scheduling_demand_projection
+    scheduling_schedule_preview           = aws_lambda_function.scheduling_schedule_preview
+    scheduling_publish_schedule           = aws_lambda_function.scheduling_publish_schedule
+    scheduling_list_schedule_assignments  = aws_lambda_function.scheduling_list_schedule_assignments
     scheduling_list_capacity_slots        = aws_lambda_function.scheduling_list_capacity_slots
     scheduling_create_capacity_slot       = aws_lambda_function.scheduling_create_capacity_slot
     scheduling_update_capacity_slot       = aws_lambda_function.scheduling_update_capacity_slot

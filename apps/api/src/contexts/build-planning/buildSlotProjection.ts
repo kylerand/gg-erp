@@ -100,6 +100,33 @@ export interface BuildSlotDemandProjection {
   warnings: BuildSlotProjectionWarning[];
 }
 
+export interface BuildSlotScheduleAssignment {
+  workOrderId: string;
+  workOrderNumber: string;
+  title: string;
+  status: string;
+  priority: number;
+  dueAt?: string;
+  materialReadiness: MaterialReadiness;
+  operationId: string;
+  operationCode: string;
+  operationName: string;
+  operationSequenceNo: number;
+  operationStatus: string;
+  requiredSkillCode?: string;
+  estimatedMinutes: number;
+  capacitySlotId: string;
+  slotStart: string;
+  slotEnd: string;
+  stockLocationId?: string;
+  bayCode?: string;
+  teamCode?: string;
+  plannedStartAt: string;
+  plannedEndAt: string;
+  slotSequenceNo: number;
+  reason: 'PROJECTED_TO_SLOT';
+}
+
 export interface BuildSlotDemandProjectionInput {
   startDate: string;
   endDate: string;
@@ -273,6 +300,48 @@ export function buildSlotDemandProjection(
   };
 }
 
+export function buildScheduleAssignmentsFromProjection(
+  projection: BuildSlotDemandProjection,
+): BuildSlotScheduleAssignment[] {
+  return [...projection.slots]
+    .sort(compareProjectionSlots)
+    .flatMap((slot) => {
+      let cursorMs =
+        new Date(slot.slotStart).getTime() + Math.max(slot.allocatedMinutes, 0) * 60_000;
+      return slot.demand.map((item, index): BuildSlotScheduleAssignment => {
+        const plannedStartAt = new Date(cursorMs).toISOString();
+        cursorMs += Math.max(item.estimatedMinutes, 0) * 60_000;
+        const plannedEndAt = new Date(cursorMs).toISOString();
+        return {
+          workOrderId: item.workOrderId,
+          workOrderNumber: item.workOrderNumber,
+          title: item.title,
+          status: item.status,
+          priority: item.priority,
+          dueAt: item.dueAt,
+          materialReadiness: item.materialReadiness,
+          operationId: item.operationId,
+          operationCode: item.operationCode,
+          operationName: item.operationName,
+          operationSequenceNo: item.sequenceNo,
+          operationStatus: item.operationStatus,
+          requiredSkillCode: item.requiredSkillCode,
+          estimatedMinutes: item.estimatedMinutes,
+          capacitySlotId: slot.slotId,
+          slotStart: slot.slotStart,
+          slotEnd: slot.slotEnd,
+          stockLocationId: slot.stockLocationId,
+          bayCode: slot.bayCode,
+          teamCode: slot.teamCode,
+          plannedStartAt,
+          plannedEndAt,
+          slotSequenceNo: index + 1,
+          reason: 'PROJECTED_TO_SLOT',
+        };
+      });
+    });
+}
+
 function getUnschedulableReason(item: BuildSlotDemandInput): BuildSlotDemandReason | undefined {
   if (item.estimatedMinutes <= 0) return 'MISSING_ESTIMATE';
   if (item.operationStatus === 'BLOCKED') return 'OPERATION_BLOCKED';
@@ -281,6 +350,18 @@ function getUnschedulableReason(item: BuildSlotDemandInput): BuildSlotDemandReas
 }
 
 function compareSlots(left: BuildSlotCapacityInput, right: BuildSlotCapacityInput): number {
+  return (
+    left.slotStart.localeCompare(right.slotStart) ||
+    (left.bayCode ?? '').localeCompare(right.bayCode ?? '') ||
+    (left.teamCode ?? '').localeCompare(right.teamCode ?? '') ||
+    left.slotId.localeCompare(right.slotId)
+  );
+}
+
+function compareProjectionSlots(
+  left: BuildSlotProjectionSlot,
+  right: BuildSlotProjectionSlot,
+): number {
   return (
     left.slotStart.localeCompare(right.slotStart) ||
     (left.bayCode ?? '').localeCompare(right.bayCode ?? '') ||

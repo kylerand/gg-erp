@@ -232,9 +232,9 @@
       </header>
 
       <div class="summary">
-        <div class="metric"><strong>10</strong><span>Tracked delivery slices</span></div>
+        <div class="metric"><strong>11</strong><span>Tracked delivery slices</span></div>
         <div class="metric"><strong>7</strong><span>Done</span></div>
-        <div class="metric"><strong>3</strong><span>In progress</span></div>
+        <div class="metric"><strong>4</strong><span>In progress</span></div>
         <div class="metric"><strong>0</strong><span>Not started</span></div>
       </div>
 
@@ -243,7 +243,7 @@
         <p class="muted">
           Current focus: schedule publication, dispatch execution, and remaining selector gaps.
         </p>
-        <div class="progress" aria-label="84 percent complete"><div style="width: 84%"></div></div>
+        <div class="progress" aria-label="86 percent complete"><div style="width: 86%"></div></div>
       </section>
 
       <section>
@@ -312,6 +312,17 @@
                 persisted planner runs, published slot assignments, and work-order planned times.
               </td>
               <td>Merge the schedule-publication slice, wait for QA/CD, then remove pending-deploy route exceptions.</td>
+            </tr>
+            <tr>
+              <td>Dispatch schedule execution</td>
+              <td><span class="pill doing">In progress</span></td>
+              <td>
+                `/work-orders/dispatch` now reads live published/dispatched schedule assignments,
+                shows an action queue, deep-links to work orders, and lets dispatch start,
+                complete, resume, or block planned operations through live work-order operation
+                transitions with mock fallback disabled.
+              </td>
+              <td>Open the stacked PR after schedule publication, wait for CI, then QA the live dispatch board against published schedule data.</td>
             </tr>
             <tr>
               <td>Training repair</td>

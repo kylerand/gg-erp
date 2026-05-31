@@ -1305,12 +1305,34 @@ export interface CreatePartInput {
   reorderPoint?: number;
 }
 
+export interface UpdatePartInput {
+  defaultVendorId?: string | null;
+}
+
 export async function createPart(input: CreatePartInput): Promise<Part> {
   const data = await apiFetch<{ part: Part }>('/inventory/parts', {
     method: 'POST',
     headers: mutationHeaders(),
     body: JSON.stringify(input),
   });
+  return data.part;
+}
+
+export async function updatePart(
+  id: string,
+  input: UpdatePartInput,
+  options?: ApiDataOptions,
+): Promise<Part> {
+  const data = await apiFetch<{ part: Part }>(
+    `/inventory/parts/${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      headers: mutationHeaders(),
+      body: JSON.stringify(input),
+    },
+    undefined,
+    options,
+  );
   return data.part;
 }
 

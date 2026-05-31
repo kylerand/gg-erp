@@ -6,11 +6,14 @@ import { PageHeader, LoadingSkeleton, EmptyState } from '@gg-erp/ui';
 import {
   createPurchaseOrder,
   getMaterialPlanByStage,
+  listVendors,
+  updatePart,
   type ReplenishmentRecommendation,
   type ReplenishmentVendorGroup,
   type StageMaterialPlanGroup,
   type StageMaterialPlanLine,
   type StageMaterialPlanResponse,
+  type Vendor,
 } from '@/lib/api-client';
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 
@@ -108,17 +111,29 @@ function ReplenishmentPanel({
   groups,
   summary,
   selectedRecommendations,
+  vendors,
+  vendorSelections,
   creatingVendorId,
+  assigningPartId,
   createError,
+  assignError,
   onToggleRecommendation,
+  onVendorSelectionChange,
+  onAssignDefaultVendor,
   onCreatePurchaseOrder,
 }: {
   groups: ReplenishmentVendorGroup[];
   summary: NonNullable<StageMaterialPlanResponse['replenishment']>['summary'];
   selectedRecommendations: Record<string, boolean>;
+  vendors: Vendor[];
+  vendorSelections: Record<string, string>;
   creatingVendorId: string | null;
+  assigningPartId: string | null;
   createError: string | null;
+  assignError: string | null;
   onToggleRecommendation: (partId: string) => void;
+  onVendorSelectionChange: (partId: string, vendorId: string) => void;
+  onAssignDefaultVendor: (partId: string, vendorId: string) => void;
   onCreatePurchaseOrder: (group: ReplenishmentVendorGroup) => void;
 }) {
   return (
@@ -149,9 +164,9 @@ function ReplenishmentPanel({
           </div>
         </div>
       </header>
-      {createError && (
+      {(createError || assignError) && (
         <div className="border-b border-red-100 bg-red-50 px-4 py-3 text-sm text-red-900">
-          {createError}
+          {createError ?? assignError}
         </div>
       )}
       {summary.recommendationCount === 0 ? (
@@ -165,8 +180,13 @@ function ReplenishmentPanel({
               key={group.vendorId ?? 'unassigned'}
               group={group}
               selectedRecommendations={selectedRecommendations}
-              creating={creatingVendorId === group.vendorId}
+              vendors={vendors}
+              vendorSelections={vendorSelections}
+              creating={Boolean(group.vendorId) && creatingVendorId === group.vendorId}
+              assigningPartId={assigningPartId}
               onToggleRecommendation={onToggleRecommendation}
+              onVendorSelectionChange={onVendorSelectionChange}
+              onAssignDefaultVendor={onAssignDefaultVendor}
               onCreatePurchaseOrder={onCreatePurchaseOrder}
             />
           ))}
@@ -179,14 +199,24 @@ function ReplenishmentPanel({
 function ReplenishmentVendorSection({
   group,
   selectedRecommendations,
+  vendors,
+  vendorSelections,
   creating,
+  assigningPartId,
   onToggleRecommendation,
+  onVendorSelectionChange,
+  onAssignDefaultVendor,
   onCreatePurchaseOrder,
 }: {
   group: ReplenishmentVendorGroup;
   selectedRecommendations: Record<string, boolean>;
+  vendors: Vendor[];
+  vendorSelections: Record<string, string>;
   creating: boolean;
+  assigningPartId: string | null;
   onToggleRecommendation: (partId: string) => void;
+  onVendorSelectionChange: (partId: string, vendorId: string) => void;
+  onAssignDefaultVendor: (partId: string, vendorId: string) => void;
   onCreatePurchaseOrder: (group: ReplenishmentVendorGroup) => void;
 }) {
   const canCreate = Boolean(group.vendorId) && group.vendorState !== 'INACTIVE';
@@ -234,7 +264,7 @@ function ReplenishmentVendorSection({
         </div>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[880px] text-sm">
+        <table className="w-full min-w-[1080px] text-sm">
           <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
             <tr>
               <th className="w-10 px-3 py-2">Use</th>
@@ -246,6 +276,7 @@ function ReplenishmentVendorSection({
               <th className="px-3 py-2 text-right">Buy</th>
               <th className="px-3 py-2 text-right">Unit Cost</th>
               <th className="px-3 py-2">Next ETA</th>
+              <th className="px-3 py-2">Vendor action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -255,7 +286,19 @@ function ReplenishmentVendorSection({
                 recommendation={recommendation}
                 checked={Boolean(selectedRecommendations[recommendation.part.id])}
                 disabled={!canCreate}
+                vendors={vendors}
+                selectedVendorId={vendorSelections[recommendation.part.id] ?? ''}
+                assigning={assigningPartId === recommendation.part.id}
                 onToggle={() => onToggleRecommendation(recommendation.part.id)}
+                onVendorSelectionChange={(vendorId) =>
+                  onVendorSelectionChange(recommendation.part.id, vendorId)
+                }
+                onAssignDefaultVendor={() =>
+                  onAssignDefaultVendor(
+                    recommendation.part.id,
+                    vendorSelections[recommendation.part.id] ?? '',
+                  )
+                }
               />
             ))}
           </tbody>
@@ -269,18 +312,29 @@ function ReplenishmentRow({
   recommendation,
   checked,
   disabled,
+  vendors,
+  selectedVendorId,
+  assigning,
   onToggle,
+  onVendorSelectionChange,
+  onAssignDefaultVendor,
 }: {
   recommendation: ReplenishmentRecommendation;
   checked: boolean;
   disabled: boolean;
+  vendors: Vendor[];
+  selectedVendorId: string;
+  assigning: boolean;
   onToggle: () => void;
+  onVendorSelectionChange: (vendorId: string) => void;
+  onAssignDefaultVendor: () => void;
 }) {
   const severityStyle: Record<ReplenishmentRecommendation['severity'], string> = {
     critical: 'bg-red-50',
     high: 'bg-amber-50',
     medium: '',
   };
+  const needsVendor = !recommendation.vendorId;
   return (
     <tr className={severityStyle[recommendation.severity]}>
       <td className="px-3 py-2">
@@ -315,6 +369,36 @@ function ReplenishmentRow({
       <td className="px-3 py-2 text-gray-600">
         {recommendation.nextExpectedAt ? formatDate(recommendation.nextExpectedAt) : 'Not ordered'}
       </td>
+      <td className="px-3 py-2">
+        {needsVendor ? (
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedVendorId}
+              disabled={vendors.length === 0 || assigning}
+              onChange={(event) => onVendorSelectionChange(event.target.value)}
+              aria-label={`Default vendor for ${recommendation.part.sku}`}
+              className="min-w-[180px] rounded-md border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-900 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
+            >
+              <option value="">{vendors.length === 0 ? 'No active vendors' : 'Select vendor'}</option>
+              {vendors.map((vendor) => (
+                <option key={vendor.id} value={vendor.id}>
+                  {vendor.vendorName}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={!selectedVendorId || assigning}
+              onClick={onAssignDefaultVendor}
+              className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-xs font-semibold text-gray-900 hover:border-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
+            >
+              {assigning ? 'Saving...' : 'Set vendor'}
+            </button>
+          </div>
+        ) : (
+          <span className="text-xs font-medium text-green-700">Ready for PO</span>
+        )}
+      </td>
     </tr>
   );
 }
@@ -322,25 +406,36 @@ function ReplenishmentRow({
 export default function PlanningPage() {
   const router = useRouter();
   const [plan, setPlan] = useState<StageMaterialPlanResponse | null>(null);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedRecommendations, setSelectedRecommendations] = useState<Record<string, boolean>>(
     {},
   );
+  const [vendorSelections, setVendorSelections] = useState<Record<string, string>>({});
   const [creatingVendorId, setCreatingVendorId] = useState<string | null>(null);
+  const [assigningPartId, setAssigningPartId] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [assignError, setAssignError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setLoadError(null);
-    getMaterialPlanByStage({ allowMockFallback: false })
-      .then((res) => {
-        if (!cancelled) setPlan(res);
+    Promise.all([
+      getMaterialPlanByStage({ allowMockFallback: false }),
+      listVendors({ state: 'ACTIVE', limit: 200 }, { allowMockFallback: false }),
+    ])
+      .then(([res, vendorPage]) => {
+        if (!cancelled) {
+          setPlan(res);
+          setVendors(vendorPage.items);
+        }
       })
       .catch((err) => {
         if (!cancelled) {
           setPlan(null);
+          setVendors([]);
           setLoadError(
             err instanceof Error ? err.message : 'Material planning data failed to load.',
           );
@@ -356,6 +451,7 @@ export default function PlanningPage() {
 
   useEffect(() => {
     const recommendations = plan?.replenishment?.recommendations ?? [];
+    const firstActiveVendorId = vendors.find((vendor) => vendor.vendorState === 'ACTIVE')?.id ?? '';
     setSelectedRecommendations((current) => {
       const next: Record<string, boolean> = {};
       for (const recommendation of recommendations) {
@@ -365,7 +461,16 @@ export default function PlanningPage() {
       }
       return next;
     });
-  }, [plan]);
+    setVendorSelections((current) => {
+      const next: Record<string, string> = {};
+      for (const recommendation of recommendations) {
+        if (!recommendation.vendorId) {
+          next[recommendation.part.id] = current[recommendation.part.id] ?? firstActiveVendorId;
+        }
+      }
+      return next;
+    });
+  }, [plan, vendors]);
 
   const summary = useMemo(() => summarizePlan(plan), [plan]);
   const actions = useMemo(() => buildActionQueue(plan), [plan]);
@@ -378,8 +483,33 @@ export default function PlanningPage() {
     setSelectedRecommendations((current) => ({ ...current, [partId]: !current[partId] }));
   };
 
+  const handleVendorSelectionChange = (partId: string, vendorId: string) => {
+    setVendorSelections((current) => ({ ...current, [partId]: vendorId }));
+  };
+
+  const handleAssignDefaultVendor = async (partId: string, vendorId: string) => {
+    setAssignError(null);
+    setCreateError(null);
+    if (!vendorId) {
+      setAssignError('Select an active vendor before saving the part default vendor.');
+      return;
+    }
+
+    setAssigningPartId(partId);
+    try {
+      await updatePart(partId, { defaultVendorId: vendorId }, { allowMockFallback: false });
+      const refreshedPlan = await getMaterialPlanByStage({ allowMockFallback: false });
+      setPlan(refreshedPlan);
+    } catch (err) {
+      setAssignError(err instanceof Error ? err.message : 'Unable to save default vendor.');
+    } finally {
+      setAssigningPartId(null);
+    }
+  };
+
   const handleCreatePurchaseOrder = async (group: ReplenishmentVendorGroup) => {
     setCreateError(null);
+    setAssignError(null);
     if (!group.vendorId) {
       setCreateError('Assign default vendors before creating replenishment purchase orders.');
       return;
@@ -438,9 +568,15 @@ export default function PlanningPage() {
           groups={plan.replenishment.vendorGroups}
           summary={plan.replenishment.summary}
           selectedRecommendations={selectedRecommendations}
+          vendors={vendors}
+          vendorSelections={vendorSelections}
           creatingVendorId={creatingVendorId}
+          assigningPartId={assigningPartId}
           createError={createError}
+          assignError={assignError}
           onToggleRecommendation={toggleRecommendation}
+          onVendorSelectionChange={handleVendorSelectionChange}
+          onAssignDefaultVendor={handleAssignDefaultVendor}
           onCreatePurchaseOrder={handleCreatePurchaseOrder}
         />
       )}
@@ -574,7 +710,7 @@ function buildActionQueue(plan: StageMaterialPlanResponse | null): QueuedAction[
           cta: recommendation.vendorId ? 'Open buying list' : 'Assign vendor',
           href: recommendation.vendorId
             ? `#replenishment-${recommendation.vendorId}`
-            : erpRecordRoute('part', recommendation.part.id),
+            : '#replenishment-unassigned',
         } satisfies QueuedAction;
       });
     if (recommendations.length > TOP_SHORTAGE_LIMIT) {

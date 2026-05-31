@@ -33,6 +33,7 @@ import {
   getPartHandler,
   getPartChainHandler,
   createPartHandler,
+  updatePartHandler,
   listVendorsHandler,
   getVendorHandler,
   listManufacturersHandler,
@@ -372,6 +373,8 @@ async function route(
     result = await getPartChainHandler({ ...event, pathParameters: { id: partMatch[1] } });
   } else if (partMatch && !partMatch[2] && method === 'GET') {
     result = await getPartHandler({ ...event, pathParameters: { id: partMatch[1] } });
+  } else if (partMatch && !partMatch[2] && method === 'PATCH') {
+    result = await updatePartHandler({ ...event, pathParameters: { id: partMatch[1] } });
   } else if (pathname === '/inventory/vendors' && method === 'GET') {
     result = await listVendorsHandler(event);
   } else if (vendorMatch && method === 'GET') {
@@ -720,7 +723,7 @@ server.listen(PORT, () => {
   console.log(`   Auth        GET /auth/me`);
   console.log(`   Workspace   GET /workspace/today`);
   console.log(`   Customers   GET|POST /identity/customers, GET|POST /:id/transition`);
-  console.log(`   Inventory   GET|POST /inventory/parts, GET /inventory/vendors`);
+  console.log(`   Inventory   GET|POST /inventory/parts, PATCH /inventory/parts/:id, GET /inventory/vendors`);
   console.log(`   Tickets     /tickets/work-orders/:id/tasks|operations|rework|qc-gates|time-entries`);
   console.log(`   Queue       GET /tickets/wo-queue, GET /tickets/wo-queue/:id`);
   console.log(`   Time        GET /tickets/time-entries`);

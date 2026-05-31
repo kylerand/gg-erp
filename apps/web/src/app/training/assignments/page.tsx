@@ -7,7 +7,7 @@ import { PageHeader } from '@gg-erp/ui';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { listMyAssignments, type TrainingAssignment } from '@/lib/api-client';
+import { listEmployees, listMyAssignments, type Employee, type TrainingAssignment } from '@/lib/api-client';
 import { erpRoute } from '@/lib/erp-routes';
 
 type AssignmentFilter = TrainingAssignment['assignmentStatus'] | 'OVERDUE' | 'ALL';
@@ -44,10 +44,22 @@ function isOverdue(a: TrainingAssignment): boolean {
   );
 }
 
-function matchesSearch(a: TrainingAssignment, search: string): boolean {
+function formatEmployeeName(employee: Employee | undefined): string | undefined {
+  if (!employee) return undefined;
+  return [employee.firstName, employee.lastName].filter(Boolean).join(' ').trim() || employee.employeeNumber;
+}
+
+function matchesSearch(
+  a: TrainingAssignment,
+  search: string,
+  employeeById: Map<string, Employee>,
+): boolean {
   if (!search.trim()) return true;
+  const employee = employeeById.get(a.employeeId);
   const haystack = [
-    a.employeeId,
+    formatEmployeeName(employee),
+    employee?.employeeNumber,
+    employee?.employmentState,
     a.moduleId,
     a.module?.moduleCode,
     a.module?.moduleName,
@@ -74,6 +86,8 @@ export default function AssignmentsPage() {
   const activeStatus = parseAssignmentFilter(searchParams.get('status'));
   const activeSearch = searchParams.get('search') ?? '';
   const [assignments, setAssignments] = useState<TrainingAssignment[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [employeeLookupFailed, setEmployeeLookupFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState(activeSearch);
 
@@ -82,11 +96,43 @@ export default function AssignmentsPage() {
   }, [activeSearch]);
 
   useEffect(() => {
-    listMyAssignments('', {}, { allowMockFallback: false })
-      .then((res) => setAssignments(res.items))
-      .catch(() => toast.error('Failed to load assignments'))
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    setLoading(true);
+    setEmployeeLookupFailed(false);
+
+    Promise.allSettled([
+      listMyAssignments('', {}, { allowMockFallback: false }),
+      listEmployees(undefined, { allowMockFallback: false }),
+    ]).then(([assignmentResult, employeeResult]) => {
+      if (cancelled) return;
+
+      if (assignmentResult.status === 'fulfilled') {
+        setAssignments(assignmentResult.value.items);
+      } else {
+        setAssignments([]);
+        toast.error('Failed to load assignments');
+      }
+
+      if (employeeResult.status === 'fulfilled') {
+        setEmployees(employeeResult.value.items);
+      } else {
+        setEmployees([]);
+        setEmployeeLookupFailed(true);
+        toast.error('Failed to load employee names');
+      }
+
+      setLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  const employeeById = useMemo(
+    () => new Map(employees.map((employee) => [employee.id, employee])),
+    [employees],
+  );
 
   const statusCounts = useMemo(() => {
     const counts: Record<AssignmentFilter, number> = {
@@ -110,12 +156,12 @@ export default function AssignmentsPage() {
   const filteredAssignments = useMemo(
     () =>
       assignments.filter((assignment) => {
-        if (!matchesSearch(assignment, activeSearch)) return false;
+        if (!matchesSearch(assignment, activeSearch, employeeById)) return false;
         if (activeStatus === 'OVERDUE') return isOverdue(assignment);
         if (activeStatus === 'ALL') return true;
         return assignment.assignmentStatus === activeStatus;
       }),
-    [activeSearch, activeStatus, assignments],
+    [activeSearch, activeStatus, assignments, employeeById],
   );
 
   function applySearch(event: React.FormEvent<HTMLFormElement>) {
@@ -185,6 +231,8 @@ export default function AssignmentsPage() {
         <div className="space-y-2">
           {filteredAssignments.map((assignment) => {
             const overdue = isOverdue(assignment);
+            const employee = employeeById.get(assignment.employeeId);
+            const employeeName = formatEmployeeName(employee) ?? 'Unresolved employee';
             return (
               <Card
                 key={assignment.id}
@@ -193,13 +241,19 @@ export default function AssignmentsPage() {
                 <CardContent className="pt-3 pb-3">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900">{assignment.employeeId}</p>
+                      <p className="text-sm font-medium text-gray-900">{employeeName}</p>
                       <p className="text-xs text-gray-500 mt-0.5">
+                        {employee?.employeeNumber ? `${employee.employeeNumber} - ` : ''}
                         {assignment.module?.moduleName ?? assignment.moduleId}
                         {assignment.dueAt
                           ? ` - Due ${new Date(assignment.dueAt).toLocaleDateString()}`
                           : ''}
                       </p>
+                      {!employee && employeeLookupFailed && (
+                        <p className="text-xs text-red-600 mt-1">
+                          Employee registry lookup failed. Retry after HR data is available.
+                        </p>
+                      )}
                     </div>
                     {assignment.score !== undefined && (
                       <span className="text-xs text-gray-500">Score: {assignment.score}</span>

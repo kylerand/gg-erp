@@ -181,12 +181,18 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
 test('messages attach files through saved communication attachments', () => {
   const source = readSource('app/messages/page.tsx');
   const apiClientSource = readSource('lib/api-client.ts');
+  const communicationHandlersSource = readFileSync(
+    path.resolve(WEB_SRC_DIR, '../../../apps/api/src/lambda/communication/handlers.ts'),
+    'utf8',
+  );
 
   assert.deepEqual(
     [
       'uploadAttachment',
       'getAttachmentDownloadUrl',
       'listEmployees',
+      'authorDisplayName',
+      'authorInitials',
       'SearchableSelect',
       'attachmentIds',
       'onOpenAttachment',
@@ -198,14 +204,21 @@ test('messages attach files through saved communication attachments', () => {
     [],
   );
   assert.deepEqual(
-    ['attachmentIds?: string[]', '/attachments/${id}/download'].filter(
+    ['attachmentIds?: string[]', 'author?: ChannelMessageAuthor', '/attachments/${id}/download'].filter(
       (snippet) => !apiClientSource.includes(snippet),
+    ),
+    [],
+  );
+  assert.deepEqual(
+    ['loadAuthorProfiles', 'author: authorProfiles.get(m.authorId)'].filter(
+      (snippet) => !communicationHandlersSource.includes(snippet),
     ),
     [],
   );
   assert.equal(source.includes('TODO: Upload files'), false);
   assert.equal(source.includes('Avatar placeholder'), false);
   assert.equal(source.includes('todo.assigneeId.slice'), false);
+  assert.equal(source.includes('message.authorId.slice'), false);
 });
 
 test('quote detail exposes live conversion into shop execution', () => {

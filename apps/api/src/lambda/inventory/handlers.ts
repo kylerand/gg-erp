@@ -876,6 +876,48 @@ interface AdjustReservationInput {
   quantity?: number;
 }
 
+interface CreateInventoryAdjustmentInput {
+  stockLotId: string;
+  quantityDelta: number;
+  reasonCode: string;
+  notes?: string;
+}
+
+interface InventoryAdjustmentLotRow {
+  stockLotId: string;
+  lotNumber: string | null;
+  lotState: string;
+  partId: string;
+  partSku: string;
+  partName: string;
+  stockLocationId: string;
+  locationName: string;
+  quantityOnHand: unknown;
+  quantityReserved: unknown;
+}
+
+interface InventoryAdjustmentResponse {
+  id: string;
+  adjustmentNumber: string;
+  adjustmentType: string;
+  status: string;
+  stockLocationId: string;
+  locationName: string;
+  stockLotId: string;
+  lotNumber?: string;
+  partId: string;
+  partSku: string;
+  partName: string;
+  quantityDelta: number;
+  expectedQuantity: number;
+  countedQuantity: number;
+  reasonCode: string;
+  notes?: string;
+  ledgerEntryId: string;
+  postedAt: string;
+  correlationId: string;
+}
+
 interface ReceiveInventoryLotInput {
   purchaseOrderId?: string;
   purchaseOrderLineId: string;
@@ -904,6 +946,15 @@ interface PurchaseOrderReceiptLineRow {
 }
 
 class ReservationCommandError extends Error {
+  constructor(
+    readonly statusCode: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+class AdjustmentCommandError extends Error {
   constructor(
     readonly statusCode: number,
     message: string,
@@ -1376,6 +1427,191 @@ export const inventoryReservationQueries = {
   },
 };
 
+export const inventoryAdjustmentCommands = {
+  async createAdjustment(
+    input: CreateInventoryAdjustmentInput,
+    correlationId: string,
+  ): Promise<InventoryAdjustmentResponse> {
+    const adjustmentId = randomUUID();
+    const lineId = randomUUID();
+    const adjustmentNumber = `ADJ-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${adjustmentId.slice(0, 8).toUpperCase()}`;
+    const reasonCode = input.reasonCode.trim().toUpperCase();
+    const notes = input.notes?.trim() || undefined;
+
+    return getInventoryPrisma().$transaction(async (tx) => {
+      const lots = await tx.$queryRaw<InventoryAdjustmentLotRow[]>`
+        SELECT
+          lot.id::text AS "stockLotId",
+          lot.lot_number AS "lotNumber",
+          lot.lot_state AS "lotState",
+          p.id::text AS "partId",
+          p.sku AS "partSku",
+          p.name AS "partName",
+          loc.id::text AS "stockLocationId",
+          loc.location_name AS "locationName",
+          bal.quantity_on_hand AS "quantityOnHand",
+          bal.quantity_reserved AS "quantityReserved"
+        FROM inventory.stock_lots lot
+        JOIN inventory.parts p ON p.id = lot.part_id
+        JOIN inventory.stock_locations loc ON loc.id = lot.stock_location_id
+        JOIN inventory.inventory_balances bal ON bal.stock_lot_id = lot.id
+        WHERE lot.id = ${input.stockLotId}::uuid
+        FOR UPDATE OF lot, bal
+      `;
+      const lot = lots[0];
+      if (!lot) {
+        throw new AdjustmentCommandError(404, `Stock lot not found: ${input.stockLotId}`);
+      }
+      if (lot.lotState === 'CONSUMED' || lot.lotState === 'CLOSED') {
+        throw new AdjustmentCommandError(
+          409,
+          `Stock lot cannot be adjusted in ${lot.lotState} state.`,
+        );
+      }
+
+      const expectedQuantity = numberFromDb(lot.quantityOnHand);
+      const countedQuantity = expectedQuantity + input.quantityDelta;
+      const reservedQuantity = numberFromDb(lot.quantityReserved);
+      if (countedQuantity < 0) {
+        throw new AdjustmentCommandError(409, 'Adjustment would make on-hand quantity negative.');
+      }
+      if (countedQuantity < reservedQuantity) {
+        throw new AdjustmentCommandError(
+          409,
+          'Adjustment would reduce on-hand below reserved quantity.',
+        );
+      }
+
+      const postedAt = new Date();
+      await tx.$executeRaw`
+        INSERT INTO inventory.inventory_adjustments (
+          id,
+          adjustment_number,
+          adjustment_type,
+          adjustment_status,
+          stock_location_id,
+          reason_code,
+          notes,
+          counted_at,
+          posted_at,
+          created_at,
+          updated_at,
+          correlation_id,
+          version
+        )
+        VALUES (
+          ${adjustmentId}::uuid,
+          ${adjustmentNumber},
+          'MANUAL',
+          'POSTED',
+          ${lot.stockLocationId}::uuid,
+          ${reasonCode},
+          ${notes ?? null},
+          ${postedAt},
+          ${postedAt},
+          now(),
+          now(),
+          ${correlationId},
+          0
+        )
+      `;
+
+      await tx.$executeRaw`
+        INSERT INTO inventory.inventory_adjustment_lines (
+          id,
+          inventory_adjustment_id,
+          line_number,
+          part_id,
+          stock_lot_id,
+          quantity_delta,
+          expected_quantity,
+          counted_quantity,
+          reason_code,
+          created_at,
+          updated_at,
+          correlation_id,
+          version
+        )
+        VALUES (
+          ${lineId}::uuid,
+          ${adjustmentId}::uuid,
+          1,
+          ${lot.partId}::uuid,
+          ${lot.stockLotId}::uuid,
+          ${input.quantityDelta},
+          ${expectedQuantity},
+          ${countedQuantity},
+          ${reasonCode},
+          now(),
+          now(),
+          ${correlationId},
+          0
+        )
+      `;
+
+      const ledgerEntryId = await appendInventoryLedgerEntry(tx, {
+        partId: lot.partId,
+        stockLocationId: lot.stockLocationId,
+        stockLotId: lot.stockLotId,
+        movementType: 'ADJUSTMENT',
+        quantityDelta: input.quantityDelta,
+        reasonCode,
+        sourceDocumentType: 'INVENTORY_ADJUSTMENT_LINE',
+        sourceDocumentId: lineId,
+        correlationId,
+      });
+
+      const updatedBalances = await tx.$queryRaw<Array<{ id: string }>>`
+        UPDATE inventory.inventory_balances
+        SET
+          quantity_on_hand = quantity_on_hand + ${input.quantityDelta},
+          last_ledger_entry_id = ${ledgerEntryId}::uuid,
+          updated_at = now(),
+          last_correlation_id = ${correlationId},
+          version = version + 1
+        WHERE stock_lot_id = ${lot.stockLotId}::uuid
+          AND quantity_on_hand + ${input.quantityDelta} >= 0
+          AND quantity_on_hand + ${input.quantityDelta} >= quantity_reserved
+        RETURNING id::text AS "id"
+      `;
+      if (updatedBalances.length === 0) {
+        throw new AdjustmentCommandError(409, 'Inventory balance cannot accept that adjustment.');
+      }
+
+      await tx.$executeRaw`
+        UPDATE inventory.inventory_adjustment_lines
+        SET
+          ledger_entry_id = ${ledgerEntryId}::uuid,
+          updated_at = now(),
+          version = version + 1
+        WHERE id = ${lineId}::uuid
+      `;
+
+      return {
+        id: adjustmentId,
+        adjustmentNumber,
+        adjustmentType: 'MANUAL',
+        status: 'POSTED',
+        stockLocationId: lot.stockLocationId,
+        locationName: lot.locationName,
+        stockLotId: lot.stockLotId,
+        lotNumber: lot.lotNumber ?? undefined,
+        partId: lot.partId,
+        partSku: lot.partSku,
+        partName: lot.partName,
+        quantityDelta: input.quantityDelta,
+        expectedQuantity,
+        countedQuantity,
+        reasonCode,
+        notes,
+        ledgerEntryId,
+        postedAt: postedAt.toISOString(),
+        correlationId,
+      };
+    });
+  },
+};
+
 type InventorySqlClient = Prisma.TransactionClient | PrismaClient;
 
 interface ActionReservation {
@@ -1566,6 +1802,18 @@ async function handleReservationCommand(
     return jsonResponse(successStatus, { reservation });
   } catch (error) {
     if (error instanceof ReservationCommandError) {
+      return jsonResponse(error.statusCode, { message: error.message });
+    }
+    throw error;
+  }
+}
+
+async function handleInventoryAdjustmentCommand(command: Promise<InventoryAdjustmentResponse>) {
+  try {
+    const adjustment = await command;
+    return jsonResponse(201, { adjustment });
+  } catch (error) {
+    if (error instanceof AdjustmentCommandError) {
       return jsonResponse(error.statusCode, { message: error.message });
     }
     throw error;
@@ -1977,6 +2225,26 @@ function validateAdjustmentInput(input: AdjustReservationInput, verb: string): s
   if (input.quantity === undefined) return undefined;
   if (!Number.isFinite(input.quantity) || input.quantity <= 0) {
     return `Reservation ${verb} quantity must be greater than zero.`;
+  }
+  return undefined;
+}
+
+function validateCreateInventoryAdjustmentInput(
+  input: CreateInventoryAdjustmentInput,
+): string | undefined {
+  const stockLotId = parseOptionalUuid(input.stockLotId, 'stockLotId');
+  if (stockLotId.error || !stockLotId.value) return stockLotId.error ?? 'stockLotId is required.';
+  if (!Number.isFinite(input.quantityDelta) || input.quantityDelta === 0) {
+    return 'quantityDelta must be a non-zero number.';
+  }
+  if (!input.reasonCode?.trim()) {
+    return 'reasonCode is required.';
+  }
+  if (input.reasonCode.trim().length > 80) {
+    return 'reasonCode must be 80 characters or fewer.';
+  }
+  if (input.notes !== undefined && input.notes.length > 1000) {
+    return 'notes must be 1000 characters or fewer.';
   }
   return undefined;
 }
@@ -2634,6 +2902,23 @@ export const consumeReservationHandler = wrapHandler(
 
     return handleReservationCommand(
       inventoryReservationQueries.consumeReservation(id.value, body.value, ctx.correlationId),
+    );
+  },
+  { requireAuth: false },
+);
+
+// ─── Inventory Adjustments ──────────────────────────────────────────────────
+
+export const createInventoryAdjustmentHandler = wrapHandler(
+  async (ctx) => {
+    const body = parseBody<CreateInventoryAdjustmentInput>(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
+
+    const validation = validateCreateInventoryAdjustmentInput(body.value);
+    if (validation) return jsonResponse(422, { message: validation });
+
+    return handleInventoryAdjustmentCommand(
+      inventoryAdjustmentCommands.createAdjustment(body.value, ctx.correlationId),
     );
   },
   { requireAuth: false },

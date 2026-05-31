@@ -2,7 +2,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { listQuotes, type Quote } from '@/lib/api-client';
+import {
+  getCustomer,
+  listQuotes,
+  salesCustomerDisplayName,
+  type Customer,
+  type Quote,
+} from '@/lib/api-client';
 import { PageHeader, LoadingSkeleton } from '@gg-erp/ui';
 import { Pagination } from '@/components/ui/pagination';
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
@@ -29,21 +35,28 @@ export default function QuotesListPage() {
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [loading, setLoading] = useState(true);
+  const [filteredCustomer, setFilteredCustomer] = useState<Customer | undefined>();
 
   const load = useCallback(async (p: number, ps: number, status: string, customerId?: string) => {
     setLoading(true);
     try {
-      const res = await listQuotes(
-        {
-          status: status === 'All' ? undefined : status,
-          customerId,
-          limit: ps,
-          offset: (p - 1) * ps,
-        },
-        { allowMockFallback: false },
-      );
+      const [res, customer] = await Promise.all([
+        listQuotes(
+          {
+            status: status === 'All' ? undefined : status,
+            customerId,
+            limit: ps,
+            offset: (p - 1) * ps,
+          },
+          { allowMockFallback: false },
+        ),
+        customerId
+          ? getCustomer(customerId, { allowMockFallback: false }).catch(() => undefined)
+          : Promise.resolve(undefined),
+      ]);
       setItems(res.items);
       setTotal(res.total);
+      setFilteredCustomer(customer);
     } finally {
       setLoading(false);
     }
@@ -58,7 +71,15 @@ export default function QuotesListPage() {
       <div className="flex items-center justify-between mb-6">
         <PageHeader
           title="Quotes"
-          description={customerIdFilter ? `Filtered to customer ${customerIdFilter}` : undefined}
+          description={
+            customerIdFilter
+              ? `Filtered to customer ${
+                  filteredCustomer
+                    ? salesCustomerDisplayName(filteredCustomer)
+                    : 'selected customer'
+                }`
+              : undefined
+          }
         />
         <Link
           href={erpRoute('create-quote', { customerId: customerIdFilter })}
@@ -117,7 +138,16 @@ export default function QuotesListPage() {
                         {q.quoteNumber}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-gray-700 truncate max-w-xs">{q.customerId}</td>
+                    <td className="px-4 py-3 text-gray-700">
+                      <div className="max-w-xs truncate font-medium text-gray-900">
+                        {salesCustomerDisplayName(q.customerProfile)}
+                      </div>
+                      {q.customerProfile?.email && (
+                        <div className="max-w-xs truncate text-xs text-gray-500">
+                          {q.customerProfile.email}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <span
                         className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[q.status] ?? 'bg-gray-100 text-gray-700'}`}

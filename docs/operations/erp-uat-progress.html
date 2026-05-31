@@ -241,9 +241,10 @@
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: remaining stable selector gaps and real execution behind polished secondary actions.
+          Current focus: remaining identity-resolution gaps and real execution behind polished
+          secondary actions.
         </p>
-        <div class="progress" aria-label="89 percent complete"><div style="width: 89%"></div></div>
+        <div class="progress" aria-label="90 percent complete"><div style="width: 90%"></div></div>
       </section>
 
       <section>
@@ -298,9 +299,8 @@
               <td><span class="pill doing">In progress</span></td>
               <td>
                 Work-order, sales opportunity, quote create, time logging, and purchase-order
-                create/edit screens use live customer, cart, opportunity, part, vendor,
-                work-order, active employee, and recent build-package selectors with mock fallback
-                disabled.
+                create/edit screens use live customer, cart, opportunity, part, vendor, work-order,
+                active employee, and recent build-package selectors with mock fallback disabled.
               </td>
               <td>
                 Add dedicated build configuration and BOM selectors once those catalogs are exposed
@@ -308,14 +308,25 @@
               </td>
             </tr>
             <tr>
+              <td>Sales quote and pipeline actionability</td>
+              <td><span class="pill doing">In progress</span></td>
+              <td>
+                Quote list/detail and opportunity detail views now resolve live customer display
+                profiles, assigned sales users, and quote creators instead of rendering raw IDs.
+                Opportunity detail reads unwrap the live API envelope before rendering the command
+                workspace, and quote detail links to the related opportunity route when present.
+              </td>
+              <td>Wait for PR CI/CD, then continue remaining raw-ID remediation slices.</td>
+            </tr>
+            <tr>
               <td>Communication actionability</td>
               <td><span class="pill done">Done</span></td>
               <td>
-                Messages now upload selected files through the live attachment presign/confirm
-                flow, persist attachment IDs on the message, render saved attachment chips, and
-                open saved files through presigned download URLs. Message authors resolve through
-                live identity profiles instead of raw IDs. Channel todos now assign active employees
-                from the live HR catalog and capture optional due dates.
+                Messages now upload selected files through the live attachment presign/confirm flow,
+                persist attachment IDs on the message, render saved attachment chips, and open saved
+                files through presigned download URLs. Message authors resolve through live identity
+                profiles instead of raw IDs. Channel todos now assign active employees from the live
+                HR catalog and capture optional due dates.
               </td>
               <td>Keep extending channel members as communication APIs grow.</td>
             </tr>
@@ -323,21 +334,27 @@
               <td>Build-slot schedule publication</td>
               <td><span class="pill doing">In progress</span></td>
               <td>
-                Capacity slots and deterministic demand projection are being promoted into
-                persisted planner runs, published slot assignments, and work-order planned times.
+                Capacity slots and deterministic demand projection are being promoted into persisted
+                planner runs, published slot assignments, and work-order planned times.
               </td>
-              <td>Merge the schedule-publication slice, wait for QA/CD, then remove pending-deploy route exceptions.</td>
+              <td>
+                Merge the schedule-publication slice, wait for QA/CD, then remove pending-deploy
+                route exceptions.
+              </td>
             </tr>
             <tr>
               <td>Dispatch schedule execution</td>
               <td><span class="pill doing">In progress</span></td>
               <td>
                 `/work-orders/dispatch` now reads live published/dispatched schedule assignments,
-                shows an action queue, deep-links to work orders, and lets dispatch start,
-                complete, resume, or block planned operations through live work-order operation
-                transitions with mock fallback disabled.
+                shows an action queue, deep-links to work orders, and lets dispatch start, complete,
+                resume, or block planned operations through live work-order operation transitions
+                with mock fallback disabled.
               </td>
-              <td>Open the stacked PR after schedule publication, wait for CI, then QA the live dispatch board against published schedule data.</td>
+              <td>
+                Open the stacked PR after schedule publication, wait for CI, then QA the live
+                dispatch board against published schedule data.
+              </td>
             </tr>
             <tr>
               <td>Training repair</td>

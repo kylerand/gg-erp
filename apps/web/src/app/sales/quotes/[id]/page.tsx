@@ -8,6 +8,8 @@ import {
   acceptQuote,
   convertQuoteToWorkOrder,
   rejectQuote,
+  salesCustomerDisplayName,
+  salesUserDisplayName,
   type Quote,
 } from '@/lib/api-client';
 import { erpRoute, erpRecordRoute } from '@/lib/erp-routes';
@@ -48,11 +50,23 @@ export default function QuoteDetailPage() {
     void load();
   }, [load]);
 
+  const applyQuoteUpdate = (updated: Quote) => {
+    setQuote((current) =>
+      current
+        ? {
+            ...updated,
+            customerProfile: updated.customerProfile ?? current.customerProfile,
+            createdByUser: updated.createdByUser ?? current.createdByUser,
+          }
+        : updated,
+    );
+  };
+
   const handleSend = async () => {
     setActionLoading(true);
     try {
       const updated = await sendQuote(params.id);
-      setQuote(updated);
+      applyQuoteUpdate(updated);
     } finally {
       setActionLoading(false);
     }
@@ -62,7 +76,7 @@ export default function QuoteDetailPage() {
     setActionLoading(true);
     try {
       const updated = await acceptQuote(params.id);
-      setQuote(updated);
+      applyQuoteUpdate(updated);
     } finally {
       setActionLoading(false);
     }
@@ -73,7 +87,7 @@ export default function QuoteDetailPage() {
     setActionLoading(true);
     try {
       const updated = await rejectQuote(params.id, reason ?? undefined);
-      setQuote(updated);
+      applyQuoteUpdate(updated);
     } finally {
       setActionLoading(false);
     }
@@ -83,7 +97,7 @@ export default function QuoteDetailPage() {
     setActionLoading(true);
     try {
       const result = await convertQuoteToWorkOrder(params.id);
-      setQuote(result.quote);
+      applyQuoteUpdate(result.quote);
       setConvertedWorkOrder(result.workOrder);
     } finally {
       setActionLoading(false);
@@ -111,6 +125,11 @@ export default function QuoteDetailPage() {
   const statusColor = STATUS_COLORS[quote.status] ?? 'bg-gray-100 text-gray-700';
   const lines = quote.lines ?? [];
   const convertedWorkOrderId = convertedWorkOrder?.id ?? quote.convertedWoId;
+  const createdByLabel = quote.createdByUser
+    ? salesUserDisplayName(quote.createdByUser)
+    : quote.createdByUserId
+      ? 'Sales user'
+      : 'System';
 
   return (
     <div>
@@ -146,17 +165,45 @@ export default function QuoteDetailPage() {
 
       {/* Info */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mb-8">
-        {[
-          { label: 'Customer', value: quote.customerId },
-          { label: 'Opportunity', value: quote.opportunityId ?? '—' },
-          { label: 'Created By', value: quote.createdByUserId ?? '—' },
-          { label: 'Updated', value: new Date(quote.updatedAt).toLocaleDateString() },
-        ].map((item) => (
-          <div key={item.label} className="bg-white rounded-lg border border-gray-200 p-3">
-            <div className="text-xs text-gray-500">{item.label}</div>
-            <div className="text-sm font-medium text-gray-900 mt-0.5 truncate">{item.value}</div>
+        <div className="bg-white rounded-lg border border-gray-200 p-3">
+          <div className="text-xs text-gray-500">Customer</div>
+          <div className="text-sm font-medium text-gray-900 mt-0.5 truncate">
+            {salesCustomerDisplayName(quote.customerProfile)}
           </div>
-        ))}
+          {quote.customerProfile?.email && (
+            <div className="mt-0.5 truncate text-xs text-gray-500">
+              {quote.customerProfile.email}
+            </div>
+          )}
+        </div>
+        <div className="bg-white rounded-lg border border-gray-200 p-3">
+          <div className="text-xs text-gray-500">Opportunity</div>
+          <div className="text-sm font-medium text-gray-900 mt-0.5 truncate">
+            {quote.opportunityId ? (
+              <Link
+                href={erpRecordRoute('sales-opportunity', quote.opportunityId)}
+                className="hover:text-yellow-600"
+              >
+                View linked opportunity
+              </Link>
+            ) : (
+              'No linked opportunity'
+            )}
+          </div>
+        </div>
+        <div className="bg-white rounded-lg border border-gray-200 p-3">
+          <div className="text-xs text-gray-500">Created By</div>
+          <div className="text-sm font-medium text-gray-900 mt-0.5 truncate">{createdByLabel}</div>
+          {quote.createdByUser?.employeeNumber && (
+            <div className="mt-0.5 text-xs text-gray-500">{quote.createdByUser.employeeNumber}</div>
+          )}
+        </div>
+        <div className="bg-white rounded-lg border border-gray-200 p-3">
+          <div className="text-xs text-gray-500">Updated</div>
+          <div className="text-sm font-medium text-gray-900 mt-0.5 truncate">
+            {new Date(quote.updatedAt).toLocaleDateString()}
+          </div>
+        </div>
       </div>
 
       {quote.notes && (

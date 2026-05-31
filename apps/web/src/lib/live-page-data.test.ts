@@ -30,6 +30,7 @@ const truthCriticalPages = [
   'app/work-orders/[id]/page.tsx',
   'app/work-orders/dispatch/DispatchClient.tsx',
   'app/work-orders/new/page.tsx',
+  'app/sales/opportunities/[id]/page.tsx',
   'app/sales/opportunities/new/page.tsx',
   'app/sales/quotes/[id]/page.tsx',
   'app/sales/quotes/new/page.tsx',
@@ -204,9 +205,11 @@ test('messages attach files through saved communication attachments', () => {
     [],
   );
   assert.deepEqual(
-    ['attachmentIds?: string[]', 'author?: ChannelMessageAuthor', '/attachments/${id}/download'].filter(
-      (snippet) => !apiClientSource.includes(snippet),
-    ),
+    [
+      'attachmentIds?: string[]',
+      'author?: ChannelMessageAuthor',
+      '/attachments/${id}/download',
+    ].filter((snippet) => !apiClientSource.includes(snippet)),
     [],
   );
   assert.deepEqual(
@@ -236,6 +239,84 @@ test('quote detail exposes live conversion into shop execution', () => {
   );
 });
 
+test('sales quote and opportunity views resolve customer and user display profiles', () => {
+  const quotesSource = readSource('app/sales/quotes/page.tsx');
+  const quoteDetailSource = readSource('app/sales/quotes/[id]/page.tsx');
+  const opportunityDetailSource = readSource('app/sales/opportunities/[id]/page.tsx');
+  const opportunityInsightsSource = readSource('components/sales/OpportunityInsights.tsx');
+  const pricingIntelligenceSource = readSource('components/sales/PricingIntelligence.tsx');
+  const apiClientSource = readSource('lib/api-client.ts');
+  const salesHandlersSource = readFileSync(
+    path.resolve(WEB_SRC_DIR, '../../../apps/api/src/lambda/sales/handlers.ts'),
+    'utf8',
+  );
+
+  assert.deepEqual(
+    [
+      'salesCustomerDisplayName(q.customerProfile)',
+      'getCustomer(customerId, { allowMockFallback: false })',
+      'Filtered to customer',
+    ].filter((snippet) => !quotesSource.includes(snippet)),
+    [],
+  );
+  assert.deepEqual(
+    [
+      'salesCustomerDisplayName(quote.customerProfile)',
+      'salesUserDisplayName(quote.createdByUser)',
+      "erpRecordRoute('sales-opportunity'",
+      'applyQuoteUpdate',
+    ].filter((snippet) => !quoteDetailSource.includes(snippet)),
+    [],
+  );
+  assert.deepEqual(
+    [
+      'getOpportunity(params.id, { allowMockFallback: false })',
+      'salesCustomerDisplayName(opportunity.customerProfile)',
+      'salesUserDisplayName(opportunity.assignedToUser)',
+      'customerName={customerName}',
+    ].filter((snippet) => !opportunityDetailSource.includes(snippet)),
+    [],
+  );
+  assert.deepEqual(
+    [
+      'SalesCustomerProfile',
+      'SalesUserProfile',
+      'customerProfile?: SalesCustomerProfile',
+      'assignedToUser?: SalesUserProfile',
+      'createdByUser?: SalesUserProfile',
+      'salesCustomerDisplayName',
+      'const data = await apiFetch<{',
+      'return data.opportunity',
+    ].filter((snippet) => !apiClientSource.includes(snippet)),
+    [],
+  );
+  assert.deepEqual(
+    [
+      'loadCustomerProfiles',
+      'loadUserProfiles',
+      'customerProfile',
+      'assignedToUser',
+      'createdByUser',
+    ].filter((snippet) => !salesHandlersSource.includes(snippet)),
+    [],
+  );
+
+  assert.equal(quotesSource.includes('{q.customerId}</td>'), false);
+  assert.equal(quotesSource.includes('Filtered to customer ${customerIdFilter}'), false);
+  assert.equal(quoteDetailSource.includes("{ label: 'Customer', value: quote.customerId }"), false);
+  assert.equal(
+    quoteDetailSource.includes("{ label: 'Created By', value: quote.createdByUserId"),
+    false,
+  );
+  assert.equal(
+    opportunityDetailSource.includes("{ label: 'Customer', value: opportunity.customerId }"),
+    false,
+  );
+  assert.equal(opportunityDetailSource.includes('customerName={opportunity.customerId}'), false);
+  assert.equal(opportunityInsightsSource.includes('Customer ID'), false);
+  assert.equal(pricingIntelligenceSource.includes('Customer ID'), false);
+});
+
 test('build-slot planner renders live demand projection instead of visualization filler', () => {
   const source = readSource('app/planning/slots/page.tsx');
 
@@ -259,7 +340,7 @@ test('build-slot planner renders live demand projection instead of visualization
     ].filter((snippet) => !source.includes(snippet)),
     [],
   );
-  assert.equal(source.includes("idx % 5"), false);
+  assert.equal(source.includes('idx % 5'), false);
   assert.equal(source.includes("toast.success('Plan published"), false);
   assert.equal(source.includes('Assign work to'), false);
 });
@@ -455,7 +536,7 @@ test('training content keeps notes, bookmarks, and media wired to live APIs', ()
   );
 
   assert.deepEqual(
-    ['href={steps[0] ? erpNestedRoute', "href=\"#\""].filter((snippet) =>
+    ['href={steps[0] ? erpNestedRoute', 'href="#"'].filter((snippet) =>
       moduleSource.includes(snippet),
     ),
     [],
@@ -463,12 +544,12 @@ test('training content keeps notes, bookmarks, and media wired to live APIs', ()
 
   assert.deepEqual(
     [
-      "getTrainingModule(moduleId, { allowMockFallback: false })",
-      "getModuleProgress(mod.id, employeeId, { allowMockFallback: false })",
-      "listNotes(employeeId, mod.id, { allowMockFallback: false })",
-      "listBookmarks(employeeId, mod.id, { allowMockFallback: false })",
-      "saveNote(employeeId, module.id, content, stepId,",
-      "toggleBookmark(employeeId, module.id, stepId,",
+      'getTrainingModule(moduleId, { allowMockFallback: false })',
+      'getModuleProgress(mod.id, employeeId, { allowMockFallback: false })',
+      'listNotes(employeeId, mod.id, { allowMockFallback: false })',
+      'listBookmarks(employeeId, mod.id, { allowMockFallback: false })',
+      'saveNote(employeeId, module.id, content, stepId,',
+      'toggleBookmark(employeeId, module.id, stepId,',
       'Progress tools did not load. Lesson content is still available.',
     ].filter((snippet) => !stepSource.includes(snippet)),
     [],
@@ -476,7 +557,7 @@ test('training content keeps notes, bookmarks, and media wired to live APIs', ()
 
   assert.deepEqual(
     [
-      "getTrainingModule(moduleId, { allowMockFallback: false })",
+      'getTrainingModule(moduleId, { allowMockFallback: false })',
       'submitQuiz(moduleId, employeeId, answers, { allowMockFallback: false })',
     ].filter((snippet) => !quizSource.includes(snippet)),
     [],
@@ -484,8 +565,8 @@ test('training content keeps notes, bookmarks, and media wired to live APIs', ()
 
   assert.deepEqual(
     [
-      "listMyAssignments(employeeId, {}, { allowMockFallback: false })",
-      "completeAssignment(id, undefined, { allowMockFallback: false })",
+      'listMyAssignments(employeeId, {}, { allowMockFallback: false })',
+      'completeAssignment(id, undefined, { allowMockFallback: false })',
     ].filter((snippet) => !myOjtSource.includes(snippet)),
     [],
   );

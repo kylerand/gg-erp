@@ -68,8 +68,8 @@ export default function MyQueuePage() {
   const [isStale, setIsStale] = useState(false);
   const lastFetchedAtRef = useRef<Date | null>(null);
 
-  const load = useCallback(async () => {
-    if (!technicianId) return;
+  const load = useCallback(async (): Promise<boolean> => {
+    if (!technicianId) return false;
     try {
       const { items } = await listTechnicianTasks({ technicianId, limit: 20 });
       setTasks(
@@ -78,8 +78,10 @@ export default function MyQueuePage() {
       lastFetchedAtRef.current = new Date();
       setIsStale(false);
       setError(null);
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load queue');
+      return false;
     } finally {
       setLoading(false);
     }
@@ -106,6 +108,16 @@ export default function MyQueuePage() {
     };
   }, [technicianId, roleLoading, load]);
 
+  async function refreshAfterRejectedTransition(message: string) {
+    setError(`${message} Refreshing queue from server...`);
+    const refreshed = await load();
+    setError(
+      refreshed
+        ? `${message} Queue refreshed from server.`
+        : `${message} Refresh failed; use Refresh to reload your queue.`,
+    );
+  }
+
   async function handleTransition(task: TechnicianTask, nextState: TechnicianTask['state']) {
     const prevTask = { ...task };
     setTransitioning(task.id);
@@ -122,7 +134,8 @@ export default function MyQueuePage() {
       }
     } catch (err) {
       setTasks((prev) => prev.map((t) => (t.id === task.id ? prevTask : t)));
-      setError(err instanceof Error ? err.message : 'Failed to update task');
+      const message = err instanceof Error ? err.message : 'Failed to update task';
+      await refreshAfterRejectedTransition(message);
     } finally {
       setTransitioning(null);
     }
@@ -153,7 +166,8 @@ export default function MyQueuePage() {
       toast.success('Task blocked');
     } catch (err) {
       setTasks((prev) => prev.map((t) => (t.id === taskId ? prevTask : t)));
-      setError(err instanceof Error ? err.message : 'Failed to block task');
+      const message = err instanceof Error ? err.message : 'Failed to block task';
+      await refreshAfterRejectedTransition(message);
     } finally {
       setTransitioning(null);
       setBlockReasonText('');

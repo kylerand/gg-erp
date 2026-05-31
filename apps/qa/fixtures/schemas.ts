@@ -126,6 +126,28 @@ const inventoryLedgerEntry = z.object({
     .optional(),
 });
 
+const inventoryAdjustment = z.object({
+  id: uuid,
+  adjustmentNumber: z.string(),
+  adjustmentType: z.string(),
+  status: z.string(),
+  stockLocationId: uuid,
+  locationName: z.string(),
+  stockLotId: uuid,
+  lotNumber: z.string().optional(),
+  partId: uuid,
+  partSku: z.string(),
+  partName: z.string(),
+  quantityDelta: z.number(),
+  expectedQuantity: z.number(),
+  countedQuantity: z.number(),
+  reasonCode: z.string(),
+  notes: z.string().optional(),
+  ledgerEntryId: uuid,
+  postedAt: isoDate,
+  correlationId: z.string(),
+});
+
 // ─── Customers / Dealers ──────────────────────────────────────────────────
 
 const customer = z.object({
@@ -264,6 +286,11 @@ const ROUTES: RouteEntry[] = [
         }),
       ),
     }),
+  },
+  {
+    method: 'POST',
+    template: '/inventory/adjustments',
+    schema: z.object({ adjustment: inventoryAdjustment }),
   },
 
   // Identity / Customers / Dealers

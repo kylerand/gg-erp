@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test, { mock } from 'node:test';
 import {
+  createInventoryAdjustmentHandler,
   inventoryLedgerQueries,
   inventoryLotQueries,
   inventoryReservationQueries,
@@ -231,6 +232,49 @@ test('reservation mutations append inventory ledger consequences', async () => {
     );
     assert.equal(balanceUpdates.length, 3);
     assert.ok(balanceUpdates.every((call) => call.sql.includes('last_ledger_entry_id')));
+  } finally {
+    setInventoryHandlerPrismaForTests(undefined);
+  }
+});
+
+test('createInventoryAdjustmentHandler posts balance and ledger consequences', async () => {
+  const harness = createInventoryAdjustmentHarness();
+  setInventoryHandlerPrismaForTests(harness.prisma as never);
+
+  try {
+    const response = await createInventoryAdjustmentHandler({
+      httpMethod: 'POST',
+      headers: { 'x-correlation-id': 'adjustment-correlation' },
+      body: JSON.stringify({
+        stockLotId: TEST_STOCK_LOT_ID,
+        quantityDelta: -1,
+        reasonCode: 'cycle_count',
+        notes: 'Physical count correction',
+      }),
+    });
+
+    assert.equal(response.statusCode, 201);
+    const payload = JSON.parse(response.body) as {
+      adjustment: { quantityDelta: number; countedQuantity: number; reasonCode: string };
+    };
+    assert.equal(payload.adjustment.quantityDelta, -1);
+    assert.equal(payload.adjustment.countedQuantity, 4);
+    assert.equal(payload.adjustment.reasonCode, 'CYCLE_COUNT');
+
+    const ledgerCall = harness.executeCalls.find((call) =>
+      call.sql.includes('INSERT INTO inventory.inventory_ledger_entries'),
+    );
+    assert.ok(ledgerCall);
+    assert.ok(ledgerCall.values.includes('ADJUSTMENT'));
+    assert.ok(ledgerCall.values.includes('INVENTORY_ADJUSTMENT_LINE'));
+    assert.ok(ledgerCall.values.includes('CYCLE_COUNT'));
+
+    const balanceUpdate = harness.queryCalls.find((call) =>
+      call.sql.includes('UPDATE inventory.inventory_balances'),
+    );
+    assert.ok(balanceUpdate);
+    assert.ok(balanceUpdate.sql.includes('quantity_on_hand = quantity_on_hand +'));
+    assert.ok(balanceUpdate.sql.includes('last_ledger_entry_id'));
   } finally {
     setInventoryHandlerPrismaForTests(undefined);
   }
@@ -470,6 +514,53 @@ function createInventoryReservationLedgerHarness() {
             workOrderPartId: TEST_WORK_ORDER_PART_ID,
           },
         ];
+      }
+
+      throw new Error(`Unhandled query: ${sql}`);
+    }),
+    $executeRaw: mock.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      executeCalls.push({ sql: sqlText(strings), values });
+      return 1;
+    }),
+  };
+
+  const prisma = {
+    $transaction: mock.fn(async (callback: (transaction: typeof tx) => Promise<unknown>) =>
+      callback(tx),
+    ),
+  };
+
+  return { prisma, queryCalls, executeCalls };
+}
+
+function createInventoryAdjustmentHarness() {
+  const queryCalls: RawSqlCall[] = [];
+  const executeCalls: RawSqlCall[] = [];
+
+  const tx = {
+    $queryRaw: mock.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const sql = sqlText(strings);
+      queryCalls.push({ sql, values });
+
+      if (sql.includes('FROM inventory.stock_lots lot')) {
+        return [
+          {
+            stockLotId: TEST_STOCK_LOT_ID,
+            lotNumber: 'LOT-001',
+            lotState: 'AVAILABLE',
+            partId: TEST_PART_ID,
+            partSku: 'GG-LIFT',
+            partName: 'Lift kit',
+            stockLocationId: TEST_LOCATION_ID,
+            locationName: 'Main Warehouse',
+            quantityOnHand: 5,
+            quantityReserved: 2,
+          },
+        ];
+      }
+
+      if (sql.includes('UPDATE inventory.inventory_balances')) {
+        return [{ id: 'balance-1' }];
       }
 
       throw new Error(`Unhandled query: ${sql}`);

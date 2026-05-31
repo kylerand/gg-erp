@@ -345,14 +345,14 @@
       <header>
         <h1>Golfin Garage ERP Project Overview</h1>
         <p class="lede">
-          High-level status after the floor-tech SSO handoff slice. The app has moved past polished
-          static screens into a usable shop-ops ERP foundation, but it is not yet a complete
-          ERPNext-grade operating system.
+          High-level status after the inventory adjustment posting slice. The app has moved past
+          polished static screens into a usable shop-ops ERP foundation, but it is not yet a
+          complete ERPNext-grade operating system.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: May 31, 2026</span>
-          <span class="chip">Baseline: origin/main plus floor-tech handoff branch</span>
-          <span class="chip">Active slice: floor-tech SSO handoff</span>
+          <span class="chip">Baseline: origin/main plus inventory adjustment branch</span>
+          <span class="chip">Active slice: stock adjustment posting</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
@@ -394,8 +394,8 @@
               <li>
                 Inventory and purchasing are mostly actionable: PO drill-in, lifecycle actions,
                 receiving, reservations, replenishment, default-vendor assignment from planning,
-                variance, payable review, import/export, stock movement history, and bulk row
-                actions.
+                variance, payable review, import/export, stock movement history, manual stock
+                adjustment posting, and bulk row actions.
               </li>
               <li>
                 Dashboards, KPI cards, reporting cards, and many workspace links now deep-link to
@@ -428,8 +428,8 @@
                 technician selectors still need broader catalog-backed coverage.
               </li>
               <li>
-                Schedule publication is being added now; dispatch execution is the next
-                planning-to-shop handoff gap.
+                Transfer posting, cycle-count batches, and BOM authoring are the next inventory
+                depth gaps after manual stock adjustment posting.
               </li>
               <li>
                 Accounting is still integration-first; internal GL, financial reports, and ledger
@@ -440,8 +440,8 @@
                 open.
               </li>
               <li>
-                Known API smoke route exceptions are now at zero; unsigned accounting webhook probes
-                return a clean 400.
+                Known API smoke route exceptions are normally kept at zero; this active slice uses
+                one temporary pending-deploy allowance for the new stock-adjustment route.
               </li>
             </ul>
           </div>
@@ -590,15 +590,16 @@
           <div class="module-card">
             <header>
               <h3>Inventory And Purchasing</h3>
-              <span class="pill done">86%</span>
+              <span class="pill done">87%</span>
             </header>
-            <div class="bar good"><span style="width: 86%"></span></div>
+            <div class="bar good"><span style="width: 87%"></span></div>
             <p>
               Receiving, PO lifecycle, reservations, replenishment, default-vendor assignment from
               material planning, variance, payable handoff, import/export, stock movement history,
-              and drill-through are live. Reservation, release, and issue writes now append
-              immutable ledger consequences. Broader item editing, transfer/adjustment ledger
-              writes, and BOM authoring are the next practical gaps.
+              manual stock adjustments, and drill-through are live. Reservation, release, issue, and
+              adjustment writes now append immutable ledger consequences. Broader item editing,
+              transfer ledger writes, cycle-count batches, and BOM authoring are the next practical
+              gaps.
             </p>
           </div>
 
@@ -765,9 +766,8 @@
             authoring/versioning now that selectors read from the dedicated planning catalog.
           </li>
           <li>
-            <strong>Move toward ERP ledgers:</strong> finish transfer/adjustment inventory ledger
-            writes and start internal accounting ledger design before adding more financial-report
-            UI.
+            <strong>Move toward ERP ledgers:</strong> finish transfer inventory ledger writes and
+            start internal accounting ledger design before adding more financial-report UI.
           </li>
         </ol>
       </section>

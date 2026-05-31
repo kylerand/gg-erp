@@ -1654,6 +1654,46 @@ export async function consumeInventoryReservation(
   return data.reservation;
 }
 
+export interface InventoryAdjustment {
+  id: string;
+  adjustmentNumber: string;
+  adjustmentType: string;
+  status: string;
+  stockLocationId: string;
+  locationName: string;
+  stockLotId: string;
+  lotNumber?: string;
+  partId: string;
+  partSku: string;
+  partName: string;
+  quantityDelta: number;
+  expectedQuantity: number;
+  countedQuantity: number;
+  reasonCode: string;
+  notes?: string;
+  ledgerEntryId: string;
+  postedAt: string;
+  correlationId: string;
+}
+
+export interface CreateInventoryAdjustmentInput {
+  stockLotId: string;
+  quantityDelta: number;
+  reasonCode: string;
+  notes?: string;
+}
+
+export async function createInventoryAdjustment(
+  input: CreateInventoryAdjustmentInput,
+): Promise<InventoryAdjustment> {
+  const data = await apiFetch<{ adjustment: InventoryAdjustment }>('/inventory/adjustments', {
+    method: 'POST',
+    headers: mutationHeaders(),
+    body: JSON.stringify(input),
+  });
+  return data.adjustment;
+}
+
 export type InventoryLedgerMovementType =
   | 'RECEIPT'
   | 'RESERVATION'

@@ -187,6 +187,15 @@ export const ERP_WORKSPACES = [
         keywords: ['ledger', 'movement', 'stock history', 'trace'],
       },
       {
+        key: 'inventory-adjustment',
+        label: 'Stock Adjustments',
+        description: 'Post on-hand corrections with ledger traceability.',
+        route: '/inventory/adjustments',
+        status: 'live',
+        objectKey: 'inventory-adjustment',
+        keywords: ['adjustment', 'cycle count', 'correction'],
+      },
+      {
         key: 'purchase-order',
         label: 'Purchase Orders',
         description: 'Track vendor orders, ETAs, and line-level receiving.',

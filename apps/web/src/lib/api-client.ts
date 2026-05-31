@@ -2429,20 +2429,39 @@ export async function getFailureSummary(options?: ApiDataOptions): Promise<Failu
 
 export interface Dealer {
   id: string;
+  customerId?: string;
   name: string;
+  primaryContact?: string;
   contactEmail?: string;
+  phone?: string;
   serviceRelationship: 'ACTIVE' | 'INACTIVE';
+  customerState?: Customer['state'];
   territory?: string;
+  source?: string;
+  updatedAt?: string;
 }
 
-export async function listDealers(options?: ApiDataOptions): Promise<Dealer[]> {
+export async function listDealers(
+  params?: {
+    search?: string;
+    limit?: number;
+    offset?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<{ items: Dealer[]; total: number; limit?: number; offset?: number }> {
+  const qs = new URLSearchParams();
+  if (params?.search) qs.set('search', params.search);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
   const res = await apiFetch<{ items: Dealer[]; total: number } | Dealer[]>(
-    '/identity/dealers',
+    `/identity/dealers${qs.size ? `?${qs}` : ''}`,
     undefined,
     { items: [], total: 0 },
     options,
   );
-  return Array.isArray(res) ? res : (res.items ?? []);
+  return Array.isArray(res)
+    ? { items: res, total: res.length }
+    : { items: res.items ?? [], total: res.total ?? res.items?.length ?? 0 };
 }
 
 // ─── SOP Documents ────────────────────────────────────────────────────────────

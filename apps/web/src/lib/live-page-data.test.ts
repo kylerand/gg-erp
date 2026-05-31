@@ -9,6 +9,8 @@ const WEB_SRC_DIR = path.resolve(__dirname, '..');
 
 const truthCriticalPages = [
   'app/customer-dealers/page.tsx',
+  'app/customer-dealers/dealers/page.tsx',
+  'app/customer-dealers/relationships/page.tsx',
   'app/inventory/page.tsx',
   'app/inventory/planning/page.tsx',
   'app/inventory/purchase-orders/page.tsx',
@@ -209,6 +211,81 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
   );
 
   assert.deepEqual(rawIdUses, []);
+});
+
+test('customer dealer ops views are backed by live customer and cart data', () => {
+  const hubSource = readSource('app/customer-dealers/page.tsx');
+  const dealersSource = readSource('app/customer-dealers/dealers/page.tsx');
+  const relationshipsSource = readSource('app/customer-dealers/relationships/page.tsx');
+  const workOrderCreateSource = readSource('app/work-orders/new/page.tsx');
+  const apiClientSource = readSource('lib/api-client.ts');
+  const dealerHandlerSource = readFileSync(
+    path.resolve(WEB_SRC_DIR, '../../../apps/api/src/lambda/identity/list-dealers.handler.ts'),
+    'utf8',
+  );
+
+  assert.deepEqual(
+    [
+      'listCustomers({ limit: 1, offset: 0 }, strictApiOptions)',
+      'listDealers({ limit: 1, offset: 0 }, strictApiOptions)',
+      'listCartVehicles({ limit: 1, offset: 0 }, strictApiOptions)',
+      'relationshipTotal',
+      "erpRoute('customer-relationship')",
+    ].filter((snippet) => !hubSource.includes(snippet)),
+    [],
+  );
+  assert.deepEqual(
+    [
+      'listDealers(',
+      'STRICT_LIVE_DATA',
+      'customerLookupHref',
+      'Open all customers',
+      'Open customer',
+      'New Customer',
+    ].filter((snippet) => !dealersSource.includes(snippet)),
+    [],
+  );
+  assert.deepEqual(
+    [
+      'listCartVehicles({ limit: VEHICLE_LIMIT }, STRICT_LIVE_DATA)',
+      'listCustomers({ limit: CUSTOMER_LIMIT }, STRICT_LIVE_DATA)',
+      'workOrderHref',
+      "erpRoute('create-work-order'",
+      'customerLookupHref',
+      'Start work order',
+    ].filter((snippet) => !relationshipsSource.includes(snippet)),
+    [],
+  );
+  assert.deepEqual(
+    [
+      'useSearchParams',
+      "searchParams.get('customerId')",
+      "searchParams.get('vehicleId')",
+    ].filter((snippet) => !workOrderCreateSource.includes(snippet)),
+    [],
+  );
+  assert.deepEqual(
+    [
+      'export async function listDealers',
+      'params?:',
+      '/identity/dealers',
+      'total: res.total',
+    ].filter((snippet) => !apiClientSource.includes(snippet)),
+    [],
+  );
+  assert.deepEqual(
+    [
+      'getPrisma().customer.findMany',
+      'companyName: { not: null }',
+      'serviceRelationship',
+      'source: \'customer-company\'',
+      'total',
+    ].filter((snippet) => !dealerHandlerSource.includes(snippet)),
+    [],
+  );
+  assert.equal(dealersSource.includes('Add your first dealer'), false);
+  assert.equal(relationshipsSource.includes('storage is not configured yet'), false);
+  assert.equal(dealerHandlerSource.includes('items: [], total: 0 }),'), false);
 });
 
 test('messages attach files through saved communication attachments', () => {

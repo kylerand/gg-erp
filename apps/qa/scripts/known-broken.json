@@ -1,4 +1,19 @@
 {
   "_doc": "Routes with an expected non-healthy API smoke status in the currently deployed QA API. Smoke fails when this list drifts in EITHER direction — a new bug joins, OR an existing bug gets fixed/deployed (so we know to remove the entry). File a Linear ticket when adding long-lived handler bugs; remove pending-deploy entries after the route is live. Use expectRouteMiss for pending Terraform routes that are not deployed yet.",
-  "broken": []
+  "broken": [
+    {
+      "method": "GET",
+      "path": "/accounting/payment-syncs",
+      "expectStatus": 404,
+      "expectRouteMiss": true,
+      "note": "Pending deploy for payment sync row list route added in PR #119."
+    },
+    {
+      "method": "POST",
+      "path": "/accounting/payment-syncs/{id}/retry",
+      "expectStatus": 404,
+      "expectRouteMiss": true,
+      "note": "Pending deploy for payment sync row retry route added in PR #119."
+    }
+  ]
 }

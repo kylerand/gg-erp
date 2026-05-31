@@ -424,6 +424,7 @@ test('training content keeps notes, bookmarks, and media wired to live APIs', ()
   const stepSource = readSource('app/training/[moduleId]/step/[stepId]/page.tsx');
   const quizSource = readSource('app/training/[moduleId]/quiz/page.tsx');
   const myOjtSource = readSource('app/training/my-ojt/page.tsx');
+  const assignmentsSource = readSource('app/training/assignments/page.tsx');
   const apiClientSource = readSource('lib/api-client.ts');
   const sopHandlersSource = readFileSync(
     path.resolve(WEB_SRC_DIR, '../../../apps/api/src/lambda/sop/handlers.ts'),
@@ -469,6 +470,18 @@ test('training content keeps notes, bookmarks, and media wired to live APIs', ()
     ].filter((snippet) => !myOjtSource.includes(snippet)),
     [],
   );
+
+  assert.deepEqual(
+    [
+      "listMyAssignments('', {}, { allowMockFallback: false })",
+      'listEmployees(undefined, { allowMockFallback: false })',
+      'const employeeById = useMemo',
+      "formatEmployeeName(employee) ?? 'Unresolved employee'",
+      'employee?.employeeNumber',
+    ].filter((snippet) => !assignmentsSource.includes(snippet)),
+    [],
+  );
+  assert.equal(assignmentsSource.includes('{assignment.employeeId}</p>'), false);
 
   assert.deepEqual(
     [

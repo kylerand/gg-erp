@@ -79,6 +79,7 @@ const CUSTOMER_LOAD_STATES: Array<CustomerSyncRecord['state'] | undefined> = [
 ];
 const EMPTY_FAILURES: FailureSummary = { invoice: 0, customer: 0, payment: 0, total: 0 };
 const PAYABLE_PO_STATES = new Set(['PARTIALLY_RECEIVED', 'RECEIVED']);
+const STRICT_LIVE_DATA = { allowMockFallback: false } as const;
 
 interface PayableRow {
   id: string;
@@ -120,19 +121,20 @@ export default function SyncMonitorPage() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setLoadError(null);
     const invoiceRequests = INVOICE_LOAD_STATES.map((syncState) =>
-      listInvoiceSyncRecords({ state: syncState, limit: 200 }),
+      listInvoiceSyncRecords({ state: syncState, limit: 200 }, STRICT_LIVE_DATA),
     );
     const customerRequests = CUSTOMER_LOAD_STATES.map((syncState) =>
-      listCustomerSyncs({ state: syncState, limit: 200 }),
+      listCustomerSyncs({ state: syncState, limit: 200 }, STRICT_LIVE_DATA),
     );
     Promise.allSettled([
       ...invoiceRequests,
       ...customerRequests,
-      listPurchaseOrders({ pageSize: 200 }, { allowMockFallback: false }),
-      listIntegrationAccounts(),
-      getFailureSummary(),
-      getQbStatus(),
+      listPurchaseOrders({ pageSize: 200 }, STRICT_LIVE_DATA),
+      listIntegrationAccounts(STRICT_LIVE_DATA),
+      getFailureSummary(STRICT_LIVE_DATA),
+      getQbStatus(STRICT_LIVE_DATA),
     ])
       .then((results) => {
         if (cancelled) return;

@@ -53,6 +53,8 @@ const EMPTY: AccountingMetrics = {
   integrationAccountsCount: 0,
 };
 
+const STRICT_LIVE_DATA = { allowMockFallback: false } as const;
+
 const ACCOUNTING_LINKS = {
   failures: erpRoute('accounting-sync', { view: 'failures' }),
   queue: erpRoute('accounting-sync', { view: 'queue' }),
@@ -69,15 +71,18 @@ const ACCOUNTING_LINKS = {
   recentInvoices: erpRoute('quickbooks-invoice'),
   openInvoices: erpRoute('quickbooks-invoice', { filter: 'OPEN' }),
   reconciliation: erpRoute('accounting-reconciliation'),
+  integrationSettings: erpRoute('integration-settings'),
 };
 
 export default function AccountingPage() {
   const [m, setM] = useState<AccountingMetrics>(EMPTY);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
+      setLoadError(null);
       const [
         qb,
         invoiceAll,
@@ -92,24 +97,38 @@ export default function AccountingPage() {
         failureSummary,
         payables,
       ] = await Promise.allSettled([
-        getQbStatus(),
-        listInvoiceSyncRecords(),
-        listInvoiceSyncRecords({ state: 'FAILED' }),
-        listInvoiceSyncRecords({ state: 'PENDING' }),
-        listInvoiceSyncRecords({ state: 'SYNCED' }),
-        listCustomerSyncs(),
-        listCustomerSyncs({ state: 'FAILED' }),
-        listCustomerSyncs({ state: 'PENDING' }),
-        listReconciliationRuns({ limit: 1 }),
-        listIntegrationAccounts(),
-        getFailureSummary(),
-        listPurchaseOrders({ pageSize: 200 }, { allowMockFallback: false }),
+        getQbStatus(STRICT_LIVE_DATA),
+        listInvoiceSyncRecords(undefined, STRICT_LIVE_DATA),
+        listInvoiceSyncRecords({ state: 'FAILED' }, STRICT_LIVE_DATA),
+        listInvoiceSyncRecords({ state: 'PENDING' }, STRICT_LIVE_DATA),
+        listInvoiceSyncRecords({ state: 'SYNCED' }, STRICT_LIVE_DATA),
+        listCustomerSyncs(undefined, STRICT_LIVE_DATA),
+        listCustomerSyncs({ state: 'FAILED' }, STRICT_LIVE_DATA),
+        listCustomerSyncs({ state: 'PENDING' }, STRICT_LIVE_DATA),
+        listReconciliationRuns({ limit: 1 }, STRICT_LIVE_DATA),
+        listIntegrationAccounts(STRICT_LIVE_DATA),
+        getFailureSummary(STRICT_LIVE_DATA),
+        listPurchaseOrders({ pageSize: 200 }, STRICT_LIVE_DATA),
       ]);
 
       if (cancelled) return;
 
       const ok = <T,>(r: PromiseSettledResult<T>): T | undefined =>
         r.status === 'fulfilled' ? r.value : undefined;
+      const rejected = [
+        qb,
+        invoiceAll,
+        invoiceFailed,
+        invoicePending,
+        invoiceSynced,
+        customerAll,
+        customerFailed,
+        customerPending,
+        recons,
+        accounts,
+        failureSummary,
+        payables,
+      ].find((r): r is PromiseRejectedResult => r.status === 'rejected');
 
       const invoiceSyncedItems = ok(invoiceSynced)?.items ?? [];
       const today = new Date().toDateString();
@@ -136,6 +155,7 @@ export default function AccountingPage() {
         reconciliationRunCount: ok(recons)?.total ?? 0,
         integrationAccountsCount: ok(accounts)?.total ?? 0,
       });
+      setLoadError(rejected ? errorMessage(rejected.reason) : null);
       setLoading(false);
     }
     void load();
@@ -163,6 +183,14 @@ export default function AccountingPage() {
         realmId={m.qb?.realmId}
         loading={loading}
       />
+
+      {loadError && !loading && (
+        <LiveDataWarning
+          message={loadError}
+          href={ACCOUNTING_LINKS.integrationSettings}
+          action="Check integrations"
+        />
+      )}
 
       {/* Today's state — single sentence the user reads first */}
       <TodayBanner state={todayState} loading={loading} />
@@ -518,6 +546,34 @@ function ConnectionCard({
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+function LiveDataWarning({
+  message,
+  href,
+  action,
+}: {
+  message: string;
+  href: string;
+  action: string;
+}) {
+  return (
+    <div
+      className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center justify-between gap-4"
+      role="alert"
+    >
+      <div>
+        <p className="font-semibold text-red-900">Some accounting data could not be loaded.</p>
+        <p className="text-sm text-red-800 mt-1">{message}</p>
+      </div>
+      <Link
+        href={href}
+        className="shrink-0 bg-white border border-red-200 text-red-800 font-semibold px-3 py-2 rounded-lg hover:border-red-400"
+      >
+        {action}
+      </Link>
     </div>
   );
 }
@@ -878,4 +934,8 @@ function formatDateTime(iso: string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function errorMessage(reason: unknown): string {
+  return reason instanceof Error ? reason.message : String(reason);
 }

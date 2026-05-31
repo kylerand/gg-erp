@@ -823,6 +823,7 @@ test('admin configuration catalog is registry-backed with live settings destinat
 test('accounting sync monitor exposes live purchase-order payable handoff', () => {
   const accountingSource = readSource('app/accounting/page.tsx');
   const syncSource = readSource('app/accounting/sync/page.tsx');
+  const apiClientSource = readSource('lib/api-client.ts');
   const workspaceSource = readFileSync(
     path.resolve(WEB_SRC_DIR, '../../../packages/domain/src/erp-workspaces.ts'),
     'utf8',
@@ -836,7 +837,16 @@ test('accounting sync monitor exposes live purchase-order payable handoff', () =
     [
       'ACCOUNTING_LINKS.payables',
       'summarizePayables',
-      'listPurchaseOrders({ pageSize: 200 }, { allowMockFallback: false })',
+      'const STRICT_LIVE_DATA = { allowMockFallback: false } as const',
+      'getQbStatus(STRICT_LIVE_DATA)',
+      'listInvoiceSyncRecords(undefined, STRICT_LIVE_DATA)',
+      "listInvoiceSyncRecords({ state: 'FAILED' }, STRICT_LIVE_DATA)",
+      'listCustomerSyncs(undefined, STRICT_LIVE_DATA)',
+      'listReconciliationRuns({ limit: 1 }, STRICT_LIVE_DATA)',
+      'listIntegrationAccounts(STRICT_LIVE_DATA)',
+      'getFailureSummary(STRICT_LIVE_DATA)',
+      'listPurchaseOrders({ pageSize: 200 }, STRICT_LIVE_DATA)',
+      'LiveDataWarning',
       'PO bill review',
     ].filter((snippet) => !accountingSource.includes(snippet)),
     [],
@@ -853,7 +863,13 @@ test('accounting sync monitor exposes live purchase-order payable handoff', () =
       "erpRoute('customer'",
       'invoiceSyncWorkOrderDisplayName',
       'customerSyncDisplayName',
-      'listPurchaseOrders({ pageSize: 200 }, { allowMockFallback: false })',
+      'const STRICT_LIVE_DATA = { allowMockFallback: false } as const',
+      'listInvoiceSyncRecords({ state: syncState, limit: 200 }, STRICT_LIVE_DATA)',
+      'listCustomerSyncs({ state: syncState, limit: 200 }, STRICT_LIVE_DATA)',
+      'listPurchaseOrders({ pageSize: 200 }, STRICT_LIVE_DATA)',
+      'listIntegrationAccounts(STRICT_LIVE_DATA)',
+      'getFailureSummary(STRICT_LIVE_DATA)',
+      'getQbStatus(STRICT_LIVE_DATA)',
     ].filter((snippet) => !syncSource.includes(snippet)),
     [],
   );
@@ -866,6 +882,13 @@ test('accounting sync monitor exposes live purchase-order payable handoff', () =
   assert.deepEqual(
     ['vendor-payable', '/accounting/sync?view=payables'].filter(
       (snippet) => !workspaceSource.includes(snippet) || !registrySource.includes(snippet),
+    ),
+    [],
+  );
+
+  assert.deepEqual(
+    ['export async function getFailureSummary(options?: ApiDataOptions)'].filter(
+      (snippet) => !apiClientSource.includes(snippet),
     ),
     [],
   );

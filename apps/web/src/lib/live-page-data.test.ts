@@ -907,6 +907,7 @@ test('inventory procurement drill-in uses live PO/vendor reads and focused recei
   const purchaseOrdersSource = readSource('app/inventory/purchase-orders/page.tsx');
   const purchaseOrderDetailSource = readSource('app/inventory/purchase-orders/[id]/page.tsx');
   const receivingSource = readSource('app/inventory/receiving/page.tsx');
+  const reservationsSource = readSource('app/inventory/reservations/page.tsx');
   const planningSource = readSource('app/inventory/planning/page.tsx');
   const apiClientSource = readSource('lib/api-client.ts');
 
@@ -974,12 +975,29 @@ test('inventory procurement drill-in uses live PO/vendor reads and focused recei
       "searchParams.get('purchaseOrderId')",
       "searchParams.get('lineId')",
       "erpRecordRoute('purchase-order'",
+      "erpRecordRoute('part'",
       'Receiving variance report',
+      'partDisplayLabel',
+      'SKU missing. Open part detail to repair catalog mapping.',
       'rejectedQuantity',
       'receiveInventoryLot',
     ].filter((snippet) => !receivingSource.includes(snippet)),
     [],
   );
+  assert.equal(receivingSource.includes('?? row.line.partId'), false);
+  assert.equal(receivingSource.includes('?? line.partId'), false);
+
+  assert.deepEqual(
+    [
+      'reservationWorkOrderLabel',
+      'reservationWorkOrderDetail',
+      'Unresolved work order',
+      'Work-order number missing. Open detail to repair context.',
+      "erpRecordRoute('work-order', reservation.workOrderId)",
+    ].filter((snippet) => !reservationsSource.includes(snippet)),
+    [],
+  );
+  assert.equal(reservationsSource.includes('?? reservation.workOrderId'), false);
 
   assert.deepEqual(
     ["erpRoute('purchase-order'", 'defaultVendorId'].filter(

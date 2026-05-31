@@ -64,6 +64,20 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Request failed.';
 }
 
+function reservationWorkOrderLabel(reservation: InventoryReservation): string {
+  return (
+    reservation.workOrderNumber?.trim() ||
+    reservation.workOrderTitle?.trim() ||
+    'Unresolved work order'
+  );
+}
+
+function reservationWorkOrderDetail(reservation: InventoryReservation): string | undefined {
+  if (reservation.workOrderNumber?.trim()) return reservation.workOrderTitle;
+  if (reservation.workOrderId) return 'Work-order number missing. Open detail to repair context.';
+  return undefined;
+}
+
 function workOrderOption(workOrder: WorkOrder): SearchableSelectOption {
   return {
     id: workOrder.id,
@@ -440,14 +454,14 @@ export default function ReservationsPage() {
                           href={erpRecordRoute('work-order', reservation.workOrderId)}
                           className="font-medium text-gray-900 hover:underline"
                         >
-                          {reservation.workOrderNumber ?? reservation.workOrderId}
+                          {reservationWorkOrderLabel(reservation)}
                         </Link>
                       ) : (
                         <span className="text-gray-500">Unassigned</span>
                       )}
-                      {reservation.workOrderTitle && (
+                      {reservationWorkOrderDetail(reservation) && (
                         <div className="mt-0.5 max-w-[220px] truncate text-gray-500">
-                          {reservation.workOrderTitle}
+                          {reservationWorkOrderDetail(reservation)}
                         </div>
                       )}
                     </td>

@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Clipboard, Download, FileText, Plus, RefreshCw, Save, X } from 'lucide-react';
 import { EmptyState, LoadingSkeleton, PageHeader, StatusBadge } from '@gg-erp/ui';
 import { Button } from '@/components/ui/button';
+import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
 import {
   createPurchaseOrder,
   listParts,
@@ -86,6 +87,36 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Request failed.';
 }
 
+function vendorOption(vendor: Vendor): SearchableSelectOption {
+  return {
+    id: vendor.id,
+    label: vendor.vendorName,
+    description: [vendor.vendorCode, vendor.email, vendor.phone].filter(Boolean).join(' · '),
+    meta: vendor.vendorState.replace(/_/g, ' '),
+  };
+}
+
+function partOption(part: Part): SearchableSelectOption {
+  return {
+    id: part.id,
+    label: part.sku,
+    description: [part.name, part.manufacturerPartNumber, part.defaultVendorName]
+      .filter(Boolean)
+      .join(' · '),
+    meta: [part.category?.replace(/_/g, ' '), part.installStage?.replace(/_/g, ' ')]
+      .filter(Boolean)
+      .join(' · '),
+  };
+}
+
+function optionMatches(option: SearchableSelectOption, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  return [option.label, option.description, option.meta].some((value) =>
+    value?.toLowerCase().includes(needle),
+  );
+}
+
 export default function PurchaseOrdersPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -100,6 +131,8 @@ export default function PurchaseOrdersPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedPurchaseOrderIds, setSelectedPurchaseOrderIds] = useState<string[]>([]);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [createVendorSearch, setCreateVendorSearch] = useState('');
+  const [createPartSearch, setCreatePartSearch] = useState('');
   const [createDraft, setCreateDraft] = useState({
     vendorId: '',
     partId: '',
@@ -162,6 +195,18 @@ export default function PurchaseOrdersPage() {
     () => vendors.filter((vendor) => vendor.vendorState === 'ACTIVE'),
     [vendors],
   );
+  const vendorOptions = useMemo(() => activeVendors.map(vendorOption), [activeVendors]);
+  const filteredVendorOptions = useMemo(
+    () => vendorOptions.filter((option) => optionMatches(option, createVendorSearch)),
+    [createVendorSearch, vendorOptions],
+  );
+  const partOptions = useMemo(() => parts.map(partOption), [parts]);
+  const filteredPartOptions = useMemo(
+    () => partOptions.filter((option) => optionMatches(option, createPartSearch)),
+    [createPartSearch, partOptions],
+  );
+  const selectedVendor = vendorOptions.find((option) => option.id === createDraft.vendorId);
+  const selectedPart = partOptions.find((option) => option.id === createDraft.partId);
   const selectedPurchaseOrders = useMemo(
     () => purchaseOrders.filter((po) => selectedPurchaseOrderIds.includes(po.id)),
     [purchaseOrders, selectedPurchaseOrderIds],
@@ -365,38 +410,42 @@ export default function PurchaseOrdersPage() {
           className="mb-6 rounded-lg border border-gray-200 bg-white p-4"
         >
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
-            <label className="block xl:col-span-2">
-              <span className="text-xs font-medium uppercase text-gray-500">Vendor</span>
-              <select
+            <div className="xl:col-span-2">
+              <SearchableSelect
+                id="purchase-order-vendor"
+                label="Vendor"
+                required
                 value={createDraft.vendorId}
-                onChange={(event) =>
-                  setCreateDraft((current) => ({ ...current, vendorId: event.target.value }))
+                selectedOption={selectedVendor}
+                searchValue={createVendorSearch}
+                options={filteredVendorOptions}
+                loading={loading}
+                placeholder="Search active vendors"
+                emptyText="No active vendors matched this search."
+                onSearchChange={setCreateVendorSearch}
+                onChange={(nextVendorId) =>
+                  setCreateDraft((current) => ({ ...current, vendorId: nextVendorId }))
                 }
-                className="mt-1 h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm"
-              >
-                {activeVendors.map((vendor) => (
-                  <option key={vendor.id} value={vendor.id}>
-                    {vendor.vendorName}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block xl:col-span-2">
-              <span className="text-xs font-medium uppercase text-gray-500">Part</span>
-              <select
+              />
+            </div>
+            <div className="xl:col-span-2">
+              <SearchableSelect
+                id="purchase-order-part"
+                label="Part"
+                required
                 value={createDraft.partId}
-                onChange={(event) =>
-                  setCreateDraft((current) => ({ ...current, partId: event.target.value }))
+                selectedOption={selectedPart}
+                searchValue={createPartSearch}
+                options={filteredPartOptions}
+                loading={loading}
+                placeholder="Search active parts"
+                emptyText="No active parts matched this search."
+                onSearchChange={setCreatePartSearch}
+                onChange={(nextPartId) =>
+                  setCreateDraft((current) => ({ ...current, partId: nextPartId }))
                 }
-                className="mt-1 h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm"
-              >
-                {parts.map((part) => (
-                  <option key={part.id} value={part.id}>
-                    {part.sku} - {part.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+              />
+            </div>
             <label className="block">
               <span className="text-xs font-medium uppercase text-gray-500">Qty</span>
               <input

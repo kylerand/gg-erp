@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { EmptyState, LoadingSkeleton, PageHeader, StatusBadge } from '@gg-erp/ui';
 import { Button } from '@/components/ui/button';
+import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
 import {
   approvePurchaseOrder,
   cancelPurchaseOrder,
@@ -94,6 +95,36 @@ function draftFromPurchaseOrder(purchaseOrder: PurchaseOrder): DraftEditState {
   };
 }
 
+function vendorOption(vendor: Vendor): SearchableSelectOption {
+  return {
+    id: vendor.id,
+    label: vendor.vendorName,
+    description: [vendor.vendorCode, vendor.email, vendor.phone].filter(Boolean).join(' · '),
+    meta: vendor.vendorState.replace(/_/g, ' '),
+  };
+}
+
+function partOption(part: Part): SearchableSelectOption {
+  return {
+    id: part.id,
+    label: part.sku,
+    description: [part.name, part.manufacturerPartNumber, part.defaultVendorName]
+      .filter(Boolean)
+      .join(' · '),
+    meta: [part.category?.replace(/_/g, ' '), part.installStage?.replace(/_/g, ' ')]
+      .filter(Boolean)
+      .join(' · '),
+  };
+}
+
+function optionMatches(option: SearchableSelectOption, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  return [option.label, option.description, option.meta].some((value) =>
+    value?.toLowerCase().includes(needle),
+  );
+}
+
 export default function PurchaseOrderDetailPage() {
   const params = useParams<{ id: string }>();
   const [purchaseOrder, setPurchaseOrder] = useState<PurchaseOrder | null>(null);
@@ -105,6 +136,8 @@ export default function PurchaseOrderDetailPage() {
   const [savingDraft, setSavingDraft] = useState(false);
   const [actioning, setActioning] = useState<string | null>(null);
   const [vendorError, setVendorError] = useState<string | null>(null);
+  const [draftVendorSearch, setDraftVendorSearch] = useState('');
+  const [draftPartSearches, setDraftPartSearches] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
@@ -178,7 +211,22 @@ export default function PurchaseOrderDetailPage() {
     purchaseOrder &&
     ['SENT', 'PARTIALLY_RECEIVED'].includes(purchaseOrder.purchaseOrderState) &&
     totals.open === 0;
-  const draftVendorOptions = vendors.length > 0 ? vendors : vendor ? [vendor] : [];
+  const draftVendorOptions = useMemo(
+    () => (vendors.length > 0 ? vendors : vendor ? [vendor] : []),
+    [vendor, vendors],
+  );
+  const draftVendorSelectOptions = useMemo(
+    () => draftVendorOptions.map(vendorOption),
+    [draftVendorOptions],
+  );
+  const filteredDraftVendorOptions = useMemo(
+    () => draftVendorSelectOptions.filter((option) => optionMatches(option, draftVendorSearch)),
+    [draftVendorSearch, draftVendorSelectOptions],
+  );
+  const draftPartOptions = useMemo(() => parts.map(partOption), [parts]);
+  const selectedDraftVendor = draftVendorSelectOptions.find(
+    (option) => option.id === draftEdit?.vendorId,
+  );
 
   async function handleTransition(action: 'approve' | 'send' | 'cancel' | 'close') {
     if (!purchaseOrder) return;
@@ -429,24 +477,26 @@ export default function PurchaseOrderDetailPage() {
           </div>
 
           <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-            <label className="block">
-              <span className="text-xs font-medium uppercase text-gray-500">Vendor</span>
-              <select
+            <div>
+              <SearchableSelect
+                id="draft-vendor"
+                label="Vendor"
+                required
                 value={draftEdit.vendorId}
-                onChange={(event) =>
+                selectedOption={selectedDraftVendor}
+                searchValue={draftVendorSearch}
+                options={filteredDraftVendorOptions}
+                loading={loading}
+                placeholder="Search active vendors"
+                emptyText="No active vendors matched this search."
+                onSearchChange={setDraftVendorSearch}
+                onChange={(nextVendorId) =>
                   setDraftEdit((current) =>
-                    current ? { ...current, vendorId: event.target.value } : current,
+                    current ? { ...current, vendorId: nextVendorId } : current,
                   )
                 }
-                className="mt-1 h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm"
-              >
-                {draftVendorOptions.map((vendorOption) => (
-                  <option key={vendorOption.id} value={vendorOption.id}>
-                    {vendorOption.vendorName}
-                  </option>
-                ))}
-              </select>
-            </label>
+              />
+            </div>
             <label className="block">
               <span className="text-xs font-medium uppercase text-gray-500">Expected</span>
               <input
@@ -475,38 +525,51 @@ export default function PurchaseOrderDetailPage() {
           </div>
 
           <div className="space-y-3">
-            {draftEdit.lines.map((line, index) => (
-              <div
-                key={line.id ?? index}
-                className="grid grid-cols-1 gap-3 rounded-md border border-gray-100 bg-gray-50 p-3 md:grid-cols-12"
-              >
-                <label className="block md:col-span-5">
-                  <span className="text-xs font-medium uppercase text-gray-500">Part</span>
-                  <select
-                    value={line.partId}
-                    onChange={(event) =>
-                      setDraftEdit((current) =>
-                        current
-                          ? {
-                              ...current,
-                              lines: current.lines.map((item, itemIndex) =>
-                                itemIndex === index
-                                  ? { ...item, partId: event.target.value }
-                                  : item,
-                              ),
-                            }
-                          : current,
-                      )
-                    }
-                    className="mt-1 h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm"
-                  >
-                    {parts.map((part) => (
-                      <option key={part.id} value={part.id}>
-                        {part.sku} - {part.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+            {draftEdit.lines.map((line, index) => {
+              const lineKey = line.id ?? String(index);
+              const selectedDraftPart = draftPartOptions.find(
+                (option) => option.id === line.partId,
+              );
+              const filteredDraftPartOptions = draftPartOptions.filter((option) =>
+                optionMatches(option, draftPartSearches[lineKey] ?? ''),
+              );
+
+              return (
+                <div
+                  key={lineKey}
+                  className="grid grid-cols-1 gap-3 rounded-md border border-gray-100 bg-gray-50 p-3 md:grid-cols-12"
+                >
+                  <div className="md:col-span-5">
+                    <SearchableSelect
+                      id={`draft-line-part-${lineKey}`}
+                      label="Part"
+                      required
+                      value={line.partId}
+                      selectedOption={selectedDraftPart}
+                      searchValue={draftPartSearches[lineKey] ?? ''}
+                      options={filteredDraftPartOptions}
+                      loading={loading}
+                      placeholder="Search active parts"
+                      emptyText="No active parts matched this search."
+                      onSearchChange={(value) =>
+                        setDraftPartSearches((current) => ({ ...current, [lineKey]: value }))
+                      }
+                      onChange={(nextPartId) =>
+                        setDraftEdit((current) =>
+                          current
+                            ? {
+                                ...current,
+                                lines: current.lines.map((item, itemIndex) =>
+                                  itemIndex === index
+                                    ? { ...item, partId: nextPartId }
+                                    : item,
+                                ),
+                              }
+                            : current,
+                        )
+                      }
+                    />
+                  </div>
                 <label className="block md:col-span-2">
                   <span className="text-xs font-medium uppercase text-gray-500">Qty</span>
                   <input
@@ -598,8 +661,9 @@ export default function PurchaseOrderDetailPage() {
                     <Trash2 size={15} />
                   </Button>
                 </div>
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
 
           <Button

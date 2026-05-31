@@ -43,6 +43,7 @@ test('registry route helper resolves module links and filtered routes', () => {
   assert.equal(getRequiredErpRoute('build-package'), '/planning/build-packages');
   assert.equal(getRequiredErpRoute('inventory-ledger'), '/inventory/ledger');
   assert.equal(getRequiredErpRoute('inventory-adjustment'), '/inventory/adjustments');
+  assert.equal(getRequiredErpRoute('inventory-transfer'), '/inventory/transfers');
   assert.equal(getRequiredErpRoute('create-sales-opportunity'), '/sales/opportunities/new');
   assert.equal(getRequiredErpRoute('quickbooks-customer'), '/accounting/quickbooks/customers');
   assert.equal(getRequiredErpRoute('accounting-settings'), '/admin/accounting');
@@ -101,6 +102,7 @@ test('workspace navigation items include live links and quick actions', () => {
   assert.ok(inventoryItems.some((item) => item.key === 'purchase-order'));
   assert.ok(inventoryItems.some((item) => item.key === 'inventory-ledger'));
   assert.ok(inventoryItems.some((item) => item.key === 'inventory-adjustment'));
+  assert.ok(inventoryItems.some((item) => item.key === 'inventory-transfer'));
   assert.ok(accountingItems.some((item) => item.key === 'quickbooks-customer'));
   assert.ok(accountingItems.some((item) => item.key === 'vendor-payable'));
   assert.ok(accountingItems.some((item) => item.key === 'quickbooks-invoice'));

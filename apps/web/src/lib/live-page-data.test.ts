@@ -19,6 +19,7 @@ const truthCriticalPages = [
   'app/inventory/reservations/page.tsx',
   'app/inventory/ledger/page.tsx',
   'app/inventory/adjustments/page.tsx',
+  'app/inventory/transfers/page.tsx',
   'app/planning/build-packages/page.tsx',
   'app/planning/slots/page.tsx',
   'app/reporting/page.tsx',
@@ -1094,6 +1095,7 @@ test('inventory procurement drill-in uses live PO/vendor reads and focused recei
   const reservationsSource = readSource('app/inventory/reservations/page.tsx');
   const ledgerSource = readSource('app/inventory/ledger/page.tsx');
   const adjustmentsSource = readSource('app/inventory/adjustments/page.tsx');
+  const transfersSource = readSource('app/inventory/transfers/page.tsx');
   const planningSource = readSource('app/inventory/planning/page.tsx');
   const apiClientSource = readSource('lib/api-client.ts');
 
@@ -1219,6 +1221,19 @@ test('inventory procurement drill-in uses live PO/vendor reads and focused recei
 
   assert.deepEqual(
     [
+      'createInventoryTransfer',
+      'listInventoryLocations',
+      'listInventoryLots',
+      'allowMockFallback: false',
+      'SearchableSelect',
+      'toStockLocationId',
+      "erpRoute('inventory-ledger', { movementType: 'TRANSFER_OUT,TRANSFER_IN' })",
+    ].filter((snippet) => !transfersSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    [
       "erpRoute('purchase-order'",
       'defaultVendorId',
       'listVendors({ state: ',
@@ -1244,7 +1259,10 @@ test('inventory procurement drill-in uses live PO/vendor reads and focused recei
       'export function closePurchaseOrder',
       'export async function listInventoryLedger',
       'export async function createInventoryAdjustment',
+      'export async function listInventoryLocations',
+      'export async function createInventoryTransfer',
       '/inventory/adjustments',
+      '/inventory/transfers',
       'vendorId',
     ].filter((snippet) => !apiClientSource.includes(snippet)),
     [],

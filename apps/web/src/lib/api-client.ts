@@ -1503,6 +1503,7 @@ export interface InventoryLot {
   lotState: 'AVAILABLE' | 'QUARANTINED' | 'CONSUMED' | 'CLOSED';
   partSku: string;
   partName: string;
+  stockLocationId: string;
   locationName: string;
   quantityOnHand: number;
   quantityReserved: number;
@@ -1692,6 +1693,69 @@ export async function createInventoryAdjustment(
     body: JSON.stringify(input),
   });
   return data.adjustment;
+}
+
+export interface InventoryLocation {
+  id: string;
+  locationCode: string;
+  locationName: string;
+  locationType: string;
+  isPickable: boolean;
+}
+
+export async function listInventoryLocations(
+  options?: ApiDataOptions,
+): Promise<{ items: InventoryLocation[]; total: number }> {
+  return apiFetch(
+    '/inventory/locations',
+    undefined,
+    { items: [], total: 0 },
+    options,
+  );
+}
+
+export interface InventoryTransfer {
+  id: string;
+  transferNumber: string;
+  status: string;
+  fromStockLocationId: string;
+  fromLocationName: string;
+  toStockLocationId: string;
+  toLocationName: string;
+  fromStockLotId: string;
+  toStockLotId: string;
+  sourceLotNumber?: string;
+  destinationLotNumber: string;
+  partId: string;
+  partSku: string;
+  partName: string;
+  quantity: number;
+  reasonCode?: string;
+  notes?: string;
+  transferOutLedgerEntryId: string;
+  transferInLedgerEntryId: string;
+  shippedAt: string;
+  receivedAt: string;
+  correlationId: string;
+}
+
+export interface CreateInventoryTransferInput {
+  stockLotId: string;
+  quantity: number;
+  toStockLocationId: string;
+  reasonCode?: string;
+  notes?: string;
+}
+
+export async function createInventoryTransfer(
+  input: CreateInventoryTransferInput,
+): Promise<InventoryTransfer> {
+  const data = await apiFetch<{ transfer: InventoryTransfer }>('/inventory/transfers', {
+    method: 'POST',
+    headers: mutationHeaders(),
+    body: JSON.stringify(input),
+  });
+  return data.transfer;
 }
 
 export type InventoryLedgerMovementType =

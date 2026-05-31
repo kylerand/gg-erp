@@ -196,6 +196,15 @@ export const ERP_WORKSPACES = [
         keywords: ['adjustment', 'cycle count', 'correction'],
       },
       {
+        key: 'inventory-transfer',
+        label: 'Stock Transfers',
+        description: 'Move stock between shop locations.',
+        route: '/inventory/transfers',
+        status: 'live',
+        objectKey: 'inventory-transfer',
+        keywords: ['transfer', 'move stock', 'locations'],
+      },
+      {
         key: 'purchase-order',
         label: 'Purchase Orders',
         description: 'Track vendor orders, ETAs, and line-level receiving.',

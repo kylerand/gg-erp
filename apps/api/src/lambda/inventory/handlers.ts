@@ -69,7 +69,7 @@ export const inventoryLotQueries = {
         where,
         include: {
           part: { select: { sku: true, name: true } },
-          stockLocation: { select: { locationName: true } },
+          stockLocation: { select: { id: true, locationName: true } },
         },
         orderBy: { receivedAt: 'desc' },
         skip: (page - 1) * pageSize,
@@ -289,7 +289,7 @@ export const inventoryLotQueries = {
           where: { id: lotId },
           include: {
             part: { select: { sku: true, name: true } },
-            stockLocation: { select: { locationName: true } },
+            stockLocation: { select: { id: true, locationName: true } },
           },
         });
         if (!lot) {
@@ -379,6 +379,27 @@ export const inventoryLotQueries = {
         purchaseOrderState: receipt?.purchaseOrderState ?? line.purchaseOrderState,
       };
     });
+  },
+};
+
+export const inventoryLocationQueries = {
+  async listLocations(): Promise<InventoryLocationResponse[]> {
+    const locations = await getInventoryPrisma().stockLocation.findMany({
+      where: { deletedAt: null },
+      orderBy: [
+        { isPickable: 'desc' },
+        { locationType: 'asc' },
+        { locationCode: 'asc' },
+      ],
+    });
+
+    return locations.map((location) => ({
+      id: location.id,
+      locationCode: location.locationCode,
+      locationName: location.locationName,
+      locationType: location.locationType,
+      isPickable: location.isPickable,
+    }));
   },
 };
 
@@ -883,6 +904,22 @@ interface CreateInventoryAdjustmentInput {
   notes?: string;
 }
 
+interface CreateInventoryTransferInput {
+  stockLotId: string;
+  quantity: number;
+  toStockLocationId: string;
+  reasonCode?: string;
+  notes?: string;
+}
+
+interface InventoryLocationResponse {
+  id: string;
+  locationCode: string;
+  locationName: string;
+  locationType: string;
+  isPickable: boolean;
+}
+
 interface InventoryAdjustmentLotRow {
   stockLotId: string;
   lotNumber: string | null;
@@ -915,6 +952,52 @@ interface InventoryAdjustmentResponse {
   notes?: string;
   ledgerEntryId: string;
   postedAt: string;
+  correlationId: string;
+}
+
+interface InventoryTransferLotRow {
+  stockLotId: string;
+  lotNumber: string | null;
+  serialNumber: string | null;
+  lotState: string;
+  partId: string;
+  partSku: string;
+  partName: string;
+  unitOfMeasureId: string | null;
+  unitOfMeasure: string;
+  fromStockLocationId: string;
+  fromLocationName: string;
+  quantityOnHand: unknown;
+  quantityReserved: unknown;
+}
+
+interface InventoryTransferLocationRow {
+  id: string;
+  locationName: string;
+}
+
+interface InventoryTransferResponse {
+  id: string;
+  transferNumber: string;
+  status: string;
+  fromStockLocationId: string;
+  fromLocationName: string;
+  toStockLocationId: string;
+  toLocationName: string;
+  fromStockLotId: string;
+  toStockLotId: string;
+  sourceLotNumber?: string;
+  destinationLotNumber: string;
+  partId: string;
+  partSku: string;
+  partName: string;
+  quantity: number;
+  reasonCode?: string;
+  notes?: string;
+  transferOutLedgerEntryId: string;
+  transferInLedgerEntryId: string;
+  shippedAt: string;
+  receivedAt: string;
   correlationId: string;
 }
 
@@ -955,6 +1038,15 @@ class ReservationCommandError extends Error {
 }
 
 class AdjustmentCommandError extends Error {
+  constructor(
+    readonly statusCode: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+class TransferCommandError extends Error {
   constructor(
     readonly statusCode: number,
     message: string,
@@ -1612,6 +1704,310 @@ export const inventoryAdjustmentCommands = {
   },
 };
 
+export const inventoryTransferCommands = {
+  async createTransfer(
+    input: CreateInventoryTransferInput,
+    correlationId: string,
+  ): Promise<InventoryTransferResponse> {
+    const transferId = randomUUID();
+    const lineId = randomUUID();
+    const destinationLotId = randomUUID();
+    const transferNumber = `TRF-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${transferId.slice(0, 8).toUpperCase()}`;
+    const reasonCode = input.reasonCode?.trim().toUpperCase() || 'STOCK_TRANSFER';
+    const notes = input.notes?.trim() || undefined;
+
+    return getInventoryPrisma().$transaction(async (tx) => {
+      const lots = await tx.$queryRaw<InventoryTransferLotRow[]>`
+        SELECT
+          lot.id::text AS "stockLotId",
+          lot.lot_number AS "lotNumber",
+          lot.serial_number AS "serialNumber",
+          lot.lot_state AS "lotState",
+          p.id::text AS "partId",
+          p.sku AS "partSku",
+          p.name AS "partName",
+          p.unit_of_measure AS "unitOfMeasure",
+          uom.id::text AS "unitOfMeasureId",
+          loc.id::text AS "fromStockLocationId",
+          loc.location_name AS "fromLocationName",
+          bal.quantity_on_hand AS "quantityOnHand",
+          bal.quantity_reserved AS "quantityReserved"
+        FROM inventory.stock_lots lot
+        JOIN inventory.parts p ON p.id = lot.part_id
+        JOIN inventory.stock_locations loc ON loc.id = lot.stock_location_id
+        JOIN inventory.inventory_balances bal
+          ON bal.stock_lot_id = lot.id
+         AND bal.stock_location_id = lot.stock_location_id
+        LEFT JOIN inventory.units_of_measure uom
+          ON lower(uom.uom_code) = lower(p.unit_of_measure)
+         AND uom.deleted_at IS NULL
+        WHERE lot.id = ${input.stockLotId}::uuid
+        FOR UPDATE OF lot, bal
+      `;
+      const lot = lots[0];
+      if (!lot) {
+        throw new TransferCommandError(404, `Stock lot not found: ${input.stockLotId}`);
+      }
+      if (lot.lotState !== 'AVAILABLE') {
+        throw new TransferCommandError(409, `Stock lot cannot be transferred in ${lot.lotState} state.`);
+      }
+      if (!lot.unitOfMeasureId) {
+        throw new TransferCommandError(
+          409,
+          `No active unit of measure found for ${lot.unitOfMeasure}.`,
+        );
+      }
+
+      const destinations = await tx.$queryRaw<InventoryTransferLocationRow[]>`
+        SELECT id::text AS "id", location_name AS "locationName"
+        FROM inventory.stock_locations
+        WHERE id = ${input.toStockLocationId}::uuid
+          AND deleted_at IS NULL
+      `;
+      const destination = destinations[0];
+      if (!destination) {
+        throw new TransferCommandError(
+          404,
+          `Destination stock location not found: ${input.toStockLocationId}`,
+        );
+      }
+      if (destination.id === lot.fromStockLocationId) {
+        throw new TransferCommandError(409, 'Destination location must differ from source location.');
+      }
+
+      const onHand = numberFromDb(lot.quantityOnHand);
+      const reserved = numberFromDb(lot.quantityReserved);
+      const available = onHand - reserved;
+      if (input.quantity > available) {
+        throw new TransferCommandError(
+          409,
+          `Transfer quantity exceeds available quantity (${available}).`,
+        );
+      }
+
+      const shippedAt = new Date();
+      const sourceLotLabel = lot.lotNumber ?? lot.stockLotId.slice(0, 8).toUpperCase();
+      const destinationLotNumber = `${sourceLotLabel}-XFER-${transferId.slice(0, 8).toUpperCase()}`;
+      const metadata = {
+        source: 'inventory_transfer',
+        transferId,
+        transferLineId: lineId,
+        fromStockLotId: lot.stockLotId,
+        sourceLotNumber: lot.lotNumber,
+      };
+
+      await tx.$executeRaw`
+        INSERT INTO inventory.inventory_transfers (
+          id,
+          transfer_number,
+          transfer_status,
+          from_stock_location_id,
+          to_stock_location_id,
+          shipped_at,
+          received_at,
+          reason_code,
+          notes,
+          created_at,
+          updated_at,
+          correlation_id,
+          version
+        )
+        VALUES (
+          ${transferId}::uuid,
+          ${transferNumber},
+          'RECEIVED',
+          ${lot.fromStockLocationId}::uuid,
+          ${destination.id}::uuid,
+          ${shippedAt},
+          ${shippedAt},
+          ${reasonCode},
+          ${notes ?? null},
+          now(),
+          now(),
+          ${correlationId},
+          0
+        )
+      `;
+
+      await tx.$executeRaw`
+        INSERT INTO inventory.stock_lots (
+          id,
+          part_id,
+          stock_location_id,
+          lot_number,
+          serial_number,
+          lot_state,
+          received_at,
+          metadata,
+          created_at,
+          updated_at,
+          version
+        )
+        VALUES (
+          ${destinationLotId}::uuid,
+          ${lot.partId}::uuid,
+          ${destination.id}::uuid,
+          ${destinationLotNumber},
+          null,
+          'AVAILABLE',
+          ${shippedAt},
+          ${JSON.stringify(metadata)}::jsonb,
+          now(),
+          now(),
+          0
+        )
+      `;
+
+      const transferOutLedgerEntryId = await appendInventoryLedgerEntry(tx, {
+        partId: lot.partId,
+        stockLocationId: lot.fromStockLocationId,
+        stockLotId: lot.stockLotId,
+        movementType: 'TRANSFER_OUT',
+        quantityDelta: -input.quantity,
+        reasonCode,
+        sourceDocumentType: 'INVENTORY_TRANSFER_LINE',
+        sourceDocumentId: lineId,
+        correlationId,
+      });
+      const transferInLedgerEntryId = await appendInventoryLedgerEntry(tx, {
+        partId: lot.partId,
+        stockLocationId: destination.id,
+        stockLotId: destinationLotId,
+        movementType: 'TRANSFER_IN',
+        quantityDelta: input.quantity,
+        reasonCode,
+        sourceDocumentType: 'INVENTORY_TRANSFER_LINE',
+        sourceDocumentId: lineId,
+        correlationId,
+      });
+
+      await tx.$executeRaw`
+        INSERT INTO inventory.inventory_transfer_lines (
+          id,
+          inventory_transfer_id,
+          line_number,
+          part_id,
+          from_stock_lot_id,
+          to_stock_lot_id,
+          transfer_uom_id,
+          quantity_shipped,
+          quantity_received,
+          transfer_out_ledger_entry_id,
+          transfer_in_ledger_entry_id,
+          notes,
+          created_at,
+          updated_at,
+          correlation_id,
+          version
+        )
+        VALUES (
+          ${lineId}::uuid,
+          ${transferId}::uuid,
+          1,
+          ${lot.partId}::uuid,
+          ${lot.stockLotId}::uuid,
+          ${destinationLotId}::uuid,
+          ${lot.unitOfMeasureId}::uuid,
+          ${input.quantity},
+          ${input.quantity},
+          ${transferOutLedgerEntryId}::uuid,
+          ${transferInLedgerEntryId}::uuid,
+          ${notes ?? null},
+          now(),
+          now(),
+          ${correlationId},
+          0
+        )
+      `;
+
+      const updatedSourceBalances = await tx.$queryRaw<Array<{ id: string }>>`
+        UPDATE inventory.inventory_balances
+        SET
+          quantity_on_hand = quantity_on_hand - ${input.quantity},
+          last_ledger_entry_id = ${transferOutLedgerEntryId}::uuid,
+          updated_at = now(),
+          last_correlation_id = ${correlationId},
+          version = version + 1
+        WHERE stock_lot_id = ${lot.stockLotId}::uuid
+          AND stock_location_id = ${lot.fromStockLocationId}::uuid
+          AND quantity_on_hand - ${input.quantity} >= quantity_reserved
+        RETURNING id::text AS "id"
+      `;
+      if (updatedSourceBalances.length === 0) {
+        throw new TransferCommandError(409, 'Source inventory balance cannot fulfill that transfer.');
+      }
+
+      await tx.$executeRaw`
+        UPDATE inventory.stock_lots
+        SET
+          lot_state = CASE
+            WHEN ${onHand - input.quantity} <= 0 THEN 'CLOSED'
+            ELSE lot_state
+          END,
+          updated_at = now(),
+          version = version + 1
+        WHERE id = ${lot.stockLotId}::uuid
+      `;
+
+      await tx.$executeRaw`
+        INSERT INTO inventory.inventory_balances (
+          id,
+          part_id,
+          stock_location_id,
+          stock_lot_id,
+          quantity_on_hand,
+          quantity_reserved,
+          quantity_allocated,
+          quantity_consumed,
+          last_ledger_entry_id,
+          updated_at,
+          last_correlation_id,
+          version
+        )
+        VALUES (
+          ${randomUUID()}::uuid,
+          ${lot.partId}::uuid,
+          ${destination.id}::uuid,
+          ${destinationLotId}::uuid,
+          ${input.quantity},
+          0,
+          0,
+          0,
+          ${transferInLedgerEntryId}::uuid,
+          now(),
+          ${correlationId},
+          0
+        )
+      `;
+
+      return {
+        id: transferId,
+        transferNumber,
+        status: 'RECEIVED',
+        fromStockLocationId: lot.fromStockLocationId,
+        fromLocationName: lot.fromLocationName,
+        toStockLocationId: destination.id,
+        toLocationName: destination.locationName,
+        fromStockLotId: lot.stockLotId,
+        toStockLotId: destinationLotId,
+        sourceLotNumber: lot.lotNumber ?? undefined,
+        destinationLotNumber,
+        partId: lot.partId,
+        partSku: lot.partSku,
+        partName: lot.partName,
+        quantity: input.quantity,
+        reasonCode,
+        notes,
+        transferOutLedgerEntryId,
+        transferInLedgerEntryId,
+        shippedAt: shippedAt.toISOString(),
+        receivedAt: shippedAt.toISOString(),
+        correlationId,
+      };
+    });
+  },
+};
+
 type InventorySqlClient = Prisma.TransactionClient | PrismaClient;
 
 interface ActionReservation {
@@ -1814,6 +2210,18 @@ async function handleInventoryAdjustmentCommand(command: Promise<InventoryAdjust
     return jsonResponse(201, { adjustment });
   } catch (error) {
     if (error instanceof AdjustmentCommandError) {
+      return jsonResponse(error.statusCode, { message: error.message });
+    }
+    throw error;
+  }
+}
+
+async function handleInventoryTransferCommand(command: Promise<InventoryTransferResponse>) {
+  try {
+    const transfer = await command;
+    return jsonResponse(201, { transfer });
+  } catch (error) {
+    if (error instanceof TransferCommandError) {
       return jsonResponse(error.statusCode, { message: error.message });
     }
     throw error;
@@ -2241,6 +2649,27 @@ function validateCreateInventoryAdjustmentInput(
     return 'reasonCode is required.';
   }
   if (input.reasonCode.trim().length > 80) {
+    return 'reasonCode must be 80 characters or fewer.';
+  }
+  if (input.notes !== undefined && input.notes.length > 1000) {
+    return 'notes must be 1000 characters or fewer.';
+  }
+  return undefined;
+}
+
+function validateCreateInventoryTransferInput(
+  input: CreateInventoryTransferInput,
+): string | undefined {
+  const stockLotId = parseOptionalUuid(input.stockLotId, 'stockLotId');
+  if (stockLotId.error || !stockLotId.value) return stockLotId.error ?? 'stockLotId is required.';
+  const toStockLocationId = parseOptionalUuid(input.toStockLocationId, 'toStockLocationId');
+  if (toStockLocationId.error || !toStockLocationId.value) {
+    return toStockLocationId.error ?? 'toStockLocationId is required.';
+  }
+  if (!Number.isFinite(input.quantity) || input.quantity <= 0) {
+    return 'quantity must be greater than zero.';
+  }
+  if (input.reasonCode !== undefined && input.reasonCode.trim().length > 80) {
     return 'reasonCode must be 80 characters or fewer.';
   }
   if (input.notes !== undefined && input.notes.length > 1000) {
@@ -2815,6 +3244,14 @@ export const listLotsHandler = wrapHandler(
   { requireAuth: false },
 );
 
+export const listInventoryLocationsHandler = wrapHandler(
+  async () => {
+    const items = await inventoryLocationQueries.listLocations();
+    return jsonResponse(200, { items, total: items.length });
+  },
+  { requireAuth: false },
+);
+
 export const receiveInventoryLotHandler = wrapHandler(
   async (ctx) => {
     const body = parseBody<ReceiveInventoryLotInput>(ctx.event);
@@ -2919,6 +3356,21 @@ export const createInventoryAdjustmentHandler = wrapHandler(
 
     return handleInventoryAdjustmentCommand(
       inventoryAdjustmentCommands.createAdjustment(body.value, ctx.correlationId),
+    );
+  },
+  { requireAuth: false },
+);
+
+export const createInventoryTransferHandler = wrapHandler(
+  async (ctx) => {
+    const body = parseBody<CreateInventoryTransferInput>(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
+
+    const validation = validateCreateInventoryTransferInput(body.value);
+    if (validation) return jsonResponse(422, { message: validation });
+
+    return handleInventoryTransferCommand(
+      inventoryTransferCommands.createTransfer(body.value, ctx.correlationId),
     );
   },
   { requireAuth: false },
@@ -3489,7 +3941,7 @@ function toLotDetailResponse(r: {
   createdAt: Date;
   updatedAt: Date;
   part: { sku: string; name: string };
-  stockLocation: { locationName: string };
+  stockLocation: { id: string; locationName: string };
   balance?: InventoryLotBalanceRow;
 }) {
   const quantityOnHand = numberFromDb(r.balance?.quantityOnHand);
@@ -3504,6 +3956,7 @@ function toLotDetailResponse(r: {
     lotState: r.lotState,
     partSku: r.part.sku,
     partName: r.part.name,
+    stockLocationId: r.stockLocation.id,
     locationName: r.stockLocation.locationName,
     quantityOnHand,
     quantityReserved,

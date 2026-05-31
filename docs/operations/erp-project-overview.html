@@ -345,38 +345,38 @@
       <header>
         <h1>Golfin Garage ERP Project Overview</h1>
         <p class="lede">
-          High-level status after the inventory adjustment posting slice. The app has moved past
+          High-level status after the inventory transfer posting slice. The app has moved past
           polished static screens into a usable shop-ops ERP foundation, but it is not yet a
           complete ERPNext-grade operating system.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: May 31, 2026</span>
-          <span class="chip">Baseline: origin/main plus inventory adjustment branch</span>
-          <span class="chip">Active slice: stock adjustment posting</span>
+          <span class="chip">Baseline: origin/main plus inventory transfer branch</span>
+          <span class="chip">Active slice: stock transfer posting</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
 
       <div class="summary">
         <div class="metric">
-          <strong>70%</strong>
+          <strong>71%</strong>
           <span>Estimated production readiness for an internal ERP rollout.</span>
-          <div class="bar warn"><span style="width: 70%"></span></div>
+          <div class="bar warn"><span style="width: 71%"></span></div>
         </div>
         <div class="metric">
-          <strong>84%</strong>
+          <strong>85%</strong>
           <span>Actionability remediation from the UAT plan.</span>
-          <div class="bar good"><span style="width: 84%"></span></div>
+          <div class="bar good"><span style="width: 85%"></span></div>
         </div>
         <div class="metric">
-          <strong>64%</strong>
+          <strong>66%</strong>
           <span>Live workflow/API contract completeness.</span>
-          <div class="bar warn"><span style="width: 64%"></span></div>
+          <div class="bar warn"><span style="width: 66%"></span></div>
         </div>
         <div class="metric">
-          <strong>50%</strong>
+          <strong>52%</strong>
           <span>ERPNext-style breadth: ledgers, lifecycle, setup, reports.</span>
-          <div class="bar risk"><span style="width: 50%"></span></div>
+          <div class="bar risk"><span style="width: 52%"></span></div>
         </div>
       </div>
 
@@ -395,7 +395,7 @@
                 Inventory and purchasing are mostly actionable: PO drill-in, lifecycle actions,
                 receiving, reservations, replenishment, default-vendor assignment from planning,
                 variance, payable review, import/export, stock movement history, manual stock
-                adjustment posting, and bulk row actions.
+                adjustment posting, stock transfer posting, and bulk row actions.
               </li>
               <li>
                 Dashboards, KPI cards, reporting cards, and many workspace links now deep-link to
@@ -428,8 +428,8 @@
                 technician selectors still need broader catalog-backed coverage.
               </li>
               <li>
-                Transfer posting, cycle-count batches, and BOM authoring are the next inventory
-                depth gaps after manual stock adjustment posting.
+                Cycle-count batches and BOM authoring are the next inventory depth gaps after
+                manual stock adjustment and transfer posting.
               </li>
               <li>
                 Accounting is still integration-first; internal GL, financial reports, and ledger
@@ -590,16 +590,16 @@
           <div class="module-card">
             <header>
               <h3>Inventory And Purchasing</h3>
-              <span class="pill done">87%</span>
+              <span class="pill done">89%</span>
             </header>
-            <div class="bar good"><span style="width: 87%"></span></div>
+            <div class="bar good"><span style="width: 89%"></span></div>
             <p>
               Receiving, PO lifecycle, reservations, replenishment, default-vendor assignment from
               material planning, variance, payable handoff, import/export, stock movement history,
-              manual stock adjustments, and drill-through are live. Reservation, release, issue, and
-              adjustment writes now append immutable ledger consequences. Broader item editing,
-              transfer ledger writes, cycle-count batches, and BOM authoring are the next practical
-              gaps.
+              manual stock adjustments, stock transfer posting, and drill-through are live.
+              Reservation, release, issue, adjustment, and transfer writes now append immutable
+              ledger consequences. Broader item editing, cycle-count batches, and BOM authoring are
+              the next practical gaps.
             </p>
           </div>
 
@@ -766,8 +766,8 @@
             authoring/versioning now that selectors read from the dedicated planning catalog.
           </li>
           <li>
-            <strong>Move toward ERP ledgers:</strong> finish transfer inventory ledger writes and
-            start internal accounting ledger design before adding more financial-report UI.
+            <strong>Move toward ERP ledgers:</strong> add cycle-count batch execution and start
+            internal accounting ledger design before adding more financial-report UI.
           </li>
         </ol>
       </section>

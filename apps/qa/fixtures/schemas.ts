@@ -148,6 +148,39 @@ const inventoryAdjustment = z.object({
   correlationId: z.string(),
 });
 
+const inventoryLocation = z.object({
+  id: uuid,
+  locationCode: z.string(),
+  locationName: z.string(),
+  locationType: z.string(),
+  isPickable: z.boolean(),
+});
+
+const inventoryTransfer = z.object({
+  id: uuid,
+  transferNumber: z.string(),
+  status: z.string(),
+  fromStockLocationId: uuid,
+  fromLocationName: z.string(),
+  toStockLocationId: uuid,
+  toLocationName: z.string(),
+  fromStockLotId: uuid,
+  toStockLotId: uuid,
+  sourceLotNumber: z.string().optional(),
+  destinationLotNumber: z.string(),
+  partId: uuid,
+  partSku: z.string(),
+  partName: z.string(),
+  quantity: z.number(),
+  reasonCode: z.string().optional(),
+  notes: z.string().optional(),
+  transferOutLedgerEntryId: uuid,
+  transferInLedgerEntryId: uuid,
+  shippedAt: isoDate,
+  receivedAt: isoDate,
+  correlationId: z.string(),
+});
+
 // ─── Customers / Dealers ──────────────────────────────────────────────────
 
 const customer = z.object({
@@ -268,6 +301,7 @@ const ROUTES: RouteEntry[] = [
   { method: 'GET', template: '/inventory/parts', schema: paginated(part) },
   { method: 'GET', template: '/inventory/parts/{id}', schema: z.object({ part }) },
   { method: 'PATCH', template: '/inventory/parts/{id}', schema: z.object({ part }) },
+  { method: 'GET', template: '/inventory/locations', schema: paginated(inventoryLocation) },
   { method: 'GET', template: '/inventory/manufacturers', schema: paginated(manufacturer) },
   {
     method: 'GET',
@@ -291,6 +325,11 @@ const ROUTES: RouteEntry[] = [
     method: 'POST',
     template: '/inventory/adjustments',
     schema: z.object({ adjustment: inventoryAdjustment }),
+  },
+  {
+    method: 'POST',
+    template: '/inventory/transfers',
+    schema: z.object({ transfer: inventoryTransfer }),
   },
 
   // Identity / Customers / Dealers

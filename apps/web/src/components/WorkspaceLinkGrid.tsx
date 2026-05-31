@@ -9,6 +9,7 @@ import {
 import {
   BarChart3,
   BookOpen,
+  ArrowRightLeft,
   ClipboardCheck,
   ClipboardList,
   Factory,
@@ -47,6 +48,7 @@ const ICON_BY_ITEM_KEY: Partial<Record<string, LucideIcon>> = {
   'inventory-reservation': PackageCheck,
   'inventory-ledger': History,
   'inventory-adjustment': SlidersHorizontal,
+  'inventory-transfer': ArrowRightLeft,
   receiving: Truck,
   manufacturer: Factory,
   'material-planning': BarChart3,

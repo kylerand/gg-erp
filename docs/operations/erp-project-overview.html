@@ -39,7 +39,7 @@
           system-ui,
           -apple-system,
           BlinkMacSystemFont,
-          "Segoe UI",
+          'Segoe UI',
           sans-serif;
         line-height: 1.5;
       }
@@ -312,12 +312,7 @@
         background: #f3eee5;
         padding: 1px 5px;
         font-family:
-          ui-monospace,
-          SFMono-Regular,
-          "SF Mono",
-          Consolas,
-          "Liberation Mono",
-          monospace;
+          ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', monospace;
         font-size: 0.92em;
       }
 
@@ -350,9 +345,9 @@
       <header>
         <h1>Golfin Garage ERP Project Overview</h1>
         <p class="lede">
-          High-level status after the floor-tech SSO handoff slice. The app has
-          moved past polished static screens into a usable shop-ops ERP foundation, but it
-          is not yet a complete ERPNext-grade operating system.
+          High-level status after the floor-tech SSO handoff slice. The app has moved past polished
+          static screens into a usable shop-ops ERP foundation, but it is not yet a complete
+          ERPNext-grade operating system.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: May 31, 2026</span>
@@ -391,23 +386,62 @@
           <div class="callout">
             <h3>What is now strong</h3>
             <ul>
-              <li>Work-order detail has become the core command center: services, parts, time, QC, SOP, messages, accounting links, customer/cart drawers, profile edits, and quote conversion.</li>
-              <li>Inventory and purchasing are mostly actionable: PO drill-in, lifecycle actions, receiving, reservations, replenishment, default-vendor assignment from planning, variance, payable review, import/export, and bulk row actions.</li>
-              <li>Dashboards, KPI cards, reporting cards, and many workspace links now deep-link to real filtered destinations.</li>
-              <li>Training, reporting, and admin catalogs have moved from placeholder status to useful operational destinations.</li>
-              <li>CI, QA smoke, QA coverage, CD, and Pages are green on the latest merged production baseline.</li>
+              <li>
+                Work-order detail has become the core command center: services, parts, time, QC,
+                SOP, messages, accounting links, customer/cart drawers, profile edits, and quote
+                conversion.
+              </li>
+              <li>
+                Inventory and purchasing are mostly actionable: PO drill-in, lifecycle actions,
+                receiving, reservations, replenishment, default-vendor assignment from planning,
+                variance, payable review, import/export, and bulk row actions.
+              </li>
+              <li>
+                Dashboards, KPI cards, reporting cards, and many workspace links now deep-link to
+                real filtered destinations.
+              </li>
+              <li>
+                Training, reporting, and admin catalogs have moved from placeholder status to useful
+                operational destinations.
+              </li>
+              <li>
+                CI, QA smoke, QA coverage, CD, and Pages are green on the latest merged production
+                baseline.
+              </li>
             </ul>
           </div>
           <div class="callout">
             <h3>What still keeps this from full production confidence</h3>
             <ul>
-              <li>Some core contract tracking is stale and needs reconciliation with the work that shipped after March 20, 2026.</li>
-              <li>Identity/auth session bootstrap is deployed; this slice closes the one-click floor-tech SSO handoff from the ERP shell.</li>
-              <li>Build package selection now has a live planning-history catalog and manual released-reference fallback; material planning can assign default vendors, while technician selectors still need broader catalog-backed coverage.</li>
-              <li>Schedule publication is being added now; dispatch execution is the next planning-to-shop handoff gap.</li>
-              <li>Accounting is still integration-first; internal GL, financial reports, and ledger consequences are not mature yet.</li>
-              <li>ShopMonkey migration validation, reference data seeding, and cutover proving remain open.</li>
-              <li>Known API smoke route exceptions are now at zero; unsigned accounting webhook probes return a clean 400.</li>
+              <li>
+                Some core contract tracking is stale and needs reconciliation with the work that
+                shipped after March 20, 2026.
+              </li>
+              <li>
+                Identity/auth session bootstrap is deployed; this slice closes the one-click
+                floor-tech SSO handoff from the ERP shell.
+              </li>
+              <li>
+                Build package selection now has a live planning-history catalog and manual
+                released-reference fallback; material planning can assign default vendors, while
+                technician selectors still need broader catalog-backed coverage.
+              </li>
+              <li>
+                Schedule publication is being added now; dispatch execution is the next
+                planning-to-shop handoff gap.
+              </li>
+              <li>
+                Accounting is still integration-first; internal GL, financial reports, and ledger
+                consequences are not mature yet.
+              </li>
+              <li>
+                ShopMonkey migration validation, reference data seeding, and cutover proving remain
+                open.
+              </li>
+              <li>
+                Known API smoke route exceptions are now at zero; unsigned accounting webhook probes
+                return a clean 400.
+              </li>
             </ul>
           </div>
         </div>
@@ -431,44 +465,80 @@
           </thead>
           <tbody>
             <tr>
-              <td><strong>Production UAT stabilization</strong><br /><span class="muted">2-week horizon</span></td>
+              <td>
+                <strong>Production UAT stabilization</strong><br /><span class="muted"
+                  >2-week horizon</span
+                >
+              </td>
               <td>June 4, 2026</td>
               <td>
                 <span class="pill doing">72%</span>
                 <div class="bar warn"><span style="width: 72%"></span></div>
               </td>
-              <td>Internal users can complete normal shop workflows without placeholder clicks or route misses.</td>
-              <td>Reconcile remaining stale status docs, finish remaining selectors, and run live UAT scripts by role.</td>
+              <td>
+                Internal users can complete normal shop workflows without placeholder clicks or
+                route misses.
+              </td>
+              <td>
+                Reconcile remaining stale status docs, finish remaining selectors, and run live UAT
+                scripts by role.
+              </td>
             </tr>
             <tr>
-              <td><strong>Shop-ops MVP rollout</strong><br /><span class="muted">30-day horizon</span></td>
+              <td>
+                <strong>Shop-ops MVP rollout</strong><br /><span class="muted">30-day horizon</span>
+              </td>
               <td>June 20, 2026</td>
               <td>
                 <span class="pill doing">65%</span>
                 <div class="bar warn"><span style="width: 65%"></span></div>
               </td>
-              <td>Sales, work orders, inventory, purchasing, training, reporting, and admin can run a real internal pilot.</td>
-              <td>Finish dispatch execution hardening, technician/rework contract coverage, migration validation, and role permissions audit.</td>
+              <td>
+                Sales, work orders, inventory, purchasing, training, reporting, and admin can run a
+                real internal pilot.
+              </td>
+              <td>
+                Finish dispatch execution hardening, technician/rework contract coverage, migration
+                validation, and role permissions audit.
+              </td>
             </tr>
             <tr>
-              <td><strong>Integrated ERP operating model</strong><br /><span class="muted">60-day horizon</span></td>
+              <td>
+                <strong>Integrated ERP operating model</strong><br /><span class="muted"
+                  >60-day horizon</span
+                >
+              </td>
               <td>July 20, 2026</td>
               <td>
                 <span class="pill watch">48%</span>
                 <div class="bar risk"><span style="width: 48%"></span></div>
               </td>
               <td>The app behaves like one ERP, not a collection of good module pages.</td>
-              <td>Add inventory, labor, quality, and accounting ledger consequences; harden read models and freshness signals; complete setup/configuration domains.</td>
+              <td>
+                Add inventory, labor, quality, and accounting ledger consequences; harden read
+                models and freshness signals; complete setup/configuration domains.
+              </td>
             </tr>
             <tr>
-              <td><strong>ERPNext-inspired maturity</strong><br /><span class="muted">90-day horizon</span></td>
+              <td>
+                <strong>ERPNext-inspired maturity</strong><br /><span class="muted"
+                  >90-day horizon</span
+                >
+              </td>
               <td>August 19, 2026</td>
               <td>
                 <span class="pill watch">36%</span>
                 <div class="bar risk"><span style="width: 36%"></span></div>
               </td>
-              <td>Business objects, lifecycle, reports, settings, permissions, ledgers, and role workspaces are consistent across the ERP.</td>
-              <td>Standardize document lifecycle, internal accounting, stock movement history, BOM/routing/job-card parity, financial reports, warranty/support flows, and setup masters.</td>
+              <td>
+                Business objects, lifecycle, reports, settings, permissions, ledgers, and role
+                workspaces are consistent across the ERP.
+              </td>
+              <td>
+                Standardize document lifecycle, internal accounting ledger consequences,
+                BOM/routing/job-card parity, financial reports, warranty/support flows, and setup
+                masters.
+              </td>
             </tr>
           </tbody>
         </table>
@@ -483,7 +553,11 @@
               <span class="pill doing">75%</span>
             </header>
             <div class="bar warn"><span style="width: 75%"></span></div>
-            <p>Command search, quick create, recent routes, deep links, and workspace organization are useful. The active registry-route coverage branch is not counted as production complete until it lands through PR and CI.</p>
+            <p>
+              Command search, quick create, recent routes, deep links, and workspace organization
+              are useful. The active registry-route coverage branch is not counted as production
+              complete until it lands through PR and CI.
+            </p>
           </div>
 
           <div class="module-card">
@@ -492,7 +566,11 @@
               <span class="pill doing">82%</span>
             </header>
             <div class="bar good"><span style="width: 82%"></span></div>
-            <p>Strongest operator surface. The command center now covers commercial context, service transitions, materials, labor, QC, SOP, activity, customer/cart editing, accepted quote conversion, and build-package selection from the dedicated planning catalog.</p>
+            <p>
+              Strongest operator surface. The command center now covers commercial context, service
+              transitions, materials, labor, QC, SOP, activity, customer/cart editing, accepted
+              quote conversion, and build-package selection from the dedicated planning catalog.
+            </p>
           </div>
 
           <div class="module-card">
@@ -501,16 +579,25 @@
               <span class="pill doing">72%</span>
             </header>
             <div class="bar warn"><span style="width: 72%"></span></div>
-            <p>Pipeline, quotes, forecast, approvals, and quote conversion are live. Remaining maturity is around sales-order lifecycle, pricing rules, customer history, and deeper accounting consequences.</p>
+            <p>
+              Pipeline, quotes, forecast, approvals, and quote conversion are live. Remaining
+              maturity is around sales-order lifecycle, pricing rules, customer history, and deeper
+              accounting consequences.
+            </p>
           </div>
 
           <div class="module-card">
             <header>
               <h3>Inventory And Purchasing</h3>
-              <span class="pill done">82%</span>
+              <span class="pill done">85%</span>
             </header>
-            <div class="bar good"><span style="width: 82%"></span></div>
-            <p>Receiving, PO lifecycle, reservations, replenishment, default-vendor assignment from material planning, variance, payable handoff, import/export, and drill-through are live. Broader item editing, BOM authoring, and inventory movement history are the next practical gaps.</p>
+            <div class="bar good"><span style="width: 85%"></span></div>
+            <p>
+              Receiving, PO lifecycle, reservations, replenishment, default-vendor assignment from
+              material planning, variance, payable handoff, import/export, stock movement history,
+              and drill-through are live. Broader item editing and BOM authoring are the next
+              practical gaps.
+            </p>
           </div>
 
           <div class="module-card">
@@ -519,7 +606,11 @@
               <span class="pill doing">55%</span>
             </header>
             <div class="bar warn"><span style="width: 55%"></span></div>
-            <p>QuickBooks integration, sync status, reconciliation, payable review, mapping admin, and reference views exist. Full ERP accounting still needs internal GL, invoices/payments, financial reports, and a clean webhook error path.</p>
+            <p>
+              QuickBooks integration, sync status, reconciliation, payable review, mapping admin,
+              and reference views exist. Full ERP accounting still needs internal GL,
+              invoices/payments, financial reports, and a clean webhook error path.
+            </p>
           </div>
 
           <div class="module-card">
@@ -528,7 +619,11 @@
               <span class="pill doing">55%</span>
             </header>
             <div class="bar warn"><span style="width: 55%"></span></div>
-            <p>Customer/cart profile editing now exists inside work orders. Standalone CRM depth, cart asset history, warranty/service history, and dealer relationship workflows still need more complete surfaces.</p>
+            <p>
+              Customer/cart profile editing now exists inside work orders. Standalone CRM depth,
+              cart asset history, warranty/service history, and dealer relationship workflows still
+              need more complete surfaces.
+            </p>
           </div>
 
           <div class="module-card">
@@ -537,7 +632,11 @@
               <span class="pill doing">76%</span>
             </header>
             <div class="bar warn"><span style="width: 76%"></span></div>
-            <p>Training repair work is done for content loading, notes/bookmarks, fallback media, live filtered assignment destinations, manager assignment creation, and supervisor sign-off actions. SOP/module authoring and editing workflows remain future work.</p>
+            <p>
+              Training repair work is done for content loading, notes/bookmarks, fallback media,
+              live filtered assignment destinations, manager assignment creation, and supervisor
+              sign-off actions. SOP/module authoring and editing workflows remain future work.
+            </p>
           </div>
 
           <div class="module-card">
@@ -546,7 +645,11 @@
               <span class="pill doing">70%</span>
             </header>
             <div class="bar warn"><span style="width: 70%"></span></div>
-            <p>Report catalog, saved views, CSV export, admin configuration catalog, access, audit, integrations, and accounting settings are usable. Subscriptions, templates, API keys, and webhook admin are still later-phase items.</p>
+            <p>
+              Report catalog, saved views, CSV export, admin configuration catalog, access, audit,
+              integrations, and accounting settings are usable. Subscriptions, templates, API keys,
+              and webhook admin are still later-phase items.
+            </p>
           </div>
 
           <div class="module-card">
@@ -555,7 +658,11 @@
               <span class="pill watch">45%</span>
             </header>
             <div class="bar risk"><span style="width: 45%"></span></div>
-            <p>ShopMonkey migration framework exists, but cutover validation, historical backfill proof, reference seed migration, and production data quality checks are not yet complete.</p>
+            <p>
+              ShopMonkey migration framework exists, but cutover validation, historical backfill
+              proof, reference seed migration, and production data quality checks are not yet
+              complete.
+            </p>
           </div>
 
           <div class="module-card">
@@ -564,7 +671,11 @@
               <span class="pill doing">78%</span>
             </header>
             <div class="bar good"><span style="width: 78%"></span></div>
-            <p>PR and main CI/QA/CD discipline is strong. The remaining work is better role-based live UAT, deeper data assertions, route-registry drift checks, and cleanup of stale status docs.</p>
+            <p>
+              PR and main CI/QA/CD discipline is strong. The remaining work is better role-based
+              live UAT, deeper data assertions, route-registry drift checks, and cleanup of stale
+              status docs.
+            </p>
           </div>
         </div>
       </section>
@@ -583,17 +694,26 @@
             <tr>
               <td>Latest production baseline</td>
               <td><span class="pill done">Merged</span></td>
-              <td><code>origin/main</code> is at <code>529f4e9</code>, from PR 78: route allowlist cleanup after PR 77 profile editing deployed.</td>
+              <td>
+                <code>origin/main</code> is at <code>529f4e9</code>, from PR 78: route allowlist
+                cleanup after PR 77 profile editing deployed.
+              </td>
             </tr>
             <tr>
               <td>Recent pipeline health</td>
               <td><span class="pill done">Green</span></td>
-              <td>Latest main CI, QA, Pages, and prior CD runs completed successfully. Latest scheduled QA on May 21, 2026 also succeeded.</td>
+              <td>
+                Latest main CI, QA, Pages, and prior CD runs completed successfully. Latest
+                scheduled QA on May 21, 2026 also succeeded.
+              </td>
             </tr>
             <tr>
               <td>Route/API surface</td>
               <td><span class="pill info">Broad</span></td>
-              <td>Recent smoke discovery covered 142 API routes. Main has 156 Lambda handler entrypoints and 37 API test files.</td>
+              <td>
+                Recent smoke discovery covered 142 API routes. Main has 156 Lambda handler
+                entrypoints and 37 API test files.
+              </td>
             </tr>
             <tr>
               <td>Web surface</td>
@@ -603,12 +723,18 @@
             <tr>
               <td>ERP registry direction</td>
               <td><span class="pill doing">In Progress</span></td>
-              <td>Main defines 37 registry objects, 35 workspace links, 5 quick actions, and 14 reports. More registry-backed coverage is active locally but not merged.</td>
+              <td>
+                Main defines 37 registry objects, 35 workspace links, 5 quick actions, and 14
+                reports. More registry-backed coverage is active locally but not merged.
+              </td>
             </tr>
             <tr>
               <td>Known route exceptions</td>
               <td><span class="pill done">0 Open</span></td>
-              <td><code>POST /accounting/webhook</code> returns an explicit 400 for unsigned non-empty probes; <code>known-broken.json</code> is empty.</td>
+              <td>
+                <code>POST /accounting/webhook</code> returns an explicit 400 for unsigned non-empty
+                probes; <code>known-broken.json</code> is empty.
+              </td>
             </tr>
           </tbody>
         </table>
@@ -617,21 +743,52 @@
       <section>
         <h2>Recommended Next Slice</h2>
         <ol>
-          <li><strong>Reconcile status truth:</strong> update <code>docs/architecture/IMPLEMENTATION_STATUS.md</code> to reflect the PR 59-78 work so project reporting stops undercounting shipped functionality.</li>
-          <li><strong>Finish registry-backed route coverage:</strong> land the active registry route coverage branch through CI so navigation, command palette, and QA share one source of truth.</li>
-          <li><strong>Keep production blockers closed:</strong> continue verifying <code>GET /auth/me</code>, the accounting webhook 400 path, and floor-tech SSO handoff in live UAT runs.</li>
-          <li><strong>Extend planning masters:</strong> add write-side build configuration and BOM authoring/versioning now that selectors read from the dedicated planning catalog.</li>
-          <li><strong>Move toward ERP ledgers:</strong> start inventory movement history and internal accounting ledger design before adding more financial-report UI.</li>
+          <li>
+            <strong>Reconcile status truth:</strong> update
+            <code>docs/architecture/IMPLEMENTATION_STATUS.md</code> to reflect the PR 59-78 work so
+            project reporting stops undercounting shipped functionality.
+          </li>
+          <li>
+            <strong>Finish registry-backed route coverage:</strong> land the active registry route
+            coverage branch through CI so navigation, command palette, and QA share one source of
+            truth.
+          </li>
+          <li>
+            <strong>Keep production blockers closed:</strong> continue verifying
+            <code>GET /auth/me</code>, the accounting webhook 400 path, and floor-tech SSO handoff
+            in live UAT runs.
+          </li>
+          <li>
+            <strong>Extend planning masters:</strong> add write-side build configuration and BOM
+            authoring/versioning now that selectors read from the dedicated planning catalog.
+          </li>
+          <li>
+            <strong>Move toward ERP ledgers:</strong> extend inventory ledger writes across all
+            stock mutations and start internal accounting ledger design before adding more
+            financial-report UI.
+          </li>
         </ol>
       </section>
 
       <section>
         <h2>Scope Notes</h2>
         <ul>
-          <li>The estimates intentionally count only merged <code>origin/main</code> behavior as production baseline.</li>
-          <li>The local checkout currently has unrelated in-progress registry/repo-agent changes. Those are noted as active work but excluded from completion percentages until merged.</li>
-          <li>The older MVP status tracker is useful but stale. The actionability tracker is more current after PR 78.</li>
-          <li>The product direction remains "Shop Ops ERP": ERPNext-informed architecture, current Golfin Garage UI style, and operator workflows first.</li>
+          <li>
+            The estimates intentionally count only merged <code>origin/main</code> behavior as
+            production baseline.
+          </li>
+          <li>
+            The local checkout currently has unrelated in-progress registry/repo-agent changes.
+            Those are noted as active work but excluded from completion percentages until merged.
+          </li>
+          <li>
+            The older MVP status tracker is useful but stale. The actionability tracker is more
+            current after PR 78.
+          </li>
+          <li>
+            The product direction remains "Shop Ops ERP": ERPNext-informed architecture, current
+            Golfin Garage UI style, and operator workflows first.
+          </li>
         </ul>
       </section>
     </main>

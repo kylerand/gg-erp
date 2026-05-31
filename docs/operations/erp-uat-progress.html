@@ -270,10 +270,12 @@
               <td><span class="pill done">Done</span></td>
               <td>
                 Command search, quick create, recent routes, notification deep links, server-backed
-                session bootstrap, and one-click ERP-to-floor-tech Cognito handoff through the
-                floor app auth entrypoint.
+                session bootstrap, and one-click ERP-to-floor-tech Cognito handoff through the floor
+                app auth entrypoint.
               </td>
-              <td>Keep shell destinations on the route registry as new workspaces become stable.</td>
+              <td>
+                Keep shell destinations on the route registry as new workspaces become stable.
+              </td>
             </tr>
             <tr>
               <td>Unified work-order command center</td>
@@ -287,8 +289,8 @@
                 operations and part demand. My Queue, SOP Runner, QC, and Dispatch now resolve
                 work-order and routing-step context instead of falling back to raw IDs. Planner
                 links now focus the exact service operation inside the work-order command center.
-                Technician-task transitions now fail cleanly when unassigned work is started, and
-                My Queue refreshes from the server after rejected task transitions.
+                Technician-task transitions now fail cleanly when unassigned work is started, and My
+                Queue refreshes from the server after rejected task transitions.
               </td>
               <td>Add any remaining stable selectors.</td>
             </tr>
@@ -408,9 +410,9 @@
                 fallback route exists; dev seed includes a real training module thumbnail; team
                 assignment lists resolve employee names from the live HR catalog; assignment
                 status/search filters are URL-backed for report drill-throughs; trainers can create
-                new team assignments from live active-module and employee selectors; modules
-                that require supervisor review now move into Pending Sign-off and can be closed
-                from Team Assignments with a live sign-off action.
+                new team assignments from live active-module and employee selectors; modules that
+                require supervisor review now move into Pending Sign-off and can be closed from Team
+                Assignments with a live sign-off action.
               </td>
               <td>Add SOP/module content editing once those APIs exist.</td>
             </tr>
@@ -421,13 +423,14 @@
                 PO receiving, PO/vendor list and detail reads, purchase-order drill-in, focused
                 receiving links, PO create/edit/approve/send/cancel/close actions, work-order
                 reservation execution, live replenishment recommendations with draft PO creation,
-                default-vendor assignment from the material-planning replenishment table,
-                receiving variance reporting with accepted/rejected quantity posting, reservation
-                and receiving rows avoid raw part/work-order ID fallbacks when display context is
+                default-vendor assignment from the material-planning replenishment table, receiving
+                variance reporting with accepted/rejected quantity posting, reservation and
+                receiving rows avoid raw part/work-order ID fallbacks when display context is
                 missing, and live accounting payable review for received POs are wired to live
                 inventory APIs. Part lookup now supports CSV export, CSV import through the live
                 create-part endpoint, selected-row SKU copy, and purchase-order selected/visible CSV
-                export.
+                export. Inventory now exposes a live movement ledger for stock receipts, issues,
+                reservations, transfers, and adjustments.
               </td>
               <td>
                 Expand broader item editing and BOM selectors when those mutation APIs are stable.

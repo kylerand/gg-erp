@@ -717,8 +717,23 @@ const RESERVATION_STATUSES = [
   'EXPIRED',
 ] as const;
 
+const INVENTORY_LEDGER_MOVEMENT_TYPES = [
+  'RECEIPT',
+  'RESERVATION',
+  'ALLOCATION',
+  'RELEASE',
+  'ISSUE',
+  'RETURN',
+  'TRANSFER_OUT',
+  'TRANSFER_IN',
+  'ADJUSTMENT',
+  'CYCLE_COUNT',
+  'REVERSAL',
+] as const;
+
 type ReservationStatus = (typeof RESERVATION_STATUSES)[number];
 type ReservationStatusFilter = ReservationStatus | 'OPEN' | 'ALL';
+type InventoryLedgerMovementType = (typeof INVENTORY_LEDGER_MOVEMENT_TYPES)[number];
 
 interface ListReservationsFilters {
   status?: ReservationStatusFilter;
@@ -757,6 +772,54 @@ interface InventoryReservationRow {
 
 interface CountRow {
   total: number | bigint | string;
+}
+
+interface InventoryLedgerFilters {
+  search?: string;
+  movementTypes?: InventoryLedgerMovementType[];
+  partId?: string;
+  stockLocationId?: string;
+  stockLotId?: string;
+  workOrderId?: string;
+  sourceDocumentId?: string;
+  correlationId?: string;
+  from?: Date;
+  to?: Date;
+  limit?: number;
+  offset?: number;
+}
+
+interface InventoryLedgerRow {
+  id: string;
+  movementType: InventoryLedgerMovementType | string;
+  quantityDelta: unknown;
+  unitCost: unknown;
+  valueDelta: unknown;
+  reasonCode: string;
+  sourceDocumentType: string | null;
+  sourceDocumentId: string | null;
+  correlationId: string;
+  createdAt: Date;
+  partId: string;
+  partSku: string;
+  partName: string;
+  unitOfMeasure: string;
+  stockLocationId: string;
+  locationName: string;
+  stockLotId: string | null;
+  lotNumber: string | null;
+  workOrderId: string | null;
+  workOrderNumber: string | null;
+  purchaseOrderId: string | null;
+  poNumber: string | null;
+  purchaseOrderLineId: string | null;
+}
+
+interface InventoryLedgerSummaryRow {
+  movementType: InventoryLedgerMovementType | string;
+  entryCount: number | bigint | string;
+  quantityDelta: unknown;
+  valueDelta: unknown;
 }
 
 interface InventoryLotBalanceRow {
@@ -850,6 +913,101 @@ class PurchaseOrderCommandError extends Error {
     super(message);
   }
 }
+
+export const inventoryLedgerQueries = {
+  async listLedger(filters?: InventoryLedgerFilters) {
+    const limit = Math.min(Math.max(filters?.limit ?? 50, 1), 200);
+    const offset = Math.max(filters?.offset ?? 0, 0);
+    const where = buildInventoryLedgerWhere(filters);
+    const prisma = getInventoryPrisma();
+
+    const [items, countRows, summaryRows] = await Promise.all([
+      prisma.$queryRaw<InventoryLedgerRow[]>`
+        SELECT
+          l.id::text AS "id",
+          l.movement_type AS "movementType",
+          l.quantity_delta AS "quantityDelta",
+          l.unit_cost AS "unitCost",
+          l.value_delta AS "valueDelta",
+          l.reason_code AS "reasonCode",
+          l.source_document_type AS "sourceDocumentType",
+          l.source_document_id AS "sourceDocumentId",
+          l.correlation_id AS "correlationId",
+          l.created_at AS "createdAt",
+          p.id::text AS "partId",
+          p.sku AS "partSku",
+          p.name AS "partName",
+          p.unit_of_measure AS "unitOfMeasure",
+          loc.id::text AS "stockLocationId",
+          loc.location_name AS "locationName",
+          lot.id::text AS "stockLotId",
+          lot.lot_number AS "lotNumber",
+          wo.id::text AS "workOrderId",
+          wo.work_order_number AS "workOrderNumber",
+          po.id::text AS "purchaseOrderId",
+          po.po_number AS "poNumber",
+          pol.id::text AS "purchaseOrderLineId"
+        FROM inventory.inventory_ledger_entries l
+        JOIN inventory.parts p ON p.id = l.part_id
+        JOIN inventory.stock_locations loc ON loc.id = l.stock_location_id
+        LEFT JOIN inventory.stock_lots lot ON lot.id = l.stock_lot_id
+        LEFT JOIN work_orders.work_orders wo ON wo.id = l.work_order_id
+        LEFT JOIN inventory.purchase_order_lines pol
+          ON l.source_document_type = 'PURCHASE_ORDER_LINE'
+          AND l.source_document_id = pol.id::text
+        LEFT JOIN inventory.purchase_orders po ON po.id = pol.purchase_order_id
+        ${where}
+        ORDER BY l.created_at DESC, l.id DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `,
+      prisma.$queryRaw<CountRow[]>`
+        SELECT COUNT(*) AS "total"
+        FROM inventory.inventory_ledger_entries l
+        JOIN inventory.parts p ON p.id = l.part_id
+        JOIN inventory.stock_locations loc ON loc.id = l.stock_location_id
+        LEFT JOIN inventory.stock_lots lot ON lot.id = l.stock_lot_id
+        LEFT JOIN work_orders.work_orders wo ON wo.id = l.work_order_id
+        LEFT JOIN inventory.purchase_order_lines pol
+          ON l.source_document_type = 'PURCHASE_ORDER_LINE'
+          AND l.source_document_id = pol.id::text
+        LEFT JOIN inventory.purchase_orders po ON po.id = pol.purchase_order_id
+        ${where}
+      `,
+      prisma.$queryRaw<InventoryLedgerSummaryRow[]>`
+        SELECT
+          l.movement_type AS "movementType",
+          COUNT(*) AS "entryCount",
+          COALESCE(SUM(l.quantity_delta), 0) AS "quantityDelta",
+          COALESCE(SUM(l.value_delta), 0) AS "valueDelta"
+        FROM inventory.inventory_ledger_entries l
+        JOIN inventory.parts p ON p.id = l.part_id
+        JOIN inventory.stock_locations loc ON loc.id = l.stock_location_id
+        LEFT JOIN inventory.stock_lots lot ON lot.id = l.stock_lot_id
+        LEFT JOIN work_orders.work_orders wo ON wo.id = l.work_order_id
+        LEFT JOIN inventory.purchase_order_lines pol
+          ON l.source_document_type = 'PURCHASE_ORDER_LINE'
+          AND l.source_document_id = pol.id::text
+        LEFT JOIN inventory.purchase_orders po ON po.id = pol.purchase_order_id
+        ${where}
+        GROUP BY l.movement_type
+        ORDER BY "entryCount" DESC, l.movement_type ASC
+      `,
+    ]);
+
+    return {
+      items: items.map(toInventoryLedgerEntryResponse),
+      total: Number(countRows[0]?.total ?? 0),
+      limit,
+      offset,
+      summary: summaryRows.map((row) => ({
+        movementType: row.movementType,
+        entryCount: Number(row.entryCount),
+        quantityDelta: numberFromDb(row.quantityDelta),
+        valueDelta: numberFromDb(row.valueDelta),
+      })),
+    };
+  },
+};
 
 export const inventoryReservationQueries = {
   async listReservations(filters?: ListReservationsFilters) {
@@ -1368,10 +1526,80 @@ function parseReservationStatusFilter(value: string | undefined): {
   return { error: `Unsupported reservation status: ${value}` };
 }
 
+function parseInventoryLedgerMovementTypes(value: string | undefined): {
+  value?: InventoryLedgerMovementType[];
+  error?: string;
+} {
+  if (!value?.trim()) return {};
+  const tokens = value
+    .split(',')
+    .map((token) => token.trim().toUpperCase())
+    .filter(Boolean);
+  const unsupported = tokens.filter(
+    (token) => !INVENTORY_LEDGER_MOVEMENT_TYPES.includes(token as InventoryLedgerMovementType),
+  );
+  if (unsupported.length > 0) {
+    return { error: `Unsupported inventory ledger movement type: ${unsupported.join(', ')}` };
+  }
+  return { value: [...new Set(tokens)] as InventoryLedgerMovementType[] };
+}
+
 function parsePositiveInteger(value: string | undefined, fallback: number): number {
   if (!value?.trim()) return fallback;
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function parseNonNegativeInteger(value: string | undefined, fallback: number): number {
+  if (!value?.trim()) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function parseLedgerDate(
+  value: string | undefined,
+  field: string,
+): { value?: Date; error?: string } {
+  if (!value?.trim()) return {};
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return { error: `${field} must be an ISO-8601 timestamp.` };
+  return { value: date };
+}
+
+function buildInventoryLedgerWhere(filters?: InventoryLedgerFilters): Prisma.Sql {
+  const clauses: Prisma.Sql[] = [];
+  const search = filters?.search?.trim();
+  if (search) {
+    clauses.push(Prisma.sql`(
+      p.sku ILIKE '%' || ${search}::text || '%'
+      OR p.name ILIKE '%' || ${search}::text || '%'
+      OR loc.location_name ILIKE '%' || ${search}::text || '%'
+      OR lot.lot_number ILIKE '%' || ${search}::text || '%'
+      OR wo.work_order_number ILIKE '%' || ${search}::text || '%'
+      OR po.po_number ILIKE '%' || ${search}::text || '%'
+      OR l.source_document_id ILIKE '%' || ${search}::text || '%'
+      OR l.correlation_id ILIKE '%' || ${search}::text || '%'
+    )`);
+  }
+  if (filters?.movementTypes?.length) {
+    clauses.push(Prisma.sql`l.movement_type IN (${Prisma.join(filters.movementTypes)})`);
+  }
+  if (filters?.partId) clauses.push(Prisma.sql`l.part_id = ${filters.partId}::uuid`);
+  if (filters?.stockLocationId) {
+    clauses.push(Prisma.sql`l.stock_location_id = ${filters.stockLocationId}::uuid`);
+  }
+  if (filters?.stockLotId) clauses.push(Prisma.sql`l.stock_lot_id = ${filters.stockLotId}::uuid`);
+  if (filters?.workOrderId)
+    clauses.push(Prisma.sql`l.work_order_id = ${filters.workOrderId}::uuid`);
+  if (filters?.sourceDocumentId) {
+    clauses.push(Prisma.sql`l.source_document_id = ${filters.sourceDocumentId}`);
+  }
+  if (filters?.correlationId) clauses.push(Prisma.sql`l.correlation_id = ${filters.correlationId}`);
+  if (filters?.from) clauses.push(Prisma.sql`l.created_at >= ${filters.from}`);
+  if (filters?.to) clauses.push(Prisma.sql`l.created_at <= ${filters.to}`);
+
+  if (clauses.length === 0) return Prisma.empty;
+  return Prisma.sql`WHERE ${Prisma.join(clauses, ' AND ')}`;
 }
 
 function parseOptionalAdjustmentBody(
@@ -2042,6 +2270,54 @@ export const planMaterialByStageHandler = wrapHandler(
   { requireAuth: false },
 );
 
+// ─── Inventory Ledger ────────────────────────────────────────────────────────
+
+export const listInventoryLedgerHandler = wrapHandler(
+  async (ctx) => {
+    const qs = ctx.event.queryStringParameters ?? {};
+    const movementTypes = parseInventoryLedgerMovementTypes(qs.movementType ?? qs.movementTypes);
+    if (movementTypes.error) return jsonResponse(422, { message: movementTypes.error });
+
+    const partId = parseOptionalUuid(qs.partId, 'partId');
+    if (partId.error) return jsonResponse(422, { message: partId.error });
+    const stockLocationId = parseOptionalUuid(
+      qs.stockLocationId ?? qs.locationId,
+      'stockLocationId',
+    );
+    if (stockLocationId.error) return jsonResponse(422, { message: stockLocationId.error });
+    const stockLotId = parseOptionalUuid(qs.stockLotId ?? qs.lotId, 'stockLotId');
+    if (stockLotId.error) return jsonResponse(422, { message: stockLotId.error });
+    const workOrderId = parseOptionalUuid(qs.workOrderId, 'workOrderId');
+    if (workOrderId.error) return jsonResponse(422, { message: workOrderId.error });
+
+    const from = parseLedgerDate(qs.from, 'from');
+    if (from.error) return jsonResponse(422, { message: from.error });
+    const to = parseLedgerDate(qs.to, 'to');
+    if (to.error) return jsonResponse(422, { message: to.error });
+    if (from.value && to.value && from.value.getTime() > to.value.getTime()) {
+      return jsonResponse(422, { message: 'from cannot be after to.' });
+    }
+
+    const result = await inventoryLedgerQueries.listLedger({
+      search: qs.search?.trim() || undefined,
+      movementTypes: movementTypes.value,
+      partId: partId.value,
+      stockLocationId: stockLocationId.value,
+      stockLotId: stockLotId.value,
+      workOrderId: workOrderId.value,
+      sourceDocumentId: qs.sourceDocumentId?.trim() || undefined,
+      correlationId: qs.correlationId?.trim() || undefined,
+      from: from.value,
+      to: to.value,
+      limit: parsePositiveInteger(qs.limit, 50),
+      offset: parseNonNegativeInteger(qs.offset, 0),
+    });
+
+    return jsonResponse(200, result);
+  },
+  { requireAuth: false },
+);
+
 // ─── List Manufacturers ──────────────────────────────────────────────────────
 
 export const listManufacturersHandler = wrapHandler(
@@ -2582,6 +2858,62 @@ function numberFromDb(value: unknown): number {
     return (value as { toNumber(): number }).toNumber();
   }
   return 0;
+}
+
+function toInventoryLedgerEntryResponse(row: InventoryLedgerRow) {
+  const createdAt =
+    row.createdAt instanceof Date
+      ? row.createdAt.toISOString()
+      : new Date(row.createdAt).toISOString();
+  return {
+    id: row.id,
+    movementType: row.movementType,
+    quantityDelta: numberFromDb(row.quantityDelta),
+    unitCost: row.unitCost === null ? undefined : numberFromDb(row.unitCost),
+    valueDelta: row.valueDelta === null ? undefined : numberFromDb(row.valueDelta),
+    reasonCode: row.reasonCode,
+    sourceDocument:
+      row.sourceDocumentType || row.sourceDocumentId
+        ? {
+            type: row.sourceDocumentType ?? 'UNKNOWN',
+            id: row.sourceDocumentId ?? '',
+          }
+        : undefined,
+    correlationId: row.correlationId,
+    createdAt,
+    part: {
+      id: row.partId,
+      sku: row.partSku,
+      name: row.partName,
+      unitOfMeasure: row.unitOfMeasure,
+    },
+    location: {
+      id: row.stockLocationId,
+      name: row.locationName,
+    },
+    lot:
+      row.stockLotId || row.lotNumber
+        ? {
+            id: row.stockLotId,
+            lotNumber: row.lotNumber,
+          }
+        : undefined,
+    workOrder:
+      row.workOrderId || row.workOrderNumber
+        ? {
+            id: row.workOrderId,
+            number: row.workOrderNumber,
+          }
+        : undefined,
+    purchaseOrder:
+      row.purchaseOrderId || row.poNumber
+        ? {
+            id: row.purchaseOrderId,
+            number: row.poNumber,
+            lineId: row.purchaseOrderLineId,
+          }
+        : undefined,
+  };
 }
 
 function toReservationResponse(r: InventoryReservationRow) {

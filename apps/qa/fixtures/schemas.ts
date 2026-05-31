@@ -26,7 +26,12 @@ const paginated = <T extends z.ZodTypeAny>(item: T) =>
 // ─── Work Orders ──────────────────────────────────────────────────────────
 
 const workOrderState = z.enum([
-  'PLANNED', 'RELEASED', 'IN_PROGRESS', 'BLOCKED', 'COMPLETED', 'CANCELLED',
+  'PLANNED',
+  'RELEASED',
+  'IN_PROGRESS',
+  'BLOCKED',
+  'COMPLETED',
+  'CANCELLED',
 ]);
 
 const workOrder = z.object({
@@ -59,9 +64,7 @@ const cartVehicle = z.object({
 
 // ─── Inventory ────────────────────────────────────────────────────────────
 
-const partLifecycleLevel = z.enum([
-  'RAW_COMPONENT', 'PREPARED_COMPONENT', 'ASSEMBLED_COMPONENT',
-]);
+const partLifecycleLevel = z.enum(['RAW_COMPONENT', 'PREPARED_COMPONENT', 'ASSEMBLED_COMPONENT']);
 
 const part = z.object({
   id: uuid,
@@ -88,6 +91,41 @@ const manufacturer = z.object({
   notes: z.string().nullable().optional(),
 });
 
+const inventoryLedgerEntry = z.object({
+  id: uuid,
+  movementType: z.string(),
+  quantityDelta: z.number(),
+  unitCost: z.number().optional(),
+  valueDelta: z.number().optional(),
+  reasonCode: z.string(),
+  sourceDocument: z.object({ type: z.string(), id: z.string() }).optional(),
+  correlationId: z.string(),
+  createdAt: isoDate,
+  part: z.object({
+    id: uuid,
+    sku: z.string(),
+    name: z.string(),
+    unitOfMeasure: z.string(),
+  }),
+  location: z.object({
+    id: uuid,
+    name: z.string(),
+  }),
+  lot: z
+    .object({ id: z.string().nullable().optional(), lotNumber: z.string().nullable().optional() })
+    .optional(),
+  workOrder: z
+    .object({ id: z.string().nullable().optional(), number: z.string().nullable().optional() })
+    .optional(),
+  purchaseOrder: z
+    .object({
+      id: z.string().nullable().optional(),
+      number: z.string().nullable().optional(),
+      lineId: z.string().nullable().optional(),
+    })
+    .optional(),
+});
+
 // ─── Customers / Dealers ──────────────────────────────────────────────────
 
 const customer = z.object({
@@ -99,7 +137,7 @@ const customer = z.object({
 });
 
 const dealer = z.object({
-  id: z.string(),  // Mock data uses 'd-1' style; relax UUID requirement.
+  id: z.string(), // Mock data uses 'd-1' style; relax UUID requirement.
   name: z.string(),
   contactEmail: z.string().optional(),
   serviceRelationship: z.enum(['ACTIVE', 'INACTIVE']),
@@ -133,7 +171,11 @@ const reconciliationRun = z.object({
 // ─── Sales ────────────────────────────────────────────────────────────────
 
 const opportunityStage = z.enum([
-  'PROSPECTING', 'PROPOSAL', 'NEGOTIATION', 'CLOSED_WON', 'CLOSED_LOST',
+  'PROSPECTING',
+  'PROPOSAL',
+  'NEGOTIATION',
+  'CLOSED_WON',
+  'CLOSED_LOST',
 ]);
 const opportunity = z.object({
   id: uuid,
@@ -205,6 +247,24 @@ const ROUTES: RouteEntry[] = [
   { method: 'GET', template: '/inventory/parts/{id}', schema: z.object({ part }) },
   { method: 'PATCH', template: '/inventory/parts/{id}', schema: z.object({ part }) },
   { method: 'GET', template: '/inventory/manufacturers', schema: paginated(manufacturer) },
+  {
+    method: 'GET',
+    template: '/inventory/ledger',
+    schema: z.object({
+      items: z.array(inventoryLedgerEntry),
+      total: positiveInt,
+      limit: positiveInt,
+      offset: positiveInt,
+      summary: z.array(
+        z.object({
+          movementType: z.string(),
+          entryCount: positiveInt,
+          quantityDelta: z.number(),
+          valueDelta: z.number(),
+        }),
+      ),
+    }),
+  },
 
   // Identity / Customers / Dealers
   { method: 'GET', template: '/identity/customers', schema: paginated(customer) },
@@ -212,7 +272,11 @@ const ROUTES: RouteEntry[] = [
 
   // Accounting
   { method: 'GET', template: '/accounting/status', schema: accountingStatus },
-  { method: 'GET', template: '/accounting/reconciliation/runs', schema: paginated(reconciliationRun) },
+  {
+    method: 'GET',
+    template: '/accounting/reconciliation/runs',
+    schema: paginated(reconciliationRun),
+  },
 
   // Sales
   { method: 'GET', template: '/sales/opportunities', schema: paginated(opportunity) },

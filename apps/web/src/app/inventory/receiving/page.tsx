@@ -51,6 +51,15 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Request failed.';
 }
 
+function partDisplayLabel(line: PurchaseOrderLine): string {
+  return line.partSku?.trim() || line.partName?.trim() || 'Unresolved part';
+}
+
+function partDisplayDetail(line: PurchaseOrderLine): string | undefined {
+  if (line.partSku?.trim()) return line.partName;
+  return 'SKU missing. Open part detail to repair catalog mapping.';
+}
+
 function isPastDue(value?: string): boolean {
   if (!value) return false;
   const due = new Date(value);
@@ -175,8 +184,11 @@ function VarianceReport({ rows }: { rows: ReceivingVarianceRow[] }) {
                         href={erpRecordRoute('part', row.line.partId)}
                         className="font-mono text-xs font-semibold text-gray-900 hover:underline"
                       >
-                        {row.line.partSku ?? row.line.partId}
+                        {partDisplayLabel(row.line)}
                       </Link>
+                      {partDisplayDetail(row.line) && (
+                        <div className="text-xs text-gray-500">{partDisplayDetail(row.line)}</div>
+                      )}
                       <div className="text-xs text-gray-500">{row.detail}</div>
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
@@ -471,10 +483,12 @@ export default function ReceivingPage() {
                                 href={erpRecordRoute('part', line.partId)}
                                 className="font-mono text-xs font-semibold text-gray-900 hover:underline"
                               >
-                                {line.partSku ?? line.partId}
+                                {partDisplayLabel(line)}
                               </Link>
-                              {line.partName && (
-                                <div className="mt-0.5 text-gray-600">{line.partName}</div>
+                              {partDisplayDetail(line) && (
+                                <div className="mt-0.5 text-gray-600">
+                                  {partDisplayDetail(line)}
+                                </div>
                               )}
                             </td>
                             <td className="px-3 py-2 text-gray-600">

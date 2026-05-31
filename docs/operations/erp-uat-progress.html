@@ -395,10 +395,12 @@
                 PO receiving, PO/vendor list and detail reads, purchase-order drill-in, focused
                 receiving links, PO create/edit/approve/send/cancel/close actions, work-order
                 reservation execution, live replenishment recommendations with draft PO creation,
-                receiving variance reporting with accepted/rejected quantity posting, and live
-                accounting payable review for received POs are wired to live inventory APIs. Part
-                lookup now supports CSV export, CSV import through the live create-part endpoint,
-                selected-row SKU copy, and purchase-order selected/visible CSV export.
+                receiving variance reporting with accepted/rejected quantity posting, reservation
+                and receiving rows avoid raw part/work-order ID fallbacks when display context is
+                missing, and live accounting payable review for received POs are wired to live
+                inventory APIs. Part lookup now supports CSV export, CSV import through the live
+                create-part endpoint, selected-row SKU copy, and purchase-order selected/visible CSV
+                export.
               </td>
               <td>
                 Expand item edit and vendor/BOM selectors when those mutation APIs are stable.

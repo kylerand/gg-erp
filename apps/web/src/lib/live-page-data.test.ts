@@ -131,6 +131,7 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
   const timeLoggingSource = readSource('app/work-orders/time-logging/page.tsx');
   const opportunitySource = readSource('app/sales/opportunities/new/page.tsx');
   const quoteSource = readSource('app/sales/quotes/new/page.tsx');
+  const reservationsSource = readSource('app/inventory/reservations/page.tsx');
 
   assert.deepEqual(
     ['listCustomers', 'listCartVehicles', 'listWorkOrders', 'SearchableSelect'].filter(
@@ -156,7 +157,17 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
     ),
     [],
   );
+  assert.deepEqual(
+    [
+      'listWorkOrders({ limit: 200 }, { allowMockFallback: false })',
+      'workOrderOption',
+      'selectedWorkOrderId',
+      'SearchableSelect',
+    ].filter((call) => !reservationsSource.includes(call)),
+    [],
+  );
   assert.equal(timeLoggingSource.includes('placeholder="WO-001"'), false);
+  assert.equal(reservationsSource.includes('Work Order ID'), false);
 
   const rawIdLabels = [
     /Customer ID/i,
@@ -165,12 +176,14 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
     /BOM ID/i,
     /Opportunity ID/i,
     /Part ID/i,
+    /Work Order ID/i,
   ];
   const rawIdUses = rawIdLabels.flatMap((pattern) =>
     [
       ['app/work-orders/new/page.tsx', workOrderSource] as const,
       ['app/sales/opportunities/new/page.tsx', opportunitySource] as const,
       ['app/sales/quotes/new/page.tsx', quoteSource] as const,
+      ['app/inventory/reservations/page.tsx', reservationsSource] as const,
     ]
       .filter(([, source]) => pattern.test(source))
       .map(([page]) => ({ page, pattern: pattern.source })),

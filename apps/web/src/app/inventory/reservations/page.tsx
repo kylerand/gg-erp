@@ -11,14 +11,17 @@ import {
   createInventoryReservation,
   listInventoryLots,
   listInventoryReservations,
+  listWorkOrders,
   releaseInventoryReservation,
   type InventoryLot,
   type InventoryReservation,
   type InventoryReservationStatus,
+  type WorkOrder,
 } from '@/lib/api-client';
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
 
 type ReservationFilter = InventoryReservationStatus | 'OPEN' | 'ALL';
 
@@ -59,6 +62,32 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Request failed.';
 }
 
+function workOrderOption(workOrder: WorkOrder): SearchableSelectOption {
+  return {
+    id: workOrder.id,
+    label: workOrder.workOrderNumber,
+    description: workOrder.description ?? workOrder.state,
+    meta: [
+      workOrder.state,
+      workOrder.scheduledDate
+        ? `Scheduled ${new Date(workOrder.scheduledDate).toLocaleDateString()}`
+        : undefined,
+    ]
+      .filter(Boolean)
+      .join(' · '),
+  };
+}
+
+function filterOptions(options: SearchableSelectOption[], query: string): SearchableSelectOption[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return options;
+  return options.filter((option) =>
+    [option.label, option.description, option.meta].some((value) =>
+      value?.toLowerCase().includes(needle),
+    ),
+  );
+}
+
 export default function ReservationsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -66,13 +95,16 @@ export default function ReservationsPage() {
   const activeSearch = searchParams.get('search') ?? '';
   const [reservations, setReservations] = useState<InventoryReservation[]>([]);
   const [lots, setLots] = useState<InventoryLot[]>([]);
+  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [total, setTotal] = useState(0);
   const [searchText, setSearchText] = useState(activeSearch);
   const [selectedLotId, setSelectedLotId] = useState('');
+  const [selectedWorkOrderId, setSelectedWorkOrderId] = useState('');
+  const [workOrderSearch, setWorkOrderSearch] = useState('');
   const [quantity, setQuantity] = useState(1);
-  const [workOrderId, setWorkOrderId] = useState('');
   const [loading, setLoading] = useState(true);
   const [lotsUnavailable, setLotsUnavailable] = useState(false);
+  const [workOrdersUnavailable, setWorkOrdersUnavailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
@@ -81,8 +113,9 @@ export default function ReservationsPage() {
     setLoading(true);
     setError(null);
     setLotsUnavailable(false);
+    setWorkOrdersUnavailable(false);
 
-    const [reservationResult, lotResult] = await Promise.allSettled([
+    const [reservationResult, lotResult, workOrderResult] = await Promise.allSettled([
       listInventoryReservations(
         { status: statusFilter, search: activeSearch || undefined, page: 1, pageSize: 100 },
         { allowMockFallback: false },
@@ -91,6 +124,7 @@ export default function ReservationsPage() {
         { status: 'AVAILABLE', page: 1, pageSize: 200 },
         { allowMockFallback: false },
       ),
+      listWorkOrders({ limit: 200 }, { allowMockFallback: false }),
     ]);
 
     if (reservationResult.status === 'fulfilled') {
@@ -107,6 +141,13 @@ export default function ReservationsPage() {
     } else {
       setLots([]);
       setLotsUnavailable(true);
+    }
+
+    if (workOrderResult.status === 'fulfilled') {
+      setWorkOrders(workOrderResult.value.items);
+    } else {
+      setWorkOrders([]);
+      setWorkOrdersUnavailable(true);
     }
 
     setLoading(false);
@@ -126,6 +167,11 @@ export default function ReservationsPage() {
     [lots],
   );
   const selectedLot = availableLots.find((lot) => lot.id === selectedLotId);
+  const workOrderOptions = useMemo(
+    () => filterOptions(workOrders.map(workOrderOption), workOrderSearch),
+    [workOrderSearch, workOrders],
+  );
+  const selectedWorkOrder = workOrders.find((workOrder) => workOrder.id === selectedWorkOrderId);
   const openReservations = reservations.filter((reservation) => reservation.openQuantity > 0);
   const openQuantity = openReservations.reduce(
     (sum, reservation) => sum + reservation.openQuantity,
@@ -151,11 +197,12 @@ export default function ReservationsPage() {
       await createInventoryReservation({
         stockLotId: selectedLot.id,
         quantity,
-        workOrderId: workOrderId.trim() || undefined,
+        workOrderId: selectedWorkOrderId || undefined,
       });
       setSelectedLotId('');
       setQuantity(1);
-      setWorkOrderId('');
+      setSelectedWorkOrderId('');
+      setWorkOrderSearch('');
       await load();
     } catch (err) {
       setActionError(errorMessage(err));
@@ -222,7 +269,7 @@ export default function ReservationsPage() {
         onSubmit={handleCreateReservation}
         className="mb-6 rounded-lg border border-gray-200 bg-white p-4"
       >
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(260px,1fr)_120px_minmax(220px,320px)_auto]">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(260px,1fr)_120px_minmax(280px,1fr)_auto]">
           <label className="grid gap-1 text-sm font-medium text-gray-700">
             Lot
             <select
@@ -257,15 +304,20 @@ export default function ReservationsPage() {
               onChange={(event) => setQuantity(Number(event.target.value))}
             />
           </label>
-          <label className="grid gap-1 text-sm font-medium text-gray-700">
-            Work Order ID
-            <Input
-              value={workOrderId}
-              disabled={Boolean(actionBusy)}
-              onChange={(event) => setWorkOrderId(event.target.value)}
-              placeholder="Optional"
-            />
-          </label>
+          <SearchableSelect
+            id="reservation-work-order"
+            label="Work Order"
+            value={selectedWorkOrderId}
+            selectedOption={selectedWorkOrder ? workOrderOption(selectedWorkOrder) : undefined}
+            searchValue={workOrderSearch}
+            options={workOrderOptions}
+            loading={loading}
+            error={workOrdersUnavailable ? 'Work orders unavailable.' : undefined}
+            placeholder="Search work orders by number, state, or scope"
+            emptyText="No work orders matched this search."
+            onSearchChange={setWorkOrderSearch}
+            onChange={setSelectedWorkOrderId}
+          />
           <div className="flex items-end">
             <Button type="submit" disabled={!canReserve} className="w-full lg:w-auto">
               <Plus data-icon="inline-start" />

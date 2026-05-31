@@ -7,12 +7,10 @@ import {
   createWorkOrder,
   listCartVehicles,
   listCustomers,
-  listWorkOrders,
-  workOrderCustomerDisplayName,
-  workOrderVehicleDisplayName,
   type CartVehicle,
   type Customer,
-  type WorkOrder,
+  listWorkOrderBuildPackages,
+  type WorkOrderBuildPackage,
 } from '@/lib/api-client';
 import { erpRoute } from '@/lib/erp-routes';
 import { PageHeader } from '@gg-erp/ui';
@@ -26,6 +24,8 @@ import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/s
 interface BuildPackageOption extends SearchableSelectOption {
   buildConfigurationId: string;
   bomId: string;
+  workOrderCount: number;
+  lastUsedAt: string;
 }
 
 function customerOption(customer: Customer): SearchableSelectOption {
@@ -46,29 +46,17 @@ function vehicleOption(vehicle: CartVehicle): SearchableSelectOption {
   };
 }
 
-function buildPackageOptions(workOrders: WorkOrder[]): BuildPackageOption[] {
-  const seen = new Set<string>();
-  const options: BuildPackageOption[] = [];
-
-  for (const workOrder of workOrders) {
-    const key = `${workOrder.buildConfigurationId}:${workOrder.bomId}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    options.push({
-      id: key,
-      buildConfigurationId: workOrder.buildConfigurationId,
-      bomId: workOrder.bomId,
-      label: `Build package from ${workOrder.workOrderNumber}`,
-      description: [workOrder.description, workOrderVehicleDisplayName(workOrder)]
-        .filter(Boolean)
-        .join(' · '),
-      meta: workOrder.customerProfile
-        ? `Last used by ${workOrderCustomerDisplayName(workOrder)}`
-        : 'Recently used package',
-    });
-  }
-
-  return options;
+function buildPackageOption(pkg: WorkOrderBuildPackage): BuildPackageOption {
+  return {
+    id: pkg.id,
+    buildConfigurationId: pkg.buildConfigurationId,
+    bomId: pkg.bomId,
+    workOrderCount: pkg.workOrderCount,
+    lastUsedAt: pkg.lastUsedAt,
+    label: pkg.label,
+    description: pkg.description,
+    meta: `${pkg.workOrderCount} work order${pkg.workOrderCount === 1 ? '' : 's'}`,
+  };
 }
 
 export default function NewWorkOrderPage() {
@@ -81,6 +69,8 @@ export default function NewWorkOrderPage() {
   const [customerId, setCustomerId] = useState(searchParams.get('customerId') ?? '');
   const [vehicleId, setVehicleId] = useState(searchParams.get('vehicleId') ?? '');
   const [buildPackageId, setBuildPackageId] = useState('');
+  const [manualBuildConfigurationId, setManualBuildConfigurationId] = useState('');
+  const [manualBomId, setManualBomId] = useState('');
   const [scheduledDate, setScheduledDate] = useState('');
   const [description, setDescription] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
@@ -88,7 +78,7 @@ export default function NewWorkOrderPage() {
   const [buildPackageSearch, setBuildPackageSearch] = useState('');
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [vehicles, setVehicles] = useState<CartVehicle[]>([]);
-  const [recentWorkOrders, setRecentWorkOrders] = useState<WorkOrder[]>([]);
+  const [buildPackages, setBuildPackages] = useState<WorkOrderBuildPackage[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -108,19 +98,19 @@ export default function NewWorkOrderPage() {
         },
         { allowMockFallback: false },
       ),
-      listWorkOrders({ limit: 100 }, { allowMockFallback: false }),
+      listWorkOrderBuildPackages({ limit: 250 }, { allowMockFallback: false }),
     ])
-      .then(([customerResult, vehicleResult, workOrderResult]) => {
+      .then(([customerResult, vehicleResult, buildPackageResult]) => {
         if (!active) return;
         setCustomers(customerResult.items);
         setVehicles(vehicleResult.items);
-        setRecentWorkOrders(workOrderResult.items);
+        setBuildPackages(buildPackageResult.items);
       })
       .catch((err: unknown) => {
         if (!active) return;
         setCustomers([]);
         setVehicles([]);
-        setRecentWorkOrders([]);
+        setBuildPackages([]);
         setReferenceError(err instanceof Error ? err.message : 'Failed to load selector data.');
       })
       .finally(() => {
@@ -134,7 +124,7 @@ export default function NewWorkOrderPage() {
 
   const customerOptions = useMemo(() => customers.map(customerOption), [customers]);
   const vehicleOptions = useMemo(() => vehicles.map(vehicleOption), [vehicles]);
-  const packageOptions = useMemo(() => buildPackageOptions(recentWorkOrders), [recentWorkOrders]);
+  const packageOptions = useMemo(() => buildPackages.map(buildPackageOption), [buildPackages]);
   const filteredPackageOptions = useMemo(() => {
     const query = buildPackageSearch.trim().toLowerCase();
     if (!query) return packageOptions;
@@ -148,6 +138,10 @@ export default function NewWorkOrderPage() {
   const selectedCustomer = customerOptions.find((option) => option.id === customerId);
   const selectedVehicle = vehicleOptions.find((option) => option.id === vehicleId);
   const selectedBuildPackage = packageOptions.find((option) => option.id === buildPackageId);
+  const resolvedBuildConfigurationId =
+    selectedBuildPackage?.buildConfigurationId ?? manualBuildConfigurationId.trim();
+  const resolvedBomId = selectedBuildPackage?.bomId ?? manualBomId.trim();
+  const hasBuildPackage = Boolean(resolvedBuildConfigurationId && resolvedBomId);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -160,8 +154,8 @@ export default function NewWorkOrderPage() {
       toast.error('Select a cart before creating the work order.');
       return;
     }
-    if (!selectedBuildPackage) {
-      toast.error('Select a build package before creating the work order.');
+    if (!hasBuildPackage) {
+      toast.error('Select a build package or enter released build references.');
       return;
     }
 
@@ -171,8 +165,8 @@ export default function NewWorkOrderPage() {
         workOrderNumber: workOrderNumber.trim(),
         vehicleId,
         customerId: customerId || undefined,
-        buildConfigurationId: selectedBuildPackage.buildConfigurationId,
-        bomId: selectedBuildPackage.bomId,
+        buildConfigurationId: resolvedBuildConfigurationId,
+        bomId: resolvedBomId,
         description: description.trim() || undefined,
         scheduledDate: scheduledDate ? new Date(scheduledDate).toISOString() : undefined,
       });
@@ -274,11 +268,55 @@ export default function NewWorkOrderPage() {
               options={filteredPackageOptions}
               loading={referenceLoading}
               error={referenceError}
-              placeholder="Search recent build packages"
-              emptyText="No build packages are available from recent work orders. A dedicated build configuration and BOM catalog is needed before new packages can be selected here."
+              placeholder="Search package, cart, customer, or reference"
+              emptyText="No package history matched. Enter released build references below."
               onSearchChange={setBuildPackageSearch}
-              onChange={setBuildPackageId}
+              onChange={(nextPackageId) => {
+                setBuildPackageId(nextPackageId);
+                const nextPackage = packageOptions.find((option) => option.id === nextPackageId);
+                if (nextPackage) {
+                  setManualBuildConfigurationId(nextPackage.buildConfigurationId);
+                  setManualBomId(nextPackage.bomId);
+                }
+              }}
             />
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="buildConfigurationReference">Build Configuration Reference</Label>
+                <Input
+                  id="buildConfigurationReference"
+                  value={manualBuildConfigurationId}
+                  onChange={(event) => {
+                    setManualBuildConfigurationId(event.target.value);
+                    setBuildPackageId('');
+                  }}
+                  placeholder="Released configuration reference"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="bomReference">Approved BOM Reference</Label>
+                <Input
+                  id="bomReference"
+                  value={manualBomId}
+                  onChange={(event) => {
+                    setManualBomId(event.target.value);
+                    setBuildPackageId('');
+                  }}
+                  placeholder="Approved materials reference"
+                />
+              </div>
+            </div>
+
+            {selectedBuildPackage && (
+              <div className="rounded-lg border border-[#D9CCBE] bg-[#FFF8EF] px-4 py-3 text-sm text-[#6E625A]">
+                <span className="font-semibold text-[#211F1E]">
+                  {selectedBuildPackage.label}
+                </span>{' '}
+                has been used on {selectedBuildPackage.workOrderCount} work order
+                {selectedBuildPackage.workOrderCount === 1 ? '' : 's'}.
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label htmlFor="description">Description</Label>
@@ -293,7 +331,7 @@ export default function NewWorkOrderPage() {
             <div className="flex gap-3 pt-2">
               <Button
                 type="submit"
-                disabled={loading || !vehicleId || !selectedBuildPackage}
+                disabled={loading || !vehicleId || !hasBuildPackage}
                 className="bg-yellow-400 text-gray-900 hover:bg-yellow-300"
               >
                 {loading ? 'Creating...' : 'Create Work Order'}

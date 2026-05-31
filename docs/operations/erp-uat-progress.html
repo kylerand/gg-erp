@@ -303,13 +303,15 @@
               <td>
                 Work-order, sales opportunity, quote create, time logging, inventory reservation,
                 and purchase-order create/edit screens use live customer, cart, opportunity, part,
-                vendor, work-order, active employee, and recent build-package selectors with mock
-                fallback disabled. Work-order list selectors resolve cart and customer context
-                instead of rendering vehicle/configuration IDs.
+                vendor, work-order, active employee, and live build-package selectors with mock
+                fallback disabled. Work-order create now reads a first-class package summary from
+                live planning work orders and supports manual released build references when no
+                package history exists. Work-order list selectors resolve cart and customer
+                context instead of rendering vehicle/configuration IDs.
               </td>
               <td>
-                Add dedicated build configuration and BOM selectors once those catalogs are exposed
-                through stable APIs.
+                Replace the derived build-package history with dedicated build configuration and
+                BOM management once those domain catalogs are exposed through stable APIs.
               </td>
             </tr>
             <tr>

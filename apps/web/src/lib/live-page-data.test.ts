@@ -144,10 +144,11 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
     [
       'listCustomers',
       'listCartVehicles',
-      'listWorkOrders',
-      'workOrderVehicleDisplayName',
-      'workOrderCustomerDisplayName',
+      'listWorkOrderBuildPackages',
+      'manualBuildConfigurationId',
+      'manualBomId',
       'SearchableSelect',
+      'allowMockFallback: false',
     ].filter((call) => !workOrderSource.includes(call)),
     [],
   );
@@ -188,6 +189,14 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
   assert.equal(timeLoggingSource.includes('Cart ${workOrder.vehicleId}'), false);
   assert.equal(workOrderSource.includes('Configuration ${workOrder.buildConfigurationId}'), false);
   assert.equal(workOrderSource.includes('vehicle ${workOrder.vehicleId}'), false);
+  assert.equal(workOrderSource.includes('Search recent build packages'), false);
+  assert.equal(workOrderSource.includes('recent work orders'), false);
+  assert.equal(
+    workOrderSource.includes(
+      'A dedicated build configuration and BOM catalog is needed before new packages can be selected here.',
+    ),
+    false,
+  );
   assert.equal(reservationsSource.includes('Work Order ID'), false);
 
   const rawIdLabels = [

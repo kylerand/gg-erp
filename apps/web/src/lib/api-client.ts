@@ -368,6 +368,22 @@ export interface WorkOrder {
   updatedAt: string;
 }
 
+export interface WorkOrderBuildPackage {
+  id: string;
+  buildConfigurationId: string;
+  bomId: string;
+  label: string;
+  description: string;
+  source: 'WORK_ORDER_HISTORY';
+  workOrderCount: number;
+  lastUsedAt: string;
+  lastWorkOrderId: string;
+  lastWorkOrderNumber: string;
+  lastVehicleDisplayName?: string;
+  lastCustomerDisplayName?: string;
+  stateCounts: Record<string, number>;
+}
+
 export interface CreateWorkOrderInput {
   workOrderNumber: string;
   vehicleId: string;
@@ -454,21 +470,39 @@ export async function listWorkOrders(
   params?: {
     state?: string;
     limit?: number;
+    includeBuildPackages?: boolean;
   },
   options?: ApiDataOptions,
-): Promise<{ items: WorkOrder[]; total: number }> {
+): Promise<{ items: WorkOrder[]; total: number; buildPackages?: WorkOrderBuildPackage[] }> {
   const qs = new URLSearchParams();
   if (params?.state) qs.set('state', params.state);
   if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.includeBuildPackages) qs.set('includeBuildPackages', 'true');
   return apiFetch(
     `/planning/work-orders${qs.size ? `?${qs}` : ''}`,
     undefined,
     {
       items: MOCK_WORK_ORDERS,
       total: MOCK_WORK_ORDERS.length,
+      buildPackages: [],
     },
     options,
   );
+}
+
+export async function listWorkOrderBuildPackages(
+  params?: { limit?: number },
+  options?: ApiDataOptions,
+): Promise<{ items: WorkOrderBuildPackage[]; total: number }> {
+  const result = await listWorkOrders(
+    { limit: params?.limit ?? 250, includeBuildPackages: true },
+    options,
+  );
+
+  return {
+    items: result.buildPackages ?? [],
+    total: result.buildPackages?.length ?? 0,
+  };
 }
 
 export async function createWorkOrder(input: CreateWorkOrderInput): Promise<WorkOrder> {

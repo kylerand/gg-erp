@@ -10,6 +10,8 @@ import {
   type CreateWorkOrderResponse,
   type ListWorkOrdersQuery,
   type ListWorkOrdersResponse,
+  type WorkOrderBuildPackageResponse,
+  type WorkOrderResponse,
 } from '../../contexts/build-planning/workOrder.contracts.js';
 import { PrismaWorkOrderRepository } from '../../contexts/build-planning/workOrder.prisma.repository.js';
 import { WorkOrderService } from '../../contexts/build-planning/workOrder.service.js';
@@ -145,6 +147,80 @@ async function loadWorkOrderListContext(items: ListWorkOrdersResponse['items']):
   };
 }
 
+function shortRef(value: string): string {
+  const normalized = value.trim();
+  if (normalized.length <= 12) return normalized;
+  return `${normalized.slice(0, 8)}...${normalized.slice(-4)}`;
+}
+
+export function summarizeBuildPackages(
+  items: WorkOrderResponse[],
+): WorkOrderBuildPackageResponse[] {
+  const packagesByKey = new Map<string, WorkOrderBuildPackageResponse>();
+
+  for (const item of items) {
+    const buildConfigurationId = item.buildConfigurationId.trim();
+    const bomId = item.bomId.trim();
+    if (!buildConfigurationId || !bomId) continue;
+
+    const key = `${buildConfigurationId}:${bomId}`;
+    const existing = packagesByKey.get(key);
+    const stateCounts = existing?.stateCounts ?? {};
+    stateCounts[item.state] = (stateCounts[item.state] ?? 0) + 1;
+
+    const lastUsedAt = item.updatedAt || item.createdAt;
+    const lastVehicleDisplayName = item.vehicleProfile?.displayName;
+    const lastCustomerDisplayName = item.customerProfile?.displayName;
+
+    if (!existing) {
+      packagesByKey.set(key, {
+        id: key,
+        buildConfigurationId,
+        bomId,
+        label: `Config ${shortRef(buildConfigurationId)} / BOM ${shortRef(bomId)}`,
+        description: [
+          `Last used on ${item.workOrderNumber}`,
+          lastVehicleDisplayName,
+          lastCustomerDisplayName,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+        source: 'WORK_ORDER_HISTORY',
+        workOrderCount: 1,
+        lastUsedAt,
+        lastWorkOrderId: item.id,
+        lastWorkOrderNumber: item.workOrderNumber,
+        lastVehicleDisplayName,
+        lastCustomerDisplayName,
+        stateCounts,
+      });
+      continue;
+    }
+
+    existing.workOrderCount += 1;
+    existing.stateCounts = stateCounts;
+
+    if (lastUsedAt >= existing.lastUsedAt) {
+      existing.lastUsedAt = lastUsedAt;
+      existing.lastWorkOrderId = item.id;
+      existing.lastWorkOrderNumber = item.workOrderNumber;
+      existing.lastVehicleDisplayName = lastVehicleDisplayName;
+      existing.lastCustomerDisplayName = lastCustomerDisplayName;
+      existing.description = [
+        `Last used on ${item.workOrderNumber}`,
+        lastVehicleDisplayName,
+        lastCustomerDisplayName,
+      ]
+        .filter(Boolean)
+        .join(' · ');
+    }
+  }
+
+  return [...packagesByKey.values()].sort((left, right) =>
+    right.lastUsedAt.localeCompare(left.lastUsedAt),
+  );
+}
+
 export async function createWorkOrderHandler(
   event: ApiGatewayProxyEventLike,
 ): Promise<ApiGatewayProxyResultLike> {
@@ -204,22 +280,28 @@ export async function listWorkOrdersHandler(
   const items = await routes.listWorkOrders(query);
   const responseItems = items.map(toWorkOrderResponse);
   const context = await loadWorkOrderListContext(responseItems);
+  const enrichedItems = responseItems.map((item) => {
+    const vehicleProfile = context.vehiclesById.get(item.vehicleId) ?? null;
+    const customerProfile = vehicleProfile
+      ? (context.customersById.get(vehicleProfile.customerId) ?? null)
+      : null;
+    return {
+      ...item,
+      vehicleProfile,
+      customerProfile,
+    };
+  });
   const response: ListWorkOrdersResponse = {
-    items: responseItems.map((item) => {
-      const vehicleProfile = context.vehiclesById.get(item.vehicleId) ?? null;
-      const customerProfile = vehicleProfile
-        ? (context.customersById.get(vehicleProfile.customerId) ?? null)
-        : null;
-      return {
-        ...item,
-        vehicleProfile,
-        customerProfile,
-      };
-    }),
+    items: enrichedItems,
     total: items.length,
     limit: query.limit ?? 50,
     offset: query.offset ?? 0,
   };
+
+  if (query.includeBuildPackages) {
+    response.buildPackages = summarizeBuildPackages(enrichedItems);
+  }
+
   return json(200, response);
 }
 
@@ -286,11 +368,14 @@ function toListQuery(
   const stateParam = queryStringParameters.state?.trim();
   const limitParam = queryStringParameters.limit?.trim();
   const offsetParam = queryStringParameters.offset?.trim();
+  const includeBuildPackagesParam = queryStringParameters.includeBuildPackages?.trim();
 
   return {
     state: stateParam as WorkOrderState | undefined,
     limit: limitParam ? Number(limitParam) : undefined,
     offset: offsetParam ? Number(offsetParam) : undefined,
+    includeBuildPackages:
+      includeBuildPackagesParam === 'true' || includeBuildPackagesParam === '1' || undefined,
   };
 }
 

@@ -768,6 +768,9 @@ test('training content keeps notes, bookmarks, and media wired to live APIs', ()
       'listEmployees(undefined, { allowMockFallback: false })',
       "listTrainingModules({ status: 'ACTIVE' }, { allowMockFallback: false })",
       'createTrainingAssignments(',
+      'signOffAssignment(',
+      'PENDING_SIGNOFF',
+      'Sign Off',
       'Assign Module',
       'const employeeById = useMemo',
       "formatEmployeeName(employee) ?? 'Unresolved employee'",
@@ -785,6 +788,7 @@ test('training content keeps notes, bookmarks, and media wired to live APIs', ()
       'toggleBookmark(',
       'createTrainingAssignments(',
       'completeAssignment(',
+      'signOffAssignment(',
     ].filter((snippet) => !apiClientSource.includes(snippet)),
     [],
   );
@@ -792,6 +796,8 @@ test('training content keeps notes, bookmarks, and media wired to live APIs', ()
   assert.deepEqual(
     [
       'createTrainingAssignmentsHandler',
+      'trainingAssignmentCompletionQueries',
+      'PENDING_SIGNOFF',
       'trainingAssignmentQueries',
       'trainingStateQueries',
       'findModuleReference',

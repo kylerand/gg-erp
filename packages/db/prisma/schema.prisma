@@ -1231,6 +1231,7 @@ model OjtAnswer {
 enum TrainingAssignmentStatus {
   ASSIGNED
   IN_PROGRESS
+  PENDING_SIGNOFF
   COMPLETED
   FAILED
   EXEMPT
@@ -1240,18 +1241,21 @@ enum TrainingAssignmentStatus {
 }
 
 model TrainingAssignment {
-  id               String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  moduleId         String                   @map("module_id") @db.Uuid
-  employeeId       String                   @map("employee_id") @db.Uuid
-  assignmentStatus TrainingAssignmentStatus @default(ASSIGNED) @map("assignment_status")
-  dueAt            DateTime?                @map("due_at") @db.Timestamptz(6)
-  startedAt        DateTime?                @map("started_at") @db.Timestamptz(6)
-  completedAt      DateTime?                @map("completed_at") @db.Timestamptz(6)
-  score            Decimal?                 @db.Decimal(5, 2)
-  correlationId    String                   @map("correlation_id")
-  createdAt        DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime                 @default(now()) @map("updated_at") @db.Timestamptz(6)
-  version          Int                      @default(0)
+  id                    String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  moduleId              String                   @map("module_id") @db.Uuid
+  employeeId            String                   @map("employee_id") @db.Uuid
+  assignmentStatus      TrainingAssignmentStatus @default(ASSIGNED) @map("assignment_status")
+  dueAt                 DateTime?                @map("due_at") @db.Timestamptz(6)
+  startedAt             DateTime?                @map("started_at") @db.Timestamptz(6)
+  completedAt           DateTime?                @map("completed_at") @db.Timestamptz(6)
+  supervisorEmployeeId  String?                  @map("supervisor_employee_id") @db.Uuid
+  supervisorSignoffAt   DateTime?                @map("supervisor_signoff_at") @db.Timestamptz(6)
+  supervisorSignoffNote String?                  @map("supervisor_signoff_note")
+  score                 Decimal?                 @db.Decimal(5, 2)
+  correlationId         String                   @map("correlation_id")
+  createdAt             DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                 @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version               Int                      @default(0)
 
   module   TrainingModule @relation(fields: [moduleId], references: [id])
   employee Employee       @relation(fields: [employeeId], references: [id])

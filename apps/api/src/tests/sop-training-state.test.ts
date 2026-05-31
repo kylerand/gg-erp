@@ -3,9 +3,11 @@ import { readFileSync } from 'node:fs';
 import test, { mock } from 'node:test';
 import {
   createTrainingAssignmentsHandler,
+  completeAssignmentHandler,
   listBookmarksHandler,
   listNotesHandler,
   toggleBookmarkHandler,
+  trainingAssignmentCompletionQueries,
   trainingAssignmentQueries,
   trainingStateQueries,
   upsertNoteHandler,
@@ -25,16 +27,27 @@ function moduleReference() {
   };
 }
 
-function assignmentRecord(employeeId: string, id = `assignment-${employeeId.slice(-1)}`) {
+function assignmentRecord(
+  employeeId: string,
+  id = `assignment-${employeeId.slice(-1)}`,
+  overrides: Partial<ReturnType<typeof assignmentRecordBase>> = {},
+) {
+  return { ...assignmentRecordBase(employeeId, id), ...overrides };
+}
+
+function assignmentRecordBase(employeeId: string, id = `assignment-${employeeId.slice(-1)}`) {
   return {
     id,
     moduleId: MODULE_ID,
     employeeId,
-    assignmentStatus: 'ASSIGNED' as const,
+    assignmentStatus: 'ASSIGNED' as 'ASSIGNED' | 'IN_PROGRESS' | 'PENDING_SIGNOFF' | 'COMPLETED' | 'FAILED' | 'EXEMPT' | 'CANCELLED',
     dueAt: new Date('2026-06-01T23:59:59.000Z'),
-    startedAt: null,
-    completedAt: null,
-    score: null,
+    startedAt: null as Date | null,
+    completedAt: null as Date | null,
+    supervisorEmployeeId: null as string | null,
+    supervisorSignoffAt: null as Date | null,
+    supervisorSignoffNote: null as string | null,
+    score: null as number | null,
     createdAt: NOW,
     updatedAt: NOW,
     version: 0,
@@ -44,6 +57,7 @@ function assignmentRecord(employeeId: string, id = `assignment-${employeeId.slic
       passScore: 80,
       validityDays: null,
       isRequired: true,
+      requiresSupervisorSignoff: true,
       sopDocument: { documentCode: 'SOP-BUILD', title: 'Build SOP' },
     },
   };
@@ -60,6 +74,7 @@ test('createTrainingAssignmentsHandler creates missing active employee assignmen
       passScore: 80,
       validityDays: null,
       isRequired: true,
+      requiresSupervisorSignoff: true,
       sopDocument: { documentCode: 'SOP-BUILD', title: 'Build SOP' },
     };
   });
@@ -120,6 +135,130 @@ test('createTrainingAssignmentsHandler creates missing active employee assignmen
     employeesMock.mock.restore();
     activeMock.mock.restore();
     createMock.mock.restore();
+  }
+});
+
+test('completeAssignmentHandler parks sign-off modules in pending supervisor review', async () => {
+  const findMock = mock.method(
+    trainingAssignmentCompletionQueries,
+    'findAssignment',
+    async (id: string) => {
+      assert.equal(id, 'assignment-needs-review');
+      return assignmentRecord(EMPLOYEE_ID, 'assignment-needs-review', {
+        assignmentStatus: 'IN_PROGRESS',
+        score: null,
+        module: {
+          moduleCode: MODULE_CODE,
+          moduleName: 'Golf Cart Build Basics',
+          passScore: 80,
+          validityDays: null,
+          isRequired: true,
+          requiresSupervisorSignoff: true,
+          sopDocument: { documentCode: 'SOP-BUILD', title: 'Build SOP' },
+        },
+      });
+    },
+  );
+  const updateMock = mock.method(
+    trainingAssignmentCompletionQueries,
+    'updateAssignment',
+    async (id: string, data: Parameters<typeof trainingAssignmentCompletionQueries.updateAssignment>[1]) => {
+      assert.equal(id, 'assignment-needs-review');
+      assert.equal(data.assignmentStatus, 'PENDING_SIGNOFF');
+      assert.equal(data.completedAt, null);
+      assert.equal(data.score, 92);
+      return assignmentRecord(EMPLOYEE_ID, id, {
+        assignmentStatus: 'PENDING_SIGNOFF',
+        completedAt: null,
+        score: 92,
+      });
+    },
+  );
+
+  try {
+    const response = await completeAssignmentHandler({
+      httpMethod: 'PATCH',
+      pathParameters: { assignmentId: 'assignment-needs-review' },
+      body: JSON.stringify({ score: 92 }),
+    });
+
+    assert.equal(response.statusCode, 200);
+    const payload = JSON.parse(response.body) as {
+      assignment: { assignmentStatus: string; completedAt?: string; module?: { requiresSupervisorSignoff: boolean } };
+    };
+    assert.equal(payload.assignment.assignmentStatus, 'PENDING_SIGNOFF');
+    assert.equal(payload.assignment.completedAt, undefined);
+    assert.equal(payload.assignment.module?.requiresSupervisorSignoff, true);
+    assert.equal(findMock.mock.calls.length, 1);
+    assert.equal(updateMock.mock.calls.length, 1);
+  } finally {
+    findMock.mock.restore();
+    updateMock.mock.restore();
+  }
+});
+
+test('completeAssignmentHandler signs off pending supervisor assignments', async () => {
+  const supervisorId = '00000000-0000-0000-0004-000000000004';
+  const findMock = mock.method(
+    trainingAssignmentCompletionQueries,
+    'findAssignment',
+    async (id: string) => {
+      assert.equal(id, 'assignment-pending-signoff');
+      return assignmentRecord(EMPLOYEE_ID, id, {
+        assignmentStatus: 'PENDING_SIGNOFF',
+        completedAt: null,
+      });
+    },
+  );
+  const updateMock = mock.method(
+    trainingAssignmentCompletionQueries,
+    'updateAssignment',
+    async (id: string, data: Parameters<typeof trainingAssignmentCompletionQueries.updateAssignment>[1]) => {
+      assert.equal(id, 'assignment-pending-signoff');
+      assert.equal(data.assignmentStatus, 'COMPLETED');
+      assert.ok(data.completedAt instanceof Date);
+      assert.ok(data.supervisorSignoffAt instanceof Date);
+      assert.equal(data.supervisorEmployeeId, supervisorId);
+      assert.equal(data.supervisorSignoffNote, 'Ride check passed');
+      return assignmentRecord(EMPLOYEE_ID, id, {
+        assignmentStatus: 'COMPLETED',
+        completedAt: data.completedAt,
+        supervisorEmployeeId: supervisorId,
+        supervisorSignoffAt: data.supervisorSignoffAt,
+        supervisorSignoffNote: 'Ride check passed',
+      });
+    },
+  );
+
+  try {
+    const response = await completeAssignmentHandler({
+      httpMethod: 'PATCH',
+      pathParameters: { assignmentId: 'assignment-pending-signoff' },
+      body: JSON.stringify({
+        action: 'SIGN_OFF',
+        supervisorEmployeeId: supervisorId,
+        signoffNote: ' Ride check passed ',
+      }),
+    });
+
+    assert.equal(response.statusCode, 200);
+    const payload = JSON.parse(response.body) as {
+      assignment: {
+        assignmentStatus: string;
+        supervisorEmployeeId?: string;
+        supervisorSignoffAt?: string;
+        supervisorSignoffNote?: string;
+      };
+    };
+    assert.equal(payload.assignment.assignmentStatus, 'COMPLETED');
+    assert.equal(payload.assignment.supervisorEmployeeId, supervisorId);
+    assert.ok(payload.assignment.supervisorSignoffAt);
+    assert.equal(payload.assignment.supervisorSignoffNote, 'Ride check passed');
+    assert.equal(findMock.mock.calls.length, 1);
+    assert.equal(updateMock.mock.calls.length, 1);
+  } finally {
+    findMock.mock.restore();
+    updateMock.mock.restore();
   }
 });
 

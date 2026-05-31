@@ -394,7 +394,8 @@
               <li>
                 Inventory and purchasing are mostly actionable: PO drill-in, lifecycle actions,
                 receiving, reservations, replenishment, default-vendor assignment from planning,
-                variance, payable review, import/export, and bulk row actions.
+                variance, payable review, import/export, stock movement history, and bulk row
+                actions.
               </li>
               <li>
                 Dashboards, KPI cards, reporting cards, and many workspace links now deep-link to
@@ -589,14 +590,15 @@
           <div class="module-card">
             <header>
               <h3>Inventory And Purchasing</h3>
-              <span class="pill done">85%</span>
+              <span class="pill done">86%</span>
             </header>
-            <div class="bar good"><span style="width: 85%"></span></div>
+            <div class="bar good"><span style="width: 86%"></span></div>
             <p>
               Receiving, PO lifecycle, reservations, replenishment, default-vendor assignment from
               material planning, variance, payable handoff, import/export, stock movement history,
-              and drill-through are live. Broader item editing and BOM authoring are the next
-              practical gaps.
+              and drill-through are live. Reservation, release, and issue writes now append
+              immutable ledger consequences. Broader item editing, transfer/adjustment ledger
+              writes, and BOM authoring are the next practical gaps.
             </p>
           </div>
 
@@ -763,9 +765,9 @@
             authoring/versioning now that selectors read from the dedicated planning catalog.
           </li>
           <li>
-            <strong>Move toward ERP ledgers:</strong> extend inventory ledger writes across all
-            stock mutations and start internal accounting ledger design before adding more
-            financial-report UI.
+            <strong>Move toward ERP ledgers:</strong> finish transfer/adjustment inventory ledger
+            writes and start internal accounting ledger design before adding more financial-report
+            UI.
           </li>
         </ol>
       </section>

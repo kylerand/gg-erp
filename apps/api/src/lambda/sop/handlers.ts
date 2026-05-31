@@ -241,6 +241,150 @@ export const listMyAssignmentsHandler = wrapHandler(async (ctx) => {
   return jsonResponse(200, { items: items.map(toAssignmentResponse), total, limit, offset });
 }, { requireAuth: false });
 
+// ─── Create Training Assignments ─────────────────────────────────────────────
+
+interface CreateTrainingAssignmentsBody {
+  moduleId?: string;
+  employeeId?: string;
+  employeeIds?: string[];
+  dueAt?: string;
+}
+
+type AssignmentRecord = Parameters<typeof toAssignmentResponse>[0];
+
+export const trainingAssignmentQueries = {
+  findAssignableModule(idOrCode: string) {
+    return prisma.trainingModule.findFirst({
+      where: moduleWhere(idOrCode),
+      select: {
+        id: true,
+        moduleCode: true,
+        moduleName: true,
+        moduleStatus: true,
+        passScore: true,
+        validityDays: true,
+        isRequired: true,
+        sopDocument: { select: { documentCode: true, title: true } },
+      },
+    });
+  },
+  listEmployeesByIds(employeeIds: string[]) {
+    return prisma.employee.findMany({
+      where: { id: { in: employeeIds } },
+      select: { id: true },
+    });
+  },
+  findActiveAssignments(moduleId: string, employeeIds: string[]): Promise<AssignmentRecord[]> {
+    return prisma.trainingAssignment.findMany({
+      where: {
+        moduleId,
+        employeeId: { in: employeeIds },
+        assignmentStatus: { in: ['ASSIGNED', 'IN_PROGRESS'] },
+      },
+      include: {
+        module: {
+          select: {
+            moduleCode: true,
+            moduleName: true,
+            passScore: true,
+            validityDays: true,
+            isRequired: true,
+            sopDocument: { select: { documentCode: true, title: true } },
+          },
+        },
+      },
+    });
+  },
+  createAssignments(input: Array<{ moduleId: string; employeeId: string; dueAt: Date | null; correlationId: string }>): Promise<AssignmentRecord[]> {
+    const now = new Date();
+    return prisma.$transaction(
+      input.map((assignment) =>
+        prisma.trainingAssignment.create({
+          data: {
+            id: randomUUID(),
+            moduleId: assignment.moduleId,
+            employeeId: assignment.employeeId,
+            assignmentStatus: 'ASSIGNED',
+            dueAt: assignment.dueAt,
+            correlationId: assignment.correlationId,
+            createdAt: now,
+            updatedAt: now,
+          },
+          include: {
+            module: {
+              select: {
+                moduleCode: true,
+                moduleName: true,
+                passScore: true,
+                validityDays: true,
+                isRequired: true,
+                sopDocument: { select: { documentCode: true, title: true } },
+              },
+            },
+          },
+        }),
+      ),
+    );
+  },
+};
+
+export const createTrainingAssignmentsHandler = wrapHandler(async (ctx) => {
+  const body = parseBody<CreateTrainingAssignmentsBody>(ctx.event);
+  if (!body.ok) return jsonResponse(400, { message: body.error });
+
+  const moduleId = body.value.moduleId?.trim();
+  if (!moduleId) return jsonResponse(422, { message: 'moduleId is required.' });
+
+  const requestedEmployeeIds = [
+    ...(body.value.employeeIds ?? []),
+    ...(body.value.employeeId ? [body.value.employeeId] : []),
+  ]
+    .map((employeeId) => employeeId.trim())
+    .filter(Boolean);
+  const employeeIds = Array.from(new Set(requestedEmployeeIds));
+  if (employeeIds.length === 0) return jsonResponse(422, { message: 'At least one employeeId is required.' });
+  const invalidEmployeeId = employeeIds.find((employeeId) => !UUID_RE.test(employeeId));
+  if (invalidEmployeeId) return jsonResponse(422, { message: `employeeId must be a valid UUID: ${invalidEmployeeId}` });
+
+  const dueAt = body.value.dueAt ? new Date(body.value.dueAt) : null;
+  if (body.value.dueAt && Number.isNaN(dueAt?.getTime())) {
+    return jsonResponse(422, { message: 'dueAt must be a valid date.' });
+  }
+
+  const module = await trainingAssignmentQueries.findAssignableModule(moduleId);
+  if (!module) return jsonResponse(404, { message: `Training module not found: ${moduleId}` });
+  if (module.moduleStatus !== 'ACTIVE') {
+    return jsonResponse(409, { message: `Training module ${module.moduleCode} is ${module.moduleStatus}. Only active modules can be assigned.` });
+  }
+
+  const employees = await trainingAssignmentQueries.listEmployeesByIds(employeeIds);
+  const foundEmployeeIds = new Set(employees.map((employee) => employee.id));
+  const missingEmployeeId = employeeIds.find((employeeId) => !foundEmployeeIds.has(employeeId));
+  if (missingEmployeeId) return jsonResponse(404, { message: `Employee not found: ${missingEmployeeId}` });
+
+  const existingAssignments = await trainingAssignmentQueries.findActiveAssignments(module.id, employeeIds);
+  const alreadyAssigned = new Set(existingAssignments.map((assignment) => assignment.employeeId));
+  const createInputs = employeeIds
+    .filter((employeeId) => !alreadyAssigned.has(employeeId))
+    .map((employeeId) => ({
+      moduleId: module.id,
+      employeeId,
+      dueAt,
+      correlationId: randomUUID(),
+    }));
+
+  const created = createInputs.length
+    ? await trainingAssignmentQueries.createAssignments(createInputs)
+    : [];
+
+  return jsonResponse(201, {
+    items: created.map(toAssignmentResponse),
+    skipped: existingAssignments.map(toAssignmentResponse),
+    totalCreated: created.length,
+    totalSkipped: existingAssignments.length,
+  });
+}, { requireAuth: false });
+
 // ─── Complete Training Assignment ─────────────────────────────────────────────
 
 interface CompleteAssignmentBody {
@@ -248,7 +392,7 @@ interface CompleteAssignmentBody {
 }
 
 export const completeAssignmentHandler = wrapHandler(async (ctx) => {
-  const id = ctx.event.pathParameters?.id;
+  const id = ctx.event.pathParameters?.id ?? ctx.event.pathParameters?.assignmentId;
   if (!id) return jsonResponse(400, { message: 'Assignment ID is required.' });
 
   const body = parseBody<CompleteAssignmentBody>(ctx.event);

@@ -81,9 +81,7 @@ See every assignment across the team. Two groups: **Active** (ASSIGNED / IN_PROG
 
 An **overdue banner** shows at the top if any active assignment has passed its due date.
 
-**Assign Module** (top-right button): opens a form — pick a module, pick one or more employees, set an optional due date. Confirm to create assignments.
-
-> **Note**: today's version of **Assign Module** is a placeholder toast in some builds — if so, ping your admin to create assignments directly in the DB while the UI is being finished.
+**Assign Module**: use the live form at the top of the page to pick an active module, employee, and optional due date. Confirm to create the assignment in the training assignment register.
 
 ### 4. Review progress
 
@@ -227,7 +225,7 @@ Notes you take on steps live with the step. Revisit `/modules/{moduleCode}/step/
 | Symptom | Who | What to check |
 |---|---|---|
 | Published an SOP but a tech can't see the module | Trainer | Module status is `ACTIVE`? SOP's `currentVersion` is set? SOP status is `PUBLISHED`, not `DRAFT`? |
-| "Assign Module" button does nothing / shows a toast | Trainer | UI stub in current build; ask admin to assign in the DB while the flow is being finished. |
+| "Assign Module" fails | Trainer | Confirm the employee registry and active training module list loaded, then retry. If the API returns a validation error, correct the module, employee, or due date shown in the error. |
 | Supervisor sign-off stuck | Trainer | UI stub in current build; admin has a manual path. |
 | Tech says "quiz won't submit" | Tech | Retry: tap Submit again. If still failing, check they're online. Offline quiz submission isn't supported. |
 | "I completed the step but it didn't save" | Tech | Check network. The Training app is NOT offline-first (unlike Floor Tech). Redo once online. |

@@ -181,10 +181,7 @@
 <p><code>/training/assignments</code></p>
 <p>See every assignment across the team. Two groups: <strong>Active</strong> (ASSIGNED / IN_PROGRESS) and <strong>Past</strong> (COMPLETED / FAILED / EXEMPT / CANCELLED).</p>
 <p>An <strong>overdue banner</strong> shows at the top if any active assignment has passed its due date.</p>
-<p><strong>Assign Module</strong> (top-right button): opens a form — pick a module, pick one or more employees, set an optional due date. Confirm to create assignments.</p>
-<blockquote>
-<p><strong>Note</strong>: today&#39;s version of <strong>Assign Module</strong> is a placeholder toast in some builds — if so, ping your admin to create assignments directly in the DB while the UI is being finished.</p>
-</blockquote>
+<p><strong>Assign Module</strong>: use the live form at the top of the page to pick an active module, employee, and optional due date. Confirm to create the assignment in the training assignment register.</p>
 <h3>4. Review progress</h3>
 <p>Click any assignment to see per-employee progress: current step, step-by-step completion, quiz attempts, score history.</p>
 <h3>5. Supervisor sign-off</h3>
@@ -306,9 +303,9 @@
 <td>Module status is <code>ACTIVE</code>? SOP&#39;s <code>currentVersion</code> is set? SOP status is <code>PUBLISHED</code>, not <code>DRAFT</code>?</td>
 </tr>
 <tr>
-<td>&quot;Assign Module&quot; button does nothing / shows a toast</td>
+<td>&quot;Assign Module&quot; fails</td>
 <td>Trainer</td>
-<td>UI stub in current build; ask admin to assign in the DB while the flow is being finished.</td>
+<td>Confirm the employee registry and active training module list loaded, then retry. If the API returns a validation error, correct the module, employee, or due date shown in the error.</td>
 </tr>
 <tr>
 <td>Supervisor sign-off stuck</td>

@@ -1,14 +1,18 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test, { mock } from 'node:test';
 import {
+  createTrainingAssignmentsHandler,
   listBookmarksHandler,
   listNotesHandler,
   toggleBookmarkHandler,
+  trainingAssignmentQueries,
   trainingStateQueries,
   upsertNoteHandler,
 } from '../lambda/sop/handlers.js';
 
 const EMPLOYEE_ID = '00000000-0000-0000-0004-000000000002';
+const SECOND_EMPLOYEE_ID = '00000000-0000-0000-0004-000000000003';
 const MODULE_ID = '00000000-0000-0000-0011-000000000001';
 const MODULE_CODE = 'OJT-BUILD-BASICS';
 const NOW = new Date('2026-05-18T12:00:00.000Z');
@@ -20,6 +24,104 @@ function moduleReference() {
     moduleName: 'Golf Cart Build Basics',
   };
 }
+
+function assignmentRecord(employeeId: string, id = `assignment-${employeeId.slice(-1)}`) {
+  return {
+    id,
+    moduleId: MODULE_ID,
+    employeeId,
+    assignmentStatus: 'ASSIGNED' as const,
+    dueAt: new Date('2026-06-01T23:59:59.000Z'),
+    startedAt: null,
+    completedAt: null,
+    score: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+    version: 0,
+    module: {
+      moduleCode: MODULE_CODE,
+      moduleName: 'Golf Cart Build Basics',
+      passScore: 80,
+      validityDays: null,
+      isRequired: true,
+      sopDocument: { documentCode: 'SOP-BUILD', title: 'Build SOP' },
+    },
+  };
+}
+
+test('createTrainingAssignmentsHandler creates missing active employee assignments only', async () => {
+  const moduleMock = mock.method(trainingAssignmentQueries, 'findAssignableModule', async (idOrCode: string) => {
+    assert.equal(idOrCode, MODULE_CODE);
+    return {
+      id: MODULE_ID,
+      moduleCode: MODULE_CODE,
+      moduleName: 'Golf Cart Build Basics',
+      moduleStatus: 'ACTIVE',
+      passScore: 80,
+      validityDays: null,
+      isRequired: true,
+      sopDocument: { documentCode: 'SOP-BUILD', title: 'Build SOP' },
+    };
+  });
+  const employeesMock = mock.method(trainingAssignmentQueries, 'listEmployeesByIds', async (employeeIds: string[]) => {
+    assert.deepEqual(employeeIds, [EMPLOYEE_ID, SECOND_EMPLOYEE_ID]);
+    return [{ id: EMPLOYEE_ID }, { id: SECOND_EMPLOYEE_ID }];
+  });
+  const activeMock = mock.method(
+    trainingAssignmentQueries,
+    'findActiveAssignments',
+    async (moduleId: string, employeeIds: string[]) => {
+      assert.equal(moduleId, MODULE_ID);
+      assert.deepEqual(employeeIds, [EMPLOYEE_ID, SECOND_EMPLOYEE_ID]);
+      return [assignmentRecord(SECOND_EMPLOYEE_ID, 'existing-assignment')];
+    },
+  );
+  const createMock = mock.method(
+    trainingAssignmentQueries,
+    'createAssignments',
+    async (input: Parameters<typeof trainingAssignmentQueries.createAssignments>[0]) => {
+      assert.equal(input.length, 1);
+      assert.equal(input[0].moduleId, MODULE_ID);
+      assert.equal(input[0].employeeId, EMPLOYEE_ID);
+      assert.equal(input[0].dueAt?.toISOString(), '2026-06-01T23:59:59.000Z');
+      assert.match(input[0].correlationId, /^[0-9a-f-]{36}$/);
+      return [assignmentRecord(EMPLOYEE_ID, 'created-assignment')];
+    },
+  );
+
+  try {
+    const response = await createTrainingAssignmentsHandler({
+      httpMethod: 'POST',
+      body: JSON.stringify({
+        moduleId: MODULE_CODE,
+        employeeIds: [EMPLOYEE_ID, SECOND_EMPLOYEE_ID],
+        dueAt: '2026-06-01T23:59:59.000Z',
+      }),
+    });
+
+    assert.equal(response.statusCode, 201);
+    const payload = JSON.parse(response.body) as {
+      items: Array<{ id: string; employeeId: string; module?: { moduleCode: string } }>;
+      skipped: Array<{ id: string; employeeId: string }>;
+      totalCreated: number;
+      totalSkipped: number;
+    };
+    assert.equal(payload.totalCreated, 1);
+    assert.equal(payload.totalSkipped, 1);
+    assert.equal(payload.items[0].employeeId, EMPLOYEE_ID);
+    assert.equal(payload.items[0].module?.moduleCode, MODULE_CODE);
+    assert.equal(payload.skipped[0].employeeId, SECOND_EMPLOYEE_ID);
+    assert.equal(moduleMock.mock.calls.length, 1);
+    assert.equal(employeesMock.mock.calls.length, 1);
+    assert.equal(activeMock.mock.calls.length, 1);
+    assert.equal(createMock.mock.calls.length, 1);
+  } finally {
+    moduleMock.mock.restore();
+    employeesMock.mock.restore();
+    activeMock.mock.restore();
+    createMock.mock.restore();
+  }
+});
 
 test('listNotesHandler resolves module codes to canonical module ids', async () => {
   const moduleMock = mock.method(trainingStateQueries, 'findModuleReference', async () =>
@@ -204,4 +306,17 @@ test('training state mutations reject invalid employee ids before module lookup'
   } finally {
     moduleMock.mock.restore();
   }
+});
+
+test('training assignment creation is wired into lambda build and API gateway routes', () => {
+  const tf = readFileSync(
+    new URL('../../../../infra/terraform/modules/api-gateway-lambda/main.tf', import.meta.url),
+    'utf8',
+  );
+  const build = readFileSync(new URL('../../../../scripts/build-lambdas.ts', import.meta.url), 'utf8');
+
+  assert.match(build, /create-assignments\.handler\.ts/);
+  assert.match(tf, /aws_lambda_function" "sop_create_assignments"/);
+  assert.match(tf, /route_key\s+= "GET \/sop\/modules"/);
+  assert.match(tf, /route_key\s+= "POST \/ojt\/assignments"/);
 });

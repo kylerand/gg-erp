@@ -81,6 +81,7 @@ import {
   updateStepProgressHandler,
   submitQuizHandler,
   listMyAssignmentsHandler,
+  createTrainingAssignmentsHandler,
   completeAssignmentHandler,
   listNotesHandler,
   upsertNoteHandler,
@@ -451,7 +452,7 @@ async function route(
     result = await createSopHandler(event);
   } else if (sopMatch && pathname.endsWith('/version') && method === 'POST') {
     result = await publishSopVersionHandler({ ...event, pathParameters: { id: sopMatch[1] } });
-  } else if (pathname === '/sop/modules' && method === 'GET') {
+  } else if ((pathname === '/sop/modules' || pathname === '/ojt/modules') && method === 'GET') {
     result = await listTrainingModulesHandler(event);
   // Module detail
   } else if (sopModuleProgressMatch && method === 'GET') {
@@ -484,6 +485,8 @@ async function route(
   // Assignments
   } else if (pathname === '/sop/assignments' && method === 'GET') {
     result = await listMyAssignmentsHandler(event);
+  } else if (pathname === '/sop/assignments' && method === 'POST') {
+    result = await createTrainingAssignmentsHandler(event);
   } else if (sopMatch && pathname.endsWith('/complete') && method === 'POST') {
     result = await completeAssignmentHandler({ ...event, pathParameters: { assignmentId: sopMatch[1] } });
   // Inspection Templates (must come before generic sopMatch GET)
@@ -685,6 +688,8 @@ async function route(
   // ── OJT / Training Assignments (aliases for /sop) ─────────────────────────
   } else if (pathname === '/ojt/assignments' && method === 'GET') {
     result = await listMyAssignmentsHandler(event);
+  } else if (pathname === '/ojt/assignments' && method === 'POST') {
+    result = await createTrainingAssignmentsHandler(event);
   } else if (ojtAssignmentMatch && method === 'POST') {
     result = await completeAssignmentHandler({ ...event, pathParameters: { assignmentId: ojtAssignmentMatch[1] } });
   } else if (ojtAssignmentMatch && method === 'PATCH') {

@@ -3059,6 +3059,25 @@ resource "aws_lambda_function" "sop_list_assignments" {
   }
 }
 
+resource "aws_lambda_function" "sop_create_assignments" {
+  function_name    = "${var.name_prefix}-sop-create-assignments"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "create-assignments.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/sop-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.sop_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.sop_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
 resource "aws_lambda_function" "sop_complete_assignment" {
   function_name    = "${var.name_prefix}-sop-complete-assignment"
   role             = aws_iam_role.erp_lambda.arn
@@ -3149,6 +3168,12 @@ resource "aws_apigatewayv2_route" "sop_list_modules" {
   target             = "integrations/${aws_apigatewayv2_integration.sop_list_modules.id}"
   authorization_type = "NONE"
 }
+resource "aws_apigatewayv2_route" "sop_list_modules_v2" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /sop/modules"
+  target             = "integrations/${aws_apigatewayv2_integration.sop_list_modules.id}"
+  authorization_type = "NONE"
+}
 
 resource "aws_apigatewayv2_integration" "sop_list_assignments" {
   api_id                 = aws_apigatewayv2_api.erp.id
@@ -3162,6 +3187,21 @@ resource "aws_apigatewayv2_route" "sop_list_assignments" {
   route_key          = "GET /ojt/assignments"
   target             = "integrations/${aws_apigatewayv2_integration.sop_list_assignments.id}"
   authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "sop_create_assignments" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.sop_create_assignments.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "sop_create_assignments" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /ojt/assignments"
+  target             = "integrations/${aws_apigatewayv2_integration.sop_create_assignments.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "sop_complete_assignment" {
@@ -4791,6 +4831,7 @@ locals {
     sop_publish_version                   = aws_lambda_function.sop_publish_version
     sop_list_modules                      = aws_lambda_function.sop_list_modules
     sop_list_assignments                  = aws_lambda_function.sop_list_assignments
+    sop_create_assignments                = aws_lambda_function.sop_create_assignments
     sop_complete_assignment               = aws_lambda_function.sop_complete_assignment
     sop_get_module                        = aws_lambda_function.sop_get_module
     sop_get_module_progress               = aws_lambda_function.sop_get_module_progress

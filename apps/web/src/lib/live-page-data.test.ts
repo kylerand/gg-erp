@@ -766,6 +766,9 @@ test('training content keeps notes, bookmarks, and media wired to live APIs', ()
     [
       "listMyAssignments('', {}, { allowMockFallback: false })",
       'listEmployees(undefined, { allowMockFallback: false })',
+      "listTrainingModules({ status: 'ACTIVE' }, { allowMockFallback: false })",
+      'createTrainingAssignments(',
+      'Assign Module',
       'const employeeById = useMemo',
       "formatEmployeeName(employee) ?? 'Unresolved employee'",
       'employee?.employeeNumber',
@@ -780,6 +783,7 @@ test('training content keeps notes, bookmarks, and media wired to live APIs', ()
       'listNotes(',
       'listBookmarks(',
       'toggleBookmark(',
+      'createTrainingAssignments(',
       'completeAssignment(',
     ].filter((snippet) => !apiClientSource.includes(snippet)),
     [],
@@ -787,6 +791,8 @@ test('training content keeps notes, bookmarks, and media wired to live APIs', ()
 
   assert.deepEqual(
     [
+      'createTrainingAssignmentsHandler',
+      'trainingAssignmentQueries',
       'trainingStateQueries',
       'findModuleReference',
       'resolveTrainingStateModule',

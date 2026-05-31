@@ -2787,6 +2787,7 @@ export interface ChannelMessage {
   id: string;
   channelId: string;
   authorId: string;
+  author?: ChannelMessageAuthor;
   content: string;
   parentId: string | null;
   replyCount?: number;
@@ -2794,6 +2795,13 @@ export interface ChannelMessage {
   reactions: { emoji: string; count: number; userIds: string[] }[];
   editedAt?: string;
   createdAt: string;
+}
+
+export interface ChannelMessageAuthor {
+  id: string;
+  displayName: string;
+  email?: string;
+  employeeNumber?: string;
 }
 
 export interface ChannelMessageAttachment {

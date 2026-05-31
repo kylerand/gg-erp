@@ -13,6 +13,13 @@ type MessageAttachmentLink = {
   fileAttachmentId: string;
 };
 
+type MessageAuthorProfile = {
+  id: string;
+  displayName: string;
+  email?: string;
+  employeeNumber?: string;
+};
+
 type AttachmentMetadataMapper = (links: MessageAttachmentLink[]) => Array<
   MessageAttachmentLink & {
     fileName?: string;
@@ -43,6 +50,48 @@ async function loadAttachmentMetadata(
         sizeBytes: file?.sizeBytes,
       };
     });
+}
+
+async function loadAuthorProfiles(authorIds: string[]): Promise<Map<string, MessageAuthorProfile>> {
+  const uniqueAuthorIds = [...new Set(authorIds.filter(Boolean))];
+  if (uniqueAuthorIds.length === 0) return new Map();
+
+  const users = await prisma.user.findMany({
+    where: {
+      deletedAt: null,
+      OR: [{ id: { in: uniqueAuthorIds } }, { cognitoSubject: { in: uniqueAuthorIds } }],
+    },
+    select: {
+      id: true,
+      cognitoSubject: true,
+      displayName: true,
+      email: true,
+      employee: {
+        select: {
+          employeeNumber: true,
+          firstName: true,
+          lastName: true,
+        },
+      },
+    },
+  });
+
+  const profiles = new Map<string, MessageAuthorProfile>();
+  for (const user of users) {
+    const employeeName = user.employee
+      ? [user.employee.firstName, user.employee.lastName].filter(Boolean).join(' ').trim()
+      : '';
+    const profile: MessageAuthorProfile = {
+      id: user.id,
+      displayName: employeeName || user.displayName,
+      email: user.email,
+      employeeNumber: user.employee?.employeeNumber,
+    };
+    profiles.set(user.id, profile);
+    profiles.set(user.cognitoSubject, profile);
+  }
+
+  return profiles;
 }
 
 // ─── List Channels ────────────────────────────────────────────────────────────
@@ -214,11 +263,13 @@ export const listMessagesHandler = wrapHandler(async (ctx) => {
   }
 
   const attachMetadata = await loadAttachmentMetadata(messages.flatMap((m) => m.attachments));
+  const authorProfiles = await loadAuthorProfiles(messages.map((m) => m.authorId));
 
   const items = messages.map((m) => ({
     id: m.id,
     channelId: m.channelId,
     authorId: m.authorId,
+    author: authorProfiles.get(m.authorId),
     content: m.content,
     parentId: m.parentId,
     replyCount: m._count.replies,
@@ -247,12 +298,14 @@ export const listRepliesHandler = wrapHandler(async (ctx) => {
   });
 
   const attachMetadata = await loadAttachmentMetadata(replies.flatMap((m) => m.attachments));
+  const authorProfiles = await loadAuthorProfiles(replies.map((m) => m.authorId));
 
   return jsonResponse(200, {
     items: replies.map((m) => ({
       id: m.id,
       channelId: m.channelId,
       authorId: m.authorId,
+      author: authorProfiles.get(m.authorId),
       content: m.content,
       parentId: m.parentId,
       attachments: attachMetadata(m.attachments),
@@ -349,11 +402,13 @@ export const sendMessageHandler = wrapHandler(async (ctx) => {
   });
 
   const attachMetadata = await loadAttachmentMetadata(message.attachments);
+  const authorProfiles = await loadAuthorProfiles([message.authorId]);
 
   return jsonResponse(201, {
     id: message.id,
     channelId: message.channelId,
     authorId: message.authorId,
+    author: authorProfiles.get(message.authorId),
     content: message.content,
     parentId: message.parentId,
     attachments: attachMetadata(message.attachments),

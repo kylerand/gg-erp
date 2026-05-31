@@ -99,6 +99,23 @@ function optionMatches(option: SearchableSelectOption, query: string): boolean {
   );
 }
 
+function authorDisplayName(message: ChannelMessage, isOwn: boolean): string {
+  return message.author?.displayName ?? (isOwn ? 'You' : 'Unresolved author');
+}
+
+function authorInitials(name: string): string {
+  const words = name
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter(Boolean);
+  if (words.length === 0) return '??';
+  return words
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join('')
+    .toUpperCase();
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function MessagesPage() {
@@ -962,6 +979,8 @@ function MessageBubble({
   onReaction,
   onOpenAttachment,
 }: MessageBubbleProps) {
+  const authorName = authorDisplayName(message, isOwn);
+  const initials = authorInitials(authorName);
   const time = new Date(message.createdAt).toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
@@ -971,15 +990,13 @@ function MessageBubble({
     <div className={`group flex gap-2 py-1.5 px-2 rounded-lg hover:bg-gray-50 ${isOwn ? '' : ''}`}>
       {/* Author avatar */}
       <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-medium text-gray-500 mt-0.5">
-        {message.authorId.slice(0, 2).toUpperCase()}
+        {initials}
       </div>
 
       <div className="flex-1 min-w-0">
         {/* Author line */}
         <div className="flex items-baseline gap-2">
-          <span className="font-medium text-sm text-gray-900">
-            {message.authorId.slice(0, 8)}
-          </span>
+          <span className="font-medium text-sm text-gray-900">{authorName}</span>
           <span className="text-xs text-gray-400">{time}</span>
           {message.editedAt && (
             <span className="text-xs text-gray-400 italic">(edited)</span>

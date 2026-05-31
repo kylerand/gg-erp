@@ -2790,10 +2790,18 @@ export interface ChannelMessage {
   content: string;
   parentId: string | null;
   replyCount?: number;
-  attachments: { id: string; fileAttachmentId: string }[];
+  attachments: ChannelMessageAttachment[];
   reactions: { emoji: string; count: number; userIds: string[] }[];
   editedAt?: string;
   createdAt: string;
+}
+
+export interface ChannelMessageAttachment {
+  id: string;
+  fileAttachmentId: string;
+  fileName?: string;
+  mimeType?: string;
+  sizeBytes?: number;
 }
 
 export interface ChannelTodo {
@@ -2857,7 +2865,7 @@ export async function listReplies(messageId: string): Promise<{ items: ChannelMe
 
 export async function sendMessage(
   channelId: string,
-  input: { content: string; parentId?: string },
+  input: { content: string; parentId?: string; attachmentIds?: string[] },
 ): Promise<ChannelMessage> {
   return apiFetch(`/communication/channels/${channelId}/messages`, {
     method: 'POST',
@@ -3770,6 +3778,15 @@ export async function uploadAttachment(input: {
 
   await apiFetch(`/attachments/${presign.attachmentId}/confirm`, { method: 'PUT' });
   return { attachmentId: presign.attachmentId, fileName: input.file.name };
+}
+
+export async function getAttachmentDownloadUrl(id: string): Promise<{
+  downloadUrl: string;
+  fileName: string;
+  mimeType: string;
+  expiresIn: number;
+}> {
+  return apiFetch(`/attachments/${id}/download`);
 }
 
 export async function getSalesDashboard(): Promise<SalesDashboard> {

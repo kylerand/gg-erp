@@ -172,6 +172,30 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
   assert.deepEqual(rawIdUses, []);
 });
 
+test('messages attach files through saved communication attachments', () => {
+  const source = readSource('app/messages/page.tsx');
+  const apiClientSource = readSource('lib/api-client.ts');
+
+  assert.deepEqual(
+    [
+      'uploadAttachment',
+      'getAttachmentDownloadUrl',
+      'attachmentIds',
+      'onOpenAttachment',
+      'formatFileSize',
+    ].filter((snippet) => !source.includes(snippet)),
+    [],
+  );
+  assert.deepEqual(
+    ['attachmentIds?: string[]', '/attachments/${id}/download'].filter(
+      (snippet) => !apiClientSource.includes(snippet),
+    ),
+    [],
+  );
+  assert.equal(source.includes('TODO: Upload files'), false);
+  assert.equal(source.includes('Avatar placeholder'), false);
+});
+
 test('quote detail exposes live conversion into shop execution', () => {
   const source = readSource('app/sales/quotes/[id]/page.tsx');
   const requiredCalls = [

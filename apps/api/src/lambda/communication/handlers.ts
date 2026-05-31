@@ -8,6 +8,43 @@ import {
 
 const prisma = new PrismaClient();
 
+type MessageAttachmentLink = {
+  id: string;
+  fileAttachmentId: string;
+};
+
+type AttachmentMetadataMapper = (links: MessageAttachmentLink[]) => Array<
+  MessageAttachmentLink & {
+    fileName?: string;
+    mimeType?: string;
+    sizeBytes?: number;
+  }
+>;
+
+async function loadAttachmentMetadata(
+  attachmentLinks: MessageAttachmentLink[],
+): Promise<AttachmentMetadataMapper> {
+  const fileAttachmentIds = [...new Set(attachmentLinks.map((link) => link.fileAttachmentId))];
+  if (fileAttachmentIds.length === 0) return (links) => links;
+
+  const files = await prisma.fileAttachment.findMany({
+    where: { id: { in: fileAttachmentIds }, deletedAt: null },
+    select: { id: true, fileName: true, mimeType: true, sizeBytes: true },
+  });
+  const fileById = new Map(files.map((file) => [file.id, file]));
+
+  return (links) =>
+    links.map((link) => {
+      const file = fileById.get(link.fileAttachmentId);
+      return {
+        ...link,
+        fileName: file?.fileName,
+        mimeType: file?.mimeType,
+        sizeBytes: file?.sizeBytes,
+      };
+    });
+}
+
 // ─── List Channels ────────────────────────────────────────────────────────────
 
 export const listChannelsHandler = wrapHandler(async (ctx) => {
@@ -176,6 +213,8 @@ export const listMessagesHandler = wrapHandler(async (ctx) => {
     });
   }
 
+  const attachMetadata = await loadAttachmentMetadata(messages.flatMap((m) => m.attachments));
+
   const items = messages.map((m) => ({
     id: m.id,
     channelId: m.channelId,
@@ -183,7 +222,7 @@ export const listMessagesHandler = wrapHandler(async (ctx) => {
     content: m.content,
     parentId: m.parentId,
     replyCount: m._count.replies,
-    attachments: m.attachments,
+    attachments: attachMetadata(m.attachments),
     reactions: groupReactions(m.reactions),
     editedAt: m.editedAt?.toISOString(),
     createdAt: m.createdAt.toISOString(),
@@ -207,6 +246,8 @@ export const listRepliesHandler = wrapHandler(async (ctx) => {
     },
   });
 
+  const attachMetadata = await loadAttachmentMetadata(replies.flatMap((m) => m.attachments));
+
   return jsonResponse(200, {
     items: replies.map((m) => ({
       id: m.id,
@@ -214,7 +255,7 @@ export const listRepliesHandler = wrapHandler(async (ctx) => {
       authorId: m.authorId,
       content: m.content,
       parentId: m.parentId,
-      attachments: m.attachments,
+      attachments: attachMetadata(m.attachments),
       reactions: groupReactions(m.reactions),
       editedAt: m.editedAt?.toISOString(),
       createdAt: m.createdAt.toISOString(),
@@ -225,7 +266,7 @@ export const listRepliesHandler = wrapHandler(async (ctx) => {
 // ─── Send Message ─────────────────────────────────────────────────────────────
 
 interface SendMessageBody {
-  content: string;
+  content?: string;
   parentId?: string;
   attachmentIds?: string[];
 }
@@ -238,7 +279,12 @@ export const sendMessageHandler = wrapHandler(async (ctx) => {
   if (!body.ok) return jsonResponse(400, { message: body.error });
 
   const { content, parentId, attachmentIds = [] } = body.value;
-  if (!content?.trim()) return jsonResponse(422, { message: 'content is required.' });
+  const normalizedAttachmentIds = Array.isArray(attachmentIds)
+    ? [...new Set(attachmentIds.map((id) => id.trim()).filter(Boolean))]
+    : [];
+  if (!content?.trim() && normalizedAttachmentIds.length === 0) {
+    return jsonResponse(422, { message: 'content or attachmentIds is required.' });
+  }
 
   const authorId = ctx.actorUserId;
   if (!authorId) return jsonResponse(401, { message: 'Authentication required.' });
@@ -246,22 +292,36 @@ export const sendMessageHandler = wrapHandler(async (ctx) => {
   const channel = await prisma.channel.findUnique({ where: { id: channelId } });
   if (!channel) return jsonResponse(404, { message: 'Channel not found.' });
 
+  const fileAttachments =
+    normalizedAttachmentIds.length > 0
+      ? await prisma.fileAttachment.findMany({
+          where: { id: { in: normalizedAttachmentIds }, deletedAt: null },
+          select: { id: true, fileName: true },
+        })
+      : [];
+  if (fileAttachments.length !== normalizedAttachmentIds.length) {
+    return jsonResponse(422, { message: 'One or more attachments could not be found.' });
+  }
+
   const messageId = randomUUID();
   const now = new Date();
+  const messageContent =
+    content?.trim() ||
+    `Attached ${fileAttachments.map((file) => file.fileName).join(', ')}`;
 
   const message = await prisma.message.create({
     data: {
       id: messageId,
       channelId,
       authorId,
-      content: content.trim(),
+      content: messageContent,
       parentId: parentId ?? null,
       createdAt: now,
-      ...(attachmentIds.length > 0
+      ...(normalizedAttachmentIds.length > 0
         ? {
             attachments: {
               createMany: {
-                data: attachmentIds.map((fId) => ({
+                data: normalizedAttachmentIds.map((fId) => ({
                   id: randomUUID(),
                   fileAttachmentId: fId,
                 })),
@@ -275,11 +335,20 @@ export const sendMessageHandler = wrapHandler(async (ctx) => {
     },
   });
 
+  if (normalizedAttachmentIds.length > 0) {
+    await prisma.fileAttachment.updateMany({
+      where: { id: { in: normalizedAttachmentIds } },
+      data: { entityType: 'communication-message', entityId: message.id },
+    });
+  }
+
   // Bump channel updatedAt
   await prisma.channel.update({
     where: { id: channelId },
     data: { updatedAt: now },
   });
+
+  const attachMetadata = await loadAttachmentMetadata(message.attachments);
 
   return jsonResponse(201, {
     id: message.id,
@@ -287,7 +356,7 @@ export const sendMessageHandler = wrapHandler(async (ctx) => {
     authorId: message.authorId,
     content: message.content,
     parentId: message.parentId,
-    attachments: message.attachments,
+    attachments: attachMetadata(message.attachments),
     createdAt: message.createdAt.toISOString(),
   });
 }, { requireAuth: true });

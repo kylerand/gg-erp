@@ -9,13 +9,18 @@ import {
   retryInvoiceSync,
   getQbStatus,
   listCustomerSyncs,
+  listPaymentSyncRecords,
+  retryPaymentSync,
   listIntegrationAccounts,
   getFailureSummary,
   listPurchaseOrders,
   invoiceSyncWorkOrderDisplayName,
   customerSyncDisplayName,
+  paymentSyncCustomerDisplayName,
+  paymentSyncWorkOrderDisplayName,
   type InvoiceSyncRecord,
   type CustomerSyncRecord,
+  type PaymentSyncRecord,
   type IntegrationAccount,
   type FailureSummary,
   type PurchaseOrder,
@@ -24,7 +29,14 @@ import {
 import { Button } from '@/components/ui/button';
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 
-type SyncView = 'failures' | 'queue' | 'payables' | 'invoices' | 'customers' | 'accounts';
+type SyncView =
+  | 'failures'
+  | 'queue'
+  | 'payables'
+  | 'invoices'
+  | 'customers'
+  | 'payments'
+  | 'accounts';
 type StateFilter =
   | 'ALL'
   | 'FAILED'
@@ -32,7 +44,9 @@ type StateFilter =
   | 'IN_PROGRESS'
   | 'SYNCED'
   | 'CANCELLED'
-  | 'SKIPPED';
+  | 'SKIPPED'
+  | 'RECONCILED'
+  | 'MISMATCH';
 type PeriodFilter = 'today' | undefined;
 
 const VIEWS: Array<{ id: SyncView; label: string; description: string }> = [
@@ -41,6 +55,7 @@ const VIEWS: Array<{ id: SyncView; label: string; description: string }> = [
   { id: 'payables', label: 'Payables', description: 'Received POs needing bill review' },
   { id: 'invoices', label: 'Invoices', description: 'Invoice sync records' },
   { id: 'customers', label: 'Customers', description: 'Customer sync records' },
+  { id: 'payments', label: 'Payments', description: 'Inbound QB payments' },
   { id: 'accounts', label: 'Accounts', description: 'QuickBooks account mappings' },
 ];
 
@@ -77,6 +92,24 @@ const CUSTOMER_LOAD_STATES: Array<CustomerSyncRecord['state'] | undefined> = [
   'SYNCED',
   'SKIPPED',
 ];
+const PAYMENT_STATE_FILTERS: StateFilter[] = [
+  'ALL',
+  'FAILED',
+  'PENDING',
+  'IN_PROGRESS',
+  'SYNCED',
+  'RECONCILED',
+  'MISMATCH',
+];
+const PAYMENT_LOAD_STATES: Array<PaymentSyncRecord['state'] | undefined> = [
+  undefined,
+  'FAILED',
+  'PENDING',
+  'IN_PROGRESS',
+  'SYNCED',
+  'RECONCILED',
+  'MISMATCH',
+];
 const EMPTY_FAILURES: FailureSummary = { invoice: 0, customer: 0, payment: 0, total: 0 };
 const PAYABLE_PO_STATES = new Set(['PARTIALLY_RECEIVED', 'RECEIVED']);
 const STRICT_LIVE_DATA = { allowMockFallback: false } as const;
@@ -99,6 +132,7 @@ interface PayableRow {
 export default function SyncMonitorPage() {
   const [invoiceRecords, setInvoiceRecords] = useState<InvoiceSyncRecord[]>([]);
   const [customerRecords, setCustomerRecords] = useState<CustomerSyncRecord[]>([]);
+  const [paymentRecords, setPaymentRecords] = useState<PaymentSyncRecord[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [accounts, setAccounts] = useState<IntegrationAccount[]>([]);
   const [failureSummary, setFailureSummary] = useState<FailureSummary>(EMPTY_FAILURES);
@@ -128,9 +162,13 @@ export default function SyncMonitorPage() {
     const customerRequests = CUSTOMER_LOAD_STATES.map((syncState) =>
       listCustomerSyncs({ state: syncState, limit: 200 }, STRICT_LIVE_DATA),
     );
+    const paymentRequests = PAYMENT_LOAD_STATES.map((syncState) =>
+      listPaymentSyncRecords({ state: syncState, limit: 200 }, STRICT_LIVE_DATA),
+    );
     Promise.allSettled([
       ...invoiceRequests,
       ...customerRequests,
+      ...paymentRequests,
       listPurchaseOrders({ pageSize: 200 }, STRICT_LIVE_DATA),
       listIntegrationAccounts(STRICT_LIVE_DATA),
       getFailureSummary(STRICT_LIVE_DATA),
@@ -148,15 +186,21 @@ export default function SyncMonitorPage() {
           invoiceRequestCount,
           invoiceRequestCount + customerRequestCount,
         ) as PromiseSettledResult<{ items: CustomerSyncRecord[] }>[];
+        const paymentRequestStart = invoiceRequestCount + customerRequestCount;
+        const paymentRequestCount = paymentRequests.length;
+        const paymentResults = results.slice(
+          paymentRequestStart,
+          paymentRequestStart + paymentRequestCount,
+        ) as PromiseSettledResult<{ items: PaymentSyncRecord[] }>[];
         const [accountsResult, failureResult, statusResult] = results.slice(
-          invoiceRequestCount + customerRequestCount + 1,
+          paymentRequestStart + paymentRequestCount + 1,
         ) as [
           PromiseSettledResult<{ items: IntegrationAccount[] }>,
           PromiseSettledResult<FailureSummary>,
           PromiseSettledResult<{ connected: boolean; companyName?: string }>,
         ];
         const payableResult = results[
-          invoiceRequestCount + customerRequestCount
+          paymentRequestStart + paymentRequestCount
         ] as PromiseSettledResult<{ items: PurchaseOrder[] }>;
 
         const errs = results
@@ -176,9 +220,16 @@ export default function SyncMonitorPage() {
               r.status === 'fulfilled',
           )
           .map((r) => r.value.items);
+        const paymentGroups = paymentResults
+          .filter(
+            (r): r is PromiseFulfilledResult<{ items: PaymentSyncRecord[] }> =>
+              r.status === 'fulfilled',
+          )
+          .map((r) => r.value.items);
 
         if (invoiceGroups.length) setInvoiceRecords(mergeById(invoiceGroups));
         if (customerGroups.length) setCustomerRecords(mergeById(customerGroups));
+        if (paymentGroups.length) setPaymentRecords(mergeById(paymentGroups));
         if (payableResult.status === 'fulfilled') setPurchaseOrders(payableResult.value.items);
         if (accountsResult.status === 'fulfilled') setAccounts(accountsResult.value.items);
         if (failureResult.status === 'fulfilled') setFailureSummary(failureResult.value);
@@ -217,6 +268,29 @@ export default function SyncMonitorPage() {
     }
   }
 
+  async function retryPayment(id: string) {
+    setRetrying(id);
+    setPaymentRecords((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, state: 'IN_PROGRESS' as const } : r)),
+    );
+    try {
+      const updated = await retryPaymentSync(id);
+      setPaymentRecords((prev) =>
+        prev.map((r) =>
+          r.id === id ? { ...r, state: updated.state as PaymentSyncRecord['state'] } : r,
+        ),
+      );
+      toast.success('Payment retry queued');
+    } catch (err) {
+      setPaymentRecords((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, state: 'FAILED' as const } : r)),
+      );
+      toast.error(err instanceof Error ? err.message : 'Payment retry failed');
+    } finally {
+      setRetrying(null);
+    }
+  }
+
   function updateLocation(next: { view?: SyncView; state?: StateFilter; period?: PeriodFilter }) {
     const nextView = next.view ?? view;
     const nextState = next.state ?? state;
@@ -228,10 +302,16 @@ export default function SyncMonitorPage() {
 
     const qs = new URLSearchParams();
     qs.set('view', nextView);
-    if ((nextView === 'invoices' || nextView === 'customers') && nextState !== 'ALL') {
+    if (
+      (nextView === 'invoices' || nextView === 'customers' || nextView === 'payments') &&
+      nextState !== 'ALL'
+    ) {
       qs.set('state', nextState);
     }
-    if ((nextView === 'invoices' || nextView === 'customers') && nextPeriod) {
+    if (
+      (nextView === 'invoices' || nextView === 'customers' || nextView === 'payments') &&
+      nextPeriod
+    ) {
       qs.set('period', nextPeriod);
     }
     window.history.replaceState(null, '', erpRoute('accounting-sync', Object.fromEntries(qs)));
@@ -240,10 +320,14 @@ export default function SyncMonitorPage() {
   const rows = useMemo(() => {
     const invoiceFailures = invoiceRecords.filter((r) => r.state === 'FAILED');
     const customerFailures = customerRecords.filter((r) => r.state === 'FAILED');
+    const paymentFailures = paymentRecords.filter((r) => r.state === 'FAILED');
     const invoiceQueue = invoiceRecords.filter(
       (r) => r.state === 'PENDING' || r.state === 'IN_PROGRESS',
     );
     const customerQueue = customerRecords.filter(
+      (r) => r.state === 'PENDING' || r.state === 'IN_PROGRESS',
+    );
+    const paymentQueue = paymentRecords.filter(
       (r) => r.state === 'PENDING' || r.state === 'IN_PROGRESS',
     );
 
@@ -253,25 +337,35 @@ export default function SyncMonitorPage() {
     const customerList = customerRecords
       .filter((r) => state === 'ALL' || r.state === state)
       .filter((r) => !period || isToday(r.syncedAt ?? r.createdAt));
+    const paymentList = paymentRecords
+      .filter((r) => state === 'ALL' || r.state === state)
+      .filter((r) => !period || isToday(r.updatedAt ?? r.createdAt));
     const payableRows = buildPayableRows(purchaseOrders);
 
     return {
       invoiceFailures,
       customerFailures,
+      paymentFailures,
       invoiceQueue,
       customerQueue,
+      paymentQueue,
       payableRows,
       invoiceList,
       customerList,
+      paymentList,
     };
-  }, [customerRecords, invoiceRecords, period, purchaseOrders, state]);
+  }, [customerRecords, invoiceRecords, paymentRecords, period, purchaseOrders, state]);
 
   const stats = {
-    failures: rows.invoiceFailures.length + rows.customerFailures.length + failureSummary.payment,
-    queue: rows.invoiceQueue.length + rows.customerQueue.length,
+    failures:
+      rows.invoiceFailures.length +
+      rows.customerFailures.length +
+      Math.max(rows.paymentFailures.length, failureSummary.payment),
+    queue: rows.invoiceQueue.length + rows.customerQueue.length + rows.paymentQueue.length,
     payables: rows.payableRows.length,
     invoices: invoiceRecords.length,
     customers: customerRecords.length,
+    payments: paymentRecords.length,
     accounts: accounts.length,
   };
 
@@ -286,7 +380,9 @@ export default function SyncMonitorPage() {
             ? 'Invoice sync history from the ERP to QuickBooks.'
             : view === 'customers'
               ? 'Customer sync history from the ERP to QuickBooks.'
-              : 'Connected integration accounts and mapped QuickBooks account metadata.';
+              : view === 'payments'
+                ? 'Inbound QuickBooks payment records matched back to ERP work orders.'
+                : 'Connected integration accounts and mapped QuickBooks account metadata.';
 
   return (
     <div>
@@ -318,7 +414,7 @@ export default function SyncMonitorPage() {
         </div>
       )}
 
-      <div className="mb-5 grid grid-cols-2 gap-2 lg:grid-cols-5">
+      <div className="mb-5 grid grid-cols-2 gap-2 lg:grid-cols-4 xl:grid-cols-7">
         {VIEWS.map((item) => {
           const active = view === item.id;
           const count = stats[item.id];
@@ -345,9 +441,9 @@ export default function SyncMonitorPage() {
         })}
       </div>
 
-      {(view === 'invoices' || view === 'customers') && (
+      {(view === 'invoices' || view === 'customers' || view === 'payments') && (
         <div className="mb-4 flex flex-wrap items-center gap-2">
-          {(view === 'customers' ? CUSTOMER_STATE_FILTERS : STATE_FILTERS).map((f) => (
+          {stateFiltersForView(view).map((f) => (
             <button
               key={f}
               type="button"
@@ -375,18 +471,29 @@ export default function SyncMonitorPage() {
         <FailureList
           invoiceRows={rows.invoiceFailures}
           customerRows={rows.customerFailures}
-          paymentFailureCount={failureSummary.payment}
+          paymentRows={rows.paymentFailures}
+          unresolvedPaymentFailureCount={Math.max(
+            failureSummary.payment - rows.paymentFailures.length,
+            0,
+          )}
           retrying={retrying}
           onRetry={retry}
+          onRetryPayment={retryPayment}
         />
       ) : view === 'queue' ? (
-        <QueueList invoiceRows={rows.invoiceQueue} customerRows={rows.customerQueue} />
+        <QueueList
+          invoiceRows={rows.invoiceQueue}
+          customerRows={rows.customerQueue}
+          paymentRows={rows.paymentQueue}
+        />
       ) : view === 'payables' ? (
         <PayablesList rows={rows.payableRows} />
       ) : view === 'invoices' ? (
         <InvoiceTable records={rows.invoiceList} retrying={retrying} onRetry={retry} />
       ) : view === 'customers' ? (
         <CustomerTable records={rows.customerList} />
+      ) : view === 'payments' ? (
+        <PaymentTable records={rows.paymentList} retrying={retrying} onRetry={retryPayment} />
       ) : (
         <AccountsTable accounts={accounts} />
       )}
@@ -573,31 +680,41 @@ function PayablesList({ rows }: { rows: PayableRow[] }) {
 function FailureList({
   invoiceRows,
   customerRows,
-  paymentFailureCount,
+  paymentRows,
+  unresolvedPaymentFailureCount,
   retrying,
   onRetry,
+  onRetryPayment,
 }: {
   invoiceRows: InvoiceSyncRecord[];
   customerRows: CustomerSyncRecord[];
-  paymentFailureCount: number;
+  paymentRows: PaymentSyncRecord[];
+  unresolvedPaymentFailureCount: number;
   retrying: string | null;
   onRetry: (id: string) => void;
+  onRetryPayment: (id: string) => void;
 }) {
-  if (invoiceRows.length === 0 && customerRows.length === 0 && paymentFailureCount === 0) {
+  if (
+    invoiceRows.length === 0 &&
+    customerRows.length === 0 &&
+    paymentRows.length === 0 &&
+    unresolvedPaymentFailureCount === 0
+  ) {
     return (
       <EmptyState
         icon="OK"
         title="No sync failures"
-        description="Invoice and customer sync records are healthy."
+        description="Invoice, customer, and payment sync records are healthy."
       />
     );
   }
   return (
     <div className="space-y-4">
-      {paymentFailureCount > 0 && (
+      {unresolvedPaymentFailureCount > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          {paymentFailureCount} payment failure{paymentFailureCount === 1 ? '' : 's'} are counted in
-          the summary. Row-level payment retry is not exposed in this monitor yet.
+          {unresolvedPaymentFailureCount} payment failure
+          {unresolvedPaymentFailureCount === 1 ? '' : 's'} could not be loaded as rows. Refresh the
+          monitor before retrying payments.
         </div>
       )}
       {invoiceRows.length > 0 && (
@@ -610,6 +727,16 @@ function FailureList({
           <CustomerTable records={customerRows} compact />
         </Section>
       )}
+      {paymentRows.length > 0 && (
+        <Section title={`Payment failures (${paymentRows.length})`}>
+          <PaymentTable
+            records={paymentRows}
+            retrying={retrying}
+            onRetry={onRetryPayment}
+            compact
+          />
+        </Section>
+      )}
     </div>
   );
 }
@@ -617,16 +744,18 @@ function FailureList({
 function QueueList({
   invoiceRows,
   customerRows,
+  paymentRows,
 }: {
   invoiceRows: InvoiceSyncRecord[];
   customerRows: CustomerSyncRecord[];
+  paymentRows: PaymentSyncRecord[];
 }) {
-  if (invoiceRows.length === 0 && customerRows.length === 0) {
+  if (invoiceRows.length === 0 && customerRows.length === 0 && paymentRows.length === 0) {
     return (
       <EmptyState
         icon="OK"
         title="Queue is empty"
-        description="No invoice or customer records are waiting to sync."
+        description="No invoice, customer, or payment records are waiting to sync."
       />
     );
   }
@@ -640,6 +769,11 @@ function QueueList({
       {customerRows.length > 0 && (
         <Section title={`Customer queue (${customerRows.length})`}>
           <CustomerTable records={customerRows} compact />
+        </Section>
+      )}
+      {paymentRows.length > 0 && (
+        <Section title={`Payment queue (${paymentRows.length})`}>
+          <PaymentTable records={paymentRows} compact />
         </Section>
       )}
     </div>
@@ -804,6 +938,130 @@ function CustomerTable({ records, compact }: { records: CustomerSyncRecord[]; co
   );
 }
 
+function PaymentTable({
+  records,
+  retrying,
+  onRetry,
+  compact,
+}: {
+  records: PaymentSyncRecord[];
+  retrying?: string | null;
+  onRetry?: (id: string) => void;
+  compact?: boolean;
+}) {
+  if (records.length === 0) {
+    return (
+      <EmptyState
+        icon="OK"
+        title="No payment records"
+        description="No payment sync records match this filter."
+      />
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="bg-gray-50 border-b border-gray-200">
+          <tr>
+            <th className="px-4 py-3 text-left font-medium text-gray-600">Payment</th>
+            {!compact && (
+              <th className="px-4 py-3 text-left font-medium text-gray-600">Work order</th>
+            )}
+            {!compact && (
+              <th className="px-4 py-3 text-left font-medium text-gray-600">Customer</th>
+            )}
+            <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
+            <th className="px-4 py-3 text-right font-medium text-gray-600">Amount</th>
+            <th className="px-4 py-3 text-left font-medium text-gray-600">Retries</th>
+            <th className="px-4 py-3 text-left font-medium text-gray-600">Updated</th>
+            <th className="px-4 py-3 text-left font-medium text-gray-600">Error</th>
+            <th className="px-4 py-3"></th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {records.map((r) => (
+            <tr key={r.id} className="hover:bg-gray-50">
+              <td className="px-4 py-3">
+                <div className="font-mono text-xs font-semibold text-gray-900">
+                  {r.qbPaymentId ?? r.id}
+                </div>
+                <div className="text-[11px] text-gray-400">
+                  {r.paymentMethod ?? r.direction}
+                  {r.qbInvoiceId ? ` - QB invoice ${r.qbInvoiceId}` : ''}
+                </div>
+              </td>
+              {!compact && (
+                <td className="px-4 py-3">
+                  {r.workOrder ? (
+                    <Link
+                      href={erpRecordRoute('work-order', r.workOrder.id)}
+                      className="text-xs font-semibold text-gray-900 hover:underline"
+                    >
+                      {paymentSyncWorkOrderDisplayName(r)}
+                    </Link>
+                  ) : (
+                    <span className="text-xs font-semibold text-gray-500">
+                      {paymentSyncWorkOrderDisplayName(r)}
+                    </span>
+                  )}
+                  <div className="mt-0.5 text-[11px] text-gray-400">
+                    {r.workOrder?.state ?? 'Work order lookup unavailable'}
+                  </div>
+                </td>
+              )}
+              {!compact && (
+                <td className="px-4 py-3">
+                  {r.customer ? (
+                    <Link
+                      href={erpRoute('customer', { search: paymentSyncCustomerDisplayName(r) })}
+                      className="text-xs font-semibold text-gray-900 hover:underline"
+                    >
+                      {paymentSyncCustomerDisplayName(r)}
+                    </Link>
+                  ) : (
+                    <span className="text-xs font-semibold text-gray-500">
+                      {paymentSyncCustomerDisplayName(r)}
+                    </span>
+                  )}
+                  <div className="mt-0.5 text-[11px] text-gray-400">
+                    {r.customer?.email ?? r.customerId}
+                  </div>
+                </td>
+              )}
+              <td className="px-4 py-3">
+                <SyncState state={r.state} />
+              </td>
+              <td className="px-4 py-3 text-right font-semibold tabular-nums">
+                {formatCurrency(r.amountCents / 100)}
+              </td>
+              <td className="px-4 py-3 text-gray-500">{r.attemptCount}</td>
+              <td className="px-4 py-3 text-xs text-gray-500">
+                {formatDateTime(r.lastAttemptAt ?? r.updatedAt ?? r.createdAt)}
+              </td>
+              <td className="px-4 py-3 text-xs text-red-600 max-w-xs truncate">
+                {r.errorMessage ?? '-'}
+              </td>
+              <td className="px-4 py-3 text-right">
+                {onRetry && r.state === 'FAILED' && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={retrying === r.id}
+                    onClick={() => onRetry(r.id)}
+                  >
+                    {retrying === r.id ? 'Queuing...' : 'Retry'}
+                  </Button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function AccountsTable({ accounts }: { accounts: IntegrationAccount[] }) {
   if (accounts.length === 0) {
     return (
@@ -932,6 +1190,7 @@ function normalizeView(raw: string | null): SyncView {
     raw === 'payables' ||
     raw === 'invoices' ||
     raw === 'customers' ||
+    raw === 'payments' ||
     raw === 'accounts' ||
     raw === 'failures'
   ) {
@@ -947,11 +1206,19 @@ function normalizeState(raw: string | null): StateFilter {
     raw === 'IN_PROGRESS' ||
     raw === 'SYNCED' ||
     raw === 'CANCELLED' ||
-    raw === 'SKIPPED'
+    raw === 'SKIPPED' ||
+    raw === 'RECONCILED' ||
+    raw === 'MISMATCH'
   ) {
     return raw;
   }
   return 'ALL';
+}
+
+function stateFiltersForView(view: SyncView): StateFilter[] {
+  if (view === 'customers') return CUSTOMER_STATE_FILTERS;
+  if (view === 'payments') return PAYMENT_STATE_FILTERS;
+  return STATE_FILTERS;
 }
 
 function mergeById<T extends { id: string; createdAt?: string; syncedAt?: string | null }>(

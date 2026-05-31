@@ -140,6 +140,8 @@ const lambdas: LambdaEntry[] = [
   { context: 'accounting', handler: 'retry-invoice-sync',     entry: 'apps/api/src/lambda/accounting/retry-invoice-sync.handler.ts' },
   { context: 'accounting', handler: 'list-customer-syncs',    entry: 'apps/api/src/lambda/accounting/list-customer-syncs.handler.ts' },
   { context: 'accounting', handler: 'trigger-customer-sync',  entry: 'apps/api/src/lambda/accounting/trigger-customer-sync.handler.ts' },
+  { context: 'accounting', handler: 'list-payment-syncs',     entry: 'apps/api/src/lambda/accounting/list-payment-syncs.handler.ts' },
+  { context: 'accounting', handler: 'retry-payment-sync',     entry: 'apps/api/src/lambda/accounting/retry-payment-sync.handler.ts' },
   { context: 'accounting', handler: 'list-reconciliation-runs',  entry: 'apps/api/src/lambda/accounting/list-reconciliation-runs.handler.ts' },
   { context: 'accounting', handler: 'trigger-reconciliation',    entry: 'apps/api/src/lambda/accounting/trigger-reconciliation.handler.ts' },
   { context: 'accounting', handler: 'get-reconciliation-run',    entry: 'apps/api/src/lambda/accounting/get-reconciliation-run.handler.ts' },

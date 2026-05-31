@@ -2349,6 +2349,83 @@ export function customerSyncDisplayName(record: CustomerSyncRecord): string {
   );
 }
 
+export interface PaymentSyncRecord {
+  id: string;
+  invoiceSyncId?: string | null;
+  workOrderId: string;
+  workOrder?: {
+    id: string;
+    workOrderNumber: string;
+    state: string;
+    scheduledStartAt?: string | null;
+  } | null;
+  customerId: string;
+  customer?: {
+    id: string;
+    displayName: string;
+    fullName: string;
+    companyName?: string | null;
+    email: string;
+    phone?: string | null;
+    state: string;
+  } | null;
+  qbPaymentId?: string | null;
+  qbInvoiceId?: string | null;
+  amountCents: number;
+  paymentMethod?: string | null;
+  paymentDate?: string | null;
+  state: 'PENDING' | 'IN_PROGRESS' | 'SYNCED' | 'FAILED' | 'RECONCILED' | 'MISMATCH';
+  direction: 'INBOUND' | 'OUTBOUND';
+  errorMessage?: string | null;
+  attemptCount: number;
+  lastAttemptAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function listPaymentSyncRecords(
+  params?: {
+    state?: string;
+    workOrderId?: string;
+    customerId?: string;
+    limit?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<{ items: PaymentSyncRecord[]; total: number }> {
+  const qs = new URLSearchParams();
+  if (params?.state) qs.set('state', params.state);
+  if (params?.workOrderId) qs.set('workOrderId', params.workOrderId);
+  if (params?.customerId) qs.set('customerId', params.customerId);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  return apiFetch(
+    `/accounting/payment-syncs${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    {
+      items: [],
+      total: 0,
+    },
+    options,
+  );
+}
+
+export async function retryPaymentSync(id: string): Promise<{ id: string; state: string }> {
+  return apiFetch(`/accounting/payment-syncs/${id}/retry`, { method: 'POST' });
+}
+
+export function paymentSyncWorkOrderDisplayName(record: PaymentSyncRecord): string {
+  return record.workOrder?.workOrderNumber || 'Unresolved work order';
+}
+
+export function paymentSyncCustomerDisplayName(record: PaymentSyncRecord): string {
+  return (
+    record.customer?.displayName?.trim() ||
+    record.customer?.companyName?.trim() ||
+    record.customer?.fullName ||
+    record.customer?.email ||
+    'Unresolved customer'
+  );
+}
+
 export interface IntegrationAccount {
   id: string;
   provider?: string;
@@ -2828,7 +2905,14 @@ export interface TrainingAssignment {
   id: string;
   moduleId: string;
   employeeId: string;
-  assignmentStatus: 'ASSIGNED' | 'IN_PROGRESS' | 'PENDING_SIGNOFF' | 'COMPLETED' | 'FAILED' | 'EXEMPT' | 'CANCELLED';
+  assignmentStatus:
+    | 'ASSIGNED'
+    | 'IN_PROGRESS'
+    | 'PENDING_SIGNOFF'
+    | 'COMPLETED'
+    | 'FAILED'
+    | 'EXEMPT'
+    | 'CANCELLED';
   dueAt?: string;
   startedAt?: string;
   completedAt?: string;

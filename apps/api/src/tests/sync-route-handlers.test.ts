@@ -101,9 +101,7 @@ test('listInvoiceSyncsHandler returns paginated invoice sync records', async () 
 });
 
 test('listInvoiceSyncsHandler rejects invalid state filter', async () => {
-  const { listInvoiceSyncsHandler } = await import(
-    '../lambda/accounting/handlers.js'
-  );
+  const { listInvoiceSyncsHandler } = await import('../lambda/accounting/handlers.js');
 
   const event = makeEvent({
     httpMethod: 'GET',
@@ -120,23 +118,15 @@ test('listInvoiceSyncsHandler rejects invalid state filter', async () => {
 // ─── Invoice Sync: triggerInvoiceSyncHandler ──────────────────────────────────
 
 test('triggerInvoiceSyncHandler creates a sync record via the service', async () => {
-  const { triggerInvoiceSyncHandler } = await import(
-    '../lambda/accounting/handlers.js'
-  );
-  const { invoiceSyncQueries } = await import(
-    '../contexts/accounting/invoiceSync.service.js'
-  );
+  const { triggerInvoiceSyncHandler } = await import('../lambda/accounting/handlers.js');
+  const { invoiceSyncQueries } = await import('../contexts/accounting/invoiceSync.service.js');
 
   const findByInvoiceNumberMock = mock.method(
     invoiceSyncQueries,
     'findByInvoiceNumber',
     async () => undefined,
   );
-  const saveMock = mock.method(
-    invoiceSyncQueries,
-    'save',
-    async () => undefined,
-  );
+  const saveMock = mock.method(invoiceSyncQueries, 'save', async () => undefined);
 
   try {
     const event = makeEvent({
@@ -161,9 +151,7 @@ test('triggerInvoiceSyncHandler creates a sync record via the service', async ()
 });
 
 test('triggerInvoiceSyncHandler returns 422 when workOrderId is missing', async () => {
-  const { triggerInvoiceSyncHandler } = await import(
-    '../lambda/accounting/handlers.js'
-  );
+  const { triggerInvoiceSyncHandler } = await import('../lambda/accounting/handlers.js');
 
   const event = makeEvent({
     httpMethod: 'POST',
@@ -178,9 +166,7 @@ test('triggerInvoiceSyncHandler returns 422 when workOrderId is missing', async 
 });
 
 test('triggerInvoiceSyncHandler returns 422 when invoiceNumber is missing', async () => {
-  const { triggerInvoiceSyncHandler } = await import(
-    '../lambda/accounting/handlers.js'
-  );
+  const { triggerInvoiceSyncHandler } = await import('../lambda/accounting/handlers.js');
 
   const event = makeEvent({
     httpMethod: 'POST',
@@ -195,9 +181,7 @@ test('triggerInvoiceSyncHandler returns 422 when invoiceNumber is missing', asyn
 });
 
 test('triggerInvoiceSyncHandler returns 400 when body is missing', async () => {
-  const { triggerInvoiceSyncHandler } = await import(
-    '../lambda/accounting/handlers.js'
-  );
+  const { triggerInvoiceSyncHandler } = await import('../lambda/accounting/handlers.js');
 
   const event = makeEvent({ httpMethod: 'POST', body: null });
 
@@ -209,12 +193,8 @@ test('triggerInvoiceSyncHandler returns 400 when body is missing', async () => {
 });
 
 test('triggerInvoiceSyncHandler returns 409 for duplicate invoice number', async () => {
-  const { triggerInvoiceSyncHandler } = await import(
-    '../lambda/accounting/handlers.js'
-  );
-  const { invoiceSyncQueries } = await import(
-    '../contexts/accounting/invoiceSync.service.js'
-  );
+  const { triggerInvoiceSyncHandler } = await import('../lambda/accounting/handlers.js');
+  const { invoiceSyncQueries } = await import('../contexts/accounting/invoiceSync.service.js');
 
   const existingRecord = {
     id: 'existing-1',
@@ -252,9 +232,7 @@ test('triggerInvoiceSyncHandler returns 409 for duplicate invoice number', async
 // ─── Invoice Sync: retryInvoiceSyncHandler ────────────────────────────────────
 
 test('retryInvoiceSyncHandler returns 400 when ID is missing', async () => {
-  const { retryInvoiceSyncHandler } = await import(
-    '../lambda/accounting/handlers.js'
-  );
+  const { retryInvoiceSyncHandler } = await import('../lambda/accounting/handlers.js');
 
   const event = makeEvent({ httpMethod: 'POST', pathParameters: {} });
 
@@ -266,12 +244,8 @@ test('retryInvoiceSyncHandler returns 400 when ID is missing', async () => {
 });
 
 test('retryInvoiceSyncHandler returns 404 when record does not exist', async () => {
-  const { retryInvoiceSyncHandler } = await import(
-    '../lambda/accounting/handlers.js'
-  );
-  const { invoiceSyncQueries } = await import(
-    '../contexts/accounting/invoiceSync.service.js'
-  );
+  const { retryInvoiceSyncHandler } = await import('../lambda/accounting/handlers.js');
+  const { invoiceSyncQueries } = await import('../contexts/accounting/invoiceSync.service.js');
 
   const findByIdMock = mock.method(invoiceSyncQueries, 'findById', async () => undefined);
 
@@ -292,12 +266,8 @@ test('retryInvoiceSyncHandler returns 404 when record does not exist', async () 
 });
 
 test('retryInvoiceSyncHandler returns 409 for non-retryable state', async () => {
-  const { retryInvoiceSyncHandler } = await import(
-    '../lambda/accounting/handlers.js'
-  );
-  const { invoiceSyncQueries } = await import(
-    '../contexts/accounting/invoiceSync.service.js'
-  );
+  const { retryInvoiceSyncHandler } = await import('../lambda/accounting/handlers.js');
+  const { invoiceSyncQueries } = await import('../contexts/accounting/invoiceSync.service.js');
 
   const findByIdMock = mock.method(invoiceSyncQueries, 'findById', async () => ({
     id: 'sync-1',
@@ -327,12 +297,8 @@ test('retryInvoiceSyncHandler returns 409 for non-retryable state', async () => 
 });
 
 test('retryInvoiceSyncHandler retries a FAILED record successfully', async () => {
-  const { retryInvoiceSyncHandler } = await import(
-    '../lambda/accounting/handlers.js'
-  );
-  const { invoiceSyncQueries } = await import(
-    '../contexts/accounting/invoiceSync.service.js'
-  );
+  const { retryInvoiceSyncHandler } = await import('../lambda/accounting/handlers.js');
+  const { invoiceSyncQueries } = await import('../contexts/accounting/invoiceSync.service.js');
 
   const failedRecord = {
     id: 'sync-fail-1',
@@ -395,21 +361,17 @@ test('listCustomerSyncsHandler returns paginated customer sync records', async (
 
   const findManyMock = mock.method(customerSyncListQueries, 'findMany', async () => mockRecords);
   const countMock = mock.method(customerSyncListQueries, 'count', async () => 1);
-  const findCustomersMock = mock.method(
-    accountingSyncContextQueries,
-    'findCustomers',
-    async () => [
-      {
-        id: 'cust-1',
-        displayName: 'Acme Cart Works',
-        fullName: 'Avery Customer',
-        companyName: 'Acme Cart Works',
-        email: 'avery@example.com',
-        phone: null,
-        state: 'ACTIVE',
-      },
-    ],
-  );
+  const findCustomersMock = mock.method(accountingSyncContextQueries, 'findCustomers', async () => [
+    {
+      id: 'cust-1',
+      displayName: 'Acme Cart Works',
+      fullName: 'Avery Customer',
+      companyName: 'Acme Cart Works',
+      email: 'avery@example.com',
+      phone: null,
+      state: 'ACTIVE',
+    },
+  ]);
 
   try {
     const event = makeEvent({
@@ -450,9 +412,7 @@ test('listCustomerSyncsHandler returns paginated customer sync records', async (
 });
 
 test('listCustomerSyncsHandler rejects invalid state filter', async () => {
-  const { listCustomerSyncsHandler } = await import(
-    '../lambda/accounting/handlers.js'
-  );
+  const { listCustomerSyncsHandler } = await import('../lambda/accounting/handlers.js');
 
   const event = makeEvent({
     httpMethod: 'GET',
@@ -469,23 +429,15 @@ test('listCustomerSyncsHandler rejects invalid state filter', async () => {
 // ─── Customer Sync: triggerCustomerSyncHandler ────────────────────────────────
 
 test('triggerCustomerSyncHandler creates a sync record', async () => {
-  const { triggerCustomerSyncHandler } = await import(
-    '../lambda/accounting/handlers.js'
-  );
-  const { customerSyncQueries } = await import(
-    '../contexts/accounting/customerSync.service.js'
-  );
+  const { triggerCustomerSyncHandler } = await import('../lambda/accounting/handlers.js');
+  const { customerSyncQueries } = await import('../contexts/accounting/customerSync.service.js');
 
   const findByCustomerAndProviderMock = mock.method(
     customerSyncQueries,
     'findByCustomerAndProvider',
     async () => undefined,
   );
-  const saveMock = mock.method(
-    customerSyncQueries,
-    'save',
-    async () => undefined,
-  );
+  const saveMock = mock.method(customerSyncQueries, 'save', async () => undefined);
 
   try {
     const event = makeEvent({
@@ -511,9 +463,7 @@ test('triggerCustomerSyncHandler creates a sync record', async () => {
 });
 
 test('triggerCustomerSyncHandler returns 422 when customerId is missing', async () => {
-  const { triggerCustomerSyncHandler } = await import(
-    '../lambda/accounting/handlers.js'
-  );
+  const { triggerCustomerSyncHandler } = await import('../lambda/accounting/handlers.js');
 
   const event = makeEvent({
     httpMethod: 'POST',
@@ -528,9 +478,7 @@ test('triggerCustomerSyncHandler returns 422 when customerId is missing', async 
 });
 
 test('triggerCustomerSyncHandler returns 422 when displayName is missing', async () => {
-  const { triggerCustomerSyncHandler } = await import(
-    '../lambda/accounting/handlers.js'
-  );
+  const { triggerCustomerSyncHandler } = await import('../lambda/accounting/handlers.js');
 
   const event = makeEvent({
     httpMethod: 'POST',
@@ -545,9 +493,7 @@ test('triggerCustomerSyncHandler returns 422 when displayName is missing', async
 });
 
 test('triggerCustomerSyncHandler returns 422 when integrationAccountId is missing', async () => {
-  const { triggerCustomerSyncHandler } = await import(
-    '../lambda/accounting/handlers.js'
-  );
+  const { triggerCustomerSyncHandler } = await import('../lambda/accounting/handlers.js');
 
   const event = makeEvent({
     httpMethod: 'POST',
@@ -562,9 +508,7 @@ test('triggerCustomerSyncHandler returns 422 when integrationAccountId is missin
 });
 
 test('triggerCustomerSyncHandler returns 400 when body is empty', async () => {
-  const { triggerCustomerSyncHandler } = await import(
-    '../lambda/accounting/handlers.js'
-  );
+  const { triggerCustomerSyncHandler } = await import('../lambda/accounting/handlers.js');
 
   const event = makeEvent({ httpMethod: 'POST', body: '' });
 
@@ -573,6 +517,229 @@ test('triggerCustomerSyncHandler returns 400 when body is empty', async () => {
 
   const body = parseResponseBody(response);
   assert.ok((body.message as string).includes('body'));
+});
+
+// ─── Payment Sync: listPaymentSyncsHandler ───────────────────────────────────
+
+test('listPaymentSyncsHandler returns payment sync rows with work order and customer context', async () => {
+  const { listPaymentSyncsHandler, paymentSyncListQueries, accountingSyncContextQueries } =
+    await import('../lambda/accounting/handlers.js');
+
+  const now = new Date('2026-05-31T12:00:00.000Z');
+  const mockRecords = [
+    {
+      id: 'pay-sync-1',
+      invoiceSyncId: 'inv-sync-1',
+      workOrderId: 'wo-1',
+      customerId: 'cust-1',
+      qbPaymentId: 'qb-pay-1',
+      qbInvoiceId: 'qb-inv-1',
+      amountCents: 129900,
+      paymentMethod: 'Card',
+      paymentDate: now,
+      state: 'FAILED',
+      direction: 'INBOUND',
+      errorMessage: 'Customer lookup failed',
+      attemptCount: 2,
+      lastAttemptAt: now,
+      createdAt: now,
+      updatedAt: now,
+    },
+  ];
+
+  const findManyMock = mock.method(paymentSyncListQueries, 'findMany', async () => mockRecords);
+  const countMock = mock.method(paymentSyncListQueries, 'count', async () => 1);
+  const findWorkOrdersMock = mock.method(
+    accountingSyncContextQueries,
+    'findWorkOrders',
+    async () => [
+      {
+        id: 'wo-1',
+        workOrderNumber: 'WO-2026-1001',
+        state: 'READY',
+        scheduledStartAt: null,
+      },
+    ],
+  );
+  const findCustomersMock = mock.method(accountingSyncContextQueries, 'findCustomers', async () => [
+    {
+      id: 'cust-1',
+      displayName: 'Acme Cart Works',
+      fullName: 'Avery Customer',
+      companyName: 'Acme Cart Works',
+      email: 'avery@example.com',
+      phone: null,
+      state: 'ACTIVE',
+    },
+  ]);
+
+  try {
+    const response = await listPaymentSyncsHandler(
+      makeEvent({
+        httpMethod: 'GET',
+        queryStringParameters: { state: 'FAILED', limit: '25', offset: '0' },
+      }),
+    );
+
+    assert.equal(response.statusCode, 200);
+    const body = parseResponseBody(response);
+    assert.equal(body.total, 1);
+    assert.equal(body.limit, 25);
+
+    const items = body.items as Array<Record<string, unknown>>;
+    assert.equal(items.length, 1);
+    assert.equal(items[0].id, 'pay-sync-1');
+    assert.equal(items[0].state, 'FAILED');
+    assert.equal(items[0].amountCents, 129900);
+    assert.equal(items[0].errorMessage, 'Customer lookup failed');
+    assert.deepEqual(items[0].workOrder, {
+      id: 'wo-1',
+      workOrderNumber: 'WO-2026-1001',
+      state: 'READY',
+      scheduledStartAt: null,
+    });
+    assert.deepEqual(items[0].customer, {
+      id: 'cust-1',
+      displayName: 'Acme Cart Works',
+      fullName: 'Avery Customer',
+      companyName: 'Acme Cart Works',
+      email: 'avery@example.com',
+      phone: null,
+      state: 'ACTIVE',
+    });
+
+    assert.equal(findManyMock.mock.calls.length, 1);
+    assert.equal(countMock.mock.calls.length, 1);
+    assert.deepEqual(findWorkOrdersMock.mock.calls[0].arguments[0], ['wo-1']);
+    assert.deepEqual(findCustomersMock.mock.calls[0].arguments[0], ['cust-1']);
+  } finally {
+    findManyMock.mock.restore();
+    countMock.mock.restore();
+    findWorkOrdersMock.mock.restore();
+    findCustomersMock.mock.restore();
+  }
+});
+
+test('listPaymentSyncsHandler rejects invalid state filter', async () => {
+  const { listPaymentSyncsHandler } = await import('../lambda/accounting/handlers.js');
+
+  const response = await listPaymentSyncsHandler(
+    makeEvent({
+      httpMethod: 'GET',
+      queryStringParameters: { state: 'NOPE' },
+    }),
+  );
+  assert.equal(response.statusCode, 400);
+
+  const body = parseResponseBody(response);
+  assert.ok((body.message as string).includes('Invalid state filter'));
+});
+
+// ─── Payment Sync: retryPaymentSyncHandler ───────────────────────────────────
+
+test('retryPaymentSyncHandler returns 400 when ID is missing', async () => {
+  const { retryPaymentSyncHandler } = await import('../lambda/accounting/handlers.js');
+
+  const response = await retryPaymentSyncHandler(makeEvent({ httpMethod: 'POST' }));
+  assert.equal(response.statusCode, 400);
+
+  const body = parseResponseBody(response);
+  assert.ok((body.message as string).includes('Payment sync record ID'));
+});
+
+test('retryPaymentSyncHandler returns 404 when record does not exist', async () => {
+  const { retryPaymentSyncHandler } = await import('../lambda/accounting/handlers.js');
+  const { paymentSyncQueries } = await import('../contexts/accounting/paymentSync.service.js');
+
+  const findByIdMock = mock.method(paymentSyncQueries, 'findById', async () => undefined);
+
+  try {
+    const response = await retryPaymentSyncHandler(
+      makeEvent({ httpMethod: 'POST', pathParameters: { id: 'missing-payment' } }),
+    );
+    assert.equal(response.statusCode, 404);
+
+    const body = parseResponseBody(response);
+    assert.ok((body.message as string).includes('not found'));
+  } finally {
+    findByIdMock.mock.restore();
+  }
+});
+
+test('retryPaymentSyncHandler returns 409 for non-failed payment records', async () => {
+  const { retryPaymentSyncHandler } = await import('../lambda/accounting/handlers.js');
+  const { paymentSyncQueries } = await import('../contexts/accounting/paymentSync.service.js');
+
+  const now = new Date('2026-05-31T12:00:00.000Z').toISOString();
+  const findByIdMock = mock.method(paymentSyncQueries, 'findById', async () => ({
+    id: 'pay-sync-synced',
+    workOrderId: 'wo-1',
+    customerId: 'cust-1',
+    amountCents: 5000,
+    state: 'SYNCED' as const,
+    direction: 'INBOUND' as const,
+    attemptCount: 1,
+    createdAt: now,
+    updatedAt: now,
+  }));
+
+  try {
+    const response = await retryPaymentSyncHandler(
+      makeEvent({ httpMethod: 'POST', pathParameters: { id: 'pay-sync-synced' } }),
+    );
+    assert.equal(response.statusCode, 409);
+
+    const body = parseResponseBody(response);
+    assert.ok((body.message as string).includes('Cannot retry'));
+  } finally {
+    findByIdMock.mock.restore();
+  }
+});
+
+test('retryPaymentSyncHandler transitions failed payments back into progress', async () => {
+  const { retryPaymentSyncHandler } = await import('../lambda/accounting/handlers.js');
+  const { paymentSyncQueries } = await import('../contexts/accounting/paymentSync.service.js');
+
+  const now = new Date('2026-05-31T12:00:00.000Z').toISOString();
+  const failedRecord = {
+    id: 'pay-sync-failed',
+    workOrderId: 'wo-1',
+    customerId: 'cust-1',
+    qbPaymentId: 'qb-pay-1',
+    qbInvoiceId: 'qb-inv-1',
+    amountCents: 5000,
+    paymentMethod: 'Card',
+    paymentDate: '2026-05-31',
+    state: 'FAILED' as const,
+    direction: 'INBOUND' as const,
+    errorMessage: 'Previous failure',
+    attemptCount: 1,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  const findByIdMock = mock.method(paymentSyncQueries, 'findById', async () => failedRecord);
+  const saveMock = mock.method(paymentSyncQueries, 'save', async () => undefined);
+
+  try {
+    const response = await retryPaymentSyncHandler(
+      makeEvent({ httpMethod: 'POST', pathParameters: { id: 'pay-sync-failed' } }),
+    );
+    assert.equal(response.statusCode, 200);
+
+    const body = parseResponseBody(response);
+    assert.equal(body.id, 'pay-sync-failed');
+    assert.equal(body.state, 'IN_PROGRESS');
+    assert.equal(body.message, 'Payment sync queued for retry.');
+
+    const saved = saveMock.mock.calls[0].arguments[0] as unknown as Record<string, unknown>;
+    assert.equal(saved.state, 'IN_PROGRESS');
+    assert.equal(saved.attemptCount, 2);
+    assert.equal(saved.errorMessage, undefined);
+  } finally {
+    findByIdMock.mock.restore();
+    saveMock.mock.restore();
+  }
 });
 
 // ─── CORS / OPTIONS preflight ─────────────────────────────────────────────────
@@ -584,6 +751,8 @@ test('all handlers return 204 for OPTIONS preflight', async () => {
     retryInvoiceSyncHandler,
     listCustomerSyncsHandler,
     triggerCustomerSyncHandler,
+    listPaymentSyncsHandler,
+    retryPaymentSyncHandler,
   } = await import('../lambda/accounting/handlers.js');
 
   const optionsEvent = makeEvent({ httpMethod: 'OPTIONS' });
@@ -594,6 +763,8 @@ test('all handlers return 204 for OPTIONS preflight', async () => {
     retryInvoiceSyncHandler,
     listCustomerSyncsHandler,
     triggerCustomerSyncHandler,
+    listPaymentSyncsHandler,
+    retryPaymentSyncHandler,
   ]) {
     const response = await handler(optionsEvent);
     assert.equal(response.statusCode, 204, `OPTIONS should return 204`);

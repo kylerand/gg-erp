@@ -2,8 +2,11 @@ import assert from 'node:assert/strict';
 import test, { mock } from 'node:test';
 import {
   createInventoryAdjustmentHandler,
+  createInventoryTransferHandler,
   inventoryLedgerQueries,
+  inventoryLocationQueries,
   inventoryLotQueries,
+  listInventoryLocationsHandler,
   inventoryReservationQueries,
   listInventoryLedgerHandler,
   listLotsHandler,
@@ -19,6 +22,7 @@ const TEST_WORK_ORDER_PART_ID = '00000000-0000-4000-8000-000000000003';
 const TEST_RESERVATION_ID = '00000000-0000-4000-8000-000000000004';
 const TEST_PART_ID = '00000000-0000-4000-8000-000000000005';
 const TEST_LOCATION_ID = '00000000-0000-4000-8000-000000000006';
+const TEST_DESTINATION_LOCATION_ID = '00000000-0000-4000-8000-000000000007';
 
 test('listLotsHandler returns inventory lot details for the web contract', async () => {
   const listLotsMock = mock.method(inventoryLotQueries, 'listLots', async () => ({
@@ -33,7 +37,7 @@ test('listLotsHandler returns inventory lot details for the web contract', async
         createdAt: new Date('2026-01-15T10:00:00.000Z'),
         updatedAt: new Date('2026-01-15T10:00:00.000Z'),
         part: { sku: 'SKU-001', name: 'Brake Pad' },
-        stockLocation: { locationName: 'Warehouse A' },
+        stockLocation: { id: TEST_LOCATION_ID, locationName: 'Warehouse A' },
       },
       {
         id: 'lot-2',
@@ -45,7 +49,7 @@ test('listLotsHandler returns inventory lot details for the web contract', async
         createdAt: new Date('2026-01-10T08:00:00.000Z'),
         updatedAt: new Date('2026-01-10T08:00:00.000Z'),
         part: { sku: 'SKU-002', name: 'Oil Filter' },
-        stockLocation: { locationName: 'Warehouse B' },
+        stockLocation: { id: TEST_DESTINATION_LOCATION_ID, locationName: 'Warehouse B' },
       },
     ],
     total: 2,
@@ -275,6 +279,99 @@ test('createInventoryAdjustmentHandler posts balance and ledger consequences', a
     assert.ok(balanceUpdate);
     assert.ok(balanceUpdate.sql.includes('quantity_on_hand = quantity_on_hand +'));
     assert.ok(balanceUpdate.sql.includes('last_ledger_entry_id'));
+  } finally {
+    setInventoryHandlerPrismaForTests(undefined);
+  }
+});
+
+test('listInventoryLocationsHandler returns pickable stock locations', async () => {
+  const listLocationsMock = mock.method(inventoryLocationQueries, 'listLocations', async () => [
+    {
+      id: TEST_LOCATION_ID,
+      locationCode: 'MAIN',
+      locationName: 'Main Warehouse',
+      locationType: 'WAREHOUSE',
+      isPickable: true,
+    },
+    {
+      id: TEST_DESTINATION_LOCATION_ID,
+      locationCode: 'BAY-1',
+      locationName: 'Bay 1',
+      locationType: 'BAY',
+      isPickable: true,
+    },
+  ]);
+
+  try {
+    const response = await listInventoryLocationsHandler({ httpMethod: 'GET' });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(listLocationsMock.mock.calls.length, 1);
+    const payload = JSON.parse(response.body) as {
+      items: Array<{ id: string; locationCode: string; locationName: string }>;
+      total: number;
+    };
+    assert.equal(payload.total, 2);
+    assert.equal(payload.items[0].locationCode, 'MAIN');
+    assert.equal(payload.items[1].locationName, 'Bay 1');
+  } finally {
+    listLocationsMock.mock.restore();
+  }
+});
+
+test('createInventoryTransferHandler posts transfer rows, balances, and ledger entries', async () => {
+  const harness = createInventoryTransferHarness();
+  setInventoryHandlerPrismaForTests(harness.prisma as never);
+
+  try {
+    const response = await createInventoryTransferHandler({
+      httpMethod: 'POST',
+      headers: { 'x-correlation-id': 'transfer-correlation' },
+      body: JSON.stringify({
+        stockLotId: TEST_STOCK_LOT_ID,
+        quantity: 2,
+        toStockLocationId: TEST_DESTINATION_LOCATION_ID,
+        reasonCode: 'shop_move',
+        notes: 'Move to install bay',
+      }),
+    });
+
+    assert.equal(response.statusCode, 201);
+    const payload = JSON.parse(response.body) as {
+      transfer: { quantity: number; reasonCode: string; fromStockLotId: string; toStockLotId: string };
+    };
+    assert.equal(payload.transfer.quantity, 2);
+    assert.equal(payload.transfer.reasonCode, 'SHOP_MOVE');
+    assert.equal(payload.transfer.fromStockLotId, TEST_STOCK_LOT_ID);
+    assert.match(payload.transfer.toStockLotId, /^[0-9a-f-]{36}$/);
+
+    const ledgerCalls = harness.executeCalls.filter((call) =>
+      call.sql.includes('INSERT INTO inventory.inventory_ledger_entries'),
+    );
+    assert.equal(ledgerCalls.length, 2);
+    assert.ok(ledgerCalls.some((call) => call.values.includes('TRANSFER_OUT')));
+    assert.ok(ledgerCalls.some((call) => call.values.includes('TRANSFER_IN')));
+    assert.ok(ledgerCalls.every((call) => call.values.includes('INVENTORY_TRANSFER_LINE')));
+    assert.ok(ledgerCalls.every((call) => call.values.includes('SHOP_MOVE')));
+
+    assert.ok(
+      harness.executeCalls.some((call) => call.sql.includes('INSERT INTO inventory.inventory_transfers')),
+    );
+    assert.ok(
+      harness.executeCalls.some((call) => call.sql.includes('INSERT INTO inventory.inventory_transfer_lines')),
+    );
+    assert.ok(harness.executeCalls.some((call) => call.sql.includes('INSERT INTO inventory.stock_lots')));
+
+    const sourceBalanceUpdate = harness.queryCalls.find((call) =>
+      call.sql.includes('UPDATE inventory.inventory_balances'),
+    );
+    assert.ok(sourceBalanceUpdate);
+    assert.ok(sourceBalanceUpdate.sql.includes('quantity_on_hand = quantity_on_hand -'));
+    assert.ok(sourceBalanceUpdate.sql.includes('last_ledger_entry_id'));
+
+    assert.ok(
+      harness.executeCalls.some((call) => call.sql.includes('INSERT INTO inventory.inventory_balances')),
+    );
   } finally {
     setInventoryHandlerPrismaForTests(undefined);
   }
@@ -555,6 +652,65 @@ function createInventoryAdjustmentHarness() {
             locationName: 'Main Warehouse',
             quantityOnHand: 5,
             quantityReserved: 2,
+          },
+        ];
+      }
+
+      if (sql.includes('UPDATE inventory.inventory_balances')) {
+        return [{ id: 'balance-1' }];
+      }
+
+      throw new Error(`Unhandled query: ${sql}`);
+    }),
+    $executeRaw: mock.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      executeCalls.push({ sql: sqlText(strings), values });
+      return 1;
+    }),
+  };
+
+  const prisma = {
+    $transaction: mock.fn(async (callback: (transaction: typeof tx) => Promise<unknown>) =>
+      callback(tx),
+    ),
+  };
+
+  return { prisma, queryCalls, executeCalls };
+}
+
+function createInventoryTransferHarness() {
+  const queryCalls: RawSqlCall[] = [];
+  const executeCalls: RawSqlCall[] = [];
+
+  const tx = {
+    $queryRaw: mock.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const sql = sqlText(strings);
+      queryCalls.push({ sql, values });
+
+      if (sql.includes('FROM inventory.stock_lots lot')) {
+        return [
+          {
+            stockLotId: TEST_STOCK_LOT_ID,
+            lotNumber: 'LOT-001',
+            serialNumber: null,
+            lotState: 'AVAILABLE',
+            partId: TEST_PART_ID,
+            partSku: 'GG-LIFT',
+            partName: 'Lift kit',
+            unitOfMeasureId: '00000000-0000-4000-8000-000000000099',
+            unitOfMeasure: 'EA',
+            fromStockLocationId: TEST_LOCATION_ID,
+            fromLocationName: 'Main Warehouse',
+            quantityOnHand: 5,
+            quantityReserved: 1,
+          },
+        ];
+      }
+
+      if (sql.includes('FROM inventory.stock_locations')) {
+        return [
+          {
+            id: TEST_DESTINATION_LOCATION_ID,
+            locationName: 'Bay 1',
           },
         ];
       }

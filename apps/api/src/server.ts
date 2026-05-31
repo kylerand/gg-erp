@@ -54,6 +54,8 @@ import {
   consumeReservationHandler,
   listInventoryLedgerHandler,
   createInventoryAdjustmentHandler,
+  createInventoryTransferHandler,
+  listInventoryLocationsHandler,
 } from './lambda/inventory/handlers.js';
 import {
   listTasksHandler,
@@ -343,6 +345,8 @@ async function route(
     result = await listPartsHandler(event);
   } else if (pathname === '/inventory/lots' && method === 'GET') {
     result = await listLotsHandler(event);
+  } else if (pathname === '/inventory/locations' && method === 'GET') {
+    result = await listInventoryLocationsHandler(event);
   } else if (pathname === '/inventory/lots' && method === 'POST') {
     result = await receiveInventoryLotHandler(event);
   } else if (pathname === '/inventory/reservations' && method === 'GET') {
@@ -361,6 +365,8 @@ async function route(
     result = await listInventoryLedgerHandler(event);
   } else if (pathname === '/inventory/adjustments' && method === 'POST') {
     result = await createInventoryAdjustmentHandler(event);
+  } else if (pathname === '/inventory/transfers' && method === 'POST') {
+    result = await createInventoryTransferHandler(event);
   } else if (pathname === '/inventory/manufacturers' && method === 'GET') {
     result = await listManufacturersHandler(event);
   } else if (pathname === '/inventory/manufacturers' && method === 'POST') {
@@ -739,7 +745,7 @@ server.listen(PORT, () => {
   console.log(`   Auth        GET /auth/me`);
   console.log(`   Workspace   GET /workspace/today`);
   console.log(`   Customers   GET|POST /identity/customers, GET|POST /:id/transition`);
-  console.log(`   Inventory   GET|POST /inventory/parts, PATCH /inventory/parts/:id, GET /inventory/vendors, GET /inventory/ledger, POST /inventory/adjustments`);
+  console.log(`   Inventory   GET|POST /inventory/parts, PATCH /inventory/parts/:id, GET /inventory/vendors, GET /inventory/ledger, POST /inventory/adjustments, POST /inventory/transfers`);
   console.log(`   Tickets     /tickets/work-orders/:id/tasks|operations|rework|qc-gates|time-entries`);
   console.log(`   Queue       GET /tickets/wo-queue, GET /tickets/wo-queue/:id`);
   console.log(`   Time        GET /tickets/time-entries`);

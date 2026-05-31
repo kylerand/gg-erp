@@ -5,6 +5,8 @@ import Link from 'next/link';
 import {
   getOpportunity,
   createActivity,
+  salesCustomerDisplayName,
+  salesUserDisplayName,
   type SalesOpportunity,
   type Quote,
   type SalesActivity,
@@ -40,7 +42,7 @@ export default function OpportunityDetailPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getOpportunity(params.id);
+      const data = await getOpportunity(params.id, { allowMockFallback: false });
       setOpportunity(data);
     } finally {
       setLoading(false);
@@ -91,6 +93,12 @@ export default function OpportunityDetailPage() {
   }
 
   const stageColor = STAGE_COLORS[opportunity.stage] ?? 'bg-gray-100 text-gray-800';
+  const customerName = salesCustomerDisplayName(opportunity.customerProfile);
+  const assignedToLabel = opportunity.assignedToUser
+    ? salesUserDisplayName(opportunity.assignedToUser)
+    : opportunity.assignedToUserId
+      ? 'Assigned sales user'
+      : 'Unassigned';
 
   return (
     <div>
@@ -127,29 +135,46 @@ export default function OpportunityDetailPage() {
 
       {/* Info grid */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-5 mb-8">
-        {[
-          { label: 'Customer', value: opportunity.customerId },
-          { label: 'Source', value: opportunity.source },
-          {
-            label: 'Estimated Value',
-            value:
-              opportunity.estimatedValue != null
-                ? `$${opportunity.estimatedValue.toLocaleString()}`
-                : '—',
-          },
-          {
-            label: 'Expected Close',
-            value: opportunity.expectedCloseDate
-              ? new Date(opportunity.expectedCloseDate).toLocaleDateString()
-              : '—',
-          },
-          { label: 'Assigned To', value: opportunity.assignedToUserId ?? 'Unassigned' },
-        ].map((item) => (
-          <div key={item.label} className="bg-white rounded-lg border border-gray-200 p-3">
-            <div className="text-xs text-gray-500">{item.label}</div>
-            <div className="text-sm font-medium text-gray-900 mt-0.5 truncate">{item.value}</div>
+        <div className="bg-white rounded-lg border border-gray-200 p-3">
+          <div className="text-xs text-gray-500">Customer</div>
+          <div className="text-sm font-medium text-gray-900 mt-0.5 truncate">{customerName}</div>
+          {opportunity.customerProfile?.email && (
+            <div className="mt-0.5 truncate text-xs text-gray-500">
+              {opportunity.customerProfile.email}
+            </div>
+          )}
+        </div>
+        <div className="bg-white rounded-lg border border-gray-200 p-3">
+          <div className="text-xs text-gray-500">Source</div>
+          <div className="text-sm font-medium text-gray-900 mt-0.5 truncate">
+            {opportunity.source}
           </div>
-        ))}
+        </div>
+        <div className="bg-white rounded-lg border border-gray-200 p-3">
+          <div className="text-xs text-gray-500">Estimated Value</div>
+          <div className="text-sm font-medium text-gray-900 mt-0.5 truncate">
+            {opportunity.estimatedValue != null
+              ? `$${opportunity.estimatedValue.toLocaleString()}`
+              : 'No estimate'}
+          </div>
+        </div>
+        <div className="bg-white rounded-lg border border-gray-200 p-3">
+          <div className="text-xs text-gray-500">Expected Close</div>
+          <div className="text-sm font-medium text-gray-900 mt-0.5 truncate">
+            {opportunity.expectedCloseDate
+              ? new Date(opportunity.expectedCloseDate).toLocaleDateString()
+              : 'Not scheduled'}
+          </div>
+        </div>
+        <div className="bg-white rounded-lg border border-gray-200 p-3">
+          <div className="text-xs text-gray-500">Assigned To</div>
+          <div className="text-sm font-medium text-gray-900 mt-0.5 truncate">{assignedToLabel}</div>
+          {opportunity.assignedToUser?.employeeNumber && (
+            <div className="mt-0.5 text-xs text-gray-500">
+              {opportunity.assignedToUser.employeeNumber}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* AI Insights — Phase 4 */}
@@ -159,7 +184,7 @@ export default function OpportunityDetailPage() {
         estimatedValue={opportunity.estimatedValue}
         stage={opportunity.stage}
         probability={opportunity.probability}
-        customerId={opportunity.customerId}
+        customerName={customerName}
       />
 
       {/* Follow-up Suggestions — Phase 4 */}
@@ -168,7 +193,7 @@ export default function OpportunityDetailPage() {
         opportunityTitle={opportunity.title}
         stage={opportunity.stage}
         lastActivityDate={opportunity.activities[0]?.createdAt}
-        customerName={opportunity.customerId}
+        customerName={customerName}
       />
 
       {/* Quotes */}
@@ -311,7 +336,7 @@ export default function OpportunityDetailPage() {
         isOpen={showEmailDraft}
         onClose={() => setShowEmailDraft(false)}
         opportunityId={params.id}
-        customerName={opportunity.customerId}
+        customerName={customerName}
         context={`Opportunity: ${opportunity.title}, Stage: ${opportunity.stage}, Value: $${(opportunity.estimatedValue ?? 0).toLocaleString()}`}
       />
     </div>

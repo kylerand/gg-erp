@@ -38,12 +38,13 @@ export default function PricingIntelligence({
   const analyze = useCallback(async () => {
     setLoading(true);
     try {
-      const itemsList = items?.map((i) => `${i.name}: ${i.quantity}x @ $${i.unitPrice}`).join('\n') ?? 'No items specified';
+      const itemsList =
+        items?.map((i) => `${i.name}: ${i.quantity}x @ $${i.unitPrice}`).join('\n') ??
+        'No items specified';
 
       const res = await sendAgentChat({
         message: `Analyze pricing for this deal and suggest optimizations:
-Customer: ${customerName ?? customerId ?? 'Unknown'}
-${customerId ? `Customer ID: ${customerId}` : ''}
+Customer: ${customerName ?? (customerId ? 'Selected customer' : 'Unknown')}
 Items:
 ${itemsList}
 
@@ -101,8 +102,14 @@ Provide specific suggestions with dollar amounts.`,
           {loading && (
             <div className="flex items-center gap-1">
               <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-bounce" />
-              <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-              <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              <div
+                className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-bounce"
+                style={{ animationDelay: '150ms' }}
+              />
+              <div
+                className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-bounce"
+                style={{ animationDelay: '300ms' }}
+              />
             </div>
           )}
           {!loading && !result && (
@@ -115,7 +122,12 @@ Provide specific suggestions with dollar amounts.`,
               stroke="currentColor"
               viewBox="0 0 24 24"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 9l-7 7-7-7"
+              />
             </svg>
           )}
         </div>

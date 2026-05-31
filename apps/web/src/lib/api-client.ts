@@ -3395,7 +3395,13 @@ export async function listCapacitySlots(
   return apiFetch<CapacitySlotListResponse>(
     `/scheduling/capacity-slots${qs.size ? `?${qs}` : ''}`,
     undefined,
-    { items: [], total: 0, limit: params?.limit ?? 100, offset: params?.offset ?? 0, stockLocations: [] },
+    {
+      items: [],
+      total: 0,
+      limit: params?.limit ?? 100,
+      offset: params?.offset ?? 0,
+      stockLocations: [],
+    },
     options,
   );
 }
@@ -3473,9 +3479,28 @@ export async function importCapacitySlots(
 // Sales
 // ---------------------------------------------------------------------------
 
+export interface SalesCustomerProfile {
+  id: string;
+  displayName: string;
+  fullName: string;
+  companyName?: string;
+  email: string;
+  phone?: string;
+  state: string;
+}
+
+export interface SalesUserProfile {
+  id: string;
+  displayName: string;
+  email: string;
+  employeeName?: string;
+  employeeNumber?: string;
+}
+
 export interface SalesOpportunity {
   id: string;
   customerId: string;
+  customerProfile?: SalesCustomerProfile;
   title: string;
   description: string | null;
   stage: string;
@@ -3483,6 +3508,7 @@ export interface SalesOpportunity {
   estimatedValue: number | null;
   expectedCloseDate: string | null;
   assignedToUserId: string | null;
+  assignedToUser?: SalesUserProfile;
   source: string;
   lostReason: string | null;
   wonWorkOrderId: string | null;
@@ -3495,6 +3521,7 @@ export interface Quote {
   quoteNumber: string;
   opportunityId: string | null;
   customerId: string;
+  customerProfile?: SalesCustomerProfile;
   status: string;
   subtotal: number;
   taxRate: number;
@@ -3504,6 +3531,7 @@ export interface Quote {
   notes: string | null;
   termsAndConditions: string | null;
   createdByUserId: string | null;
+  createdByUser?: SalesUserProfile;
   convertedWoId?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -3556,6 +3584,27 @@ export interface SalesDashboard {
   topOpportunities: SalesOpportunity[];
 }
 
+type CustomerDisplayRecord = {
+  displayName?: string;
+  companyName?: string;
+  fullName?: string;
+  email?: string;
+};
+
+export function salesCustomerDisplayName(customer?: CustomerDisplayRecord | null): string {
+  return (
+    customer?.displayName?.trim() ||
+    customer?.companyName ||
+    customer?.fullName ||
+    customer?.email ||
+    'Unresolved customer'
+  );
+}
+
+export function salesUserDisplayName(user?: SalesUserProfile | null): string {
+  return user?.displayName?.trim() || user?.employeeName || user?.email || 'Unresolved user';
+}
+
 export async function listOpportunities(
   params?: {
     stage?: string;
@@ -3585,8 +3634,12 @@ export async function listOpportunities(
 
 export async function getOpportunity(
   id: string,
+  options?: ApiDataOptions,
 ): Promise<SalesOpportunity & { quotes: Quote[]; activities: SalesActivity[] }> {
-  return apiFetch(`/sales/opportunities/${id}`);
+  const data = await apiFetch<{
+    opportunity: SalesOpportunity & { quotes: Quote[]; activities: SalesActivity[] };
+  }>(`/sales/opportunities/${id}`, undefined, undefined, options);
+  return data.opportunity;
 }
 
 export async function createOpportunity(input: {
@@ -3598,7 +3651,11 @@ export async function createOpportunity(input: {
   expectedCloseDate?: string;
   source?: string;
 }): Promise<SalesOpportunity> {
-  return apiFetch('/sales/opportunities', { method: 'POST', body: JSON.stringify(input) });
+  const data = await apiFetch<{ opportunity: SalesOpportunity }>('/sales/opportunities', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return data.opportunity;
 }
 
 export async function transitionOpportunityStage(
@@ -3606,10 +3663,14 @@ export async function transitionOpportunityStage(
   stage: string,
   lostReason?: string,
 ): Promise<SalesOpportunity> {
-  return apiFetch(`/sales/opportunities/${id}/stage`, {
-    method: 'POST',
-    body: JSON.stringify({ stage, lostReason }),
-  });
+  const data = await apiFetch<{ opportunity: SalesOpportunity }>(
+    `/sales/opportunities/${id}/stage`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ stage, lostReason }),
+    },
+  );
+  return data.opportunity;
 }
 
 export async function listQuotes(
@@ -3676,9 +3737,7 @@ export async function acceptQuote(id: string): Promise<Quote> {
   return data.quote;
 }
 
-export async function convertQuoteToWorkOrder(
-  id: string,
-): Promise<{
+export async function convertQuoteToWorkOrder(id: string): Promise<{
   quote: Quote;
   workOrder: { id: string; workOrderNumber: string; title: string; status: string };
   operationsCreated?: number;

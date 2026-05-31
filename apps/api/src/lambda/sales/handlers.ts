@@ -63,15 +63,160 @@ const VALID_STAGE_TRANSITIONS: Record<string, string[]> = {
 // Response mappers
 // ---------------------------------------------------------------------------
 
-function toOpportunityResponse(r: Record<string, unknown>) {
-  return {
+interface SalesCustomerProfile {
+  id: string;
+  displayName: string;
+  fullName: string;
+  companyName?: string;
+  email: string;
+  phone?: string;
+  state: string;
+}
+
+interface SalesUserProfile {
+  id: string;
+  displayName: string;
+  email: string;
+  employeeName?: string;
+  employeeNumber?: string;
+}
+
+type SalesCustomerRecord = {
+  id: string;
+  fullName: string;
+  companyName: string | null;
+  email: string;
+  phone: string | null;
+  state: unknown;
+};
+
+type SalesUserRecord = {
+  id: string;
+  displayName: string;
+  email: string;
+  employee?: {
+    firstName: string;
+    lastName: string;
+    employeeNumber: string;
+  } | null;
+};
+
+interface SalesResponseContext {
+  customerProfiles?: Map<string, SalesCustomerProfile>;
+  userProfiles?: Map<string, SalesUserProfile>;
+}
+
+function compactIds(ids: unknown[]): string[] {
+  return Array.from(
+    new Set(ids.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)),
+  );
+}
+
+function toCustomerProfile(customer: SalesCustomerRecord): SalesCustomerProfile {
+  const profile: SalesCustomerProfile = {
+    id: customer.id,
+    displayName: customer.companyName?.trim() || customer.fullName,
+    fullName: customer.fullName,
+    email: customer.email,
+    state: String(customer.state),
+  };
+  if (customer.companyName) profile.companyName = customer.companyName;
+  if (customer.phone) profile.phone = customer.phone;
+  return profile;
+}
+
+function toUserProfile(user: SalesUserRecord): SalesUserProfile {
+  const employeeName = user.employee
+    ? `${user.employee.firstName} ${user.employee.lastName}`.trim()
+    : undefined;
+  const profile: SalesUserProfile = {
+    id: user.id,
+    displayName: user.displayName?.trim() || employeeName || user.email,
+    email: user.email,
+  };
+  if (employeeName) profile.employeeName = employeeName;
+  if (user.employee?.employeeNumber) profile.employeeNumber = user.employee.employeeNumber;
+  return profile;
+}
+
+async function loadCustomerProfiles(
+  customerIds: unknown[],
+): Promise<Map<string, SalesCustomerProfile>> {
+  const ids = compactIds(customerIds);
+  if (ids.length === 0) return new Map();
+
+  const prisma = getSalesPrisma() as unknown as {
+    customer?: {
+      findMany?: (args: unknown) => Promise<SalesCustomerRecord[]>;
+    };
+  };
+  if (typeof prisma.customer?.findMany !== 'function') return new Map();
+
+  const customers = await prisma.customer.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      fullName: true,
+      companyName: true,
+      email: true,
+      phone: true,
+      state: true,
+    },
+  });
+
+  return new Map(customers.map((customer) => [customer.id, toCustomerProfile(customer)]));
+}
+
+async function loadUserProfiles(userIds: unknown[]): Promise<Map<string, SalesUserProfile>> {
+  const ids = compactIds(userIds);
+  if (ids.length === 0) return new Map();
+
+  const prisma = getSalesPrisma() as unknown as {
+    user?: {
+      findMany?: (args: unknown) => Promise<SalesUserRecord[]>;
+    };
+  };
+  if (typeof prisma.user?.findMany !== 'function') return new Map();
+
+  const users = await prisma.user.findMany({
+    where: { id: { in: ids }, deletedAt: null },
+    select: {
+      id: true,
+      displayName: true,
+      email: true,
+      employee: {
+        select: {
+          firstName: true,
+          lastName: true,
+          employeeNumber: true,
+        },
+      },
+    },
+  });
+
+  return new Map(users.map((user) => [user.id, toUserProfile(user)]));
+}
+
+function toOpportunityResponse(r: Record<string, unknown>, context: SalesResponseContext = {}) {
+  const opportunity = {
     ...r,
     estimatedValue: r.estimatedValue != null ? Number(r.estimatedValue) : null,
   };
+
+  if (typeof r.customerId === 'string') {
+    const customerProfile = context.customerProfiles?.get(r.customerId);
+    if (customerProfile) (opportunity as Record<string, unknown>).customerProfile = customerProfile;
+  }
+  if (typeof r.assignedToUserId === 'string') {
+    const assignedToUser = context.userProfiles?.get(r.assignedToUserId);
+    if (assignedToUser) (opportunity as Record<string, unknown>).assignedToUser = assignedToUser;
+  }
+
+  return opportunity;
 }
 
-function toQuoteResponse(r: Record<string, unknown>) {
-  return {
+function toQuoteResponse(r: Record<string, unknown>, context: SalesResponseContext = {}) {
+  const quote = {
     ...r,
     subtotal: Number(r.subtotal),
     taxRate: Number(r.taxRate),
@@ -83,6 +228,17 @@ function toQuoteResponse(r: Record<string, unknown>) {
         }
       : {}),
   };
+
+  if (typeof r.customerId === 'string') {
+    const customerProfile = context.customerProfiles?.get(r.customerId);
+    if (customerProfile) (quote as Record<string, unknown>).customerProfile = customerProfile;
+  }
+  if (typeof r.createdByUserId === 'string') {
+    const createdByUser = context.userProfiles?.get(r.createdByUserId);
+    if (createdByUser) (quote as Record<string, unknown>).createdByUser = createdByUser;
+  }
+
+  return quote;
 }
 
 function toQuoteLineResponse(l: Record<string, unknown>) {
@@ -123,9 +279,16 @@ export const listOpportunitiesHandler = wrapHandler(
       }),
       prisma.salesOpportunity.count({ where }),
     ]);
+    const [customerProfiles, userProfiles] = await Promise.all([
+      loadCustomerProfiles(items.map((item) => item.customerId)),
+      loadUserProfiles(items.map((item) => item.assignedToUserId)),
+    ]);
+    const responseContext: SalesResponseContext = { customerProfiles, userProfiles };
 
     return jsonResponse(200, {
-      items: items.map(toOpportunityResponse),
+      items: items.map((item) =>
+        toOpportunityResponse(item as unknown as Record<string, unknown>, responseContext),
+      ),
       total,
       limit,
       offset,
@@ -145,10 +308,18 @@ export const getOpportunityHandler = wrapHandler(
     });
     if (!opp) return jsonResponse(404, { message: `Opportunity not found: ${id}` });
 
-    const mapped = toOpportunityResponse(opp as unknown as Record<string, unknown>);
+    const [customerProfiles, userProfiles] = await Promise.all([
+      loadCustomerProfiles([opp.customerId, ...opp.quotes.map((quote) => quote.customerId)]),
+      loadUserProfiles([opp.assignedToUserId, ...opp.quotes.map((quote) => quote.createdByUserId)]),
+    ]);
+    const responseContext: SalesResponseContext = { customerProfiles, userProfiles };
+    const mapped = toOpportunityResponse(
+      opp as unknown as Record<string, unknown>,
+      responseContext,
+    );
     if (Array.isArray(opp.quotes)) {
       (mapped as Record<string, unknown>).quotes = opp.quotes.map((q) =>
-        toQuoteResponse(q as unknown as Record<string, unknown>),
+        toQuoteResponse(q as unknown as Record<string, unknown>, responseContext),
       );
     }
 
@@ -173,8 +344,16 @@ export const createOpportunityHandler = wrapHandler(
     const body = parseBody<CreateOpportunityBody>(ctx.event);
     if (!body.ok) return jsonResponse(400, { message: body.error });
 
-    const { customerId, title, description, stage, estimatedValue, expectedCloseDate, assignedToUserId, source } =
-      body.value;
+    const {
+      customerId,
+      title,
+      description,
+      stage,
+      estimatedValue,
+      expectedCloseDate,
+      assignedToUserId,
+      source,
+    } = body.value;
 
     if (!customerId?.trim()) return jsonResponse(422, { message: 'customerId is required.' });
     if (!title?.trim()) return jsonResponse(422, { message: 'title is required.' });
@@ -202,7 +381,9 @@ export const createOpportunityHandler = wrapHandler(
       },
     });
 
-    return jsonResponse(201, { opportunity: toOpportunityResponse(opp as unknown as Record<string, unknown>) });
+    return jsonResponse(201, {
+      opportunity: toOpportunityResponse(opp as unknown as Record<string, unknown>),
+    });
   },
   { requireAuth: true },
 );
@@ -227,7 +408,8 @@ export const updateOpportunityHandler = wrapHandler(
     const existing = await getSalesPrisma().salesOpportunity.findUnique({ where: { id } });
     if (!existing) return jsonResponse(404, { message: `Opportunity not found: ${id}` });
 
-    const { title, description, estimatedValue, expectedCloseDate, assignedToUserId, source } = body.value;
+    const { title, description, estimatedValue, expectedCloseDate, assignedToUserId, source } =
+      body.value;
     const data: Record<string, unknown> = { updatedAt: new Date(), version: { increment: 1 } };
 
     if (title !== undefined) data.title = title.trim();
@@ -240,7 +422,9 @@ export const updateOpportunityHandler = wrapHandler(
     if (source !== undefined) data.source = source as 'OTHER';
 
     const updated = await getSalesPrisma().salesOpportunity.update({ where: { id }, data });
-    return jsonResponse(200, { opportunity: toOpportunityResponse(updated as unknown as Record<string, unknown>) });
+    return jsonResponse(200, {
+      opportunity: toOpportunityResponse(updated as unknown as Record<string, unknown>),
+    });
   },
   { requireAuth: true },
 );
@@ -304,7 +488,9 @@ export const transitionOpportunityStageHandler = wrapHandler(
       }),
     ]);
 
-    return jsonResponse(200, { opportunity: toOpportunityResponse(updated as unknown as Record<string, unknown>) });
+    return jsonResponse(200, {
+      opportunity: toOpportunityResponse(updated as unknown as Record<string, unknown>),
+    });
   },
   { requireAuth: true },
 );
@@ -325,7 +511,10 @@ function generateQuoteNumber(): string {
 }
 
 function generateWorkOrderNumber(quoteNumber: string, quoteId: string): string {
-  const quoteSuffix = quoteNumber.replace(/^Q-/i, '').replace(/[^a-z0-9-]/gi, '').slice(0, 24);
+  const quoteSuffix = quoteNumber
+    .replace(/^Q-/i, '')
+    .replace(/[^a-z0-9-]/gi, '')
+    .slice(0, 24);
   return `WO-${quoteSuffix || 'QUOTE'}-${quoteId.slice(0, 4)}`.toUpperCase();
 }
 
@@ -338,7 +527,9 @@ function clampPriority(value: number | undefined): number {
   return Math.min(5, Math.max(1, Math.round(value)));
 }
 
-function parseOptionalBody<T>(event: Parameters<typeof parseBody<T>>[0]): { ok: true; value: Partial<T> } | { ok: false; error: string } {
+function parseOptionalBody<T>(
+  event: Parameters<typeof parseBody<T>>[0],
+): { ok: true; value: Partial<T> } | { ok: false; error: string } {
   if (!event.body?.trim()) return { ok: true, value: {} };
   return parseBody<Partial<T>>(event);
 }
@@ -368,9 +559,16 @@ export const listQuotesHandler = wrapHandler(
       }),
       prisma.quote.count({ where }),
     ]);
+    const [customerProfiles, userProfiles] = await Promise.all([
+      loadCustomerProfiles(items.map((item) => item.customerId)),
+      loadUserProfiles(items.map((item) => item.createdByUserId)),
+    ]);
+    const responseContext: SalesResponseContext = { customerProfiles, userProfiles };
 
     return jsonResponse(200, {
-      items: items.map((q) => toQuoteResponse(q as unknown as Record<string, unknown>)),
+      items: items.map((q) =>
+        toQuoteResponse(q as unknown as Record<string, unknown>, responseContext),
+      ),
       total,
       limit,
       offset,
@@ -390,7 +588,15 @@ export const getQuoteHandler = wrapHandler(
     });
     if (!quote) return jsonResponse(404, { message: `Quote not found: ${id}` });
 
-    return jsonResponse(200, { quote: toQuoteResponse(quote as unknown as Record<string, unknown>) });
+    const [customerProfiles, userProfiles] = await Promise.all([
+      loadCustomerProfiles([quote.customerId]),
+      loadUserProfiles([quote.createdByUserId]),
+    ]);
+    const responseContext: SalesResponseContext = { customerProfiles, userProfiles };
+
+    return jsonResponse(200, {
+      quote: toQuoteResponse(quote as unknown as Record<string, unknown>, responseContext),
+    });
   },
   { requireAuth: false },
 );
@@ -420,7 +626,9 @@ export const createQuoteHandler = wrapHandler(
 
     // Validate opportunity exists if provided
     if (opportunityId) {
-      const opp = await getSalesPrisma().salesOpportunity.findUnique({ where: { id: opportunityId } });
+      const opp = await getSalesPrisma().salesOpportunity.findUnique({
+        where: { id: opportunityId },
+      });
       if (!opp) return jsonResponse(404, { message: `Opportunity not found: ${opportunityId}` });
     }
 
@@ -467,7 +675,9 @@ export const createQuoteHandler = wrapHandler(
       include: { lines: { orderBy: { sortOrder: 'asc' } } },
     });
 
-    return jsonResponse(201, { quote: toQuoteResponse(quote as unknown as Record<string, unknown>) });
+    return jsonResponse(201, {
+      quote: toQuoteResponse(quote as unknown as Record<string, unknown>),
+    });
   },
   { requireAuth: true },
 );
@@ -508,7 +718,9 @@ export const updateQuoteHandler = wrapHandler(
     }
 
     const updated = await getSalesPrisma().quote.update({ where: { id }, data });
-    return jsonResponse(200, { quote: toQuoteResponse(updated as unknown as Record<string, unknown>) });
+    return jsonResponse(200, {
+      quote: toQuoteResponse(updated as unknown as Record<string, unknown>),
+    });
   },
   { requireAuth: true },
 );
@@ -573,7 +785,9 @@ export const updateQuoteLinesHandler = wrapHandler(
       });
     });
 
-    return jsonResponse(200, { quote: toQuoteResponse(quote as unknown as Record<string, unknown>) });
+    return jsonResponse(200, {
+      quote: toQuoteResponse(quote as unknown as Record<string, unknown>),
+    });
   },
   { requireAuth: true },
 );
@@ -613,7 +827,9 @@ export const sendQuoteHandler = wrapHandler(
         : Promise.resolve(null),
     ]);
 
-    return jsonResponse(200, { quote: toQuoteResponse(updated as unknown as Record<string, unknown>) });
+    return jsonResponse(200, {
+      quote: toQuoteResponse(updated as unknown as Record<string, unknown>),
+    });
   },
   { requireAuth: true },
 );
@@ -633,12 +849,19 @@ export const acceptQuoteHandler = wrapHandler(
     const now = new Date();
     const updated = await prisma.quote.update({
       where: { id },
-      data: { status: 'ACCEPTED' as const, approvedByUserId: ctx.actorUserId ?? null, updatedAt: now, version: { increment: 1 } },
+      data: {
+        status: 'ACCEPTED' as const,
+        approvedByUserId: ctx.actorUserId ?? null,
+        updatedAt: now,
+        version: { increment: 1 },
+      },
     });
 
     // Auto-transition linked opportunity to CLOSED_WON
     if (existing.opportunityId) {
-      const opp = await prisma.salesOpportunity.findUnique({ where: { id: existing.opportunityId } });
+      const opp = await prisma.salesOpportunity.findUnique({
+        where: { id: existing.opportunityId },
+      });
       if (opp && opp.stage !== 'CLOSED_WON' && opp.stage !== 'CLOSED_LOST') {
         await Promise.all([
           prisma.salesOpportunity.update({
@@ -665,7 +888,9 @@ export const acceptQuoteHandler = wrapHandler(
       }
     }
 
-    return jsonResponse(200, { quote: toQuoteResponse(updated as unknown as Record<string, unknown>) });
+    return jsonResponse(200, {
+      quote: toQuoteResponse(updated as unknown as Record<string, unknown>),
+    });
   },
   { requireAuth: true },
 );
@@ -739,21 +964,25 @@ export const convertQuoteToWorkOrderHandler = wrapHandler(
 
     const now = new Date();
     const workOrderId = randomUUID();
-    const operationRows = (quote.lines.length > 0 ? quote.lines : [{ description: `Review quote ${quote.quoteNumber}`, quantity: 1 }]).map(
-      (line, idx) => ({
-        id: randomUUID(),
-        workOrderId,
-        operationCode: `QUOTE-L${String(idx + 1).padStart(2, '0')}`,
-        sequenceNo: (idx + 1) * 10,
-        operationName: line.description.trim() || `Quote line ${idx + 1}`,
-        estimatedMinutes: 60,
-        operationStatus: 'READY' as const,
-        correlationId: ctx.correlationId,
-        createdAt: now,
-        updatedAt: now,
-      }),
+    const operationRows = (
+      quote.lines.length > 0
+        ? quote.lines
+        : [{ description: `Review quote ${quote.quoteNumber}`, quantity: 1 }]
+    ).map((line, idx) => ({
+      id: randomUUID(),
+      workOrderId,
+      operationCode: `QUOTE-L${String(idx + 1).padStart(2, '0')}`,
+      sequenceNo: (idx + 1) * 10,
+      operationName: line.description.trim() || `Quote line ${idx + 1}`,
+      estimatedMinutes: 60,
+      operationStatus: 'READY' as const,
+      correlationId: ctx.correlationId,
+      createdAt: now,
+      updatedAt: now,
+    }));
+    const operationIdByLineIndex = new Map(
+      operationRows.map((operation, idx) => [idx, operation.id]),
     );
-    const operationIdByLineIndex = new Map(operationRows.map((operation, idx) => [idx, operation.id]));
     const partRows = quote.lines
       .map((line, idx) => ({ line, idx }))
       .filter(({ line }) => Boolean(line.partId))
@@ -911,7 +1140,9 @@ export const rejectQuoteHandler = wrapHandler(
       });
     }
 
-    return jsonResponse(200, { quote: toQuoteResponse(updated as unknown as Record<string, unknown>) });
+    return jsonResponse(200, {
+      quote: toQuoteResponse(updated as unknown as Record<string, unknown>),
+    });
   },
   { requireAuth: true },
 );
@@ -961,12 +1192,27 @@ export const createActivityHandler = wrapHandler(
     const body = parseBody<CreateActivityBody>(ctx.event);
     if (!body.ok) return jsonResponse(400, { message: body.error });
 
-    const { opportunityId, customerId, activityType, subject, body: bodyText, dueDate } = body.value;
+    const {
+      opportunityId,
+      customerId,
+      activityType,
+      subject,
+      body: bodyText,
+      dueDate,
+    } = body.value;
 
     if (!activityType) return jsonResponse(422, { message: 'activityType is required.' });
     if (!subject?.trim()) return jsonResponse(422, { message: 'subject is required.' });
 
-    const validTypes = ['NOTE', 'CALL', 'EMAIL', 'MEETING', 'QUOTE_SENT', 'FOLLOW_UP', 'STAGE_CHANGE'];
+    const validTypes = [
+      'NOTE',
+      'CALL',
+      'EMAIL',
+      'MEETING',
+      'QUOTE_SENT',
+      'FOLLOW_UP',
+      'STAGE_CHANGE',
+    ];
     if (!validTypes.includes(activityType)) {
       return jsonResponse(422, { message: `Invalid activityType: ${activityType}` });
     }

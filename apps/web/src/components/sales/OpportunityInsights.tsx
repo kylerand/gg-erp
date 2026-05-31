@@ -9,7 +9,7 @@ interface Props {
   estimatedValue: number | null;
   stage: string;
   probability: number;
-  customerId: string;
+  customerName: string;
 }
 
 interface Insight {
@@ -28,7 +28,7 @@ export default function OpportunityInsights({
   estimatedValue,
   stage,
   probability,
-  customerId,
+  customerName,
 }: Props) {
   const [insights, setInsights] = useState<Insight[]>([]);
   const [loading, setLoading] = useState(false);
@@ -44,7 +44,7 @@ export default function OpportunityInsights({
 - Stage: ${stage}
 - Probability: ${probability}%
 - Estimated Value: $${(estimatedValue ?? 0).toLocaleString()}
-- Customer ID: ${customerId}
+- Customer: ${customerName}
 
 Please provide:
 1. A lead score (1-100) with a one-line explanation
@@ -68,7 +68,9 @@ Keep each section brief (1-3 sentences).`,
         parsed.push({
           type: 'lead_score',
           label: `Lead Score: ${scoreMatch[1]}/100`,
-          content: content.substring(scoreIdx, sectionEnd > scoreIdx ? sectionEnd : scoreIdx + 200).trim(),
+          content: content
+            .substring(scoreIdx, sectionEnd > scoreIdx ? sectionEnd : scoreIdx + 200)
+            .trim(),
         });
       }
 
@@ -81,7 +83,9 @@ Keep each section brief (1-3 sentences).`,
         });
       } else {
         // Add next steps
-        const stepsMatch = content.match(/(?:next steps|recommended|suggestions?)[:\s]*([\s\S]*?)(?=\n\n(?:pricing|risk|concern)|$)/i);
+        const stepsMatch = content.match(
+          /(?:next steps|recommended|suggestions?)[:\s]*([\s\S]*?)(?=\n\n(?:pricing|risk|concern)|$)/i,
+        );
         if (stepsMatch) {
           parsed.push({
             type: 'next_steps',
@@ -91,7 +95,9 @@ Keep each section brief (1-3 sentences).`,
         }
 
         // Add pricing if available
-        const pricingMatch = content.match(/(?:pricing|price)[:\s]*([\s\S]*?)(?=\n\n(?:risk|concern)|$)/i);
+        const pricingMatch = content.match(
+          /(?:pricing|price)[:\s]*([\s\S]*?)(?=\n\n(?:risk|concern)|$)/i,
+        );
         if (pricingMatch) {
           parsed.push({
             type: 'pricing',
@@ -120,7 +126,7 @@ Keep each section brief (1-3 sentences).`,
     } finally {
       setLoading(false);
     }
-  }, [loading, opportunityId, title, stage, probability, estimatedValue, customerId]);
+  }, [loading, opportunityId, title, stage, probability, estimatedValue, customerName]);
 
   const ICON_MAP: Record<string, string> = {
     lead_score: '🎯',
@@ -165,9 +171,18 @@ Keep each section brief (1-3 sentences).`,
       {loading && !loaded && (
         <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
           <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
-            <div className="w-2 h-2 bg-yellow-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-            <div className="w-2 h-2 bg-yellow-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-            <div className="w-2 h-2 bg-yellow-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            <div
+              className="w-2 h-2 bg-yellow-400 rounded-full animate-bounce"
+              style={{ animationDelay: '0ms' }}
+            />
+            <div
+              className="w-2 h-2 bg-yellow-400 rounded-full animate-bounce"
+              style={{ animationDelay: '150ms' }}
+            />
+            <div
+              className="w-2 h-2 bg-yellow-400 rounded-full animate-bounce"
+              style={{ animationDelay: '300ms' }}
+            />
             <span className="ml-2">Analyzing opportunity with AI...</span>
           </div>
         </div>
@@ -176,7 +191,8 @@ Keep each section brief (1-3 sentences).`,
       {!loaded && !loading && (
         <div className="bg-gradient-to-r from-yellow-50 to-amber-50 rounded-lg border border-yellow-200 p-4 text-center">
           <p className="text-xs text-gray-600">
-            Click &quot;Generate Insights&quot; to get AI-powered lead scoring, next steps, and pricing suggestions.
+            Click &quot;Generate Insights&quot; to get AI-powered lead scoring, next steps, and
+            pricing suggestions.
           </p>
         </div>
       )}

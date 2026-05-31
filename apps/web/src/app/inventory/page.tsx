@@ -1,6 +1,11 @@
 import Link from 'next/link';
 import { PageHeader } from '@gg-erp/ui';
-import { listInventoryReservations, listParts, listPurchaseOrders } from '@/lib/api-client';
+import {
+  listInventoryLedger,
+  listInventoryReservations,
+  listParts,
+  listPurchaseOrders,
+} from '@/lib/api-client';
 import { WorkspaceLinkGrid } from '@/components/WorkspaceLinkGrid';
 import { erpRoute } from '@/lib/erp-routes';
 
@@ -9,6 +14,7 @@ export default async function InventoryPage() {
     partsResult,
     activePartsResult,
     outOfStockResult,
+    ledgerResult,
     reservationsResult,
     sentPurchaseOrdersResult,
   ] = await Promise.all([
@@ -19,6 +25,9 @@ export default async function InventoryPage() {
       .then((data) => ({ status: 'ready' as const, data }))
       .catch(() => ({ status: 'unavailable' as const })),
     listParts({ stock: 'OUT', limit: 1, offset: 0 }, { allowMockFallback: false })
+      .then((data) => ({ status: 'ready' as const, data }))
+      .catch(() => ({ status: 'unavailable' as const })),
+    listInventoryLedger({ limit: 1 }, { allowMockFallback: false })
       .then((data) => ({ status: 'ready' as const, data }))
       .catch(() => ({ status: 'unavailable' as const })),
     listInventoryReservations(
@@ -75,6 +84,22 @@ export default async function InventoryPage() {
   }
 
   stats.push(
+    ledgerResult.status === 'ready'
+      ? {
+          label: 'Stock Movements',
+          value: ledgerResult.data.total,
+          color: ledgerResult.data.total > 0 ? 'text-gray-700' : 'text-amber-700',
+          href: erpRoute('inventory-ledger'),
+        }
+      : {
+          label: 'Ledger Feed',
+          value: 'Unavailable',
+          color: 'text-red-600',
+          href: erpRoute('inventory-ledger'),
+        },
+  );
+
+  stats.push(
     reservationsResult.status === 'ready'
       ? {
           label: 'Open Reservations',
@@ -109,7 +134,7 @@ export default async function InventoryPage() {
   return (
     <div>
       <PageHeader title="Inventory" description="Parts, reservations, and receiving" />
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
         {stats.map((stat) => (
           <Link
             key={stat.label}

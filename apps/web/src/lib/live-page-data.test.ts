@@ -17,6 +17,7 @@ const truthCriticalPages = [
   'app/inventory/purchase-orders/[id]/page.tsx',
   'app/inventory/receiving/page.tsx',
   'app/inventory/reservations/page.tsx',
+  'app/inventory/ledger/page.tsx',
   'app/planning/build-packages/page.tsx',
   'app/planning/slots/page.tsx',
   'app/reporting/page.tsx',
@@ -660,8 +661,10 @@ test('dashboard KPI cards deep-link to filtered destination views', () => {
     [
       "listParts({ partState: 'ACTIVE'",
       "listParts({ stock: 'OUT'",
+      'listInventoryLedger({ limit: 1 }, { allowMockFallback: false })',
       "erpRoute('part', { partState: 'ACTIVE' })",
       "erpRoute('part', { stock: 'OUT' })",
+      "erpRoute('inventory-ledger')",
       "erpRoute('inventory-reservation', { status: 'OPEN' })",
     ].filter((snippet) => !inventorySource.includes(snippet)),
     [],
@@ -1083,10 +1086,12 @@ test('accounting sync monitor exposes live purchase-order payable handoff', () =
 test('inventory procurement drill-in uses live PO/vendor reads and focused receiving links', () => {
   const inventorySource = readSource('app/inventory/page.tsx');
   const partsSource = readSource('app/inventory/parts/page.tsx');
+  const partDetailSource = readSource('app/inventory/parts/[id]/page.tsx');
   const purchaseOrdersSource = readSource('app/inventory/purchase-orders/page.tsx');
   const purchaseOrderDetailSource = readSource('app/inventory/purchase-orders/[id]/page.tsx');
   const receivingSource = readSource('app/inventory/receiving/page.tsx');
   const reservationsSource = readSource('app/inventory/reservations/page.tsx');
+  const ledgerSource = readSource('app/inventory/ledger/page.tsx');
   const planningSource = readSource('app/inventory/planning/page.tsx');
   const apiClientSource = readSource('lib/api-client.ts');
 
@@ -1127,6 +1132,26 @@ test('inventory procurement drill-in uses live PO/vendor reads and focused recei
       'Create valid parts',
       'accept=".csv,text/csv"',
     ].filter((snippet) => !partsSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    ["erpRoute('inventory-ledger', { partId: part.id })", 'Movement History'].filter(
+      (snippet) => !partDetailSource.includes(snippet),
+    ),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      'listInventoryLedger',
+      '/inventory/ledger',
+      'allowMockFallback: false',
+      "erpRecordRoute('part'",
+      "erpRecordRoute('purchase-order'",
+      "erpRoute('inventory-ledger'",
+      'correlationId',
+    ].filter((snippet) => !ledgerSource.includes(snippet) && !apiClientSource.includes(snippet)),
     [],
   );
 
@@ -1203,6 +1228,7 @@ test('inventory procurement drill-in uses live PO/vendor reads and focused recei
       'export function sendPurchaseOrder',
       'export function cancelPurchaseOrder',
       'export function closePurchaseOrder',
+      'export async function listInventoryLedger',
       'vendorId',
     ].filter((snippet) => !apiClientSource.includes(snippet)),
     [],

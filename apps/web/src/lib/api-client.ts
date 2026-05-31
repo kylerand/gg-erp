@@ -1654,6 +1654,107 @@ export async function consumeInventoryReservation(
   return data.reservation;
 }
 
+export type InventoryLedgerMovementType =
+  | 'RECEIPT'
+  | 'RESERVATION'
+  | 'ALLOCATION'
+  | 'RELEASE'
+  | 'ISSUE'
+  | 'RETURN'
+  | 'TRANSFER_OUT'
+  | 'TRANSFER_IN'
+  | 'ADJUSTMENT'
+  | 'CYCLE_COUNT'
+  | 'REVERSAL';
+
+export interface InventoryLedgerEntry {
+  id: string;
+  movementType: InventoryLedgerMovementType | string;
+  quantityDelta: number;
+  unitCost?: number;
+  valueDelta?: number;
+  reasonCode: string;
+  sourceDocument?: { type: string; id: string };
+  correlationId: string;
+  createdAt: string;
+  part: {
+    id: string;
+    sku: string;
+    name: string;
+    unitOfMeasure: string;
+  };
+  location: {
+    id: string;
+    name: string;
+  };
+  lot?: {
+    id?: string | null;
+    lotNumber?: string | null;
+  };
+  workOrder?: {
+    id?: string | null;
+    number?: string | null;
+  };
+  purchaseOrder?: {
+    id?: string | null;
+    number?: string | null;
+    lineId?: string | null;
+  };
+}
+
+export interface InventoryLedgerSummary {
+  movementType: InventoryLedgerMovementType | string;
+  entryCount: number;
+  quantityDelta: number;
+  valueDelta: number;
+}
+
+export interface ListInventoryLedgerParams {
+  search?: string;
+  movementType?: InventoryLedgerMovementType | string;
+  partId?: string;
+  stockLocationId?: string;
+  stockLotId?: string;
+  workOrderId?: string;
+  sourceDocumentId?: string;
+  correlationId?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export async function listInventoryLedger(
+  params?: ListInventoryLedgerParams,
+  options?: ApiDataOptions,
+): Promise<{
+  items: InventoryLedgerEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+  summary: InventoryLedgerSummary[];
+}> {
+  const qs = new URLSearchParams();
+  if (params?.search) qs.set('search', params.search);
+  if (params?.movementType) qs.set('movementType', params.movementType);
+  if (params?.partId) qs.set('partId', params.partId);
+  if (params?.stockLocationId) qs.set('stockLocationId', params.stockLocationId);
+  if (params?.stockLotId) qs.set('stockLotId', params.stockLotId);
+  if (params?.workOrderId) qs.set('workOrderId', params.workOrderId);
+  if (params?.sourceDocumentId) qs.set('sourceDocumentId', params.sourceDocumentId);
+  if (params?.correlationId) qs.set('correlationId', params.correlationId);
+  if (params?.from) qs.set('from', params.from);
+  if (params?.to) qs.set('to', params.to);
+  qs.set('limit', String(params?.limit ?? 50));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  return apiFetch(
+    `/inventory/ledger${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    { items: [], total: 0, limit: params?.limit ?? 50, offset: params?.offset ?? 0, summary: [] },
+    options,
+  );
+}
+
 // ─── Manufacturers ────────────────────────────────────────────────────────────
 
 export interface Manufacturer {

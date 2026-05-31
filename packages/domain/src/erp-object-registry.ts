@@ -16,6 +16,7 @@ export type ErpObjectKind =
   | 'queue'
   | 'workspace'
   | 'report'
+  | 'ledger'
   | 'integration'
   | 'settings'
   | 'communication';
@@ -303,6 +304,22 @@ export const ERP_OBJECTS = [
     searchFields: ['workOrderNumber', 'sku', 'partDescription'],
     listColumns: ['workOrderNumber', 'sku', 'reservedQty', 'status'],
     keywords: ['reserve', 'shortage', 'pick', 'allocation'],
+  },
+  {
+    key: 'inventory-ledger',
+    label: 'Inventory Movement',
+    pluralLabel: 'Inventory Movements',
+    description:
+      'Append-only stock movement history for receipts, issues, reservations, and adjustments.',
+    module: 'inventory',
+    kind: 'ledger',
+    ownerContext: 'inventory',
+    route: '/inventory/ledger',
+    status: 'live',
+    primaryStatusField: 'movementType',
+    searchFields: ['sku', 'partName', 'lotNumber', 'workOrderNumber', 'purchaseOrderNumber'],
+    listColumns: ['movementType', 'sku', 'quantityDelta', 'sourceDocument', 'createdAt'],
+    keywords: ['ledger', 'movement', 'stock history', 'traceability'],
   },
   {
     key: 'purchase-order',

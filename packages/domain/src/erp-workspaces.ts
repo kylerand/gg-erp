@@ -178,6 +178,15 @@ export const ERP_WORKSPACES = [
         keywords: ['reserve', 'shortage', 'pick'],
       },
       {
+        key: 'inventory-ledger',
+        label: 'Movement Ledger',
+        description: 'Trace stock receipts, issues, transfers, and adjustments.',
+        route: '/inventory/ledger',
+        status: 'live',
+        objectKey: 'inventory-ledger',
+        keywords: ['ledger', 'movement', 'stock history', 'trace'],
+      },
+      {
         key: 'purchase-order',
         label: 'Purchase Orders',
         description: 'Track vendor orders, ETAs, and line-level receiving.',

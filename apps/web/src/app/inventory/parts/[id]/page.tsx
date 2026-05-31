@@ -4,7 +4,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { PageHeader, LoadingSkeleton, EmptyState, StatusBadge } from '@gg-erp/ui';
 import { getPartChain, type Part, type PartChain, type PartChainNode } from '@/lib/api-client';
-import { erpRecordRoute } from '@/lib/erp-routes';
+import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 
 function formatEnum(value: string | undefined): string {
   if (!value) return '—';
@@ -114,6 +114,12 @@ export default function PartDetailPage() {
       <div className="mb-3 flex items-center gap-3">
         <h2 className="text-lg font-semibold text-gray-900">Transformation chain</h2>
         <StatusBadge status={part.lifecycleLevel ?? 'RAW_COMPONENT'} />
+        <Link
+          href={erpRoute('inventory-ledger', { partId: part.id })}
+          className="ml-auto rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:border-yellow-400"
+        >
+          Movement History
+        </Link>
       </div>
       {chain.ancestors.length === 0 && chain.descendants.length === 0 ? (
         <EmptyState

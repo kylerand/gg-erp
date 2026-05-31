@@ -6,7 +6,7 @@ import type {
   ManufacturerState,
   PartCategory,
   PartColor,
-  PartSku
+  PartSku,
 } from '../../../../../packages/domain/src/model/inventory.js';
 
 export type InventoryRouteActorParams = [correlationId: string, actorId?: string];
@@ -435,10 +435,12 @@ export type InventoryMovementType =
   | 'ALLOCATION'
   | 'RELEASE'
   | 'ISSUE'
+  | 'RETURN'
   | 'TRANSFER_OUT'
   | 'TRANSFER_IN'
   | 'ADJUSTMENT'
-  | 'CYCLE_COUNT';
+  | 'CYCLE_COUNT'
+  | 'REVERSAL';
 
 export interface InventoryLedgerQuery {
   partSkuId?: string;
@@ -581,17 +583,12 @@ export interface InventoryApiRouteContract {
     query: ListPartSkusRequest,
     ...context: InventoryRouteActorParams
   ): Promise<ListPartSkusResponse>;
-  getPartSku(
-    partSkuId: string,
-    ...context: InventoryRouteActorParams
-  ): Promise<PartSku>;
+  getPartSku(partSkuId: string, ...context: InventoryRouteActorParams): Promise<PartSku>;
   getPartChain(
     partSkuId: string,
     ...context: InventoryRouteActorParams
   ): Promise<PartChainResponse>;
-  planMaterialByStage(
-    ...context: InventoryRouteActorParams
-  ): Promise<StageMaterialPlanResponse>;
+  planMaterialByStage(...context: InventoryRouteActorParams): Promise<StageMaterialPlanResponse>;
   createManufacturer(
     input: CreateManufacturerRequest,
     ...context: InventoryRouteActorParams

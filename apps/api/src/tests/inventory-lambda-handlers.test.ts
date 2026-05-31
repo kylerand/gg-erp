@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test, { mock } from 'node:test';
 import {
+  inventoryLedgerQueries,
   inventoryLotQueries,
+  listInventoryLedgerHandler,
   listLotsHandler,
   listPartsHandler,
   listVendorsHandler,
@@ -75,6 +77,106 @@ test('listLotsHandler returns inventory lot details for the web contract', async
   } finally {
     listLotsMock.mock.restore();
   }
+});
+
+test('listInventoryLedgerHandler forwards filters and returns movement history', async () => {
+  const listLedgerMock = mock.method(
+    inventoryLedgerQueries,
+    'listLedger',
+    async (filters: { limit?: number; offset?: number } = {}) => ({
+      items: [
+        {
+          id: 'ledger-1',
+          movementType: 'RECEIPT',
+          quantityDelta: 4,
+          unitCost: 125,
+          valueDelta: 500,
+          reasonCode: 'PURCHASE_ORDER_RECEIPT',
+          sourceDocument: { type: 'PURCHASE_ORDER_LINE', id: 'pol-1' },
+          correlationId: 'corr-1',
+          createdAt: '2026-05-30T12:00:00.000Z',
+          part: {
+            id: '11111111-1111-4111-8111-111111111111',
+            sku: 'GG-LIFT',
+            name: 'Lift kit',
+            unitOfMeasure: 'EA',
+          },
+          location: {
+            id: '22222222-2222-4222-8222-222222222222',
+            name: 'Main Warehouse',
+          },
+          lot: { id: '33333333-3333-4333-8333-333333333333', lotNumber: 'LOT-001' },
+          purchaseOrder: {
+            id: '44444444-4444-4444-8444-444444444444',
+            number: 'PO-1001',
+            lineId: 'pol-1',
+          },
+        },
+      ],
+      total: 1,
+      limit: filters.limit ?? 50,
+      offset: filters.offset ?? 0,
+      summary: [{ movementType: 'RECEIPT', entryCount: 1, quantityDelta: 4, valueDelta: 500 }],
+    }),
+  );
+
+  try {
+    const response = await listInventoryLedgerHandler({
+      httpMethod: 'GET',
+      queryStringParameters: {
+        search: 'lift',
+        movementType: 'receipt',
+        partId: '11111111-1111-4111-8111-111111111111',
+        stockLocationId: '22222222-2222-4222-8222-222222222222',
+        limit: '25',
+        offset: '10',
+      },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(listLedgerMock.mock.calls.length, 1);
+    const filters = listLedgerMock.mock.calls[0].arguments[0] as {
+      search?: string;
+      movementTypes?: string[];
+      partId?: string;
+      stockLocationId?: string;
+      limit?: number;
+      offset?: number;
+    };
+    assert.equal(filters.search, 'lift');
+    assert.deepEqual(filters.movementTypes, ['RECEIPT']);
+    assert.equal(filters.partId, '11111111-1111-4111-8111-111111111111');
+    assert.equal(filters.stockLocationId, '22222222-2222-4222-8222-222222222222');
+    assert.equal(filters.limit, 25);
+    assert.equal(filters.offset, 10);
+
+    const payload = JSON.parse(response.body) as {
+      items: Array<{
+        movementType: string;
+        part: { sku: string };
+        purchaseOrder?: { number?: string };
+      }>;
+      total: number;
+      summary: Array<{ movementType: string; entryCount: number }>;
+    };
+    assert.equal(payload.total, 1);
+    assert.equal(payload.items[0].movementType, 'RECEIPT');
+    assert.equal(payload.items[0].part.sku, 'GG-LIFT');
+    assert.equal(payload.items[0].purchaseOrder?.number, 'PO-1001');
+    assert.equal(payload.summary[0].entryCount, 1);
+  } finally {
+    listLedgerMock.mock.restore();
+  }
+});
+
+test('listInventoryLedgerHandler rejects unsupported movement filters', async () => {
+  const response = await listInventoryLedgerHandler({
+    httpMethod: 'GET',
+    queryStringParameters: { movementType: 'BAD_STATE' },
+  });
+
+  assert.equal(response.statusCode, 422);
+  assert.match(response.body, /Unsupported inventory ledger movement type/);
 });
 
 test('listLotsHandler returns an empty page when no lots are available', async () => {

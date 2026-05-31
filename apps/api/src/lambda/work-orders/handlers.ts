@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { PrismaClient } from '@prisma/client';
 import { InvariantViolationError, WorkOrderState } from '../../../../../packages/domain/src/model/index.js';
 import { InMemoryAuditSink } from '../../audit/index.js';
 import { createWorkOrderRoutes } from '../../contexts/build-planning/workOrder.routes.js';
@@ -36,15 +37,113 @@ export interface ApiGatewayProxyResultLike {
   body: string;
 }
 
+const prisma = new PrismaClient();
+
 const routes = createWorkOrderRoutes(
   new WorkOrderService({
-    repository: new PrismaWorkOrderRepository(),
+    repository: new PrismaWorkOrderRepository({ prisma }),
     audit: new InMemoryAuditSink(),
     publisher: new InMemoryEventPublisher(),
     outbox: new InMemoryOutbox(),
     observability: ConsoleObservabilityHooks,
   }),
 );
+
+interface WorkOrderVehicleProfile {
+  id: string;
+  displayName: string;
+  vin: string;
+  serialNumber: string;
+  modelCode: string;
+  modelYear: number;
+  state: string;
+  customerId: string;
+}
+
+interface WorkOrderCustomerProfile {
+  id: string;
+  displayName: string;
+  fullName: string;
+  companyName: string | null;
+  email: string;
+  phone: string | null;
+  state: string;
+}
+
+export const workOrderListContextQueries = {
+  async findVehicles(vehicleIds: string[]): Promise<WorkOrderVehicleProfile[]> {
+    if (vehicleIds.length === 0) return [];
+    const records = await prisma.cartVehicle.findMany({
+      where: { id: { in: vehicleIds } },
+      select: {
+        id: true,
+        vin: true,
+        serialNumber: true,
+        modelCode: true,
+        modelYear: true,
+        state: true,
+        customerId: true,
+      },
+    });
+
+    return records.map((record) => ({
+      id: record.id,
+      displayName: `${record.modelYear} ${record.modelCode} · ${record.serialNumber}`,
+      vin: record.vin,
+      serialNumber: record.serialNumber,
+      modelCode: record.modelCode,
+      modelYear: record.modelYear,
+      state: String(record.state),
+      customerId: record.customerId,
+    }));
+  },
+
+  async findCustomers(customerIds: string[]): Promise<WorkOrderCustomerProfile[]> {
+    if (customerIds.length === 0) return [];
+    const records = await prisma.customer.findMany({
+      where: { id: { in: customerIds } },
+      select: {
+        id: true,
+        fullName: true,
+        companyName: true,
+        email: true,
+        phone: true,
+        state: true,
+      },
+    });
+
+    return records.map((record) => ({
+      id: record.id,
+      displayName: record.companyName?.trim() || record.fullName,
+      fullName: record.fullName,
+      companyName: record.companyName,
+      email: record.email,
+      phone: record.phone,
+      state: String(record.state),
+    }));
+  },
+};
+
+function compactIds(ids: string[]): string[] {
+  return Array.from(new Set(ids.filter((id) => id.trim().length > 0)));
+}
+
+async function loadWorkOrderListContext(items: ListWorkOrdersResponse['items']): Promise<{
+  vehiclesById: Map<string, WorkOrderVehicleProfile>;
+  customersById: Map<string, WorkOrderCustomerProfile>;
+}> {
+  const vehicles = await workOrderListContextQueries.findVehicles(
+    compactIds(items.map((item) => item.vehicleId)),
+  );
+  const customers = await workOrderListContextQueries.findCustomers(
+    compactIds(vehicles.map((vehicle) => vehicle.customerId)),
+  );
+
+  return {
+    vehiclesById: new Map(vehicles.map((vehicle) => [vehicle.id, vehicle])),
+    customersById: new Map(customers.map((customer) => [customer.id, customer])),
+  };
+}
 
 export async function createWorkOrderHandler(
   event: ApiGatewayProxyEventLike,
@@ -103,8 +202,20 @@ export async function listWorkOrdersHandler(
   }
 
   const items = await routes.listWorkOrders(query);
+  const responseItems = items.map(toWorkOrderResponse);
+  const context = await loadWorkOrderListContext(responseItems);
   const response: ListWorkOrdersResponse = {
-    items: items.map(toWorkOrderResponse),
+    items: responseItems.map((item) => {
+      const vehicleProfile = context.vehiclesById.get(item.vehicleId) ?? null;
+      const customerProfile = vehicleProfile
+        ? (context.customersById.get(vehicleProfile.customerId) ?? null)
+        : null;
+      return {
+        ...item,
+        vehicleProfile,
+        customerProfile,
+      };
+    }),
     total: items.length,
     limit: query.limit ?? 50,
     offset: query.offset ?? 0,

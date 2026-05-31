@@ -337,7 +337,26 @@ export interface WorkOrder {
   id: string;
   workOrderNumber: string;
   vehicleId: string;
+  vehicleProfile?: {
+    id: string;
+    displayName: string;
+    vin: string;
+    serialNumber: string;
+    modelCode: string;
+    modelYear: number;
+    state: CartVehicleState | string;
+    customerId: string;
+  } | null;
   customerId?: string;
+  customerProfile?: {
+    id: string;
+    displayName: string;
+    fullName: string;
+    companyName?: string | null;
+    email: string;
+    phone?: string | null;
+    state: string;
+  } | null;
   buildConfigurationId: string;
   bomId: string;
   state: 'PLANNED' | 'RELEASED' | 'IN_PROGRESS' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED';
@@ -416,6 +435,20 @@ export const MOCK_WORK_ORDERS: WorkOrder[] = [
     updatedAt: new Date().toISOString(),
   },
 ];
+
+export function workOrderVehicleDisplayName(workOrder: WorkOrder): string {
+  return workOrder.vehicleProfile?.displayName || 'Unresolved cart';
+}
+
+export function workOrderCustomerDisplayName(workOrder: WorkOrder): string {
+  return (
+    workOrder.customerProfile?.displayName?.trim() ||
+    workOrder.customerProfile?.companyName?.trim() ||
+    workOrder.customerProfile?.fullName ||
+    workOrder.customerProfile?.email ||
+    'Unresolved customer'
+  );
+}
 
 export async function listWorkOrders(
   params?: {

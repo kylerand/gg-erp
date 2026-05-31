@@ -134,9 +134,14 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
   const reservationsSource = readSource('app/inventory/reservations/page.tsx');
 
   assert.deepEqual(
-    ['listCustomers', 'listCartVehicles', 'listWorkOrders', 'SearchableSelect'].filter(
-      (call) => !workOrderSource.includes(call),
-    ),
+    [
+      'listCustomers',
+      'listCartVehicles',
+      'listWorkOrders',
+      'workOrderVehicleDisplayName',
+      'workOrderCustomerDisplayName',
+      'SearchableSelect',
+    ].filter((call) => !workOrderSource.includes(call)),
     [],
   );
   assert.deepEqual(
@@ -152,21 +157,30 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
     [],
   );
   assert.deepEqual(
-    ['listWorkOrders', 'SearchableSelect', 'allowMockFallback: false'].filter(
-      (call) => !timeLoggingSource.includes(call),
-    ),
+    [
+      'listWorkOrders',
+      'workOrderVehicleDisplayName',
+      'workOrderCustomerDisplayName',
+      'SearchableSelect',
+      'allowMockFallback: false',
+    ].filter((call) => !timeLoggingSource.includes(call)),
     [],
   );
   assert.deepEqual(
     [
       'listWorkOrders({ limit: 200 }, { allowMockFallback: false })',
       'workOrderOption',
+      'workOrderVehicleDisplayName',
+      'workOrderCustomerDisplayName',
       'selectedWorkOrderId',
       'SearchableSelect',
     ].filter((call) => !reservationsSource.includes(call)),
     [],
   );
   assert.equal(timeLoggingSource.includes('placeholder="WO-001"'), false);
+  assert.equal(timeLoggingSource.includes('Cart ${workOrder.vehicleId}'), false);
+  assert.equal(workOrderSource.includes('Configuration ${workOrder.buildConfigurationId}'), false);
+  assert.equal(workOrderSource.includes('vehicle ${workOrder.vehicleId}'), false);
   assert.equal(reservationsSource.includes('Work Order ID'), false);
 
   const rawIdLabels = [

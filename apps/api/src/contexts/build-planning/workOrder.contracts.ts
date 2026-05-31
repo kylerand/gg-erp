@@ -19,6 +19,25 @@ export interface WorkOrderResponse {
   id: string;
   workOrderNumber: string;
   vehicleId: string;
+  vehicleProfile?: {
+    id: string;
+    displayName: string;
+    vin: string;
+    serialNumber: string;
+    modelCode: string;
+    modelYear: number;
+    state: string;
+    customerId: string;
+  } | null;
+  customerProfile?: {
+    id: string;
+    displayName: string;
+    fullName: string;
+    companyName?: string | null;
+    email: string;
+    phone?: string | null;
+    state: string;
+  } | null;
   buildConfigurationId: string;
   bomId: string;
   state: WorkOrderState;

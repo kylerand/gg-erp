@@ -269,6 +269,7 @@ test('quote detail exposes live conversion into shop execution', () => {
 test('sales quote and opportunity views resolve customer and user display profiles', () => {
   const quotesSource = readSource('app/sales/quotes/page.tsx');
   const quoteDetailSource = readSource('app/sales/quotes/[id]/page.tsx');
+  const quoteCreateSource = readSource('app/sales/quotes/new/page.tsx');
   const opportunityDetailSource = readSource('app/sales/opportunities/[id]/page.tsx');
   const opportunityInsightsSource = readSource('components/sales/OpportunityInsights.tsx');
   const pricingIntelligenceSource = readSource('components/sales/PricingIntelligence.tsx');
@@ -293,6 +294,16 @@ test('sales quote and opportunity views resolve customer and user display profil
       "erpRecordRoute('sales-opportunity'",
       'applyQuoteUpdate',
     ].filter((snippet) => !quoteDetailSource.includes(snippet)),
+    [],
+  );
+  assert.deepEqual(
+    [
+      'getWoOrder(sourceWorkOrderId, { allowMockFallback: false })',
+      'sourceWorkOrderDisplayName',
+      'sourceWorkOrderCustomerDisplayName',
+      'sourceWorkOrderCartDisplayName',
+      'Open source work order',
+    ].filter((snippet) => !quoteCreateSource.includes(snippet)),
     [],
   );
   assert.deepEqual(
@@ -335,6 +346,11 @@ test('sales quote and opportunity views resolve customer and user display profil
     quoteDetailSource.includes("{ label: 'Created By', value: quote.createdByUserId"),
     false,
   );
+  assert.equal(
+    quoteCreateSource.includes('Prepared from work order ${sourceWorkOrderId}'),
+    false,
+  );
+  assert.equal(quoteCreateSource.includes('Source work order: {sourceWorkOrderId}'), false);
   assert.equal(
     opportunityDetailSource.includes("{ label: 'Customer', value: opportunity.customerId }"),
     false,

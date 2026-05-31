@@ -6,12 +6,14 @@ import Link from 'next/link';
 import {
   createQuote,
   getCustomer,
+  getWoOrder,
   listCustomers,
   listOpportunities,
   listParts,
   type Customer,
   type Part,
   type SalesOpportunity,
+  type WoOrderDetail,
 } from '@/lib/api-client';
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 import { PageHeader } from '@gg-erp/ui';
@@ -29,6 +31,8 @@ interface LineItem {
   unitPrice: number;
   discountPercent: number;
 }
+
+const SOURCE_WORK_ORDER_NOTE = 'Prepared from source work order.';
 
 const emptyLine = (key: string): LineItem => ({
   key,
@@ -69,6 +73,24 @@ function partOption(part: Part): SearchableSelectOption {
   };
 }
 
+function sourceWorkOrderDisplayName(workOrder: WoOrderDetail): string {
+  return `${workOrder.number}: ${workOrder.title}`;
+}
+
+function sourceWorkOrderCustomerDisplayName(workOrder: WoOrderDetail): string {
+  return (
+    workOrder.customerProfile?.companyName ??
+    workOrder.customerProfile?.fullName ??
+    workOrder.customer
+  );
+}
+
+function sourceWorkOrderCartDisplayName(workOrder: WoOrderDetail): string {
+  return workOrder.cartProfile
+    ? `${workOrder.cartProfile.modelYear} ${workOrder.cartProfile.modelCode} · ${workOrder.cartProfile.serialNumber}`
+    : workOrder.cart;
+}
+
 function filterOptions(options: SearchableSelectOption[], query: string): SearchableSelectOption[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return options;
@@ -89,9 +111,7 @@ export default function NewQuotePage() {
   const [customerSearch, setCustomerSearch] = useState('');
   const [opportunityId, setOpportunityId] = useState(initialOpportunityId);
   const [opportunitySearch, setOpportunitySearch] = useState('');
-  const [notes, setNotes] = useState(
-    sourceWorkOrderId ? `Prepared from work order ${sourceWorkOrderId}.` : '',
-  );
+  const [notes, setNotes] = useState(sourceWorkOrderId ? SOURCE_WORK_ORDER_NOTE : '');
   const [validUntil, setValidUntil] = useState('');
   const [lines, setLines] = useState<LineItem[]>(() => [emptyLine('quote-line-1')]);
   const [nextLineNumber, setNextLineNumber] = useState(2);
@@ -99,6 +119,8 @@ export default function NewQuotePage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [opportunities, setOpportunities] = useState<SalesOpportunity[]>([]);
   const [parts, setParts] = useState<Part[]>([]);
+  const [sourceWorkOrder, setSourceWorkOrder] = useState<WoOrderDetail | null>(null);
+  const [sourceWorkOrderError, setSourceWorkOrderError] = useState<string | undefined>();
   const [referenceLoading, setReferenceLoading] = useState(true);
   const [referenceError, setReferenceError] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
@@ -153,6 +175,44 @@ export default function NewQuotePage() {
       active = false;
     };
   }, [customerId, customerSearch, opportunitySearch]);
+
+  useEffect(() => {
+    if (!sourceWorkOrderId) {
+      setSourceWorkOrder(null);
+      setSourceWorkOrderError(undefined);
+      return;
+    }
+
+    let active = true;
+    setSourceWorkOrderError(undefined);
+
+    getWoOrder(sourceWorkOrderId, { allowMockFallback: false })
+      .then((workOrder) => {
+        if (!active) return;
+        if (!workOrder) {
+          setSourceWorkOrder(null);
+          setSourceWorkOrderError('Source work order was not found.');
+          return;
+        }
+        setSourceWorkOrder(workOrder);
+        setNotes((current) =>
+          current === SOURCE_WORK_ORDER_NOTE
+            ? `Prepared from ${sourceWorkOrderDisplayName(workOrder)}.`
+            : current,
+        );
+      })
+      .catch((err: unknown) => {
+        if (!active) return;
+        setSourceWorkOrder(null);
+        setSourceWorkOrderError(
+          err instanceof Error ? err.message : 'Failed to load source work order.',
+        );
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [sourceWorkOrderId]);
 
   const customerOptions = useMemo(() => customers.map(customerOption), [customers]);
   const opportunityOptions = useMemo(() => opportunities.map(opportunityOption), [opportunities]);
@@ -322,8 +382,31 @@ export default function NewQuotePage() {
           </div>
         </div>
         {sourceWorkOrderId && (
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
-            Source work order: {sourceWorkOrderId}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <div>
+              <p className="font-semibold">
+                {sourceWorkOrder
+                  ? sourceWorkOrderDisplayName(sourceWorkOrder)
+                  : sourceWorkOrderError
+                    ? 'Source work order unavailable'
+                    : 'Loading source work order'}
+              </p>
+              {sourceWorkOrder && (
+                <p className="mt-0.5 text-amber-800">
+                  {sourceWorkOrderCustomerDisplayName(sourceWorkOrder)} ·{' '}
+                  {sourceWorkOrderCartDisplayName(sourceWorkOrder)}
+                </p>
+              )}
+              {sourceWorkOrderError && (
+                <p className="mt-0.5 text-amber-800">{sourceWorkOrderError}</p>
+              )}
+            </div>
+            <Link
+              href={erpRecordRoute('work-order', sourceWorkOrderId)}
+              className="font-semibold text-amber-950 underline-offset-2 hover:underline"
+            >
+              Open source work order
+            </Link>
           </div>
         )}
       </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   createWorkOrder,
@@ -73,12 +73,13 @@ function buildPackageOptions(workOrders: WorkOrder[]): BuildPackageOption[] {
 
 export default function NewWorkOrderPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [referenceLoading, setReferenceLoading] = useState(true);
   const [referenceError, setReferenceError] = useState<string | undefined>();
   const [workOrderNumber, setWorkOrderNumber] = useState('');
-  const [customerId, setCustomerId] = useState('');
-  const [vehicleId, setVehicleId] = useState('');
+  const [customerId, setCustomerId] = useState(searchParams.get('customerId') ?? '');
+  const [vehicleId, setVehicleId] = useState(searchParams.get('vehicleId') ?? '');
   const [buildPackageId, setBuildPackageId] = useState('');
   const [scheduledDate, setScheduledDate] = useState('');
   const [description, setDescription] = useState('');

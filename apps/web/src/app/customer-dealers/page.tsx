@@ -1,25 +1,27 @@
 import Link from 'next/link';
 import { PageHeader } from '@gg-erp/ui';
-import { listCustomers, listDealers } from '@/lib/api-client';
+import { listCartVehicles, listCustomers, listDealers } from '@/lib/api-client';
 import { WorkspaceLinkGrid } from '@/components/WorkspaceLinkGrid';
 import { erpRoute } from '@/lib/erp-routes';
 
 export default async function CustomerDealersPage() {
   const strictApiOptions = { allowMockFallback: false } as const;
-  const [customersResult, dealersResult] = await Promise.allSettled([
+  const [customersResult, dealersResult, vehiclesResult] = await Promise.allSettled([
     listCustomers({ limit: 1, offset: 0 }, strictApiOptions),
-    listDealers(strictApiOptions),
+    listDealers({ limit: 1, offset: 0 }, strictApiOptions),
+    listCartVehicles({ limit: 1, offset: 0 }, strictApiOptions),
   ]);
   const customerTotal = customersResult.status === 'fulfilled' ? customersResult.value.total : null;
-  const dealerTotal = dealersResult.status === 'fulfilled' ? dealersResult.value.length : null;
+  const dealerTotal = dealersResult.status === 'fulfilled' ? dealersResult.value.total : null;
+  const relationshipTotal = vehiclesResult.status === 'fulfilled' ? vehiclesResult.value.total : null;
 
   return (
     <div>
       <PageHeader
         title="Customer & Dealer Ops"
-        description="Customer lifecycle and dealer management"
+        description="Customer lifecycle, commercial accounts, and cart ownership links"
       />
-      <div className="grid grid-cols-2 gap-4 mb-8">
+      <div className="grid gap-4 mb-8 md:grid-cols-3">
         <Link
           href={erpRoute('customer')}
           className="bg-white rounded-lg border border-gray-200 p-4 hover:border-yellow-400 transition-colors"
@@ -37,6 +39,15 @@ export default async function CustomerDealersPage() {
             {dealerTotal === null ? 'Unavailable' : dealerTotal}
           </div>
           <div className="text-xs text-gray-500 mt-1">Dealers</div>
+        </Link>
+        <Link
+          href={erpRoute('customer-relationship')}
+          className="bg-white rounded-lg border border-gray-200 p-4 hover:border-yellow-400 transition-colors"
+        >
+          <div className="text-2xl font-bold text-gray-900">
+            {relationshipTotal === null ? 'Unavailable' : relationshipTotal}
+          </div>
+          <div className="text-xs text-gray-500 mt-1">Customer-cart links</div>
         </Link>
       </div>
       <WorkspaceLinkGrid moduleKey="customers" />

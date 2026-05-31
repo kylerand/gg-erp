@@ -1,14 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 
 import { PageHeader } from '@gg-erp/ui';
-import { createOpportunity } from '@/lib/api-client';
+import { createOpportunity, getCustomer, listCustomers, type Customer } from '@/lib/api-client';
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
+
+const STRICT_LIVE_DATA = { allowMockFallback: false } as const;
 
 const STAGES = [
   { value: 'PROSPECT', label: 'Prospect' },
@@ -26,9 +29,24 @@ const SOURCES = [
   { value: 'EVENT', label: 'Event' },
 ] as const;
 
+function customerOption(customer: Customer): SearchableSelectOption {
+  return {
+    id: customer.id,
+    label: customer.companyName ?? customer.fullName,
+    description: [customer.fullName, customer.email, customer.phone].filter(Boolean).join(' · '),
+    meta: customer.state,
+  };
+}
+
 export default function NewOpportunityPage() {
   const router = useRouter();
-  const [customerId, setCustomerId] = useState('');
+  const searchParams = useSearchParams();
+  const initialCustomerId = searchParams.get('customerId') ?? '';
+  const [customerId, setCustomerId] = useState(initialCustomerId);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [referenceLoading, setReferenceLoading] = useState(true);
+  const [referenceError, setReferenceError] = useState<string | undefined>();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [stage, setStage] = useState<(typeof STAGES)[number]['value']>('PROSPECT');
@@ -38,11 +56,49 @@ export default function NewOpportunityPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    let active = true;
+    setReferenceLoading(true);
+    setReferenceError(undefined);
+
+    const customerRequest =
+      customerId && !customerSearch
+        ? getCustomer(customerId, STRICT_LIVE_DATA).then((customer) => ({
+            items: [customer],
+            total: 1,
+          }))
+        : listCustomers(
+            { search: customerSearch || undefined, state: 'ACTIVE', limit: 25 },
+            STRICT_LIVE_DATA,
+          );
+
+    customerRequest
+      .then((customerResult) => {
+        if (!active) return;
+        setCustomers(customerResult.items);
+      })
+      .catch((err: unknown) => {
+        if (!active) return;
+        setCustomers([]);
+        setReferenceError(err instanceof Error ? err.message : 'Failed to load customers.');
+      })
+      .finally(() => {
+        if (active) setReferenceLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [customerId, customerSearch]);
+
+  const customerOptions = useMemo(() => customers.map(customerOption), [customers]);
+  const selectedCustomer = customerOptions.find((option) => option.id === customerId);
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!customerId.trim()) {
-      setError('Customer ID is required.');
+    if (!customerId) {
+      setError('Customer is required.');
       return;
     }
     if (!title.trim()) {
@@ -54,7 +110,7 @@ export default function NewOpportunityPage() {
     setError(null);
     try {
       const opportunity = await createOpportunity({
-        customerId: customerId.trim(),
+        customerId,
         title: title.trim(),
         description: description.trim() || undefined,
         stage,
@@ -86,12 +142,12 @@ export default function NewOpportunityPage() {
 
       <PageHeader
         title="New Opportunity"
-        description="Create a deal record for follow-up and quoting"
+        description="Create a deal record from a live customer for follow-up and quoting"
       />
 
-      {error && (
+      {(error || referenceError) && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          {error}
+          {error ?? referenceError}
         </div>
       )}
 
@@ -100,15 +156,21 @@ export default function NewOpportunityPage() {
         className="max-w-3xl space-y-5 rounded-lg border border-gray-200 bg-white p-6"
       >
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="space-y-1">
-            <span className="text-sm font-medium text-gray-700">Customer ID</span>
-            <Input
-              value={customerId}
-              onChange={(event) => setCustomerId(event.target.value)}
-              placeholder="Customer UUID"
-              required
-            />
-          </label>
+          <SearchableSelect
+            id="opportunity-customer"
+            label="Customer"
+            required
+            value={customerId}
+            selectedOption={selectedCustomer}
+            searchValue={customerSearch}
+            options={customerOptions}
+            loading={referenceLoading}
+            error={referenceError}
+            placeholder="Search customers by name, company, or email"
+            emptyText="No active customers matched this search."
+            onSearchChange={setCustomerSearch}
+            onChange={setCustomerId}
+          />
           <label className="space-y-1">
             <span className="text-sm font-medium text-gray-700">Title</span>
             <Input

@@ -1107,7 +1107,15 @@ test('inventory procurement drill-in uses live PO/vendor reads and focused recei
   assert.equal(reservationsSource.includes('?? reservation.workOrderId'), false);
 
   assert.deepEqual(
-    ["erpRoute('purchase-order'", 'defaultVendorId'].filter(
+    [
+      "erpRoute('purchase-order'",
+      'defaultVendorId',
+      'listVendors({ state: ',
+      'updatePart(partId, { defaultVendorId: vendorId }, { allowMockFallback: false })',
+      'vendorSelections',
+      'handleAssignDefaultVendor',
+      "'#replenishment-unassigned'",
+    ].filter(
       (snippet) => !planningSource.includes(snippet),
     ),
     [],
@@ -1118,6 +1126,7 @@ test('inventory procurement drill-in uses live PO/vendor reads and focused recei
       'export async function getPurchaseOrder',
       'export async function getVendor',
       'export async function createPart',
+      'export async function updatePart',
       'export async function createPurchaseOrder',
       'export async function updatePurchaseOrder',
       'export function approvePurchaseOrder',

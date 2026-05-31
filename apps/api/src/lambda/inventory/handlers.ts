@@ -14,6 +14,10 @@ function getInventoryPrisma(): PrismaClient {
   return inventoryPrisma;
 }
 
+export function setInventoryHandlerPrismaForTests(prisma?: PrismaClient): void {
+  inventoryPrisma = prisma;
+}
+
 export const inventoryLotQueries = {
   listAvailableLots() {
     return getInventoryPrisma().$queryRaw<
@@ -2403,6 +2407,80 @@ export const getPartHandler = wrapHandler(
   { requireAuth: false },
 );
 
+// ─── Update Part ──────────────────────────────────────────────────────────────
+
+interface UpdatePartBody {
+  defaultVendorId?: string | null;
+}
+
+export const updatePartHandler = wrapHandler(
+  async (ctx) => {
+    const partId = parseOptionalUuid(ctx.event.pathParameters?.id, 'id');
+    if (partId.error) return jsonResponse(422, { message: partId.error });
+    if (!partId.value) return jsonResponse(400, { message: 'Part ID is required.' });
+
+    const body = parseBody<UpdatePartBody>(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
+    if (!body.value || typeof body.value !== 'object' || Array.isArray(body.value)) {
+      return jsonResponse(422, { message: 'Request body must be an object.' });
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(body.value, 'defaultVendorId')) {
+      return jsonResponse(422, {
+        message: 'At least one supported part field is required.',
+      });
+    }
+
+    const existingPart = await getInventoryPrisma().part.findFirst({
+      where: { id: partId.value, deletedAt: null },
+      select: { id: true },
+    });
+    if (!existingPart) {
+      return jsonResponse(404, { message: `Part not found: ${partId.value}` });
+    }
+
+    const data: Prisma.PartUncheckedUpdateInput = {
+      updatedAt: new Date(),
+      version: { increment: 1 },
+    };
+
+    if (Object.prototype.hasOwnProperty.call(body.value, 'defaultVendorId')) {
+      const rawVendorId = body.value.defaultVendorId;
+      if (rawVendorId === null || rawVendorId === '') {
+        data.defaultVendorId = null;
+      } else if (typeof rawVendorId !== 'string') {
+        return jsonResponse(422, { message: 'defaultVendorId must be a UUID or null.' });
+      } else {
+        const vendorId = parseOptionalUuid(rawVendorId, 'defaultVendorId');
+        if (vendorId.error) return jsonResponse(422, { message: vendorId.error });
+        if (!vendorId.value) {
+          data.defaultVendorId = null;
+        } else {
+          const vendor = await getInventoryPrisma().vendor.findFirst({
+            where: { id: vendorId.value, deletedAt: null, vendorState: 'ACTIVE' },
+            select: { id: true },
+          });
+          if (!vendor) {
+            return jsonResponse(422, {
+              message: `Active vendor not found: ${vendorId.value}`,
+            });
+          }
+          data.defaultVendorId = vendorId.value;
+        }
+      }
+    }
+
+    const part = await getInventoryPrisma().part.update({
+      where: { id: partId.value },
+      data,
+      include: PART_INCLUDE,
+    });
+
+    return jsonResponse(200, { part: toPartResponse(part) });
+  },
+  { requireAuth: false },
+);
+
 // ─── Create Part SKU ──────────────────────────────────────────────────────────
 
 interface CreatePartBody {
@@ -2462,7 +2540,7 @@ export const listVendorsHandler = wrapHandler(
     const offset = parseInt(qs.offset ?? '0', 10);
 
     const where = {
-      ...(vendorState ? { state: vendorState as 'ACTIVE' | 'ON_HOLD' | 'INACTIVE' } : {}),
+      ...(vendorState ? { vendorState: vendorState as 'ACTIVE' | 'ON_HOLD' | 'INACTIVE' } : {}),
       deletedAt: null,
     };
 

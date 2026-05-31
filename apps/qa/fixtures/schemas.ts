@@ -203,6 +203,7 @@ const ROUTES: RouteEntry[] = [
   // Inventory
   { method: 'GET', template: '/inventory/parts', schema: paginated(part) },
   { method: 'GET', template: '/inventory/parts/{id}', schema: z.object({ part }) },
+  { method: 'PATCH', template: '/inventory/parts/{id}', schema: z.object({ part }) },
   { method: 'GET', template: '/inventory/manufacturers', schema: paginated(manufacturer) },
 
   // Identity / Customers / Dealers

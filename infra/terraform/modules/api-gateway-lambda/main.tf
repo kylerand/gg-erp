@@ -839,6 +839,25 @@ resource "aws_lambda_function" "inventory_get_part" {
   }
 }
 
+resource "aws_lambda_function" "inventory_update_part" {
+  function_name    = "${var.name_prefix}-inventory-update-part"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "update-part.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
 resource "aws_lambda_function" "inventory_list_vendors" {
   function_name    = "${var.name_prefix}-inventory-list-vendors"
   role             = aws_iam_role.erp_lambda.arn
@@ -2016,6 +2035,21 @@ resource "aws_apigatewayv2_route" "inventory_get_part" {
   route_key          = "GET /inventory/parts/{id}"
   target             = "integrations/${aws_apigatewayv2_integration.inventory_get_part.id}"
   authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "inventory_update_part" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.inventory_update_part.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "inventory_update_part" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /inventory/parts/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.inventory_update_part.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "inventory_list_vendors" {
@@ -4776,6 +4810,7 @@ locals {
     inventory_list_parts                  = aws_lambda_function.inventory_list_parts
     inventory_create_part                 = aws_lambda_function.inventory_create_part
     inventory_get_part                    = aws_lambda_function.inventory_get_part
+    inventory_update_part                 = aws_lambda_function.inventory_update_part
     inventory_get_part_chain              = aws_lambda_function.inventory_get_part_chain
     inventory_list_vendors                = aws_lambda_function.inventory_list_vendors
     inventory_get_vendor                  = aws_lambda_function.inventory_get_vendor

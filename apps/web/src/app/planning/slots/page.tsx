@@ -88,6 +88,10 @@ function getWeekDates(): WeekRange {
   return { start: days[0].date, end: days[4].date, days };
 }
 
+function workOrderOperationHref(item: { workOrderId: string; operationId: string }): string {
+  return erpRecordRoute('work-order', item.workOrderId, { operationId: item.operationId });
+}
+
 export default function BuildSlotPlannerPage() {
   const [projection, setProjection] = useState<BuildSlotDemandProjection | null>(null);
   const [schedulePreview, setSchedulePreview] = useState<SchedulePreviewResponse | null>(null);
@@ -461,7 +465,7 @@ function SchedulePublicationPanel({
                 <li key={assignment.id} className="grid gap-2 px-3 py-2 text-xs md:grid-cols-[1fr_auto]">
                   <div className="min-w-0">
                     <Link
-                      href={erpRecordRoute('work-order', assignment.workOrderId)}
+                      href={workOrderOperationHref(assignment)}
                       className="font-mono font-semibold text-gray-900 hover:underline"
                     >
                       #{assignment.workOrderNumber}
@@ -848,7 +852,7 @@ function SlotPanel({ slot }: { slot: BuildSlotProjectionSlot }) {
 function DemandLink({ item }: { item: BuildSlotDemandItem }) {
   return (
     <Link
-      href={erpRecordRoute('work-order', item.workOrderId)}
+      href={workOrderOperationHref(item)}
       className="block rounded bg-gray-100 px-2 py-1 text-xs text-gray-700 hover:bg-gray-200"
       title={`${item.operationName} · ${formatMinutes(item.estimatedMinutes)}`}
     >
@@ -875,7 +879,7 @@ function UnscheduledSection({ demand }: { demand: BuildSlotDemandItem[] }) {
           >
             <div className="min-w-0">
               <Link
-                href={erpRecordRoute('work-order', item.workOrderId)}
+                href={workOrderOperationHref(item)}
                 className="font-mono text-xs font-semibold text-gray-900 hover:underline"
               >
                 #{item.workOrderNumber}

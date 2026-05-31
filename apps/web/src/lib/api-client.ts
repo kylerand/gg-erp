@@ -1921,9 +1921,11 @@ export interface TechnicianTask {
   workOrderId: string;
   /** Denormalized from work order for display */
   workOrderNumber?: string;
+  workOrderTitle?: string;
   routingStepId: string;
   /** Denormalized from routing step for display */
   routingStepTitle?: string;
+  routingStepCode?: string;
   technicianId?: string;
   state: 'READY' | 'IN_PROGRESS' | 'BLOCKED' | 'DONE' | 'CANCELLED';
   startedAt?: string;

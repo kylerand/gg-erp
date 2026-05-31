@@ -7,6 +7,7 @@ import {
   createTimeEntryHandler,
   deleteTimeEntryHandler,
   disconnectTicketHandlerDependencies,
+  listTasksHandler,
   setTicketHandlerPrismaForTests,
   setTicketHandlerTimeEntryServiceForTests,
   transitionTaskHandler,
@@ -56,10 +57,7 @@ test('transitionTaskHandler returns identifier and body validation errors before
     pathParameters: {},
   });
   assert.equal(missingId.statusCode, 400);
-  assert.equal(
-    (JSON.parse(missingId.body) as { message: string }).message,
-    'Task ID is required.',
-  );
+  assert.equal((JSON.parse(missingId.body) as { message: string }).message, 'Task ID is required.');
 
   const invalidJson = await transitionTaskHandler({
     body: '{invalid-json',
@@ -80,6 +78,97 @@ test('transitionTaskHandler returns identifier and body validation errors before
     (JSON.parse(missingState.body) as { message: string }).message,
     'state is required.',
   );
+});
+
+test('listTasksHandler enriches technician tasks with work-order and routing-step context', async () => {
+  const TASK_ID = '00000000-0000-4000-8000-000000000201';
+  const WORK_ORDER_ID = '00000000-0000-4000-8000-000000000202';
+  const STEP_ID = '00000000-0000-4000-8000-000000000203';
+  const TECHNICIAN_ID = '00000000-0000-4000-8000-000000000204';
+  const updatedAt = new Date('2026-05-31T12:00:00.000Z');
+
+  setTicketHandlerPrismaForTests({
+    technicianTask: {
+      async findMany(args: {
+        where: { technicianId?: string };
+        orderBy: { updatedAt: 'desc' };
+        take: number;
+      }) {
+        assert.equal(args.where.technicianId, TECHNICIAN_ID);
+        assert.equal(args.take, 20);
+        return [
+          {
+            id: TASK_ID,
+            workOrderId: WORK_ORDER_ID,
+            routingStepId: STEP_ID,
+            technicianId: TECHNICIAN_ID,
+            state: 'READY',
+            startedAt: null,
+            completedAt: null,
+            blockedReason: null,
+            updatedAt,
+          },
+        ];
+      },
+    },
+    woOrder: {
+      async findMany(args: {
+        where: { id: { in: string[] } };
+        select: { id: true; workOrderNumber: true; title: true };
+      }) {
+        assert.deepEqual(args.where.id.in, [WORK_ORDER_ID]);
+        assert.deepEqual(args.select, { id: true, workOrderNumber: true, title: true });
+        return [{ id: WORK_ORDER_ID, workOrderNumber: 'WO-200', title: 'Lift install' }];
+      },
+    },
+    routingSopStep: {
+      async findMany(args: {
+        where: { id: { in: string[] } };
+        select: { id: true; stepName: true; stepCode: true; sequenceNo: true };
+      }) {
+        assert.deepEqual(args.where.id.in, [STEP_ID]);
+        assert.deepEqual(args.select, {
+          id: true,
+          stepName: true,
+          stepCode: true,
+          sequenceNo: true,
+        });
+        return [
+          {
+            id: STEP_ID,
+            stepName: 'Install lift kit',
+            stepCode: 'LIFT-010',
+            sequenceNo: 10,
+          },
+        ];
+      },
+    },
+  } as unknown as Partial<PrismaClient>);
+
+  try {
+    const response = await listTasksHandler({
+      queryStringParameters: { technicianId: TECHNICIAN_ID, limit: '20' },
+    });
+
+    assert.equal(response.statusCode, 200);
+    const payload = JSON.parse(response.body) as {
+      items: Array<{
+        id: string;
+        workOrderNumber?: string;
+        workOrderTitle?: string;
+        routingStepTitle?: string;
+        routingStepCode?: string;
+      }>;
+    };
+    assert.equal(payload.items.length, 1);
+    assert.equal(payload.items[0].id, TASK_ID);
+    assert.equal(payload.items[0].workOrderNumber, 'WO-200');
+    assert.equal(payload.items[0].workOrderTitle, 'Lift install');
+    assert.equal(payload.items[0].routingStepTitle, '10. Install lift kit');
+    assert.equal(payload.items[0].routingStepCode, 'LIFT-010');
+  } finally {
+    setTicketHandlerPrismaForTests(undefined);
+  }
 });
 
 test('transitionWoOperationHandler validates identifiers and operation status input', async () => {
@@ -254,10 +343,7 @@ test('createReworkHandler returns 422 for missing contract fields', async () => 
   });
 
   assert.equal(response.statusCode, 422);
-  assert.equal(
-    (JSON.parse(response.body) as { message: string }).message,
-    'title is required.',
-  );
+  assert.equal((JSON.parse(response.body) as { message: string }).message, 'title is required.');
 });
 
 test('createTimeEntryHandler returns 422 when required fields are missing', async () => {

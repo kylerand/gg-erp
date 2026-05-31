@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { PageHeader, EmptyState, LoadingSkeleton, StatusBadge } from '@gg-erp/ui';
@@ -10,7 +11,7 @@ import {
   type TechnicianTask,
   type BlockedReasonCode,
 } from '@/lib/api-client';
-import { erpRoute } from '@/lib/erp-routes';
+import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 import { useRole } from '@/lib/role-context';
 import {
   Dialog,
@@ -277,7 +278,11 @@ export default function MyQueuePage() {
                   }}
                   onComplete={() => void handleTransition(task, 'DONE')}
                   onUnblock={() => void handleTransition(task, 'IN_PROGRESS')}
-                  onSop={() => router.push(erpRoute('sop-runner', { taskId: task.id }))}
+                  onSop={() =>
+                    router.push(
+                      erpRoute('sop-runner', { taskId: task.id, workOrderId: task.workOrderId }),
+                    )
+                  }
                 />
               ))}
             </div>
@@ -323,7 +328,7 @@ export default function MyQueuePage() {
               <p className="text-sm text-gray-600">
                 Task:{' '}
                 <span className="font-medium">
-                  {blockDialogTask.routingStepTitle ?? `Step ${blockDialogTask.routingStepId}`}
+                  {blockDialogTask.routingStepTitle ?? 'Unresolved routing step'}
                 </span>
               </p>
               <div className="space-y-1.5">
@@ -409,6 +414,7 @@ function TaskCard({
   const isInProgress = task.state === 'IN_PROGRESS';
   const isReady = task.state === 'READY';
   const showSop = (isReady || isInProgress) && !readOnly;
+  const stepTitle = task.routingStepTitle ?? 'Unresolved routing step';
   const blockedReasonLabel =
     task.blockedReason ??
     (task.blockedReasonCode
@@ -426,8 +432,15 @@ function TaskCard({
         <div className="flex-1 min-w-0">
           {/* Header: WO number, state badge, age, estimated time */}
           <div className="flex items-center gap-2 flex-wrap mb-1">
-            {task.workOrderNumber && (
-              <span className="font-mono text-xs text-gray-500">{task.workOrderNumber}</span>
+            {task.workOrderNumber ? (
+              <Link
+                href={erpRecordRoute('work-order', task.workOrderId)}
+                className="font-mono text-xs text-gray-500 hover:text-gray-900 hover:underline"
+              >
+                {task.workOrderNumber}
+              </Link>
+            ) : (
+              <span className="text-xs text-gray-400">Work order context unavailable</span>
             )}
             <StatusBadge status={task.state} />
             {ageStr && (
@@ -441,9 +454,7 @@ function TaskCard({
           </div>
 
           {/* Routing step title */}
-          <p className="text-sm font-medium text-gray-900">
-            {task.routingStepTitle ?? `Step ${task.routingStepId}`}
-          </p>
+          <p className="text-sm font-medium text-gray-900">{stepTitle}</p>
 
           {/* Blocked reason — text, not color-only */}
           {isBlocked && blockedReasonLabel && (

@@ -8,8 +8,8 @@ import { PageHeader, ReworkLoopBadge } from '@gg-erp/ui';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
-import { apiFetch } from '@/lib/api-client';
-import { erpRoute } from '@/lib/erp-routes';
+import { apiFetch, getWoOrder, type WoOrderDetail } from '@/lib/api-client';
+import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 import { useRole } from '@/lib/role-context';
 
 interface QcGate {
@@ -38,6 +38,30 @@ interface QcSubmitResponse {
   activeReworkLoopCount?: number;
 }
 
+function workOrderDisplayName(workOrder: WoOrderDetail): string {
+  return `${workOrder.number}: ${workOrder.title}`;
+}
+
+function workOrderContextDescription(
+  workOrder: WoOrderDetail | null,
+  workOrderId: string,
+  lookupComplete: boolean,
+): string {
+  if (workOrder) {
+    const customer =
+      workOrder.customerProfile?.companyName ??
+      workOrder.customerProfile?.fullName ??
+      'Customer unresolved';
+    const cart = workOrder.cartProfile
+      ? `${workOrder.cartProfile.modelYear} ${workOrder.cartProfile.modelCode} · ${workOrder.cartProfile.serialNumber}`
+      : 'Cart unresolved';
+    return `${workOrderDisplayName(workOrder)} · ${customer} · ${cart}`;
+  }
+  if (workOrderId && !lookupComplete) return 'Loading work order context...';
+  if (workOrderId) return 'Work order context unavailable';
+  return 'Quality Control Review';
+}
+
 function QCChecklistsContent() {
   const params = useSearchParams();
   const taskId = params.get('taskId') ?? '';
@@ -51,6 +75,8 @@ function QCChecklistsContent() {
   const [submitting, setSubmitting] = useState(false);
   const [outcome, setOutcome] = useState<SubmitOutcome | null>(null);
   const [reworkLoopCount, setReworkLoopCount] = useState(0);
+  const [workOrder, setWorkOrder] = useState<WoOrderDetail | null>(null);
+  const [workOrderLookupComplete, setWorkOrderLookupComplete] = useState(false);
 
   const loadGates = useCallback(async () => {
     if (!workOrderId) {
@@ -79,6 +105,32 @@ function QCChecklistsContent() {
   useEffect(() => {
     void loadGates();
   }, [loadGates]);
+
+  useEffect(() => {
+    if (!workOrderId) {
+      setWorkOrder(null);
+      setWorkOrderLookupComplete(true);
+      return;
+    }
+
+    let cancelled = false;
+    setWorkOrder(null);
+    setWorkOrderLookupComplete(false);
+    void getWoOrder(workOrderId, { allowMockFallback: false })
+      .then((loaded) => {
+        if (!cancelled) setWorkOrder(loaded);
+      })
+      .catch(() => {
+        if (!cancelled) setWorkOrder(null);
+      })
+      .finally(() => {
+        if (!cancelled) setWorkOrderLookupComplete(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [workOrderId]);
 
   function setResult(id: string, result: 'PASS' | 'FAIL' | 'NA') {
     setGates((prev) =>
@@ -160,7 +212,7 @@ function QCChecklistsContent() {
       <div className="max-w-2xl space-y-6">
         <PageHeader
           title="QC Checklist"
-          description={workOrderId ? `WO ${workOrderId}` : 'Quality Control Review'}
+          description={workOrderContextDescription(workOrder, workOrderId, workOrderLookupComplete)}
         />
         <Card>
           <CardContent className="py-10 text-center text-sm text-gray-500">
@@ -175,7 +227,7 @@ function QCChecklistsContent() {
     <div className="max-w-2xl space-y-6">
       <PageHeader
         title="QC Checklist"
-        description={workOrderId ? `WO ${workOrderId}` : 'Quality Control Review'}
+        description={workOrderContextDescription(workOrder, workOrderId, workOrderLookupComplete)}
       />
 
       {reworkLoopCount > 0 && (
@@ -210,11 +262,20 @@ function QCChecklistsContent() {
           <CardContent className="pt-6 text-center space-y-3">
             <div className="text-4xl">✅</div>
             <p className="font-semibold text-green-800">QC Approved — proceed to close</p>
-            <Link href={erpRoute('work-order')}>
-              <Button variant="outline" className="min-h-[48px]">
-                Return to My Queue
-              </Button>
-            </Link>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Link href={erpRoute('my-work-queue')}>
+                <Button variant="outline" className="min-h-[48px]">
+                  Return to My Queue
+                </Button>
+              </Link>
+              {workOrderId && (
+                <Link href={erpRecordRoute('work-order', workOrderId)}>
+                  <Button variant="outline" className="min-h-[48px]">
+                    Open Work Order
+                  </Button>
+                </Link>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
@@ -230,11 +291,20 @@ function QCChecklistsContent() {
               </p>
             </div>
             {outcome.reworkLoopCount > 0 && <ReworkLoopBadge current={outcome.reworkLoopCount} />}
-            <Link href={erpRoute('work-order')}>
-              <Button variant="outline" className="min-h-[48px]">
-                Return to My Queue
-              </Button>
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link href={erpRoute('my-work-queue')}>
+                <Button variant="outline" className="min-h-[48px]">
+                  Return to My Queue
+                </Button>
+              </Link>
+              {workOrderId && (
+                <Link href={erpRecordRoute('work-order', workOrderId)}>
+                  <Button variant="outline" className="min-h-[48px]">
+                    Open Work Order
+                  </Button>
+                </Link>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}

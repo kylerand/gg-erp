@@ -99,15 +99,27 @@ function TaskCard({
   isBusy: boolean;
   onAssign: () => void;
 }) {
+  const workOrderLabel = task.workOrderNumber ?? 'Unresolved work order';
+  const routingStepLabel = task.routingStepTitle ?? 'Unresolved routing step';
+
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-3 shadow-sm space-y-2">
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <div className="font-mono text-xs text-gray-500">
-            {task.workOrderNumber ?? task.workOrderId}
+            {task.workOrderNumber ? (
+              <Link
+                href={erpRecordRoute('work-order', task.workOrderId)}
+                className="hover:text-gray-900 hover:underline"
+              >
+                {workOrderLabel}
+              </Link>
+            ) : (
+              workOrderLabel
+            )}
           </div>
           <div className="text-sm font-medium text-gray-900 mt-0.5 truncate">
-            {task.routingStepTitle ?? task.routingStepId}
+            {routingStepLabel}
           </div>
         </div>
         <StatusBadge status={task.state} />
@@ -482,10 +494,19 @@ export function DispatchClient() {
               {/* Task summary */}
               <div className="bg-gray-50 rounded-lg p-3 space-y-1">
                 <div className="font-mono text-xs text-gray-500">
-                  {selectedTask.workOrderNumber}
+                  {selectedTask.workOrderNumber ? (
+                    <Link
+                      href={erpRecordRoute('work-order', selectedTask.workOrderId)}
+                      className="hover:text-gray-900 hover:underline"
+                    >
+                      {selectedTask.workOrderNumber}
+                    </Link>
+                  ) : (
+                    'Unresolved work order'
+                  )}
                 </div>
                 <div className="text-sm font-medium text-gray-900">
-                  {selectedTask.routingStepTitle}
+                  {selectedTask.routingStepTitle ?? 'Unresolved routing step'}
                 </div>
                 {(selectedTask.requiredSkillCodes?.length ?? 0) > 0 && (
                   <div className="flex flex-wrap gap-1 mt-1.5">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { PageHeader, LoadingSkeleton, EmptyState } from '@gg-erp/ui';
@@ -19,14 +19,17 @@ import {
   updateChannelTodo,
   uploadAttachment,
   getAttachmentDownloadUrl,
+  listEmployees,
   type Channel,
   type ChannelMessage,
   type ChannelMessageAttachment,
   type ChannelTodo,
+  type Employee,
 } from '@/lib/api-client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
 import {
   Dialog,
   DialogContent,
@@ -79,6 +82,23 @@ function isImageFile(file: File): boolean {
   return file.type.startsWith('image/');
 }
 
+function employeeOption(employee: Employee): SearchableSelectOption {
+  return {
+    id: employee.id,
+    label: `${employee.firstName} ${employee.lastName}`,
+    description: employee.employeeNumber,
+    meta: employee.skills?.length ? employee.skills.join(', ') : employee.employmentState,
+  };
+}
+
+function optionMatches(option: SearchableSelectOption, query: string): boolean {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return true;
+  return [option.label, option.description, option.meta].some((value) =>
+    value?.toLowerCase().includes(normalized),
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function MessagesPage() {
@@ -116,6 +136,12 @@ export default function MessagesPage() {
   const [todos, setTodos] = useState<ChannelTodo[]>([]);
   const [todosLoading, setTodosLoading] = useState(false);
   const [newTodoTitle, setNewTodoTitle] = useState('');
+  const [todoAssigneeId, setTodoAssigneeId] = useState('');
+  const [todoAssigneeSearch, setTodoAssigneeSearch] = useState('');
+  const [todoDueDate, setTodoDueDate] = useState('');
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [employeesLoading, setEmployeesLoading] = useState(false);
+  const [employeesError, setEmployeesError] = useState<string | undefined>();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const composeRef = useRef<HTMLTextAreaElement>(null);
@@ -398,12 +424,47 @@ export default function MessagesPage() {
     }
   }
 
+  const loadEmployees = useCallback(async () => {
+    setEmployeesLoading(true);
+    setEmployeesError(undefined);
+    try {
+      const { items } = await listEmployees(
+        { employmentState: 'ACTIVE' },
+        { allowMockFallback: false },
+      );
+      setEmployees(items);
+    } catch (err) {
+      setEmployees([]);
+      setEmployeesError(err instanceof Error ? err.message : 'Failed to load employees');
+    } finally {
+      setEmployeesLoading(false);
+    }
+  }, []);
+
+  const employeeOptions = useMemo(() => employees.map(employeeOption), [employees]);
+  const filteredEmployeeOptions = useMemo(
+    () => employeeOptions.filter((option) => optionMatches(option, todoAssigneeSearch)),
+    [employeeOptions, todoAssigneeSearch],
+  );
+  const selectedTodoAssignee = employeeOptions.find((option) => option.id === todoAssigneeId);
+  const employeeNameById = useMemo(
+    () => new Map(employees.map((employee) => [employee.id, `${employee.firstName} ${employee.lastName}`])),
+    [employees],
+  );
+
   async function handleCreateTodo() {
     if (!newTodoTitle.trim() || !selectedChannelId) return;
     try {
-      const todo = await createChannelTodo(selectedChannelId, { title: newTodoTitle });
+      const todo = await createChannelTodo(selectedChannelId, {
+        title: newTodoTitle,
+        assigneeId: todoAssigneeId || undefined,
+        dueDate: todoDueDate || undefined,
+      });
       setTodos((prev) => [todo, ...prev]);
       setNewTodoTitle('');
+      setTodoAssigneeId('');
+      setTodoAssigneeSearch('');
+      setTodoDueDate('');
       toast.success('Todo added');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to create todo');
@@ -425,8 +486,9 @@ export default function MessagesPage() {
   useEffect(() => {
     if (showTodos && selectedChannelId) {
       void loadTodos(selectedChannelId);
+      void loadEmployees();
     }
-  }, [showTodos, selectedChannelId]);
+  }, [loadEmployees, showTodos, selectedChannelId]);
 
   // ─── Filter Channels ──────────────────────────────────────────────────────
 
@@ -712,9 +774,9 @@ export default function MessagesPage() {
                 {/* Todos panel — always rendered, animated via width transition */}
                 <div
                   className="flex-shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out"
-                  style={{ width: showTodos ? 300 : 0 }}
+                  style={{ width: showTodos ? 360 : 0 }}
                 >
-                  <div className="w-[300px] h-full flex flex-col bg-white border-l border-gray-200 shadow-[-2px_0_8px_rgba(0,0,0,0.06)]">
+                  <div className="w-[360px] h-full flex flex-col bg-white border-l border-gray-200 shadow-[-2px_0_8px_rgba(0,0,0,0.06)]">
                     {/* Header */}
                     <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200">
                       <h3 className="font-medium text-sm text-gray-900">Channel Todos</h3>
@@ -727,7 +789,7 @@ export default function MessagesPage() {
                     </div>
 
                     {/* Add todo */}
-                    <div className="flex gap-1 px-3 py-2 border-b border-gray-100">
+                    <div className="space-y-2 px-3 py-3 border-b border-gray-100">
                       <Input
                         placeholder="Add a todo…"
                         value={newTodoTitle}
@@ -735,17 +797,46 @@ export default function MessagesPage() {
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') void handleCreateTodo();
                         }}
-                        className="h-8 text-sm flex-1"
+                        className="h-8 text-sm"
                       />
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void handleCreateTodo()}
-                        disabled={!newTodoTitle.trim()}
-                        className="h-8 w-8 p-0"
-                      >
-                        <Plus size={14} />
-                      </Button>
+                      <SearchableSelect
+                        id="todoAssignee"
+                        label="Assignee"
+                        value={todoAssigneeId}
+                        selectedOption={selectedTodoAssignee}
+                        searchValue={todoAssigneeSearch}
+                        options={filteredEmployeeOptions}
+                        loading={employeesLoading}
+                        error={employeesError}
+                        placeholder="Search active employees"
+                        emptyText="No active employees matched this search."
+                        onSearchChange={setTodoAssigneeSearch}
+                        onChange={setTodoAssigneeId}
+                      />
+                      <div className="grid grid-cols-[1fr_auto] gap-2 items-end">
+                        <div className="space-y-1">
+                          <label htmlFor="todoDueDate" className="text-xs font-medium text-gray-700">
+                            Due date
+                          </label>
+                          <Input
+                            id="todoDueDate"
+                            type="date"
+                            value={todoDueDate}
+                            onChange={(event) => setTodoDueDate(event.target.value)}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void handleCreateTodo()}
+                          disabled={!newTodoTitle.trim()}
+                          className="h-8 w-8 p-0"
+                          aria-label="Add todo"
+                        >
+                          <Plus size={14} />
+                        </Button>
+                      </div>
                     </div>
 
                     {/* Todo list — open items first, then completed */}
@@ -788,8 +879,9 @@ export default function MessagesPage() {
                                 {(todo.assigneeId || todo.dueDate) && (
                                   <div className="flex items-center gap-2 mt-0.5">
                                     {todo.assigneeId && (
-                                      <span className="text-[10px] text-gray-400 font-mono">
-                                        {todo.assigneeId.slice(0, 8)}
+                                      <span className="truncate text-[10px] text-gray-500">
+                                        {employeeNameById.get(todo.assigneeId) ??
+                                          (employeesLoading ? 'Loading assignee...' : 'Unresolved employee')}
                                       </span>
                                     )}
                                     {todo.dueDate && (

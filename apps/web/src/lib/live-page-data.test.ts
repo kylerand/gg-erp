@@ -180,9 +180,14 @@ test('messages attach files through saved communication attachments', () => {
     [
       'uploadAttachment',
       'getAttachmentDownloadUrl',
+      'listEmployees',
+      'SearchableSelect',
       'attachmentIds',
       'onOpenAttachment',
+      'todoAssigneeId',
+      'employeeNameById',
       'formatFileSize',
+      'allowMockFallback: false',
     ].filter((snippet) => !source.includes(snippet)),
     [],
   );
@@ -194,6 +199,7 @@ test('messages attach files through saved communication attachments', () => {
   );
   assert.equal(source.includes('TODO: Upload files'), false);
   assert.equal(source.includes('Avatar placeholder'), false);
+  assert.equal(source.includes('todo.assigneeId.slice'), false);
 });
 
 test('quote detail exposes live conversion into shop execution', () => {

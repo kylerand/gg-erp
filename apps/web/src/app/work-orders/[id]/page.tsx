@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import {
@@ -38,6 +38,7 @@ import {
   createLaborTimeEntry,
   createInventoryReservation,
   getWoOrder,
+  listEmployees,
   listWorkOrderQcGates,
   listWorkOrderTimeEntries,
   listInventoryLots,
@@ -46,6 +47,7 @@ import {
   transitionWoOperation,
   updateCartVehicle,
   updateCustomer,
+  type Employee,
   type InventoryLot,
   type InventoryReservation,
   type LaborTimeEntry,
@@ -208,6 +210,18 @@ function cartDisplayName(workOrder: WoOrderDetail): string {
     : workOrder.cart;
 }
 
+function employeeDisplayName(employee: Employee | undefined): string | undefined {
+  if (!employee) return undefined;
+  return [employee.firstName, employee.lastName].filter(Boolean).join(' ').trim() || employee.employeeNumber;
+}
+
+function technicianDisplayName(
+  technicianId: string,
+  employeeById: Map<string, Employee>,
+): string {
+  return employeeDisplayName(employeeById.get(technicianId)) ?? 'Unresolved technician';
+}
+
 function createDrafts(parts: WoOrderPartLine[], lotsByPartLine: Record<string, InventoryLot[]>) {
   return parts.reduce<Record<string, MaterialDraft>>((acc, part) => {
     const firstAvailableLot = lotsByPartLine[part.id]?.find((lot) => lot.quantityAvailable > 0);
@@ -231,6 +245,8 @@ export default function WorkOrderDetailPage() {
   const [availableLots, setAvailableLots] = useState<Record<string, InventoryLot[]>>({});
   const [drafts, setDrafts] = useState<Record<string, MaterialDraft>>({});
   const [timeEntries, setTimeEntries] = useState<LaborTimeEntry[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [employeeLookupError, setEmployeeLookupError] = useState<string | null>(null);
   const [qcGates, setQcGates] = useState<WorkOrderQcGate[]>([]);
   const [timeDraft, setTimeDraft] = useState<TimeDraft>({ hours: '', description: '' });
   const [qcOutcome, setQcOutcome] = useState<QcOutcome | null>(null);
@@ -252,13 +268,15 @@ export default function WorkOrderDetailPage() {
         setAvailableLots({});
         setDrafts({});
         setTimeEntries([]);
+        setEmployees([]);
+        setEmployeeLookupError(null);
         setQcGates([]);
         setQcOutcome(null);
         setExecutionErrors({});
         return;
       }
 
-      const [lotEntries, timeResult, qcResult] = await Promise.all([
+      const [lotEntries, timeResult, qcResult, employeeResult] = await Promise.all([
         Promise.all(
           nextWorkOrder.parts.map(async (part) => {
             if (!part.partSku) return [part.id, []] as const;
@@ -282,6 +300,10 @@ export default function WorkOrderDetailPage() {
           (gates) => ({ ok: true as const, gates }),
           (err: unknown) => ({ ok: false as const, error: errorMessage(err) }),
         ),
+        listEmployees(undefined, { allowMockFallback: false }).then(
+          (res) => ({ ok: true as const, employees: res.items }),
+          (err: unknown) => ({ ok: false as const, error: errorMessage(err) }),
+        ),
       ]);
       const lotsByPartLine = Object.fromEntries(lotEntries);
 
@@ -289,6 +311,8 @@ export default function WorkOrderDetailPage() {
       setAvailableLots(lotsByPartLine);
       setDrafts(createDrafts(nextWorkOrder.parts, lotsByPartLine));
       setTimeEntries(timeResult.ok ? timeResult.entries : []);
+      setEmployees(employeeResult.ok ? employeeResult.employees : []);
+      setEmployeeLookupError(employeeResult.ok ? null : employeeResult.error);
       setQcGates(qcResult.ok ? qcResult.gates : []);
       setQcOutcome(null);
       setExecutionErrors({
@@ -300,6 +324,8 @@ export default function WorkOrderDetailPage() {
       setAvailableLots({});
       setDrafts({});
       setTimeEntries([]);
+      setEmployees([]);
+      setEmployeeLookupError(null);
       setQcGates([]);
       setQcOutcome(null);
       setExecutionErrors({});
@@ -312,6 +338,11 @@ export default function WorkOrderDetailPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const employeeById = useMemo(
+    () => new Map(employees.map((employee) => [employee.id, employee])),
+    [employees],
+  );
 
   function updateDraft(partLineId: string, patch: Partial<MaterialDraft>) {
     setDrafts((current) => ({
@@ -742,6 +773,8 @@ export default function WorkOrderDetailPage() {
             />
             <TimeExecutionPanel
               entries={timeEntries}
+              employeeById={employeeById}
+              employeeLookupError={employeeLookupError}
               draft={timeDraft}
               actionBusy={actionBusy}
               error={executionErrors.time}
@@ -836,7 +869,12 @@ export default function WorkOrderDetailPage() {
               <Clock size={15} />
               Activity
             </h2>
-            <ActivityPanel workOrder={workOrder} timeEntries={timeEntries} qcGates={qcGates} />
+            <ActivityPanel
+              workOrder={workOrder}
+              timeEntries={timeEntries}
+              employeeById={employeeById}
+              qcGates={qcGates}
+            />
           </section>
         </aside>
       </div>
@@ -1713,6 +1751,8 @@ function ContactLink({
 
 function TimeExecutionPanel({
   entries,
+  employeeById,
+  employeeLookupError,
   draft,
   actionBusy,
   error,
@@ -1723,6 +1763,8 @@ function TimeExecutionPanel({
   onRetry,
 }: {
   entries: LaborTimeEntry[];
+  employeeById: Map<string, Employee>;
+  employeeLookupError: string | null;
   draft: TimeDraft;
   actionBusy: string | null;
   error?: string;
@@ -1756,25 +1798,37 @@ function TimeExecutionPanel({
               {entries.length} entr{entries.length === 1 ? 'y' : 'ies'}
             </div>
           </div>
+          {employeeLookupError && (
+            <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Technician names did not load. Retry after HR data is available.
+            </div>
+          )}
           {entries.length > 0 ? (
             <div className="divide-y divide-gray-100 rounded-lg border border-gray-200">
-              {entries.slice(0, 5).map((entry) => (
-                <div key={entry.id} className="grid gap-2 px-3 py-2 sm:grid-cols-[5rem_1fr]">
-                  <div className="font-semibold tabular-nums text-amber-700">
-                    {formatHours(Number(entry.computedHours ?? 0))}h
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">
-                      {entry.description ?? 'Labor entry'}
+              {entries.slice(0, 5).map((entry) => {
+                const technician = employeeById.get(entry.technicianId);
+                const technicianName =
+                  employeeDisplayName(technician) ??
+                  (employeeLookupError ? 'Technician lookup unavailable' : 'Unresolved technician');
+                return (
+                  <div key={entry.id} className="grid gap-2 px-3 py-2 sm:grid-cols-[5rem_1fr]">
+                    <div className="font-semibold tabular-nums text-amber-700">
+                      {formatHours(Number(entry.computedHours ?? 0))}h
                     </div>
-                    <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
-                      <span>{formatDateTime(entry.startedAt)}</span>
-                      <span>{entry.source.replace(/_/g, ' ')}</span>
-                      <span>{entry.technicianId}</span>
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">
+                        {entry.description ?? 'Labor entry'}
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
+                        <span>{formatDateTime(entry.startedAt)}</span>
+                        <span>{entry.source.replace(/_/g, ' ')}</span>
+                        <span>{technicianName}</span>
+                        {technician?.employeeNumber && <span>{technician.employeeNumber}</span>}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <EmptyPanel text="No labor time has been logged for this work order. Add a manual entry when a technician completes shop work." />
@@ -1958,10 +2012,12 @@ function QcExecutionPanel({
 function ActivityPanel({
   workOrder,
   timeEntries,
+  employeeById,
   qcGates,
 }: {
   workOrder: WoOrderDetail;
   timeEntries: LaborTimeEntry[];
+  employeeById: Map<string, Employee>;
   qcGates: WorkOrderQcGate[];
 }) {
   const items = [
@@ -1994,7 +2050,7 @@ function ActivityPanel({
       id: `time:${entry.id}`,
       at: entry.startedAt,
       title: `${formatHours(Number(entry.computedHours ?? 0))}h labor logged`,
-      detail: entry.description ?? entry.technicianId,
+      detail: entry.description ?? technicianDisplayName(entry.technicianId, employeeById),
     })),
     ...qcGates
       .filter((gate) => gate.result)

@@ -98,6 +98,10 @@ test('work-order detail page wires live execution panels', () => {
   const requiredCalls = [
     'listWorkOrderTimeEntries',
     'createLaborTimeEntry',
+    'listEmployees(undefined, { allowMockFallback: false })',
+    'employeeById={employeeById}',
+    'employeeDisplayName(technician)',
+    'technicianDisplayName(entry.technicianId, employeeById)',
     'listWorkOrderQcGates',
     'submitWorkOrderQcGates',
     'transitionWoOperation',
@@ -117,6 +121,8 @@ test('work-order detail page wires live execution panels', () => {
     [],
   );
   assert.equal(/will appear here/i.test(source), false);
+  assert.equal(source.includes('<span>{entry.technicianId}</span>'), false);
+  assert.equal(source.includes('entry.description ?? entry.technicianId'), false);
 });
 
 test('create forms use live selectors instead of raw ID entry fields', () => {

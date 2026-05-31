@@ -29,9 +29,8 @@ function parseResponseBody(response: { body: string }): Record<string, unknown> 
 // ─── Invoice Sync: listInvoiceSyncsHandler ────────────────────────────────────
 
 test('listInvoiceSyncsHandler returns paginated invoice sync records', async () => {
-  const { listInvoiceSyncsHandler, invoiceSyncListQueries } = await import(
-    '../lambda/accounting/handlers.js'
-  );
+  const { listInvoiceSyncsHandler, invoiceSyncListQueries, accountingSyncContextQueries } =
+    await import('../lambda/accounting/handlers.js');
 
   const now = new Date();
   const mockRecords = [
@@ -52,6 +51,18 @@ test('listInvoiceSyncsHandler returns paginated invoice sync records', async () 
 
   const findManyMock = mock.method(invoiceSyncListQueries, 'findMany', async () => mockRecords);
   const countMock = mock.method(invoiceSyncListQueries, 'count', async () => 1);
+  const findWorkOrdersMock = mock.method(
+    accountingSyncContextQueries,
+    'findWorkOrders',
+    async () => [
+      {
+        id: 'wo-1',
+        workOrderNumber: 'WO-2026-0001',
+        state: 'IN_PROGRESS',
+        scheduledStartAt: null,
+      },
+    ],
+  );
 
   try {
     const event = makeEvent({
@@ -72,12 +83,20 @@ test('listInvoiceSyncsHandler returns paginated invoice sync records', async () 
     assert.equal(items[0].id, 'inv-1');
     assert.equal(items[0].state, 'PENDING');
     assert.equal(items[0].invoiceNumber, 'INV-001');
+    assert.deepEqual(items[0].workOrder, {
+      id: 'wo-1',
+      workOrderNumber: 'WO-2026-0001',
+      state: 'IN_PROGRESS',
+      scheduledStartAt: null,
+    });
 
     assert.equal(findManyMock.mock.calls.length, 1);
     assert.equal(countMock.mock.calls.length, 1);
+    assert.deepEqual(findWorkOrdersMock.mock.calls[0].arguments[0], ['wo-1']);
   } finally {
     findManyMock.mock.restore();
     countMock.mock.restore();
+    findWorkOrdersMock.mock.restore();
   }
 });
 
@@ -355,9 +374,8 @@ test('retryInvoiceSyncHandler retries a FAILED record successfully', async () =>
 // ─── Customer Sync: listCustomerSyncsHandler ─────────────────────────────────
 
 test('listCustomerSyncsHandler returns paginated customer sync records', async () => {
-  const { listCustomerSyncsHandler, customerSyncListQueries } = await import(
-    '../lambda/accounting/handlers.js'
-  );
+  const { listCustomerSyncsHandler, customerSyncListQueries, accountingSyncContextQueries } =
+    await import('../lambda/accounting/handlers.js');
 
   const now = new Date();
   const mockRecords = [
@@ -377,6 +395,21 @@ test('listCustomerSyncsHandler returns paginated customer sync records', async (
 
   const findManyMock = mock.method(customerSyncListQueries, 'findMany', async () => mockRecords);
   const countMock = mock.method(customerSyncListQueries, 'count', async () => 1);
+  const findCustomersMock = mock.method(
+    accountingSyncContextQueries,
+    'findCustomers',
+    async () => [
+      {
+        id: 'cust-1',
+        displayName: 'Acme Cart Works',
+        fullName: 'Avery Customer',
+        companyName: 'Acme Cart Works',
+        email: 'avery@example.com',
+        phone: null,
+        state: 'ACTIVE',
+      },
+    ],
+  );
 
   try {
     const event = makeEvent({
@@ -395,13 +428,24 @@ test('listCustomerSyncsHandler returns paginated customer sync records', async (
     assert.equal(items[0].id, 'cust-sync-1');
     assert.equal(items[0].state, 'SYNCED');
     assert.equal(items[0].customerId, 'cust-1');
+    assert.deepEqual(items[0].customer, {
+      id: 'cust-1',
+      displayName: 'Acme Cart Works',
+      fullName: 'Avery Customer',
+      companyName: 'Acme Cart Works',
+      email: 'avery@example.com',
+      phone: null,
+      state: 'ACTIVE',
+    });
     assert.equal(items[0].externalReference, 'qb-cust-1');
 
     assert.equal(findManyMock.mock.calls.length, 1);
     assert.equal(countMock.mock.calls.length, 1);
+    assert.deepEqual(findCustomersMock.mock.calls[0].arguments[0], ['cust-1']);
   } finally {
     findManyMock.mock.restore();
     countMock.mock.restore();
+    findCustomersMock.mock.restore();
   }
 });
 

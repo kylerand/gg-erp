@@ -12,6 +12,8 @@ import {
   listIntegrationAccounts,
   getFailureSummary,
   listPurchaseOrders,
+  invoiceSyncWorkOrderDisplayName,
+  customerSyncDisplayName,
   type InvoiceSyncRecord,
   type CustomerSyncRecord,
   type IntegrationAccount,
@@ -274,15 +276,15 @@ export default function SyncMonitorPage() {
   const activeDescription =
     view === 'failures'
       ? 'Invoice and customer sync failures with retry context.'
-        : view === 'queue'
-          ? 'Records waiting to sync or currently in progress.'
-          : view === 'payables'
-            ? 'Received purchase orders ready for vendor bill review.'
-            : view === 'invoices'
-              ? 'Invoice sync history from the ERP to QuickBooks.'
-              : view === 'customers'
-                ? 'Customer sync history from the ERP to QuickBooks.'
-                : 'Connected integration accounts and mapped QuickBooks account metadata.';
+      : view === 'queue'
+        ? 'Records waiting to sync or currently in progress.'
+        : view === 'payables'
+          ? 'Received purchase orders ready for vendor bill review.'
+          : view === 'invoices'
+            ? 'Invoice sync history from the ERP to QuickBooks.'
+            : view === 'customers'
+              ? 'Customer sync history from the ERP to QuickBooks.'
+              : 'Connected integration accounts and mapped QuickBooks account metadata.';
 
   return (
     <div>
@@ -688,7 +690,23 @@ function InvoiceTable({
                 <div className="text-[11px] text-gray-400">{r.externalReference ?? r.id}</div>
               </td>
               {!compact && (
-                <td className="px-4 py-3 font-mono text-xs text-gray-500">{r.workOrderId}</td>
+                <td className="px-4 py-3">
+                  {r.workOrder ? (
+                    <Link
+                      href={erpRecordRoute('work-order', r.workOrder.id)}
+                      className="text-xs font-semibold text-gray-900 hover:underline"
+                    >
+                      {invoiceSyncWorkOrderDisplayName(r)}
+                    </Link>
+                  ) : (
+                    <span className="text-xs font-semibold text-gray-500">
+                      {invoiceSyncWorkOrderDisplayName(r)}
+                    </span>
+                  )}
+                  <div className="mt-0.5 text-[11px] text-gray-400">
+                    {r.workOrder?.state ?? 'Work order lookup unavailable'}
+                  </div>
+                </td>
               )}
               <td className="px-4 py-3">
                 <SyncState state={r.state} />
@@ -749,8 +767,21 @@ function CustomerTable({ records, compact }: { records: CustomerSyncRecord[]; co
           {records.map((r) => (
             <tr key={r.id} className="hover:bg-gray-50">
               <td className="px-4 py-3">
-                <div className="font-mono text-xs font-semibold text-gray-900">{r.customerId}</div>
-                <div className="text-[11px] text-gray-400">{r.externalReference ?? r.id}</div>
+                {r.customer ? (
+                  <Link
+                    href={erpRoute('customer', { search: customerSyncDisplayName(r) })}
+                    className="text-xs font-semibold text-gray-900 hover:underline"
+                  >
+                    {customerSyncDisplayName(r)}
+                  </Link>
+                ) : (
+                  <div className="text-xs font-semibold text-gray-500">
+                    {customerSyncDisplayName(r)}
+                  </div>
+                )}
+                <div className="text-[11px] text-gray-400">
+                  {r.customer?.email ?? r.externalReference ?? r.id}
+                </div>
               </td>
               {!compact && <td className="px-4 py-3 text-gray-500">{r.provider}</td>}
               <td className="px-4 py-3">

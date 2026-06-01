@@ -47,32 +47,56 @@ ALTER TABLE inventory.inventory_reservations
   ADD COLUMN IF NOT EXISTS allocated_quantity numeric(14,3) not null default 0;
 
 ALTER TABLE inventory.inventory_reservations
+  DROP CONSTRAINT IF EXISTS inventory_reservations_status_ck;
+
+ALTER TABLE inventory.inventory_reservations
   ADD CONSTRAINT inventory_reservations_status_ck
   CHECK (reservation_status in ('ACTIVE', 'PARTIALLY_CONSUMED', 'CONSUMED', 'RELEASED', 'CANCELLED', 'EXPIRED'));
+
+ALTER TABLE inventory.inventory_reservations
+  DROP CONSTRAINT IF EXISTS inventory_reservations_reserved_quantity_ck;
 
 ALTER TABLE inventory.inventory_reservations
   ADD CONSTRAINT inventory_reservations_reserved_quantity_ck
   CHECK (reserved_quantity > 0);
 
 ALTER TABLE inventory.inventory_reservations
+  DROP CONSTRAINT IF EXISTS inventory_reservations_consumed_quantity_ck;
+
+ALTER TABLE inventory.inventory_reservations
   ADD CONSTRAINT inventory_reservations_consumed_quantity_ck
   CHECK (consumed_quantity >= 0);
+
+ALTER TABLE inventory.inventory_reservations
+  DROP CONSTRAINT IF EXISTS inventory_reservations_allocated_quantity_nonnegative_ck;
 
 ALTER TABLE inventory.inventory_reservations
   ADD CONSTRAINT inventory_reservations_allocated_quantity_nonnegative_ck
   CHECK (allocated_quantity >= 0);
 
 ALTER TABLE inventory.inventory_reservations
+  DROP CONSTRAINT IF EXISTS inventory_reservations_quantity_ck;
+
+ALTER TABLE inventory.inventory_reservations
   ADD CONSTRAINT inventory_reservations_quantity_ck
   CHECK (consumed_quantity <= reserved_quantity);
+
+ALTER TABLE inventory.inventory_reservations
+  DROP CONSTRAINT IF EXISTS inventory_reservations_allocated_quantity_ck;
 
 ALTER TABLE inventory.inventory_reservations
   ADD CONSTRAINT inventory_reservations_allocated_quantity_ck
   CHECK (allocated_quantity <= reserved_quantity);
 
 ALTER TABLE inventory.inventory_reservations
+  DROP CONSTRAINT IF EXISTS inventory_reservations_priority_ck;
+
+ALTER TABLE inventory.inventory_reservations
   ADD CONSTRAINT inventory_reservations_priority_ck
   CHECK (reservation_priority >= 0);
+
+ALTER TABLE inventory.inventory_reservations
+  DROP CONSTRAINT IF EXISTS inventory_reservations_version_ck;
 
 ALTER TABLE inventory.inventory_reservations
   ADD CONSTRAINT inventory_reservations_version_ck
@@ -147,12 +171,21 @@ ALTER TABLE inventory.inventory_balances
   ADD COLUMN IF NOT EXISTS quantity_consumed numeric(14,3) not null default 0;
 
 ALTER TABLE inventory.inventory_balances
+  DROP CONSTRAINT IF EXISTS inventory_balances_allocated_nonnegative_ck;
+
+ALTER TABLE inventory.inventory_balances
   ADD CONSTRAINT inventory_balances_allocated_nonnegative_ck
   CHECK (quantity_allocated >= 0);
 
 ALTER TABLE inventory.inventory_balances
+  DROP CONSTRAINT IF EXISTS inventory_balances_consumed_nonnegative_ck;
+
+ALTER TABLE inventory.inventory_balances
   ADD CONSTRAINT inventory_balances_consumed_nonnegative_ck
   CHECK (quantity_consumed >= 0);
+
+ALTER TABLE inventory.inventory_balances
+  DROP CONSTRAINT IF EXISTS inventory_balances_allocated_quantity_ck;
 
 ALTER TABLE inventory.inventory_balances
   ADD CONSTRAINT inventory_balances_allocated_quantity_ck

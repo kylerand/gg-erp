@@ -12,7 +12,7 @@ This document defines an MVP-simple rollout sequence for the existing migration 
 
 1. Aurora PostgreSQL Serverless v2 is the system of record (single writer, one tenant in MVP).
 2. `0002_canonical_erp_domain.sql` is authoritative and currently replaces `0001` placeholder tables.
-3. Seed logic must be idempotent (`INSERT ... ON CONFLICT DO NOTHING/UPDATE`) and rerunnable.
+3. Seed logic must be idempotent and rerunnable while staying compatible with the active Lambda migration runner.
 4. Production rollback priority is data safety over fast in-place reversal.
 5. Most high-volume tables are append-only or status-append patterns (ledger, outbox, audit, event inbox).
 
@@ -59,10 +59,11 @@ This pattern minimizes lock risk and keeps Aurora Serverless v2 ACU scaling beha
 2. **Quiesce writers**: disable worker consumers and put API writes into maintenance/read-only mode.
 3. **Take a cluster snapshot** (or confirm PITR window and restore runbook).
 4. **Run migrations through a single migrator** with lock/statement timeouts configured.
-5. **Run verification queries** (table existence, constraints, critical index existence, seed cardinality).
-6. **Run idempotent seed script** after schema success.
-7. **Re-enable workers first**, then API writes, then full traffic.
-8. **Observe for one release window** (error rate, lock waits, queue depth, publish retry growth).
+5. **Verify a fresh deploy path** in staging or a throwaway database when migration tooling changes.
+6. **Run verification queries** (table existence, constraints, critical index existence, seed cardinality).
+7. **Run idempotent seed script** after schema success.
+8. **Re-enable workers first**, then API writes, then full traffic.
+9. **Observe for one release window** (error rate, lock waits, queue depth, publish retry growth).
 
 ### Rollback approach
 

@@ -232,8 +232,8 @@
       </header>
 
       <div class="summary">
-        <div class="metric"><strong>17</strong><span>Tracked delivery slices</span></div>
-        <div class="metric"><strong>16</strong><span>Done</span></div>
+        <div class="metric"><strong>18</strong><span>Tracked delivery slices</span></div>
+        <div class="metric"><strong>17</strong><span>Done</span></div>
         <div class="metric"><strong>1</strong><span>In progress</span></div>
         <div class="metric"><strong>0</strong><span>Not started</span></div>
       </div>
@@ -487,6 +487,17 @@
                 scaffold deploy-schema alignment.
               </td>
               <td>Run staging seed verification during cutover rehearsal; seed stock bins after deploy-schema alignment.</td>
+            </tr>
+            <tr>
+              <td>Fresh Prisma deploy reliability</td>
+              <td><span class="pill done">Done</span></td>
+              <td>
+                The inventory reservation storage migration now drops duplicate check constraints before
+                re-adding them, the Prisma migration integrity script rejects unsafe duplicate
+                inline/add-constraint patterns, and a throwaway Postgres deploy applied all 29
+                migrations from an empty database.
+              </td>
+              <td>Keep fresh-deploy verification in release checks when migration tooling changes.</td>
             </tr>
             <tr>
               <td>Admin configuration catalog</td>

@@ -1,8 +1,6 @@
-import { readFile } from 'node:fs/promises';
 import type { PrismaClient } from '@prisma/client';
 import type { SanitizedPart } from '../sanitize/sanitize-export.js';
-import { sanitizeExport } from '../sanitize/sanitize-export.js';
-import type { ShopMonkeyExport } from '../connectors/shopmonkey-api.connector.js';
+import { readShopMonkeySource } from './shopmonkey-source.js';
 import { isAlreadyImported, recordImportMapping } from './idempotency.js';
 import { createBatch, completeBatch, recordRawRecord, recordError } from './loader.js';
 import type { LoadResult } from './loader.js';
@@ -23,9 +21,7 @@ export async function runWaveC(
 ): Promise<LoadResult> {
   const batchId = await createBatch(prisma, 'C', sourceFile);
 
-  const raw = await readFile(sourceFile, 'utf8');
-  const exportData: ShopMonkeyExport = JSON.parse(raw);
-  const report = sanitizeExport(exportData, sourceFile);
+  const { report } = await readShopMonkeySource(sourceFile);
   const parts: SanitizedPart[] = report.parts;
 
   let inserted = 0;

@@ -15,6 +15,7 @@
     "fetch-shopmonkey": "tsx src/cli/fetch-shopmonkey.ts",
     "sanitize-shopmonkey": "tsx src/cli/sanitize-shopmonkey.ts",
     "validate-cutover": "tsx src/cli/validate-cutover-preflight.ts",
+    "rehearse-cutover": "tsx src/cli/run-isolated-rehearsal.ts",
     "load-shopmonkey": "tsx --env-file=../../.env src/cli/load-shopmonkey.ts",
     "migrate": "tsx --env-file=../../.env src/cli/run-wave.ts"
   },

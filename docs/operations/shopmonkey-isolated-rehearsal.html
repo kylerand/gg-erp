@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ShopMonkey Isolated Rehearsal</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #1f2933;
+        --muted: #697386;
+        --line: #d8dee9;
+        --brand: #b1581b;
+        --pass: #11734b;
+        --warn: #a15c00;
+        --fail: #b42318;
+      }
+      body {
+        margin: 0;
+        background: #f7f4ed;
+        color: var(--ink);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      main {
+        max-width: 1160px;
+        margin: 0 auto;
+        padding: 32px 20px 48px;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        align-items: flex-start;
+        margin-bottom: 24px;
+      }
+      h1 {
+        margin: 0;
+        font-size: clamp(28px, 4vw, 44px);
+        line-height: 1.05;
+      }
+      h2 {
+        margin: 0 0 12px;
+        font-size: 18px;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .stamp,
+      .metric,
+      section {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+      .stamp {
+        padding: 10px 12px;
+        color: var(--muted);
+        font-size: 13px;
+        white-space: nowrap;
+      }
+      .summary {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+      .metric {
+        padding: 16px;
+      }
+      .metric strong {
+        display: block;
+        font-size: 28px;
+      }
+      .metric span {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      section {
+        padding: 20px;
+        margin-bottom: 18px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th,
+      td {
+        border-bottom: 1px solid var(--line);
+        padding: 10px 8px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      tr:last-child td {
+        border-bottom: 0;
+      }
+      code {
+        white-space: normal;
+      }
+      .pill {
+        display: inline-flex;
+        border: 1px solid currentColor;
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .pass {
+        color: var(--pass);
+      }
+      .warn {
+        color: var(--warn);
+      }
+      .fail {
+        color: var(--fail);
+      }
+      ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+      li + li {
+        margin-top: 8px;
+      }
+      @media (max-width: 780px) {
+        header,
+        .summary {
+          display: block;
+        }
+        .stamp,
+        .metric {
+          margin-top: 12px;
+        }
+        table {
+          display: block;
+          overflow-x: auto;
+          white-space: nowrap;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p class="muted">Disposable database load evidence</p>
+          <h1>ShopMonkey Isolated Rehearsal</h1>
+          <p class="muted">Source: packages/migration/shopmonkey-sanitized-1773274402708.json (sanitized-report)</p>
+        </div>
+        <div class="stamp">Generated: 2026-06-01T06:06:17.157Z</div>
+      </header>
+
+      <div class="summary">
+        <div class="metric"><strong class="warn">WARN</strong><span>Overall status</span></div>
+        <div class="metric"><strong>5</strong><span>Passed entity gates</span></div>
+        <div class="metric"><strong>1,021</strong><span>Imported rows</span></div>
+        <div class="metric"><strong>disposable-docker</strong><span>Database mode</span></div>
+      </div>
+
+      <section>
+        <h2>Entity Reconciliation</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Entity</th>
+              <th>Status</th>
+              <th>Source</th>
+              <th>Expected</th>
+              <th>Imported</th>
+              <th>Mappings</th>
+              <th>Detail</th>
+            </tr>
+          </thead>
+          <tbody>
+        <tr>
+          <td>Employees</td>
+          <td><span class="pill pass">PASS</span></td>
+          <td>28</td>
+          <td>28</td>
+          <td>28</td>
+          <td>28</td>
+          <td>Employees loaded 28/28 rows with 28 external ID mappings.</td>
+        </tr>
+        <tr>
+          <td>Customers</td>
+          <td><span class="pill pass">PASS</span></td>
+          <td>447</td>
+          <td>447</td>
+          <td>447</td>
+          <td>447</td>
+          <td>Customers loaded 447/447 rows with 447 external ID mappings.</td>
+        </tr>
+        <tr>
+          <td>Vehicles</td>
+          <td><span class="pill pass">PASS</span></td>
+          <td>56</td>
+          <td>56</td>
+          <td>56</td>
+          <td>56</td>
+          <td>Vehicles loaded 56/56 rows with 56 external ID mappings.</td>
+        </tr>
+        <tr>
+          <td>Work Orders</td>
+          <td><span class="pill pass">PASS</span></td>
+          <td>465</td>
+          <td>465</td>
+          <td>465</td>
+          <td>465</td>
+          <td>Work Orders loaded 465/465 rows with 465 external ID mappings.</td>
+        </tr>
+        <tr>
+          <td>Vendors</td>
+          <td><span class="pill pass">PASS</span></td>
+          <td>25</td>
+          <td>25</td>
+          <td>25</td>
+          <td>25</td>
+          <td>Vendors loaded 25/25 rows with 25 external ID mappings.</td>
+        </tr>
+        <tr>
+          <td>Parts</td>
+          <td><span class="pill warn">WARN</span></td>
+          <td>0</td>
+          <td>0</td>
+          <td>0</td>
+          <td>0</td>
+          <td>Parts is absent from this export; confirm this is intentional.</td>
+        </tr>
+        <tr>
+          <td>Purchase Orders</td>
+          <td><span class="pill warn">WARN</span></td>
+          <td>0</td>
+          <td>0</td>
+          <td>0</td>
+          <td>0</td>
+          <td>Purchase Orders is absent from this export; confirm this is intentional.</td>
+        </tr></tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Commands</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Step</th>
+              <th>Status</th>
+              <th>Exit</th>
+              <th>Duration</th>
+              <th>Command</th>
+            </tr>
+          </thead>
+          <tbody>
+        <tr>
+          <td>Start disposable PostgreSQL</td>
+          <td><span class="pill pass">PASS</span></td>
+          <td>0</td>
+          <td>0.2s</td>
+          <td><code>docker run -d --name gg-erp-shopmonkey-rehearsal-1780293969859-7e7bcd7b -p 127.0.0.1::5432 postgres:16-alpine</code></td>
+        </tr>
+        <tr>
+          <td>Apply Prisma migrations</td>
+          <td><span class="pill pass">PASS</span></td>
+          <td>0</td>
+          <td>0.8s</td>
+          <td><code>npm run db:deploy --workspace=packages/db</code></td>
+        </tr>
+        <tr>
+          <td>Run ShopMonkey loader</td>
+          <td><span class="pill pass">PASS</span></td>
+          <td>0</td>
+          <td>4.9s</td>
+          <td><code>npx tsx packages/migration/src/cli/load-shopmonkey.ts packages/migration/shopmonkey-sanitized-1773274402708.json</code></td>
+        </tr></tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Supporting Counts</h2>
+        <table>
+          <tbody>
+        <tr>
+          <td>Work order operations</td>
+          <td>0</td>
+        </tr>
+        <tr>
+          <td>Work order part lines</td>
+          <td>0</td>
+        </tr>
+        <tr>
+          <td>Migration batches</td>
+          <td>8</td>
+        </tr>
+        <tr>
+          <td>Migration errors</td>
+          <td>0</td>
+        </tr></tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Next Actions</h2>
+        <ul><li>Review warning coverage: Parts, Purchase Orders.</li><li>Rerun the isolated rehearsal before loading any shared staging or production database.</li></ul>
+      </section>
+    </main>
+  </body>
+</html>

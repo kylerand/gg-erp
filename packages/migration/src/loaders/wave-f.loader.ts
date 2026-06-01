@@ -1,9 +1,7 @@
-import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import type { SanitizedVendor, SanitizedPurchaseOrder } from '../sanitize/sanitize-export.js';
-import { sanitizeExport } from '../sanitize/sanitize-export.js';
-import type { ShopMonkeyExport } from '../connectors/shopmonkey-api.connector.js';
+import { readShopMonkeySource } from './shopmonkey-source.js';
 import { isAlreadyImported, recordImportMapping } from './idempotency.js';
 import { createBatch, completeBatch, recordRawRecord, recordError } from './loader.js';
 import type { LoadResult } from './loader.js';
@@ -24,9 +22,7 @@ export async function runWaveF(
   sourceFile: string,
   dryRun = false,
 ): Promise<{ vendors: LoadResult; purchaseOrders: LoadResult }> {
-  const raw = await readFile(sourceFile, 'utf8');
-  const exportData: ShopMonkeyExport = JSON.parse(raw);
-  const report = sanitizeExport(exportData, sourceFile);
+  const { report } = await readShopMonkeySource(sourceFile);
 
   // ── Pass 1: Vendors ────────────────────────────────────────────────────────
   const vendorBatchId = await createBatch(prisma, 'F', sourceFile);

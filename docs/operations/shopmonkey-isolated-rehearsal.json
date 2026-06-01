@@ -1,0 +1,130 @@
+{
+  "generatedAt": "2026-06-01T06:06:17.157Z",
+  "sourceFile": "packages/migration/shopmonkey-sanitized-1773274402708.json",
+  "sourceKind": "sanitized-report",
+  "database": {
+    "mode": "disposable-docker",
+    "image": "postgres:16-alpine",
+    "keptContainer": false
+  },
+  "overallStatus": "WARN",
+  "commands": [
+    {
+      "name": "Start disposable PostgreSQL",
+      "command": "docker run -d --name gg-erp-shopmonkey-rehearsal-1780293969859-7e7bcd7b -p 127.0.0.1::5432 postgres:16-alpine",
+      "status": "PASS",
+      "exitCode": 0,
+      "durationMs": 187
+    },
+    {
+      "name": "Apply Prisma migrations",
+      "command": "npm run db:deploy --workspace=packages/db",
+      "status": "PASS",
+      "exitCode": 0,
+      "durationMs": 827
+    },
+    {
+      "name": "Run ShopMonkey loader",
+      "command": "npx tsx packages/migration/src/cli/load-shopmonkey.ts packages/migration/shopmonkey-sanitized-1773274402708.json",
+      "status": "PASS",
+      "exitCode": 0,
+      "durationMs": 4877
+    }
+  ],
+  "entities": [
+    {
+      "key": "users",
+      "label": "Employees",
+      "required": true,
+      "sourceRows": 28,
+      "sourceSkipped": 0,
+      "importedRows": 28,
+      "mappedRows": 28,
+      "expectedRows": 28,
+      "status": "PASS",
+      "detail": "Employees loaded 28/28 rows with 28 external ID mappings."
+    },
+    {
+      "key": "customers",
+      "label": "Customers",
+      "required": true,
+      "sourceRows": 447,
+      "sourceSkipped": 0,
+      "importedRows": 447,
+      "mappedRows": 447,
+      "expectedRows": 447,
+      "status": "PASS",
+      "detail": "Customers loaded 447/447 rows with 447 external ID mappings."
+    },
+    {
+      "key": "vehicles",
+      "label": "Vehicles",
+      "required": true,
+      "sourceRows": 56,
+      "sourceSkipped": 0,
+      "importedRows": 56,
+      "mappedRows": 56,
+      "expectedRows": 56,
+      "status": "PASS",
+      "detail": "Vehicles loaded 56/56 rows with 56 external ID mappings."
+    },
+    {
+      "key": "orders",
+      "label": "Work Orders",
+      "required": true,
+      "sourceRows": 465,
+      "sourceSkipped": 0,
+      "importedRows": 465,
+      "mappedRows": 465,
+      "expectedRows": 465,
+      "status": "PASS",
+      "detail": "Work Orders loaded 465/465 rows with 465 external ID mappings."
+    },
+    {
+      "key": "vendors",
+      "label": "Vendors",
+      "required": true,
+      "sourceRows": 25,
+      "sourceSkipped": 0,
+      "importedRows": 25,
+      "mappedRows": 25,
+      "expectedRows": 25,
+      "status": "PASS",
+      "detail": "Vendors loaded 25/25 rows with 25 external ID mappings."
+    },
+    {
+      "key": "parts",
+      "label": "Parts",
+      "required": false,
+      "sourceRows": 0,
+      "sourceSkipped": 0,
+      "importedRows": 0,
+      "mappedRows": 0,
+      "expectedRows": 0,
+      "status": "WARN",
+      "detail": "Parts is absent from this export; confirm this is intentional."
+    },
+    {
+      "key": "purchaseOrders",
+      "label": "Purchase Orders",
+      "required": false,
+      "sourceRows": 0,
+      "sourceSkipped": 0,
+      "importedRows": 0,
+      "mappedRows": 0,
+      "expectedRows": 0,
+      "status": "WARN",
+      "detail": "Purchase Orders is absent from this export; confirm this is intentional."
+    }
+  ],
+  "supportingCounts": {
+    "Work order operations": 0,
+    "Work order part lines": 0,
+    "Migration batches": 8,
+    "Migration errors": 0
+  },
+  "nextActions": [
+    "Review warning coverage: Parts, Purchase Orders.",
+    "Rerun the isolated rehearsal before loading any shared staging or production database."
+  ]
+}

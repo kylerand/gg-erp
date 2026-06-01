@@ -11,6 +11,7 @@ const migrationDirectories = migrationEntries
   .filter((entry) => entry.isDirectory())
   .map((entry) => entry.name)
   .sort();
+const legacyDollarQuotedMigrations = new Set(['0002_work_orders_vertical_slice']);
 
 if (migrationDirectories.length === 0) {
   throw new Error(`No migration directories found in ${migrationsDir}.`);
@@ -40,6 +41,12 @@ for (const migrationDirectory of migrationDirectories) {
   const migrationSql = await readFile(migrationSqlPath, 'utf8');
   if (!migrationSql.trim()) {
     throw new Error(`migration.sql in "${migrationDirectory}" is empty.`);
+  }
+  if (!legacyDollarQuotedMigrations.has(migrationDirectory) && /\bDO\s+\$\$/i.test(migrationSql)) {
+    throw new Error(
+      `migration.sql in "${migrationDirectory}" uses a dollar-quoted DO block, ` +
+        'which is incompatible with the Lambda migration runner semicolon splitter.',
+    );
   }
 
   allMigrationSql.push(migrationSql);

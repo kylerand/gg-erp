@@ -1,37 +1,15 @@
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_type t
-    JOIN pg_namespace n ON n.oid = t.typnamespace
-    WHERE n.nspname = 'planning'
-      AND t.typname = 'BuildConfigurationStatus'
-  ) THEN
-    CREATE TYPE planning."BuildConfigurationStatus" AS ENUM (
-      'DRAFT',
-      'LOCKED',
-      'RELEASED',
-      'SUPERSEDED'
-    );
-  END IF;
-END $$;
+CREATE TYPE planning."BuildConfigurationStatus" AS ENUM (
+  'DRAFT',
+  'LOCKED',
+  'RELEASED',
+  'SUPERSEDED'
+);
 
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_type t
-    JOIN pg_namespace n ON n.oid = t.typnamespace
-    WHERE n.nspname = 'planning'
-      AND t.typname = 'BomStatus'
-  ) THEN
-    CREATE TYPE planning."BomStatus" AS ENUM (
-      'DRAFT',
-      'APPROVED',
-      'OBSOLETE'
-    );
-  END IF;
-END $$;
+CREATE TYPE planning."BomStatus" AS ENUM (
+  'DRAFT',
+  'APPROVED',
+  'OBSOLETE'
+);
 
 CREATE TABLE IF NOT EXISTS planning.build_configurations (
   id uuid primary key default gen_random_uuid(),

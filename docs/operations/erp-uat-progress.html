@@ -233,16 +233,16 @@
 
       <div class="summary">
         <div class="metric"><strong>22</strong><span>Tracked delivery slices</span></div>
-        <div class="metric"><strong>20</strong><span>Done</span></div>
-        <div class="metric"><strong>1</strong><span>In progress</span></div>
+        <div class="metric"><strong>21</strong><span>Done</span></div>
+        <div class="metric"><strong>0</strong><span>In progress</span></div>
         <div class="metric"><strong>1</strong><span>Blocked</span></div>
       </div>
 
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: accounting reversals and period locks are being added on top of the
-          deployed trial-balance and period-close readiness report from posted internal journals.
+          Current focus: accounting document depth and external close-package delivery can now
+          build on deployed journals, trial balance, reversals, and period locks.
           ShopMonkey cutover readiness remains blocked on missing parts and purchase-order source
           exports.
         </p>
@@ -429,17 +429,18 @@
             </tr>
             <tr>
               <td>Accounting period controls</td>
-              <td><span class="pill doing">In progress</span></td>
+              <td><span class="pill done">Done</span></td>
               <td>
-                This branch adds persisted accounting period locks, close-readiness-gated period
-                locking, locked-period enforcement for journal posting, and a live journal reversal
-                action that creates offsetting journal lines while marking the original journal
-                reversed. <code>/accounting/ledger</code> now has period inputs, recent locks, a
+                Persisted accounting period locks, close-readiness-gated period locking,
+                locked-period enforcement for journal posting, and live journal reversals are
+                deployed. <code>/accounting/ledger</code> has period inputs, recent locks, a
                 lock-period action, and row-level reverse actions for eligible posted journals.
+                Live smoke confirms the three protected routes reach the API authorizer, and API
+                smoke has no deployed-route exception for them.
               </td>
               <td>
-                Pass PR CI/QA, deploy the three new accounting routes, live-smoke them, then remove
-                the pending-deploy QA route exceptions.
+                Add richer invoice/payment document lifecycle and close-package export delivery
+                after close policy is chosen.
               </td>
             </tr>
             <tr>

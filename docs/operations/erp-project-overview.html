@@ -431,9 +431,9 @@
                 before shared staging or production cutover.
               </li>
               <li>
-                Planning now has first-pass routing/job-card masters, but still needs effective
-                dating, costing, and change-control guardrails before it matches ERPNext-style
-                manufacturing depth.
+                Planning now has routing/job-card masters with effective windows, costing metadata,
+                and QC/evidence seeding, but still needs engineering change-control guardrails
+                before it matches ERPNext-style manufacturing depth.
               </li>
               <li>
                 Accounting is still integration-first; internal GL, financial reports, and ledger
@@ -600,22 +600,23 @@
               manual stock adjustments, stock transfer posting, cycle-count batch posting, and
               drill-through are live. Reservation, release, issue, adjustment, transfer, and
               cycle-count variance writes now append immutable ledger consequences. Build BOM
-              authoring now lives in Planning; broader item editing, routing, and cost rollups are
-              the next practical gaps.
+              authoring and route-step standard labor costing now live in Planning; broader item
+              editing and accounting valuation rollups are the next practical gaps.
             </p>
           </div>
 
           <div class="module-card">
             <header>
               <h3>Planning Masters</h3>
-              <span class="pill doing">64%</span>
+              <span class="pill doing">68%</span>
             </header>
-            <div class="bar warn"><span style="width: 64%"></span></div>
+            <div class="bar warn"><span style="width: 68%"></span></div>
             <p>
               Build package selection no longer depends only on historical work orders. Operators
               can author build configurations, lock/release them, create BOM revisions from active
-              parts, approve BOMs, and publish approved pairs into the package catalog. Remaining
-              depth is costing, engineering change control, effective dates, and quality gates.
+              parts, approve BOMs, publish approved pairs into the package catalog, and attach
+              effective-dated costed job-card routes that seed execution operations and QC gates.
+              Remaining depth is engineering change control and approval history.
             </p>
           </div>
 
@@ -715,16 +716,17 @@
               <td>Latest production baseline</td>
               <td><span class="pill done">Merged</span></td>
               <td>
-                <code>origin/main</code> is at <code>e2891fd</code>, from PR 154: planning
-                routing-template and job-card masters.
+                <code>origin/main</code> is at <code>c24b41c</code>, from PR 155: routing-template
+                route QA allowance cleanup after PR 154 deployed.
               </td>
             </tr>
             <tr>
               <td>Recent pipeline health</td>
               <td><span class="pill done">Green</span></td>
               <td>
-                Latest main CI, QA, Pages, and CD runs completed successfully after PR 154 merged.
-                Latest scheduled QA on May 21, 2026 also succeeded.
+                Latest main CI, QA, and Pages runs completed successfully after PR 155 merged; PR
+                154 CD also completed successfully. Latest scheduled QA on May 21, 2026 also
+                succeeded.
               </td>
             </tr>
             <tr>
@@ -777,9 +779,8 @@
             in live UAT runs.
           </li>
           <li>
-            <strong>Deepen planning execution:</strong> extend routing/job-card templates with
-            effective dating, costing, quality gates, and engineering change control around released
-            configurations and approved BOMs.
+            <strong>Deepen planning execution:</strong> add engineering change control and approval
+            history around released configurations, approved BOMs, and active routing templates.
           </li>
           <li>
             <strong>Move toward ERP ledgers:</strong> start internal accounting ledger design and

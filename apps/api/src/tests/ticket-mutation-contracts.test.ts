@@ -205,7 +205,10 @@ test('createWoOrderHandler uses active routing template steps when supplied', as
     operationName: string;
     requiredSkillCode: string;
     estimatedMinutes: number;
+    routingTemplateStepId?: string | null;
+    standardLaborCostCents?: number;
   }> = [];
+  let qcGateRows: Array<{ gateLabel: string; isCritical: boolean }> = [];
 
   const tx = {
     workOrder: {
@@ -246,6 +249,12 @@ test('createWoOrderHandler uses active routing template steps when supplied', as
     woPartLine: {
       async createMany() {
         return { count: 1 };
+      },
+    },
+    workOrderQcGate: {
+      async createMany(args: { data: typeof qcGateRows }) {
+        qcGateRows = args.data;
+        return { count: args.data.length };
       },
     },
     woStatusHistory: {
@@ -294,6 +303,8 @@ test('createWoOrderHandler uses active routing template steps when supplied', as
             routeName: 'GG4 Street Build',
             routeVersion: 1,
             templateStatus: 'ACTIVE',
+            effectiveFrom: '2026-01-01T00:00:00.000Z',
+            effectiveTo: null,
           },
         ];
       }
@@ -306,7 +317,11 @@ test('createWoOrderHandler uses active routing template steps when supplied', as
             operationName: 'Frame assembly',
             workstationCode: 'BAY-1',
             estimatedMinutes: 75,
+            laborRateCents: 9000,
             requiredSkillCode: 'MECHANICAL',
+            jobCardTitle: 'Frame job card',
+            qcRequired: true,
+            evidenceRequired: true,
           },
         ];
       }
@@ -350,6 +365,13 @@ test('createWoOrderHandler uses active routing template steps when supplied', as
     assert.equal(operationRows[0]?.sequenceNo, 10);
     assert.equal(operationRows[0]?.requiredSkillCode, 'MECHANICAL');
     assert.equal(operationRows[0]?.estimatedMinutes, 75);
+    assert.equal(operationRows[0]?.routingTemplateStepId, '00000000-0000-4000-8000-000000000108');
+    assert.equal(operationRows[0]?.standardLaborCostCents, 11250);
+    assert.equal(qcGateRows.length, 2);
+    assert.equal(qcGateRows[0]?.gateLabel, 'Frame job card QC');
+    assert.equal(qcGateRows[0]?.isCritical, true);
+    assert.equal(qcGateRows[1]?.gateLabel, 'Frame job card evidence');
+    assert.equal(qcGateRows[1]?.isCritical, false);
   } finally {
     setTicketHandlerPrismaForTests(undefined);
   }

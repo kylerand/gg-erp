@@ -456,6 +456,7 @@ export interface RoutingTemplateStepInput {
   operationName: string;
   workstationCode?: string;
   estimatedMinutes: number;
+  laborRateCents?: number;
   requiredSkillCode?: string;
   jobCardTitle?: string;
   jobCardInstructions?: string;
@@ -471,6 +472,8 @@ export interface RoutingTemplateStep {
   operationName: string;
   workstationCode?: string;
   estimatedMinutes: number;
+  laborRateCents?: number;
+  laborCostCents: number;
   requiredSkillCode?: string;
   jobCardTitle?: string;
   jobCardInstructions?: string;
@@ -496,6 +499,7 @@ export interface RoutingTemplate {
   version: number;
   stepCount: number;
   estimatedMinutes: number;
+  estimatedLaborCostCents: number;
   steps: RoutingTemplateStep[];
 }
 
@@ -765,6 +769,7 @@ export async function listRoutingTemplates(
     search?: string;
     status?: RoutingTemplateStatus;
     buildConfigurationId?: string;
+    effectiveOn?: string;
     limit?: number;
     offset?: number;
   },
@@ -774,6 +779,7 @@ export async function listRoutingTemplates(
   if (params?.search) qs.set('search', params.search);
   if (params?.status) qs.set('status', params.status);
   if (params?.buildConfigurationId) qs.set('buildConfigurationId', params.buildConfigurationId);
+  if (params?.effectiveOn) qs.set('effectiveOn', params.effectiveOn);
   if (params?.limit) qs.set('limit', String(params.limit));
   if (params?.offset) qs.set('offset', String(params.offset));
   return apiFetch(

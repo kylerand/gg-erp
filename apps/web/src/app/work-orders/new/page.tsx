@@ -67,6 +67,12 @@ function buildPackageOption(pkg: WorkOrderBuildPackage): BuildPackageOption {
 }
 
 function routingTemplateOption(template: RoutingTemplate): RoutingTemplateOption {
+  const cost =
+    template.estimatedLaborCostCents > 0
+      ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
+          template.estimatedLaborCostCents / 100,
+        )
+      : undefined;
   return {
     id: template.id,
     stepCount: template.stepCount,
@@ -76,6 +82,7 @@ function routingTemplateOption(template: RoutingTemplate): RoutingTemplateOption
       template.configurationCode,
       `${template.stepCount} steps`,
       `${template.estimatedMinutes} min`,
+      cost,
     ]
       .filter(Boolean)
       .join(' · '),
@@ -133,6 +140,7 @@ export default function NewWorkOrderPage() {
         {
           search: routingTemplateSearch || undefined,
           status: 'ACTIVE',
+          effectiveOn: new Date().toISOString(),
           limit: 100,
         },
         { allowMockFallback: false },

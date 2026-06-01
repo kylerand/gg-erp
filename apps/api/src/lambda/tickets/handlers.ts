@@ -132,6 +132,8 @@ interface ReleasedRoutingTemplateHeaderRow {
   routeName: string;
   routeVersion: number;
   templateStatus: string;
+  effectiveFrom: Date | string;
+  effectiveTo: Date | string | null;
 }
 
 interface ReleasedRoutingTemplateStepRow {
@@ -141,7 +143,11 @@ interface ReleasedRoutingTemplateStepRow {
   operationName: string;
   workstationCode: string | null;
   estimatedMinutes: number;
+  laborRateCents: number | null;
   requiredSkillCode: string | null;
+  jobCardTitle: string | null;
+  qcRequired: boolean;
+  evidenceRequired: boolean;
 }
 
 interface ExecutionWorkOrderRecord {
@@ -159,6 +165,19 @@ interface ExecutionWorkOrderRecord {
   completedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+interface PendingQcGateRow {
+  id: string;
+  workOrderId: string;
+  taskId: null;
+  gateLabel: string;
+  isCritical: boolean;
+  result: null;
+  failureNote: null;
+  reviewedBy: null;
+  reviewedAt: null;
+  createdAt: Date;
 }
 
 function stageSortKey(stage: string): number {
@@ -194,6 +213,11 @@ function requestedBuildQuantity(row: ReleasedBuildPackageLineRow): number {
   const baseQuantity = numberFromDb(row.quantityPerUnit);
   const scrapFactor = numberFromDb(row.scrapFactor);
   return Math.round(baseQuantity * (1 + scrapFactor) * 1000) / 1000;
+}
+
+function standardLaborCostCents(estimatedMinutes: number, laborRateCents: number | null): number {
+  if (laborRateCents == null) return 0;
+  return Math.round((estimatedMinutes / 60) * laborRateCents);
 }
 
 function toExecutionWorkOrderResponse(order: ExecutionWorkOrderRecord) {
@@ -342,7 +366,9 @@ export const createWoOrderHandler = wrapHandler(
           rt.route_code AS "routeCode",
           rt.route_name AS "routeName",
           rt.route_version AS "routeVersion",
-          rt.template_status::text AS "templateStatus"
+          rt.template_status::text AS "templateStatus",
+          rt.effective_from AS "effectiveFrom",
+          rt.effective_to AS "effectiveTo"
         FROM planning.routing_templates rt
         WHERE rt.id = ${routingTemplate.value}::uuid
           AND (
@@ -362,6 +388,20 @@ export const createWoOrderHandler = wrapHandler(
           templateStatus: routingHeader.templateStatus,
         });
       }
+      const routeEffectiveFrom = new Date(routingHeader.effectiveFrom);
+      const routeEffectiveTo = routingHeader.effectiveTo ? new Date(routingHeader.effectiveTo) : null;
+      if (routeEffectiveFrom > new Date()) {
+        return jsonResponse(409, {
+          message: 'Routing template is not effective yet.',
+          effectiveFrom: routeEffectiveFrom.toISOString(),
+        });
+      }
+      if (routeEffectiveTo && routeEffectiveTo <= new Date()) {
+        return jsonResponse(409, {
+          message: 'Routing template effective window has ended.',
+          effectiveTo: routeEffectiveTo.toISOString(),
+        });
+      }
       routingSteps = await db.$queryRaw<ReleasedRoutingTemplateStepRow[]>`
         SELECT
           id::text AS "id",
@@ -370,7 +410,11 @@ export const createWoOrderHandler = wrapHandler(
           operation_name AS "operationName",
           workstation_code AS "workstationCode",
           estimated_minutes AS "estimatedMinutes",
-          required_skill_code AS "requiredSkillCode"
+          labor_rate_cents AS "laborRateCents",
+          required_skill_code AS "requiredSkillCode",
+          job_card_title AS "jobCardTitle",
+          qc_required AS "qcRequired",
+          evidence_required AS "evidenceRequired"
         FROM planning.routing_template_steps
         WHERE routing_template_id = ${routingTemplate.value}::uuid
         ORDER BY sequence_no ASC
@@ -448,6 +492,11 @@ export const createWoOrderHandler = wrapHandler(
               operationName: step.operationName,
               requiredSkillCode: step.requiredSkillCode ?? 'BUILD',
               estimatedMinutes: step.estimatedMinutes,
+              routingTemplateStepId: step.id,
+              standardLaborCostCents: standardLaborCostCents(
+                step.estimatedMinutes,
+                step.laborRateCents,
+              ),
               operationStatus: 'READY' as const,
               correlationId: ctx.correlationId,
               createdAt: now,
@@ -476,6 +525,8 @@ export const createWoOrderHandler = wrapHandler(
                 operationName: `${stageLabel(stage)} build`,
                 requiredSkillCode: BUILD_STAGE_SKILL[stage] ?? BUILD_STAGE_SKILL.GENERAL,
                 estimatedMinutes: Math.max(30, stageLines.length * 30),
+                routingTemplateStepId: null,
+                standardLaborCostCents: 0,
                 operationStatus: 'READY' as const,
                 correlationId: ctx.correlationId,
                 createdAt: now,
@@ -508,6 +559,38 @@ export const createWoOrderHandler = wrapHandler(
         updatedAt: now,
       };
     });
+    const qcGateRows: PendingQcGateRow[] = [];
+    for (const step of routingSteps) {
+      const label = step.jobCardTitle?.trim() || step.operationName;
+      if (step.qcRequired) {
+        qcGateRows.push({
+          id: randomUUID(),
+          workOrderId,
+          taskId: null,
+          gateLabel: `${label} QC`,
+          isCritical: true,
+          result: null,
+          failureNote: null,
+          reviewedBy: null,
+          reviewedAt: null,
+          createdAt: now,
+        });
+      }
+      if (step.evidenceRequired) {
+        qcGateRows.push({
+          id: randomUUID(),
+          workOrderId,
+          taskId: null,
+          gateLabel: `${label} evidence`,
+          isCritical: false,
+          result: null,
+          failureNote: null,
+          reviewedBy: null,
+          reviewedAt: null,
+          createdAt: now,
+        });
+      }
+    }
 
     const created = await db.$transaction(async (tx) => {
       await tx.workOrder.create({
@@ -567,6 +650,9 @@ export const createWoOrderHandler = wrapHandler(
 
       await tx.woOperation.createMany({ data: operationRows });
       await tx.woPartLine.createMany({ data: partRows });
+      if (qcGateRows.length > 0) {
+        await tx.workOrderQcGate.createMany({ data: qcGateRows });
+      }
       await tx.woStatusHistory.create({
         data: {
           id: randomUUID(),

@@ -51,6 +51,7 @@ interface DraftRoutingStep {
   operationName: string;
   workstationCode: string;
   estimatedMinutes: string;
+  laborRateDollars: string;
   requiredSkillCode: string;
   jobCardTitle: string;
   jobCardInstructions: string;
@@ -109,12 +110,30 @@ function defaultRoutingStep(): DraftRoutingStep {
     operationName: '',
     workstationCode: '',
     estimatedMinutes: '60',
+    laborRateDollars: '',
     requiredSkillCode: '',
     jobCardTitle: '',
     jobCardInstructions: '',
     qcRequired: false,
     evidenceRequired: false,
   };
+}
+
+function dollarsToCents(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) : undefined;
+}
+
+function formatCurrencyCents(value: number): string {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value / 100);
+}
+
+function dateInputToIso(value: string, exclusiveEnd = false): string {
+  const date = new Date(`${value}T00:00:00`);
+  if (exclusiveEnd) date.setDate(date.getDate() + 1);
+  return date.toISOString();
 }
 
 export default function BuildPackagesPage() {
@@ -146,6 +165,8 @@ export default function BuildPackagesPage() {
   const [routeCode, setRouteCode] = useState('');
   const [routeName, setRouteName] = useState('');
   const [routeBuildConfigurationId, setRouteBuildConfigurationId] = useState('');
+  const [routeEffectiveFrom, setRouteEffectiveFrom] = useState('');
+  const [routeEffectiveTo, setRouteEffectiveTo] = useState('');
   const [routeNotes, setRouteNotes] = useState('');
   const [routingSteps, setRoutingSteps] = useState<DraftRoutingStep[]>([defaultRoutingStep()]);
 
@@ -334,6 +355,7 @@ export default function BuildPackagesPage() {
         operationName: step.operationName.trim(),
         workstationCode: step.workstationCode.trim() || undefined,
         estimatedMinutes: Number(step.estimatedMinutes),
+        laborRateCents: dollarsToCents(step.laborRateDollars),
         requiredSkillCode: step.requiredSkillCode.trim() || undefined,
         jobCardTitle: step.jobCardTitle.trim() || undefined,
         jobCardInstructions: step.jobCardInstructions.trim() || undefined,
@@ -352,6 +374,10 @@ export default function BuildPackagesPage() {
       toast.error('Each routing step needs a code, name, and estimated minutes.');
       return;
     }
+    if (routingSteps.some((step) => step.laborRateDollars && dollarsToCents(step.laborRateDollars) === undefined)) {
+      toast.error('Labor rates must be zero or greater.');
+      return;
+    }
 
     setSaving(true);
     try {
@@ -359,6 +385,8 @@ export default function BuildPackagesPage() {
         routeCode: routeCode.trim(),
         routeName: routeName.trim(),
         buildConfigurationId: routeBuildConfigurationId || undefined,
+        effectiveFrom: routeEffectiveFrom ? dateInputToIso(routeEffectiveFrom) : undefined,
+        effectiveTo: routeEffectiveTo ? dateInputToIso(routeEffectiveTo, true) : undefined,
         notes: routeNotes.trim() || undefined,
         steps,
       });
@@ -366,6 +394,8 @@ export default function BuildPackagesPage() {
       setRouteCode('');
       setRouteName('');
       setRouteBuildConfigurationId('');
+      setRouteEffectiveFrom('');
+      setRouteEffectiveTo('');
       setRouteNotes('');
       setRoutingSteps([defaultRoutingStep()]);
       reload();
@@ -692,6 +722,26 @@ export default function BuildPackagesPage() {
                   ))}
                 </select>
               </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="routeEffectiveFrom">Effective From</Label>
+                  <Input
+                    id="routeEffectiveFrom"
+                    type="date"
+                    value={routeEffectiveFrom}
+                    onChange={(event) => setRouteEffectiveFrom(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="routeEffectiveTo">Effective Through</Label>
+                  <Input
+                    id="routeEffectiveTo"
+                    type="date"
+                    value={routeEffectiveTo}
+                    onChange={(event) => setRouteEffectiveTo(event.target.value)}
+                  />
+                </div>
+              </div>
               <div className="space-y-2">
                 <Label>Job Card Steps</Label>
                 {routingSteps.map((step, index) => (
@@ -759,6 +809,25 @@ export default function BuildPackagesPage() {
                         }
                         placeholder="BAY-1"
                       />
+                      <Input
+                        aria-label="Labor rate dollars per hour"
+                        value={step.laborRateDollars}
+                        onChange={(event) =>
+                          setRoutingSteps((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? { ...item, laborRateDollars: event.target.value }
+                                : item,
+                            ),
+                          )
+                        }
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="95.00 / hr"
+                      />
+                    </div>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
                       <Input
                         aria-label="Skill code"
                         value={step.requiredSkillCode}
@@ -1062,7 +1131,12 @@ export default function BuildPackagesPage() {
                     </div>
                     <div className="text-xs text-[#6E625A]">
                       v{template.routeVersion} · {statusText(template.templateStatus)} ·{' '}
-                      {template.stepCount} steps · {template.estimatedMinutes} min
+                      {template.stepCount} steps · {template.estimatedMinutes} min ·{' '}
+                      {formatCurrencyCents(template.estimatedLaborCostCents)}
+                    </div>
+                    <div className="mt-1 text-xs text-[#6E625A]">
+                      Effective {formatDate(template.effectiveFrom)}
+                      {template.effectiveTo ? ` to ${formatDate(template.effectiveTo)}` : ''}
                     </div>
                     {template.configurationCode && (
                       <div className="mt-1 text-xs text-[#6E625A]">
@@ -1095,6 +1169,11 @@ export default function BuildPackagesPage() {
                       {step.sequenceNo}. {step.operationCode}
                     </span>{' '}
                     {step.operationName} · {step.estimatedMinutes} min
+                    {step.laborCostCents > 0 && (
+                      <span className="ml-2 text-[#6E625A]">
+                        {formatCurrencyCents(step.laborCostCents)}
+                      </span>
+                    )}
                     {(step.qcRequired || step.evidenceRequired) && (
                       <span className="ml-2 text-[#6E625A]">
                         {[step.qcRequired ? 'QC' : '', step.evidenceRequired ? 'Evidence' : '']

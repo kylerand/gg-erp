@@ -62,18 +62,33 @@ export interface BuildConfiguration {
   state: BuildConfigurationState;
   selectedOptions: string[];
   notes?: string;
+  changeEvents: BuildConfigurationChangeEvent[];
   createdBy: string;
   createdAt: string;
   updatedAt: string;
 }
 
+export interface BuildConfigurationChangeEvent {
+  id: string;
+  buildConfigurationId: string;
+  changeKind: 'CREATED' | 'LOCKED' | 'RELEASED' | 'SUPERSEDED';
+  previousStatus?: BuildConfigurationState;
+  newStatus: BuildConfigurationState;
+  changeSummary: string;
+  approvalNote?: string;
+  approvedAt?: string;
+  appliedBy?: string;
+  createdAt: string;
+}
+
 export const BuildConfigurationDesign: EntityDesign<BuildConfigurationState> = {
   entity: 'BuildConfiguration',
   purpose: 'Versioned build definition for a vehicle before production release.',
-  keyFields: ['id', 'vehicleId', 'version', 'state', 'selectedOptions', 'createdBy', 'updatedAt'],
+  keyFields: ['id', 'vehicleId', 'version', 'state', 'selectedOptions', 'changeEvents', 'createdBy', 'updatedAt'],
   requiredIndexes: [
     { name: 'build_configs_vehicle_version_uk', fields: ['vehicleId', 'version'], unique: true },
-    { name: 'build_configs_state_idx', fields: ['state'] }
+    { name: 'build_configs_state_idx', fields: ['state'] },
+    { name: 'build_config_change_events_config_time_idx', fields: ['buildConfigurationId', 'createdAt'] }
   ],
   lifecycle: {
     initial: BuildConfigurationState.DRAFT,
@@ -98,9 +113,15 @@ export const BuildConfigurationDesign: EntityDesign<BuildConfigurationState> = {
   },
   businessRules: [
     'Only one RELEASED configuration may exist per vehicle.',
-    'LOCKED/RELEASED configurations are immutable except supersede metadata.'
+    'LOCKED/RELEASED configurations are immutable except supersede metadata.',
+    'Configuration lock, release, and supersede actions require approval evidence in append-only change history.'
   ],
-  emittedEvents: ['build.configuration.saved', 'build.configuration.locked', 'build.configuration.released'],
+  emittedEvents: [
+    'build.configuration.saved',
+    'build.configuration.locked',
+    'build.configuration.released',
+    'build.configuration.change_recorded'
+  ],
   apiOperations: [
     { method: 'POST', path: '/planning/build-configurations', summary: 'Create build configuration' },
     {
@@ -130,17 +151,32 @@ export interface Bom {
   revision: number;
   state: BomState;
   lines: BomLine[];
+  changeEvents: BomChangeEvent[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface BomChangeEvent {
+  id: string;
+  bomId: string;
+  changeKind: 'CREATED' | 'APPROVED' | 'OBSOLETED';
+  previousStatus?: BomState;
+  newStatus: BomState;
+  changeSummary: string;
+  approvalNote?: string;
+  approvedAt?: string;
+  appliedBy?: string;
+  createdAt: string;
 }
 
 export const BomDesign: EntityDesign<BomState> = {
   entity: 'BOM',
   purpose: 'Material requirements definition tied to a released build configuration.',
-  keyFields: ['id', 'configId', 'revision', 'state', 'lines', 'updatedAt'],
+  keyFields: ['id', 'configId', 'revision', 'state', 'lines', 'changeEvents', 'updatedAt'],
   requiredIndexes: [
     { name: 'bom_config_revision_uk', fields: ['configId', 'revision'], unique: true },
-    { name: 'bom_state_idx', fields: ['state'] }
+    { name: 'bom_state_idx', fields: ['state'] },
+    { name: 'build_bom_change_events_bom_time_idx', fields: ['bomId', 'createdAt'] }
   ],
   lifecycle: {
     initial: BomState.DRAFT,
@@ -152,9 +188,10 @@ export const BomDesign: EntityDesign<BomState> = {
   },
   businessRules: [
     'Each partSkuId must be unique within a BOM revision.',
-    'quantityPerUnit > 0 and scrapFactor >= 0.'
+    'quantityPerUnit > 0 and scrapFactor >= 0.',
+    'BOM approval and obsolete actions require approval evidence in append-only change history.'
   ],
-  emittedEvents: ['bom.created', 'bom.approved', 'bom.obsolete'],
+  emittedEvents: ['bom.created', 'bom.approved', 'bom.obsolete', 'bom.change_recorded'],
   apiOperations: [
     { method: 'POST', path: '/planning/boms', summary: 'Create BOM draft' },
     { method: 'PATCH', path: '/planning/boms/:id/approve', summary: 'Approve BOM revision' }

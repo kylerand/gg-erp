@@ -414,6 +414,23 @@ export interface BuildConfiguration {
   createdAt: string;
   updatedAt: string;
   version: number;
+  changeEvents: BuildConfigurationChangeEvent[];
+}
+
+export interface BuildConfigurationChangeEvent {
+  id: string;
+  buildConfigurationId: string;
+  configurationCode: string;
+  configurationVersion: number;
+  changeKind: 'CREATED' | 'LOCKED' | 'RELEASED' | 'SUPERSEDED';
+  previousStatus?: BuildConfigurationStatus;
+  newStatus: BuildConfigurationStatus;
+  changeSummary: string;
+  approvalNote?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  appliedBy?: string;
+  createdAt: string;
 }
 
 export interface BomLineInput {
@@ -448,6 +465,24 @@ export interface BuildBom {
   updatedAt: string;
   version: number;
   lines: BomLine[];
+  changeEvents: BomChangeEvent[];
+}
+
+export interface BomChangeEvent {
+  id: string;
+  bomId: string;
+  bomCode: string;
+  buildConfigurationId: string;
+  revision: number;
+  changeKind: 'CREATED' | 'APPROVED' | 'OBSOLETED';
+  previousStatus?: BomStatus;
+  newStatus: BomStatus;
+  changeSummary: string;
+  approvalNote?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  appliedBy?: string;
+  createdAt: string;
 }
 
 export interface RoutingTemplateStepInput {
@@ -724,13 +759,14 @@ export async function createBuildConfiguration(
 export async function transitionBuildConfiguration(
   id: string,
   state: BuildConfigurationStatus,
+  input?: { approvalNote?: string; changeSummary?: string },
 ): Promise<BuildConfiguration> {
   const data = await apiFetch<{ buildConfiguration: BuildConfiguration }>(
     `/planning/build-configurations/${encodeURIComponent(id)}/state`,
     {
       method: 'PATCH',
       headers: mutationHeaders(),
-      body: JSON.stringify({ state }),
+      body: JSON.stringify({ state, ...input }),
     },
   );
   return data.buildConfiguration;
@@ -769,13 +805,16 @@ export async function createBom(input: CreateBomInput): Promise<BuildBom> {
   return data.bom;
 }
 
-export async function approveBom(id: string): Promise<BuildBom> {
+export async function approveBom(
+  id: string,
+  input?: { approvalNote?: string; changeSummary?: string },
+): Promise<BuildBom> {
   const data = await apiFetch<{ bom: BuildBom }>(
     `/planning/boms/${encodeURIComponent(id)}/approve`,
     {
       method: 'PATCH',
       headers: mutationHeaders(),
-      body: JSON.stringify({}),
+      body: JSON.stringify(input ?? {}),
     },
   );
   return data.bom;

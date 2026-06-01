@@ -233,18 +233,18 @@
 
       <div class="summary">
         <div class="metric"><strong>19</strong><span>Tracked delivery slices</span></div>
-        <div class="metric"><strong>18</strong><span>Done</span></div>
-        <div class="metric"><strong>1</strong><span>In progress</span></div>
+        <div class="metric"><strong>19</strong><span>Done</span></div>
+        <div class="metric"><strong>0</strong><span>In progress</span></div>
         <div class="metric"><strong>0</strong><span>Not started</span></div>
       </div>
 
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: closing the remaining customer/dealer relationship model and validating
-          ShopMonkey cutover readiness around the now-actionable operator workflows.
+          Current focus: validating ShopMonkey cutover readiness around the now-actionable
+          operator workflows and keeping new mutation slices on the same live-data standard.
         </p>
-        <div class="progress" aria-label="99 percent complete"><div style="width: 99%"></div></div>
+        <div class="progress" aria-label="100 percent complete"><div style="width: 100%"></div></div>
       </section>
 
       <section>
@@ -347,17 +347,18 @@
             </tr>
             <tr>
               <td>Customer and dealer ops</td>
-              <td><span class="pill doing">In progress</span></td>
+              <td><span class="pill done">Done</span></td>
               <td>
-                Customer/dealer landing cards use strict live totals for customers, customer-backed
-                dealer accounts, and customer-cart ownership links. Dealer accounts now read live
-                company customer records instead of an empty placeholder API. Relationship rows
-                resolve live cart vehicles to customer display context and deep-link to customer
-                lookup and prefilled work-order creation.
+                Customer/dealer landing cards use strict live totals for customers, dedicated
+                dealer accounts, and explicit dealer relationship rows. Dealer accounts read the
+                `customers.dealer_accounts` model with customer profile context, and relationship
+                rows read `customers.customer_dealer_relationships` with dealer, customer, cart,
+                status, and action-link context. Deploy migrations seed existing commercial
+                customer profiles and dealer-owned carts into the dedicated model.
               </td>
               <td>
-                Add a dedicated dealer relationship model once commercial account ownership rules
-                are finalized.
+                Add create/update dealer assignment workflows once relationship ownership mutation
+                rules are finalized.
               </td>
             </tr>
             <tr>
@@ -483,7 +484,8 @@
                 Baseline roles, permissions, role-permission grants, stock locations, stock bins, and
                 `MVP_BASELINE` planning constraints are seeded through idempotent reference
                 migrations. Stock bins now exist in the deploy-applied Prisma schema with day-one
-                `GENERAL`, `INBOUND`, and bay `WIP` bins.
+                `GENERAL`, `INBOUND`, and bay `WIP` bins, and dealer account/relationship bootstrap
+                rows are derived from live commercial customer and cart ownership records.
               </td>
               <td>Run staging seed verification during cutover rehearsal.</td>
             </tr>

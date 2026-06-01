@@ -27,7 +27,7 @@ This document defines an MVP-simple rollout sequence for the existing migration 
 | Stage 0: preflight | release checklist + DB snapshot | Validate ownership, migration lock strategy, backup readiness | Prevents ambiguous ownership/race conditions during DDL rollout |
 | Stage 1: bootstrap | `0001_initial_schema.sql` | Create baseline schemas/tables for first environment bootstrap only | Keeps migration history complete and reproducible from an empty cluster |
 | Stage 2: canonical | `0002_canonical_erp_domain.sql` | Install canonical domain model and append-only controls | Aligns runtime schema with architecture docs and domain boundaries |
-| Stage 3: seed reference data | `apps/api/src/migrations/0005_seed_reference_data.sql` and deploy-applied Prisma seed migrations | Insert minimal roles, permissions, locations, stock bins, and planning defaults | Enables immediate operability without leaking environment-specific fixtures |
+| Stage 3: seed reference data | `apps/api/src/migrations/0005_seed_reference_data.sql` and deploy-applied Prisma seed migrations | Insert minimal roles, permissions, locations, stock bins, planning defaults, and dealer relationship bootstrap rows derived from live commercial customer records | Enables immediate operability without leaking environment-specific fixtures |
 | Stage 4+: additive evolution | `0006_*.sql` / later Prisma migrations onward | Expand/migrate/contract changes only | Enables safer zero/low-downtime schema evolution as live data volume grows |
 
 ### Important note on `0002`

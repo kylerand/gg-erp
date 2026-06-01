@@ -307,12 +307,19 @@ test('customer dealer ops views are backed by live customer and cart data', () =
     path.resolve(WEB_SRC_DIR, '../../../apps/api/src/lambda/identity/list-dealers.handler.ts'),
     'utf8',
   );
+  const dealerRelationshipHandlerSource = readFileSync(
+    path.resolve(
+      WEB_SRC_DIR,
+      '../../../apps/api/src/lambda/identity/list-dealer-relationships.handler.ts',
+    ),
+    'utf8',
+  );
 
   assert.deepEqual(
     [
       'listCustomers({ limit: 1, offset: 0 }, strictApiOptions)',
       'listDealers({ limit: 1, offset: 0 }, strictApiOptions)',
-      'listCartVehicles({ limit: 1, offset: 0 }, strictApiOptions)',
+      'listDealerRelationships({ limit: 1, offset: 0 }, strictApiOptions)',
       'relationshipTotal',
       "erpRoute('customer-relationship')",
     ].filter((snippet) => !hubSource.includes(snippet)),
@@ -331,8 +338,9 @@ test('customer dealer ops views are backed by live customer and cart data', () =
   );
   assert.deepEqual(
     [
-      'listCartVehicles({ limit: VEHICLE_LIMIT }, STRICT_LIVE_DATA)',
-      'listCustomers({ limit: CUSTOMER_LIMIT }, STRICT_LIVE_DATA)',
+      'listDealerRelationships(',
+      'STRICT_LIVE_DATA',
+      'dealerLookupHref',
       'workOrderHref',
       "erpRoute('create-work-order'",
       'customerLookupHref',
@@ -349,20 +357,32 @@ test('customer dealer ops views are backed by live customer and cart data', () =
   assert.deepEqual(
     [
       'export async function listDealers',
+      'export async function listDealerRelationships',
       'params?:',
       '/identity/dealers',
+      '/identity/dealer-relationships',
       'total: res.total',
     ].filter((snippet) => !apiClientSource.includes(snippet)),
     [],
   );
   assert.deepEqual(
     [
-      'getPrisma().customer.findMany',
-      'companyName: { not: null }',
+      'getPrisma().dealerAccount.findMany',
+      'include: { customer: true }',
       'serviceRelationship',
-      "source: 'customer-company'",
+      "source: 'dealer-account'",
       'total',
     ].filter((snippet) => !dealerHandlerSource.includes(snippet)),
+    [],
+  );
+  assert.deepEqual(
+    [
+      'getPrisma().dealerRelationship.findMany',
+      'dealerAccount: { include: { customer: true } }',
+      'cartVehicle: true',
+      "source: 'dealer-relationship'",
+      'total',
+    ].filter((snippet) => !dealerRelationshipHandlerSource.includes(snippet)),
     [],
   );
   assert.equal(dealersSource.includes('Add your first dealer'), false);

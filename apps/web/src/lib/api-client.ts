@@ -3027,6 +3027,7 @@ export async function getFailureSummary(options?: ApiDataOptions): Promise<Failu
 export interface Dealer {
   id: string;
   customerId?: string;
+  dealerCode?: string;
   name: string;
   primaryContact?: string;
   contactEmail?: string;
@@ -3034,6 +3035,8 @@ export interface Dealer {
   serviceRelationship: 'ACTIVE' | 'INACTIVE';
   customerState?: Customer['state'];
   territory?: string;
+  accountOwner?: string;
+  notes?: string;
   source?: string;
   updatedAt?: string;
 }
@@ -3052,6 +3055,59 @@ export async function listDealers(
   if (params?.offset) qs.set('offset', String(params.offset));
   const res = await apiFetch<{ items: Dealer[]; total: number } | Dealer[]>(
     `/identity/dealers${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    { items: [], total: 0 },
+    options,
+  );
+  return Array.isArray(res)
+    ? { items: res, total: res.length }
+    : { items: res.items ?? [], total: res.total ?? res.items?.length ?? 0 };
+}
+
+export interface DealerRelationship {
+  id: string;
+  dealerId: string;
+  dealerCustomerId: string;
+  dealerCode?: string;
+  dealerName: string;
+  serviceRelationship: 'ACTIVE' | 'INACTIVE';
+  territory?: string;
+  customerId: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone?: string;
+  customerState?: Customer['state'];
+  cartVehicleId?: string;
+  cartDisplayName?: string;
+  vin?: string;
+  serialNumber?: string;
+  cartState?: string;
+  relationshipType: 'ACCOUNT_OWNER' | 'SERVICING_DEALER' | 'BILLING_ACCOUNT' | 'WARRANTY_PROVIDER';
+  relationshipState: 'ACTIVE' | 'INACTIVE' | 'ENDED';
+  escalationOwner?: string;
+  notes?: string;
+  source?: string;
+  startedAt?: string;
+  endedAt?: string;
+  updatedAt?: string;
+}
+
+export async function listDealerRelationships(
+  params?: {
+    search?: string;
+    state?: DealerRelationship['relationshipState'];
+    limit?: number;
+    offset?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<{ items: DealerRelationship[]; total: number; limit?: number; offset?: number }> {
+  const qs = new URLSearchParams();
+  if (params?.search) qs.set('search', params.search);
+  if (params?.state) qs.set('state', params.state);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  const res = await apiFetch<{ items: DealerRelationship[]; total: number } | DealerRelationship[]>(
+    `/identity/dealer-relationships${qs.size ? `?${qs}` : ''}`,
     undefined,
     { items: [], total: 0 },
     options,

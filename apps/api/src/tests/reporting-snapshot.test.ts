@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import test, { mock } from 'node:test';
-import { getMissingReportingSnapshotKeys, type ErpReportingSnapshot } from '@gg-erp/domain';
 import {
+  getMissingReportingSnapshotKeys,
+  type ErpBlockedAlert,
+  type ErpBlockedAlertFeed,
+  type ErpReportingSnapshot,
+} from '@gg-erp/domain';
+import {
+  getBlockedAlertsHandler,
   getReportingSnapshotHandler,
   reportingSnapshotQueries,
   type ReportingBlockedWorkOrderRow,
@@ -19,6 +25,7 @@ function mockReportingQueries(overrides: {
   failedInvoiceSyncs?: number;
   overdueTraining?: number;
   deniedAuditEvents?: number;
+  blockedAlerts?: ErpBlockedAlert[];
 } = {}) {
   return [
     mock.method(
@@ -64,6 +71,11 @@ function mockReportingQueries(overrides: {
       'countDeniedAuditEvents',
       async () => overrides.deniedAuditEvents ?? 0,
     ),
+    mock.method(
+      reportingSnapshotQueries,
+      'listBlockedAlerts',
+      async () => overrides.blockedAlerts ?? [],
+    ),
   ];
 }
 
@@ -103,6 +115,50 @@ test('GET /reporting/snapshot returns live metrics for every report card', async
       Object.values(body.freshness).every((freshness) => freshness.status === 'LIVE'),
       'all mocked sources should be live',
     );
+  } finally {
+    for (const item of mocks) item.mock.restore();
+  }
+});
+
+test('GET /reporting/blocked-alerts returns unified blocker triage feed', async () => {
+  const blockedAlerts: ErpBlockedAlert[] = [
+    {
+      id: 'OPERATION:op-1',
+      sourceType: 'OPERATION',
+      sourceId: 'op-1',
+      workOrderId: 'wo-1',
+      workOrderNumber: 'WO-100',
+      workOrderTitle: 'Battery tray - Wiring',
+      customerReference: 'Pier Motorsports',
+      assetReference: 'Cart 42',
+      reason: 'Waiting on controller PO.',
+      reasonCode: 'WAITING_PARTS',
+      ownerRole: 'parts_coordinator',
+      ownerLabel: 'Parts Coordinator',
+      severity: 'P2',
+      ageMinutes: 90,
+      updatedAt: '2026-06-01T00:00:00.000Z',
+      nextAction: 'Confirm part availability, PO status, or substitution path.',
+      route: '/work-orders/wo-1',
+      actions: [{ label: 'Open work order', href: '/work-orders/wo-1' }],
+    },
+  ];
+  const mocks = mockReportingQueries({ blockedAlerts });
+
+  try {
+    const response = await getBlockedAlertsHandler({
+      httpMethod: 'GET',
+      path: '/reporting/blocked-alerts',
+      queryStringParameters: { limit: '25' },
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = JSON.parse(response.body) as ErpBlockedAlertFeed;
+    assert.equal(body.summary.total, 1);
+    assert.equal(body.summary.p2, 1);
+    assert.equal(body.summary.averageAgeMinutes, 90);
+    assert.equal(body.items[0].ownerLabel, 'Parts Coordinator');
+    assert.equal(body.items[0].route, '/work-orders/wo-1');
   } finally {
     for (const item of mocks) item.mock.restore();
   }

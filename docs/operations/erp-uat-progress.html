@@ -473,9 +473,15 @@
                 definitions, visible-report CSV export, saved-view CSV export, and copyable
                 drill-through links. `GET /reporting/snapshot` now backs report metrics with a
                 single live API contract carrying freshness, warnings, blocked work-order samples,
-                and cross-module metric values.
+                and cross-module metric values. `/reporting/blocked-alerts` now uses a strict live
+                blocked-alert feed across blocked work orders, blocked service operations, blocked
+                technician tasks, and short work-order part demand, with owner roles, age, next
+                action text, and direct links into work orders, dispatch, parts, and messages.
               </td>
-              <td>Add persisted report subscriptions and scheduled exports once subscription tables are designed.</td>
+              <td>
+                Add persisted report subscriptions, scheduled exports, and blocked-alert
+                acknowledge/escalate mutations once persistence is designed.
+              </td>
             </tr>
             <tr>
               <td>ShopMonkey cutover readiness</td>

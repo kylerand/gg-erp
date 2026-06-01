@@ -955,6 +955,14 @@ resource "aws_apigatewayv2_route" "reporting_snapshot" {
   authorizer_id      = local.authorizer_id
 }
 
+resource "aws_apigatewayv2_route" "reporting_blocked_alerts" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /reporting/blocked-alerts"
+  target             = "integrations/${aws_apigatewayv2_integration.reporting_snapshot.id}"
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorizer_id      = local.authorizer_id
+}
+
 # ─── Identity Lambda Functions ─────────────────────────────────────────────────
 
 resource "aws_lambda_function" "identity_me" {

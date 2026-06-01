@@ -1,5 +1,5 @@
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
-import type { ErpReportingSnapshot } from '@gg-erp/domain';
+import type { ErpBlockedAlertFeed, ErpReportingSnapshot } from '@gg-erp/domain';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
 const IS_AUTH_MOCK = process.env.NEXT_PUBLIC_AUTH_MODE === 'mock';
@@ -2728,6 +2728,20 @@ export async function getReportingSnapshot(
   options?: ApiDataOptions,
 ): Promise<ErpReportingSnapshot> {
   return apiFetch<ErpReportingSnapshot>('/reporting/snapshot', undefined, undefined, options);
+}
+
+export async function getBlockedAlerts(
+  params?: { limit?: number },
+  options?: ApiDataOptions,
+): Promise<ErpBlockedAlertFeed> {
+  const qs = new URLSearchParams();
+  if (params?.limit) qs.set('limit', String(params.limit));
+  return apiFetch<ErpBlockedAlertFeed>(
+    `/reporting/blocked-alerts${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    undefined,
+    options,
+  );
 }
 
 // ─── Reconciliation ──────────────────────────────────────────────────────────

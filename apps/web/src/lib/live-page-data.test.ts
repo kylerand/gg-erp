@@ -24,6 +24,7 @@ const truthCriticalPages = [
   'app/planning/build-packages/page.tsx',
   'app/planning/slots/page.tsx',
   'app/reporting/page.tsx',
+  'app/reporting/blocked-alerts/page.tsx',
   'app/admin/accounting/page.tsx',
   'app/admin/audit/page.tsx',
   'app/admin/integrations/page.tsx',
@@ -730,7 +731,7 @@ test('dashboard KPI cards deep-link to filtered destination views', () => {
     [
       'getLiveErpReports',
       'loadReportSignals',
-      "erpRoute('blocked-work', { status: 'BLOCKED' })",
+      "erpRoute('report-work-order-blockers')",
     ].filter((snippet) => !reportingSource.includes(snippet)),
     [],
   );
@@ -781,12 +782,13 @@ test('reporting catalog is registry-backed with filtered drill-through destinati
       'ReportCard',
       'getReportingSnapshot',
       'allowMockFallback: false',
+      "erpRoute('report-work-order-blockers')",
     ].filter((snippet) => !reportingSource.includes(snippet)),
     [],
   );
 
   assert.deepEqual(
-    ['ErpReportingSnapshot', '/reporting/snapshot'].filter(
+    ['ErpReportingSnapshot', 'ErpBlockedAlertFeed', '/reporting/snapshot', '/reporting/blocked-alerts'].filter(
       (snippet) => !apiClientSource.includes(snippet),
     ),
     [],
@@ -830,6 +832,66 @@ test('reporting catalog is registry-backed with filtered drill-through destinati
     [],
   );
   assert.equal(auditSource.includes('entityId.slice(0, 8)'), false);
+});
+
+test('blocked alerts page uses the live reporting triage feed', () => {
+  const blockedAlertsSource = readSource('app/reporting/blocked-alerts/page.tsx');
+  const apiClientSource = readSource('lib/api-client.ts');
+  const reportingHandlersSource = readFileSync(
+    path.resolve(WEB_SRC_DIR, '../../../apps/api/src/lambda/reporting/handlers.ts'),
+    'utf8',
+  );
+  const serverSource = readFileSync(
+    path.resolve(WEB_SRC_DIR, '../../../apps/api/src/server.ts'),
+    'utf8',
+  );
+  const terraformSource = readFileSync(
+    path.resolve(WEB_SRC_DIR, '../../../infra/terraform/modules/api-gateway-lambda/main.tf'),
+    'utf8',
+  );
+
+  assert.deepEqual(
+    [
+      'getBlockedAlerts({ limit: 50 }, STRICT_LIVE_DATA)',
+      'allowMockFallback: false',
+      'ownerLabel',
+      'nextAction',
+      'item.actions.map',
+    ].filter((snippet) => !blockedAlertsSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    ['export async function getBlockedAlerts', '/reporting/blocked-alerts'].filter(
+      (snippet) => !apiClientSource.includes(snippet),
+    ),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      'getBlockedAlertsHandler',
+      'listBlockedAlerts',
+      'PART_SHORTAGE',
+      'TECHNICIAN_TASK',
+      'WAITING_PARTS',
+    ].filter((snippet) => !reportingHandlersSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    ['getBlockedAlertsHandler', "pathname === '/reporting/blocked-alerts'"].filter(
+      (snippet) => !serverSource.includes(snippet),
+    ),
+    [],
+  );
+
+  assert.deepEqual(
+    ['reporting_blocked_alerts', 'GET /reporting/blocked-alerts'].filter(
+      (snippet) => !terraformSource.includes(snippet),
+    ),
+    [],
+  );
 });
 
 test('training content keeps notes, bookmarks, and media wired to live APIs', () => {

@@ -4783,3 +4783,64 @@ export async function getCopilotSession(
 ): Promise<{ id: string; messages: AgentChatMessage[] }> {
   return apiFetch(`/copilot/sessions/${id}`);
 }
+
+// ── Migration Cutover ──────────────────────────────────────────────────────
+
+export type MigrationBatchStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+
+export interface MigrationBatchSummary {
+  id: string;
+  wave: string;
+  sourceFile: string;
+  status: MigrationBatchStatus;
+  recordCount: number;
+  errorCount: number;
+  rawRecordCount: number;
+  migrationErrorCount: number;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  createdAt: string;
+}
+
+export interface MigrationErrorSummary {
+  id: string;
+  phase: string;
+  errorCode: string;
+  errorMessage: string;
+  retryable: boolean;
+  resolvedAt?: string | null;
+  createdAt: string;
+}
+
+export interface MigrationBatchDetail extends MigrationBatchSummary {
+  reconciliationResultCount: number;
+  recentErrors: MigrationErrorSummary[];
+  updatedAt: string;
+}
+
+export async function listMigrationBatches(
+  params?: { limit?: number; offset?: number },
+  options?: ApiDataOptions,
+): Promise<{ items: MigrationBatchSummary[]; total: number; limit: number; offset: number }> {
+  const qs = new URLSearchParams();
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  return apiFetch(
+    `/migration/batches${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    { items: [], total: 0, limit: params?.limit ?? 20, offset: params?.offset ?? 0 },
+    options,
+  );
+}
+
+export async function getMigrationBatch(
+  id: string,
+  options?: ApiDataOptions,
+): Promise<MigrationBatchDetail> {
+  return apiFetch<MigrationBatchDetail>(
+    `/migration/batches/${encodeURIComponent(id)}`,
+    undefined,
+    undefined,
+    options,
+  );
+}

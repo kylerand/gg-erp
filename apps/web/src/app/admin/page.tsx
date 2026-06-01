@@ -28,10 +28,10 @@ export default function AdminPage() {
     <div>
       <PageHeader
         title="Admin"
-        description={`${domains.length} live configuration domains for access, accounting, integrations, and audit`}
+        description={`${domains.length} live configuration domains for access, accounting, integrations, migration, and audit`}
       />
 
-      <section className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {domains.map((domain) => {
           const Icon = CATEGORY_ICONS[domain.category];
           return (

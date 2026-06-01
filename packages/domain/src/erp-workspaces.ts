@@ -531,6 +531,15 @@ export const ERP_WORKSPACES = [
         keywords: ['integration', 'quickbooks', 'google', 'settings'],
       },
       {
+        key: 'migration-cutover',
+        label: 'Migration Cutover',
+        description: 'Review ShopMonkey rehearsal status and cutover blockers.',
+        route: '/admin/migration',
+        status: 'live',
+        objectKey: 'migration-cutover',
+        keywords: ['migration', 'shopmonkey', 'cutover', 'backfill', 'rehearsal'],
+      },
+      {
         key: 'accounting-settings',
         label: 'Accounting Settings',
         description: 'Configure QuickBooks export mappings and tax codes.',

@@ -1019,10 +1019,12 @@ test('admin configuration catalog is registry-backed with live settings destinat
       'admin-config-user-access',
       'admin-config-accounting-settings',
       'admin-config-integration-health',
+      'admin-config-migration-cutover',
       'admin-config-audit-trail',
       '/admin/access',
       '/admin/accounting',
       '/admin/integrations',
+      '/admin/migration',
       '/admin/audit',
     ].filter((snippet) => !adminConfigSource.includes(snippet)),
     [],
@@ -1043,6 +1045,50 @@ test('admin configuration catalog is registry-backed with live settings destinat
     ['href="#"', 'TODO', 'placeholder'].filter(
       (snippet) => adminSource.includes(snippet) || adminConfigSource.includes(snippet),
     ),
+    [],
+  );
+});
+
+test('admin migration cutover page uses live batch evidence', () => {
+  const migrationSource = readSource('app/admin/migration/page.tsx');
+  const apiClientSource = readSource('lib/api-client.ts');
+  const adminConfigSource = readFileSync(
+    path.resolve(WEB_SRC_DIR, '../../../packages/domain/src/erp-admin-config.ts'),
+    'utf8',
+  );
+
+  assert.deepEqual(
+    [
+      'listMigrationBatches',
+      "allowMockFallback: false",
+      'Readiness Checks',
+      'Cutover Inspection',
+      "erpRoute('customer'",
+      "erpRoute('part'",
+      "erpRoute('work-order'",
+      "erpRoute('accounting-sync'",
+    ].filter((snippet) => !migrationSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      'export interface MigrationBatchSummary',
+      'export async function listMigrationBatches',
+      '/migration/batches',
+    ].filter((snippet) => !apiClientSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    ['admin-config-migration-cutover', 'migration-cutover', '/admin/migration'].filter(
+      (snippet) => !adminConfigSource.includes(snippet),
+    ),
+    [],
+  );
+
+  assert.deepEqual(
+    ['href="#"', 'TODO', 'placeholder'].filter((snippet) => migrationSource.includes(snippet)),
     [],
   );
 });

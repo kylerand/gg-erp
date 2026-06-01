@@ -52,6 +52,7 @@ test('registry route helper resolves module links and filtered routes', () => {
   assert.equal(getRequiredErpRoute('create-sales-opportunity'), '/sales/opportunities/new');
   assert.equal(getRequiredErpRoute('quickbooks-customer'), '/accounting/quickbooks/customers');
   assert.equal(getRequiredErpRoute('accounting-settings'), '/admin/accounting');
+  assert.equal(getRequiredErpRoute('migration-cutover'), '/admin/migration');
   assert.equal(
     getRequiredErpRoute('accounting-sync', { view: 'queue' }),
     '/accounting/sync?view=queue',
@@ -125,6 +126,9 @@ test('workspace navigation items include live links and quick actions', () => {
   );
   assert.ok(
     getErpWorkspaceNavigationItems('admin').some((item) => item.key === 'accounting-settings'),
+  );
+  assert.ok(
+    getErpWorkspaceNavigationItems('admin').some((item) => item.key === 'migration-cutover'),
   );
   assert.ok(
     getErpWorkspaceNavigationItems('reporting').some(

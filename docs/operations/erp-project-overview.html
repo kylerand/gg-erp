@@ -353,8 +353,8 @@
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 1, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 170</span>
-          <span class="chip">Active slice: Accounting reversals and period locks</span>
+          <span class="chip">Baseline: origin/main through PR 171</span>
+          <span class="chip">Active slice: Accounting document depth</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
@@ -453,9 +453,8 @@
                 lock workflows; invoice/payment document depth remains future maturity work.
               </li>
               <li>
-                API smoke route exceptions are back to zero on deployed main after PR 170. This
-                branch temporarily adds three pending-deploy accounting route exceptions for period
-                locks and journal reversals.
+                API smoke route exceptions are back to zero on deployed main after PR 171. Period
+                lock and journal reversal routes reached the protected live API authorizer path.
               </li>
             </ul>
           </div>
@@ -495,8 +494,8 @@
                 route misses.
               </td>
               <td>
-                Deploy accounting period controls, remove pending route exceptions after CD, and
-                run live UAT scripts by role.
+                Add accounting document depth, external close-package delivery, and run live UAT
+                scripts by role.
               </td>
             </tr>
             <tr>
@@ -530,8 +529,8 @@
               </td>
               <td>The app behaves like one ERP, not a collection of good module pages.</td>
               <td>
-                Deploy reversal and period-lock workflows, harden read models and freshness
-                signals, and complete setup/configuration domains.
+                Extend reversal and period-lock workflows into close-package delivery, harden read
+                models and freshness signals, and complete setup/configuration domains.
               </td>
             </tr>
             <tr>
@@ -738,9 +737,9 @@
               <td>Latest production baseline</td>
               <td><span class="pill done">Merged</span></td>
               <td>
-                <code>origin/main</code> is through PR 170 after the accounting trial-balance
-                deploy and route-allowlist cleanup. This branch adds accounting period locks and
-                journal reversals.
+                <code>origin/main</code> is through PR 171 after the accounting period-control
+                deploy. This cleanup branch removes the temporary QA route allowances so deployed
+                API smoke returns to zero known route exceptions.
               </td>
             </tr>
             <tr>
@@ -748,19 +747,17 @@
               <td><span class="pill done">Green</span></td>
               <td>
                 Latest main CI, QA smoke, QA coverage, Pages, and CD runs completed successfully
-                after PR 170 merged; CD was not needed for the docs/QA-only cleanup branch. The
-                latest CD path proved the accounting trial-balance route live at the protected API
-                authorizer path; this branch will require backend CD for the new period-control
-                routes.
+                after PR 171 merged. The latest CD path deployed accounting period locks, journal
+                reversals, database migrations, and Terraform routes; live smoke proved the new
+                routes reach the protected API authorizer path.
               </td>
             </tr>
             <tr>
               <td>Route/API surface</td>
               <td><span class="pill info">Broad</span></td>
               <td>
-                Current smoke discovery covers 189 deployed API routes after the accounting
-                trial-balance deploy and cleanup. This branch discovers 192 routes after adding
-                three accounting period-control routes.
+                Current smoke discovery covers 192 deployed API routes after the accounting
+                period-control deploy and cleanup.
               </td>
             </tr>
             <tr>
@@ -780,12 +777,10 @@
             </tr>
             <tr>
               <td>Known route exceptions</td>
-              <td><span class="pill watch">3 Pending Deploy</span></td>
+              <td><span class="pill done">0 Exceptions</span></td>
               <td>
-                <code>known-broken.json</code> contains short-lived pending-deploy entries for
-                <code>GET|POST /accounting/period-locks</code> and
-                <code>POST /accounting/journals/{journalId}/reverse</code>. Remove them after CD
-                deploys the Terraform routes and live smoke confirms requests reach Lambda.
+                <code>known-broken.json</code> is empty. API smoke should fail if any deployed route
+                regresses or if a fixed route remains incorrectly allowlisted.
               </td>
             </tr>
           </tbody>
@@ -809,11 +804,6 @@
             <strong>Deepen planning execution:</strong> add stateful package-level ECO sign-off or
             external review-pack delivery if the current route/configuration/BOM approval history,
             work-order provenance, and version diff workflows need a heavier change-control gate.
-          </li>
-          <li>
-            <strong>Deploy and clean accounting period controls:</strong> land the period-lock and
-            journal-reversal routes, prove CD/live smoke, then remove the pending-deploy QA route
-            exceptions.
           </li>
           <li>
             <strong>Deepen accounting documents:</strong> add richer invoice/payment document

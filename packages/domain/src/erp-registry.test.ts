@@ -11,8 +11,10 @@ import {
   getErpWorkspaceNavigationItems,
   getRequiredErpRoute,
   getLiveErpReports,
+  getLiveErpReportKeys,
   getLiveErpWorkspaceLinks,
   getLiveErpWorkspaces,
+  getMissingReportingSnapshotKeys,
   normalizeErpRoute,
   type ErpObjectDescriptor,
 } from './index.js';
@@ -167,6 +169,28 @@ test('live report catalog is routeable and references live registry sources', ()
       assert.ok(reportKeys.has(reportKey), `${view.key} references missing report ${reportKey}`);
     }
   }
+});
+
+test('reporting snapshot coverage helper requires every live report key', () => {
+  const reportKeys = getLiveErpReportKeys();
+  const coveredSnapshot = {
+    metrics: Object.fromEntries(
+      reportKeys.map((reportKey) => [
+        reportKey,
+        {
+          value: '0',
+          label: 'sample',
+          tone: 'neutral' as const,
+          generatedAt: '2026-05-31T00:00:00.000Z',
+          source: 'test',
+        },
+      ]),
+    ),
+    freshness: {},
+  };
+
+  assert.deepEqual(getMissingReportingSnapshotKeys(coveredSnapshot), []);
+  assert.deepEqual(getMissingReportingSnapshotKeys({ metrics: {}, freshness: {} }), reportKeys);
 });
 
 test('admin configuration catalog routes to live registry objects', () => {

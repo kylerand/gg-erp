@@ -35,6 +35,7 @@ const lambdas: LambdaEntry[] = [
 
   // workspace
   { context: 'workspace', handler: 'today', entry: 'apps/api/src/lambda/workspace/today.handler.ts' },
+  { context: 'workspace', handler: 'reporting-snapshot', entry: 'apps/api/src/lambda/reporting/snapshot.handler.ts' },
 
   // work-orders
   { context: 'work-orders', handler: 'create',     entry: 'apps/api/src/lambda/work-orders/create.handler.ts' },

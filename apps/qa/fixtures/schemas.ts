@@ -386,6 +386,37 @@ const accountingStatus = z.object({
   realmId: z.string().optional(),
 });
 
+const reportMetric = z.object({
+  value: z.string(),
+  label: z.string(),
+  tone: z.enum(['neutral', 'green', 'amber', 'red']),
+  generatedAt: isoDate,
+  source: z.string(),
+});
+
+const reportFreshness = z.object({
+  reportKey: z.string(),
+  source: z.string(),
+  status: z.enum(['LIVE', 'STALE', 'ERROR']),
+  generatedAt: isoDate,
+  lastSuccessfulAt: isoDate.optional(),
+  message: z.string().optional(),
+});
+
+const reportingSnapshot = z.object({
+  generatedAt: isoDate,
+  metrics: z.record(z.string(), reportMetric),
+  freshness: z.record(z.string(), reportFreshness),
+  blockedWorkOrders: z.array(
+    z.object({
+      id: z.string(),
+      workOrderNumber: z.string(),
+      title: z.string(),
+    }),
+  ),
+  warnings: z.array(z.object({ source: z.string(), message: z.string() })),
+});
+
 // ─── Route registry ───────────────────────────────────────────────────────
 // Map "METHOD /api/path/with/{placeholders}" → schema. The lookup helper
 // converts the template to a regex so /work-orders/abc-123 still matches.
@@ -470,6 +501,9 @@ const ROUTES: RouteEntry[] = [
   // Sales
   { method: 'GET', template: '/sales/opportunities', schema: paginated(opportunity) },
   { method: 'GET', template: '/sales/quotes', schema: paginated(quote) },
+
+  // Reporting
+  { method: 'GET', template: '/reporting/snapshot', schema: reportingSnapshot },
 
   // SOP / Training
   { method: 'GET', template: '/sop', schema: paginated(sopDocument) },

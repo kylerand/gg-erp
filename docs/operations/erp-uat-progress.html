@@ -242,7 +242,7 @@
         <h2>Overall Progress</h2>
         <p class="muted">
           Current focus: closing the remaining customer/dealer relationship model and hardening
-          production seed and reporting contracts around the now-actionable operator workflows.
+          production seed readiness around the now-actionable operator workflows.
         </p>
         <div class="progress" aria-label="98 percent complete"><div style="width: 98%"></div></div>
       </section>
@@ -468,11 +468,13 @@
               <td><span class="pill done">Done</span></td>
               <td>
                 `ERP_REPORTS` now feeds named report cards, workspace navigation, command palette
-                entries, category/search filters, live signals, filtered drill-through links, saved
-                report view definitions, visible-report CSV export, saved-view CSV export, and
-                copyable drill-through links.
+                entries, category/search filters, filtered drill-through links, saved report view
+                definitions, visible-report CSV export, saved-view CSV export, and copyable
+                drill-through links. `GET /reporting/snapshot` now backs report metrics with a
+                single live API contract carrying freshness, warnings, blocked work-order samples,
+                and cross-module metric values.
               </td>
-              <td>Add persisted report subscriptions when the reporting API is available.</td>
+              <td>Add persisted report subscriptions and scheduled exports once subscription tables are designed.</td>
             </tr>
             <tr>
               <td>Admin configuration catalog</td>

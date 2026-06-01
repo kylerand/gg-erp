@@ -346,38 +346,38 @@
         <h1>Golfin Garage ERP Project Overview</h1>
         <p class="lede">
           High-level status after the planning review-pack, accounting operational-ledger,
-          journal-posting, and trial-balance close-readiness slices. The app has moved past polished static screens into a usable
+          journal-posting, trial-balance close-readiness, and QA allowlist cleanup slices. The app has moved past polished static screens into a usable
           shop-ops ERP foundation, but ShopMonkey cutover remains blocked until complete parts and
           purchase-order source exports are captured.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 1, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 168</span>
-          <span class="chip">Active slice: Accounting trial balance and close readiness</span>
+          <span class="chip">Baseline: origin/main through PR 169</span>
+          <span class="chip">Active slice: Accounting reversals and period locks</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
 
       <div class="summary">
         <div class="metric">
-          <strong>79%</strong>
-          <span>Estimated production readiness for an internal ERP rollout.</span>
-          <div class="bar warn"><span style="width: 79%"></span></div>
-        </div>
-        <div class="metric">
-          <strong>92%</strong>
-          <span>Actionability remediation from the UAT plan.</span>
-          <div class="bar good"><span style="width: 92%"></span></div>
-        </div>
-        <div class="metric">
           <strong>80%</strong>
-          <span>Live workflow/API contract completeness.</span>
+          <span>Estimated production readiness for an internal ERP rollout.</span>
           <div class="bar warn"><span style="width: 80%"></span></div>
         </div>
         <div class="metric">
-          <strong>64%</strong>
+          <strong>93%</strong>
+          <span>Actionability remediation from the UAT plan.</span>
+          <div class="bar good"><span style="width: 93%"></span></div>
+        </div>
+        <div class="metric">
+          <strong>81%</strong>
+          <span>Live workflow/API contract completeness.</span>
+          <div class="bar warn"><span style="width: 81%"></span></div>
+        </div>
+        <div class="metric">
+          <strong>65%</strong>
           <span>ERPNext-style breadth: ledgers, lifecycle, setup, reports.</span>
-          <div class="bar risk"><span style="width: 64%"></span></div>
+          <div class="bar risk"><span style="width: 65%"></span></div>
         </div>
       </div>
 
@@ -447,14 +447,14 @@
               </li>
               <li>
                 Accounting is still integration-first, but ready operational ledger entries now
-                promote into first-party immutable journals and the active slice turns those
-                journals into a trial balance with close-readiness blockers. Reversals, period
-                locks, and invoice/payment document depth remain future maturity work.
+                promote into first-party immutable journals and those journals now feed a deployed
+                trial balance with close-readiness blockers. Reversals, period locks, and
+                invoice/payment document depth remain future maturity work.
               </li>
               <li>
-                API smoke route exceptions are back to zero on deployed main. This branch adds one
-                pending-deploy trial-balance report route exception that should be removed after CD
-                proves the new API Gateway route reaches Lambda.
+                API smoke route exceptions are back to zero on deployed main after the
+                trial-balance report route reached the live authorizer path and the QA allowlist was
+                cleaned up.
               </li>
             </ul>
           </div>
@@ -494,8 +494,8 @@
                 route misses.
               </td>
               <td>
-                Keep status docs current, remove the pending-deploy report route exception after
-                CD, and run live UAT scripts by role.
+                Keep status docs current, add accounting reversals and period locks, and run live
+                UAT scripts by role.
               </td>
             </tr>
             <tr>
@@ -529,8 +529,8 @@
               </td>
               <td>The app behaves like one ERP, not a collection of good module pages.</td>
               <td>
-                Deploy trial-balance close-readiness, harden read models and freshness signals,
-                and complete setup/configuration domains.
+                Extend trial-balance close-readiness into reversal and period-lock workflows,
+                harden read models and freshness signals, and complete setup/configuration domains.
               </td>
             </tr>
             <tr>
@@ -736,9 +736,9 @@
               <td>Latest production baseline</td>
               <td><span class="pill done">Merged</span></td>
               <td>
-                <code>origin/main</code> is through PR 168 after the accounting journal-posting
-                deploy and QA allowlist cleanup. This branch adds trial-balance and period-close
-                readiness reporting from posted internal journals.
+                <code>origin/main</code> is through PR 169 after the accounting trial-balance
+                deploy. This cleanup branch removes the temporary QA route allowance so deployed
+                API smoke returns to zero known route exceptions.
               </td>
             </tr>
             <tr>
@@ -746,18 +746,17 @@
               <td><span class="pill done">Green</span></td>
               <td>
                 Latest main CI, QA smoke, QA coverage, Pages, and CD runs completed successfully
-                after PR 168 merged. The latest CD path proved the accounting journal routes live;
-                this branch will require the same PR CI, main CD, live-smoke, and route-allowlist
-                cleanup loop.
+                after PR 169 merged. The latest CD path proved the accounting trial-balance route
+                live at the protected API authorizer path; this branch verifies API smoke with no
+                temporary route allowance.
               </td>
             </tr>
             <tr>
               <td>Route/API surface</td>
               <td><span class="pill info">Broad</span></td>
               <td>
-                Current smoke discovery covers 188 deployed API routes after the accounting journal
-                cleanup. This branch adds one accounting report route, bringing local discovery to
-                189 before CD deploys it.
+                Current smoke discovery covers 189 deployed API routes after the accounting
+                trial-balance deploy and cleanup.
               </td>
             </tr>
             <tr>
@@ -771,17 +770,16 @@
               <td>
                 The registry defines live accounting-ledger and accounting-journal objects and
                 Accounting workspace links in addition to the existing planning, inventory,
-                reporting, and integration destinations. The trial-balance report lives inside the
-                accounting ledger workspace.
+                reporting, and integration destinations. The trial-balance report now lives inside
+                the accounting ledger workspace.
               </td>
             </tr>
             <tr>
               <td>Known route exceptions</td>
-              <td><span class="pill watch">1 Pending Deploy</span></td>
+              <td><span class="pill done">0 Exceptions</span></td>
               <td>
-                <code>known-broken.json</code> contains short-lived pending-deploy entries for
-                <code>GET /accounting/reports/trial-balance</code>. Remove it after CD deploys the
-                Terraform route and live smoke confirms requests reach Lambda.
+                <code>known-broken.json</code> is empty. API smoke should fail if any deployed route
+                regresses or if a fixed route remains incorrectly allowlisted.
               </td>
             </tr>
           </tbody>
@@ -805,10 +803,6 @@
             <strong>Deepen planning execution:</strong> add stateful package-level ECO sign-off or
             external review-pack delivery if the current route/configuration/BOM approval history,
             work-order provenance, and version diff workflows need a heavier change-control gate.
-          </li>
-          <li>
-            <strong>Deploy and clean trial balance:</strong> land the accounting report route,
-            prove CD/live smoke, then remove the pending-deploy QA route exception.
           </li>
           <li>
             <strong>Add accounting reversals and period locks:</strong> use posted journals and the

@@ -52,6 +52,40 @@ describe('ShopMonkey isolated rehearsal report', () => {
     expect(report.entities[0].status).toBe('FAIL');
   });
 
+  it('fails production cutover when required parts or purchase order source rows are missing', () => {
+    const report = buildIsolatedRehearsalReport({
+      generatedAt: '2026-06-01T00:00:00.000Z',
+      sourceFile: 'shopmonkey-sanitized.json',
+      sourceKind: 'sanitized-report',
+      database: { mode: 'disposable-docker', image: 'postgres:16-alpine', keptContainer: false },
+      commands: [],
+      entities: [
+        {
+          key: 'parts',
+          label: 'Parts',
+          required: true,
+          sourceRows: 0,
+          sourceSkipped: 0,
+          importedRows: 0,
+          mappedRows: 0,
+        },
+        {
+          key: 'purchaseOrders',
+          label: 'Purchase Orders',
+          required: true,
+          sourceRows: 0,
+          sourceSkipped: 0,
+          importedRows: 0,
+          mappedRows: 0,
+        },
+      ],
+    });
+
+    expect(report.overallStatus).toBe('FAIL');
+    expect(report.entities.map((entity) => entity.status)).toEqual(['FAIL', 'FAIL']);
+    expect(report.nextActions).toContain('Repair failed import coverage: Parts, Purchase Orders.');
+  });
+
   it('fails when reference seed gates are missing required rows', () => {
     const report = buildIsolatedRehearsalReport({
       generatedAt: '2026-06-01T00:00:00.000Z',

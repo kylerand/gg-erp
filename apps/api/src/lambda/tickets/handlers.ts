@@ -70,6 +70,412 @@ function compactUuidIds(ids: string[]): string[] {
   return Array.from(new Set(ids.filter((id) => UUID_RE.test(id))));
 }
 
+const BUILD_OPERATION_STAGE_ORDER = [
+  'FABRICATION',
+  'FRAME',
+  'WIRING',
+  'PARTS_PREP',
+  'FINAL_ASSEMBLY',
+  'GENERAL',
+] as const;
+
+const BUILD_STAGE_SKILL: Record<string, string> = {
+  FABRICATION: 'FABRICATION',
+  FRAME: 'MECHANICAL',
+  WIRING: 'ELECTRICAL',
+  PARTS_PREP: 'PARTS',
+  FINAL_ASSEMBLY: 'ASSEMBLY',
+  GENERAL: 'BUILD',
+};
+
+interface CreateExecutionWorkOrderInput {
+  workOrderNumber: string;
+  vehicleId: string;
+  customerId?: string;
+  buildConfigurationId: string;
+  bomId: string;
+  title?: string;
+  description?: string;
+  scheduledDate?: string;
+  priority?: number;
+  stockLocationId?: string;
+}
+
+interface ReleasedBuildPackageHeaderRow {
+  buildConfigurationId: string;
+  configurationCode: string;
+  configurationVersion: number;
+  configurationStatus: string;
+  vehicleId: string;
+  vehicleDisplayName: string;
+  customerId: string | null;
+  customerDisplayName: string | null;
+  bomId: string;
+  bomCode: string;
+  revision: number;
+  bomStatus: string;
+}
+
+interface ReleasedBuildPackageLineRow {
+  partId: string;
+  partSku: string;
+  partName: string;
+  quantityPerUnit: unknown;
+  scrapFactor: unknown;
+  installStage: string | null;
+}
+
+interface ExecutionWorkOrderRecord {
+  id: string;
+  workOrderNumber: string;
+  title: string;
+  description?: string | null;
+  customerReference?: string | null;
+  assetReference?: string | null;
+  status: string;
+  priority: number;
+  stockLocationId?: string | null;
+  openedAt: Date;
+  dueAt?: Date | null;
+  completedAt?: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+function stageSortKey(stage: string): number {
+  const idx = BUILD_OPERATION_STAGE_ORDER.indexOf(stage as (typeof BUILD_OPERATION_STAGE_ORDER)[number]);
+  return idx === -1 ? BUILD_OPERATION_STAGE_ORDER.length : idx;
+}
+
+function stageLabel(stage: string): string {
+  return stage
+    .toLowerCase()
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function parseUuidField(value: unknown, fieldName: string): { ok: true; value: string } | { ok: false; message: string } {
+  if (typeof value !== 'string' || !value.trim()) {
+    return { ok: false, message: `${fieldName} is required.` };
+  }
+  const trimmed = value.trim();
+  if (!UUID_RE.test(trimmed)) {
+    return { ok: false, message: `${fieldName} must be a valid UUID.` };
+  }
+  return { ok: true, value: trimmed };
+}
+
+function clampWorkOrderPriority(value: unknown): number {
+  if (typeof value !== 'number' || Number.isNaN(value)) return 3;
+  return Math.min(5, Math.max(1, Math.round(value)));
+}
+
+function requestedBuildQuantity(row: ReleasedBuildPackageLineRow): number {
+  const baseQuantity = numberFromDb(row.quantityPerUnit);
+  const scrapFactor = numberFromDb(row.scrapFactor);
+  return Math.round(baseQuantity * (1 + scrapFactor) * 1000) / 1000;
+}
+
+function toExecutionWorkOrderResponse(order: ExecutionWorkOrderRecord) {
+  return {
+    id: order.id,
+    workOrderNumber: order.workOrderNumber,
+    title: order.title,
+    description: order.description ?? undefined,
+    customerReference: order.customerReference ?? undefined,
+    assetReference: order.assetReference ?? undefined,
+    status: mapWoStatus(order.status),
+    priority: order.priority,
+    stockLocationId: order.stockLocationId ?? undefined,
+    openedAt: order.openedAt.toISOString(),
+    dueAt: optionalIso(order.dueAt),
+    completedAt: optionalIso(order.completedAt),
+    createdAt: order.createdAt.toISOString(),
+    updatedAt: order.updatedAt.toISOString(),
+  };
+}
+
+export const createWoOrderHandler = wrapHandler(
+  async (ctx) => {
+    const body = parseBody<CreateExecutionWorkOrderInput>(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
+    if (!body.value || typeof body.value !== 'object' || Array.isArray(body.value)) {
+      return jsonResponse(422, { message: 'Request body must be an object.' });
+    }
+
+    const workOrderNumber = body.value.workOrderNumber?.trim();
+    if (!workOrderNumber) return jsonResponse(422, { message: 'workOrderNumber is required.' });
+
+    const vehicle = parseUuidField(body.value.vehicleId, 'vehicleId');
+    if (!vehicle.ok) return jsonResponse(422, { message: vehicle.message });
+    const buildConfiguration = parseUuidField(
+      body.value.buildConfigurationId,
+      'buildConfigurationId',
+    );
+    if (!buildConfiguration.ok) return jsonResponse(422, { message: buildConfiguration.message });
+    const bom = parseUuidField(body.value.bomId, 'bomId');
+    if (!bom.ok) return jsonResponse(422, { message: bom.message });
+    const customer =
+      body.value.customerId == null || body.value.customerId === ''
+        ? undefined
+        : parseUuidField(body.value.customerId, 'customerId');
+    if (customer && !customer.ok) return jsonResponse(422, { message: customer.message });
+    const stockLocation =
+      body.value.stockLocationId == null || body.value.stockLocationId === ''
+        ? undefined
+        : parseUuidField(body.value.stockLocationId, 'stockLocationId');
+    if (stockLocation && !stockLocation.ok) {
+      return jsonResponse(422, { message: stockLocation.message });
+    }
+
+    let dueAt: Date | undefined;
+    if (body.value.scheduledDate) {
+      dueAt = new Date(body.value.scheduledDate);
+      if (Number.isNaN(dueAt.getTime())) {
+        return jsonResponse(422, { message: 'scheduledDate must be a valid ISO date.' });
+      }
+    }
+
+    const db = getPrisma();
+    const existing = await db.woOrder.findUnique({
+      where: { workOrderNumber },
+      select: { id: true, workOrderNumber: true, title: true, status: true },
+    });
+    if (existing) {
+      return jsonResponse(409, {
+        message: `Work order already exists: ${workOrderNumber}`,
+        workOrder: existing,
+      });
+    }
+
+    const existingPlanningOrder = await db.workOrder.findUnique({
+      where: { workOrderNumber },
+      select: { id: true, workOrderNumber: true },
+    });
+    if (existingPlanningOrder) {
+      return jsonResponse(409, {
+        message: `Planning work order already exists: ${workOrderNumber}`,
+        workOrder: existingPlanningOrder,
+      });
+    }
+
+    const [header] = await db.$queryRaw<ReleasedBuildPackageHeaderRow[]>`
+      SELECT
+        bc.id::text AS "buildConfigurationId",
+        bc.configuration_code AS "configurationCode",
+        bc.configuration_version AS "configurationVersion",
+        bc.configuration_status::text AS "configurationStatus",
+        cv.id::text AS "vehicleId",
+        concat(cv.model_year::text, ' ', cv.model_code, ' - ', cv.serial_number) AS "vehicleDisplayName",
+        cv.customer_id::text AS "customerId",
+        coalesce(nullif(c.company_name, ''), c.full_name) AS "customerDisplayName",
+        b.id::text AS "bomId",
+        b.bom_code AS "bomCode",
+        b.revision AS "revision",
+        b.bom_status::text AS "bomStatus"
+      FROM planning.build_configurations bc
+      JOIN planning.cart_vehicles cv ON cv.id = bc.vehicle_id
+      JOIN planning.build_boms b ON b.build_configuration_id = bc.id
+      LEFT JOIN customers.customers c ON c.id = cv.customer_id
+      WHERE bc.id = ${buildConfiguration.value}::uuid
+        AND b.id = ${bom.value}::uuid
+        AND cv.id = ${vehicle.value}::uuid
+      LIMIT 1
+    `;
+
+    if (!header) {
+      return jsonResponse(404, {
+        message: 'Released build package was not found for the selected cart.',
+      });
+    }
+    if (header.configurationStatus !== 'RELEASED') {
+      return jsonResponse(409, {
+        message: 'Build configuration must be released before creating a work order.',
+        configurationStatus: header.configurationStatus,
+      });
+    }
+    if (header.bomStatus !== 'APPROVED') {
+      return jsonResponse(409, {
+        message: 'BOM must be approved before creating a work order.',
+        bomStatus: header.bomStatus,
+      });
+    }
+    if (customer && customer.ok && header.customerId && customer.value !== header.customerId) {
+      return jsonResponse(422, {
+        message: 'Selected customer does not own the selected cart.',
+      });
+    }
+
+    const lines = await db.$queryRaw<ReleasedBuildPackageLineRow[]>`
+      SELECT
+        p.id::text AS "partId",
+        p.sku AS "partSku",
+        p.name AS "partName",
+        bl.quantity_per_unit AS "quantityPerUnit",
+        bl.scrap_factor AS "scrapFactor",
+        p.install_stage::text AS "installStage"
+      FROM planning.build_bom_lines bl
+      JOIN inventory.parts p ON p.id = bl.part_id
+      WHERE bl.bom_id = ${bom.value}::uuid
+      ORDER BY
+        CASE p.install_stage::text
+          WHEN 'FABRICATION' THEN 10
+          WHEN 'FRAME' THEN 20
+          WHEN 'WIRING' THEN 30
+          WHEN 'PARTS_PREP' THEN 40
+          WHEN 'FINAL_ASSEMBLY' THEN 50
+          ELSE 99
+        END,
+        p.sku
+    `;
+
+    if (lines.length === 0) {
+      return jsonResponse(422, {
+        message: 'Approved BOM must contain at least one part line before creating a work order.',
+      });
+    }
+
+    const actorUserId = ctx.actorUserId!;
+    const now = new Date();
+    const workOrderId = randomUUID();
+    const status = dueAt ? 'SCHEDULED' : 'READY';
+    const customerReference = customer && customer.ok ? customer.value : header.customerId;
+    const title =
+      body.value.title?.trim() ||
+      `${header.vehicleDisplayName} build - ${header.configurationCode}`;
+    const description =
+      body.value.description?.trim() ||
+      [
+        `Created from released configuration ${header.configurationCode} v${header.configurationVersion}.`,
+        `Approved BOM ${header.bomCode} rev ${header.revision}.`,
+      ].join('\n');
+
+    const linesByStage = new Map<string, ReleasedBuildPackageLineRow[]>();
+    for (const line of lines) {
+      const stage = line.installStage ?? 'GENERAL';
+      const stageLines = linesByStage.get(stage) ?? [];
+      stageLines.push(line);
+      linesByStage.set(stage, stageLines);
+    }
+    const stageEntries = Array.from(linesByStage.entries()).sort(
+      ([a], [b]) => stageSortKey(a) - stageSortKey(b),
+    );
+    const operationIdByStage = new Map<string, string>();
+    const operationRows = stageEntries.map(([stage, stageLines], idx) => {
+      const id = randomUUID();
+      operationIdByStage.set(stage, id);
+      return {
+        id,
+        workOrderId,
+        operationCode: `BUILD-${stage.replace(/_/g, '-')}`,
+        sequenceNo: (idx + 1) * 10,
+        operationName: `${stageLabel(stage)} build`,
+        requiredSkillCode: BUILD_STAGE_SKILL[stage] ?? BUILD_STAGE_SKILL.GENERAL,
+        estimatedMinutes: Math.max(30, stageLines.length * 30),
+        operationStatus: 'READY' as const,
+        correlationId: ctx.correlationId,
+        createdAt: now,
+        updatedAt: now,
+      };
+    });
+    const partRows = lines.map((line) => {
+      const stage = line.installStage ?? 'GENERAL';
+      return {
+        id: randomUUID(),
+        workOrderId,
+        workOrderOperationId: operationIdByStage.get(stage) ?? null,
+        partId: line.partId,
+        requestedQuantity: requestedBuildQuantity(line),
+        reservedQuantity: 0,
+        consumedQuantity: 0,
+        partStatus: 'REQUESTED' as const,
+        correlationId: ctx.correlationId,
+        createdAt: now,
+        updatedAt: now,
+      };
+    });
+
+    const created = await db.$transaction(async (tx) => {
+      await tx.workOrder.create({
+        data: {
+          id: workOrderId,
+          workOrderNumber,
+          vehicleId: vehicle.value,
+          buildConfigurationId: buildConfiguration.value,
+          bomId: bom.value,
+          state: 'RELEASED' as const,
+          scheduledStartAt: dueAt ?? null,
+          createdByUserId: actorUserId,
+          updatedByUserId: actorUserId,
+          lastCorrelationId: ctx.correlationId,
+          lastRequestId: ctx.requestId,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+
+      const workOrder = await tx.woOrder.create({
+        data: {
+          id: workOrderId,
+          workOrderNumber,
+          customerReference,
+          assetReference: vehicle.value,
+          title,
+          description,
+          status: status as 'READY' | 'SCHEDULED',
+          priority: clampWorkOrderPriority(body.value.priority),
+          stockLocationId: stockLocation && stockLocation.ok ? stockLocation.value : null,
+          dueAt: dueAt ?? null,
+          createdByUserId: actorUserId,
+          updatedByUserId: actorUserId,
+          correlationId: ctx.correlationId,
+          openedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        },
+        select: {
+          id: true,
+          workOrderNumber: true,
+          title: true,
+          description: true,
+          customerReference: true,
+          assetReference: true,
+          status: true,
+          priority: true,
+          stockLocationId: true,
+          openedAt: true,
+          dueAt: true,
+          completedAt: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      await tx.woOperation.createMany({ data: operationRows });
+      await tx.woPartLine.createMany({ data: partRows });
+      await tx.woStatusHistory.create({
+        data: {
+          id: randomUUID(),
+          workOrderId,
+          fromStatus: null,
+          toStatus: status,
+          reasonCode: 'BUILD_PACKAGE_RELEASED',
+          reasonNote: `Created from ${header.configurationCode} / ${header.bomCode}`,
+          actorUserId,
+          correlationId: ctx.correlationId,
+          createdAt: now,
+        },
+      });
+
+      return workOrder;
+    });
+
+    return jsonResponse(201, { workOrder: toExecutionWorkOrderResponse(created) });
+  },
+  { requireAuth: true },
+);
+
 export const listTasksHandler = wrapHandler(
   async (ctx) => {
     const qs = ctx.event.queryStringParameters ?? {};

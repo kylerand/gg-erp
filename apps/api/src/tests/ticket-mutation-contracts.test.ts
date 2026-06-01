@@ -5,6 +5,7 @@ import {
   createReworkHandler,
   createTaskHandler,
   createTimeEntryHandler,
+  createWoOrderHandler,
   deleteTimeEntryHandler,
   disconnectTicketHandlerDependencies,
   listTasksHandler,
@@ -19,6 +20,174 @@ after(async () => {
   setTicketHandlerPrismaForTests(undefined);
   setTicketHandlerTimeEntryServiceForTests(undefined);
   await disconnectTicketHandlerDependencies();
+});
+
+test('createWoOrderHandler validates required released build package input', async () => {
+  const response = await createWoOrderHandler({
+    headers: { 'x-actor-id': '00000000-0000-4000-8000-000000000101' },
+    body: JSON.stringify({}),
+  });
+
+  assert.equal(response.statusCode, 422);
+  assert.equal(
+    (JSON.parse(response.body) as { message: string }).message,
+    'workOrderNumber is required.',
+  );
+});
+
+test('createWoOrderHandler creates execution work order operations and BOM part demand', async () => {
+  const ACTOR_ID = '00000000-0000-4000-8000-000000000101';
+  const VEHICLE_ID = '00000000-0000-4000-8000-000000000102';
+  const CUSTOMER_ID = '00000000-0000-4000-8000-000000000103';
+  const CONFIG_ID = '00000000-0000-4000-8000-000000000104';
+  const BOM_ID = '00000000-0000-4000-8000-000000000105';
+  const PART_ID = '00000000-0000-4000-8000-000000000106';
+
+  let operationRows: Array<{ operationCode: string; sequenceNo: number }> = [];
+  let partRows: Array<{
+    partId: string;
+    requestedQuantity: number;
+    workOrderOperationId?: string | null;
+  }> = [];
+  let planningCreate: unknown;
+
+  const tx = {
+    workOrder: {
+      async create(args: unknown) {
+        planningCreate = args;
+        return args;
+      },
+    },
+    woOrder: {
+      async create(args: {
+        data: {
+          id: string;
+          workOrderNumber: string;
+          title: string;
+          description?: string;
+          customerReference?: string | null;
+          assetReference?: string | null;
+          status: 'READY' | 'SCHEDULED';
+          priority: number;
+          stockLocationId?: string | null;
+          openedAt: Date;
+          dueAt?: Date | null;
+          createdAt: Date;
+          updatedAt: Date;
+        };
+      }) {
+        return {
+          ...args.data,
+          completedAt: null,
+        };
+      },
+    },
+    woOperation: {
+      async createMany(args: { data: Array<{ operationCode: string; sequenceNo: number }> }) {
+        operationRows = args.data;
+        return { count: args.data.length };
+      },
+    },
+    woPartLine: {
+      async createMany(args: {
+        data: Array<{
+          partId: string;
+          requestedQuantity: number;
+          workOrderOperationId?: string | null;
+        }>;
+      }) {
+        partRows = args.data;
+        return { count: args.data.length };
+      },
+    },
+    woStatusHistory: {
+      async create(args: unknown) {
+        return args;
+      },
+    },
+  };
+
+  setTicketHandlerPrismaForTests({
+    woOrder: {
+      async findUnique() {
+        return null;
+      },
+    },
+    workOrder: {
+      async findUnique() {
+        return null;
+      },
+    },
+    async $queryRaw(strings: TemplateStringsArray) {
+      const sql = Array.from(strings).join('');
+      if (sql.includes('FROM planning.build_configurations')) {
+        return [
+          {
+            buildConfigurationId: CONFIG_ID,
+            configurationCode: 'PKG-ALPHA',
+            configurationVersion: 2,
+            configurationStatus: 'RELEASED',
+            vehicleId: VEHICLE_ID,
+            vehicleDisplayName: '2026 GG - SERIAL-1',
+            customerId: CUSTOMER_ID,
+            customerDisplayName: 'Golfin Garage',
+            bomId: BOM_ID,
+            bomCode: 'BOM-ALPHA',
+            revision: 3,
+            bomStatus: 'APPROVED',
+          },
+        ];
+      }
+      if (sql.includes('FROM planning.build_bom_lines')) {
+        return [
+          {
+            partId: PART_ID,
+            partSku: 'LIFT-KIT',
+            partName: 'Lift kit',
+            quantityPerUnit: '2',
+            scrapFactor: '0.5',
+            installStage: 'FRAME',
+          },
+        ];
+      }
+      throw new Error(`Unexpected query: ${sql}`);
+    },
+    async $transaction(fn: (inner: typeof tx) => Promise<unknown>) {
+      return fn(tx);
+    },
+  } as unknown as Partial<PrismaClient>);
+
+  try {
+    const response = await createWoOrderHandler({
+      headers: { 'x-actor-id': ACTOR_ID, 'x-correlation-id': 'test-correlation' },
+      body: JSON.stringify({
+        workOrderNumber: 'WO-TEST-001',
+        vehicleId: VEHICLE_ID,
+        customerId: CUSTOMER_ID,
+        buildConfigurationId: CONFIG_ID,
+        bomId: BOM_ID,
+        scheduledDate: '2026-06-02T00:00:00.000Z',
+      }),
+      requestContext: { requestId: 'request-1' },
+    });
+
+    assert.equal(response.statusCode, 201);
+    const payload = JSON.parse(response.body) as {
+      workOrder: { id: string; workOrderNumber: string; status: string; assetReference: string };
+    };
+    assert.equal(payload.workOrder.workOrderNumber, 'WO-TEST-001');
+    assert.equal(payload.workOrder.status, 'SCHEDULED');
+    assert.equal(payload.workOrder.assetReference, VEHICLE_ID);
+    assert.equal(operationRows.length, 1);
+    assert.equal(operationRows[0]?.operationCode, 'BUILD-FRAME');
+    assert.equal(partRows.length, 1);
+    assert.equal(partRows[0]?.partId, PART_ID);
+    assert.equal(partRows[0]?.requestedQuantity, 3);
+    assert.ok(partRows[0]?.workOrderOperationId);
+    assert.ok(planningCreate);
+  } finally {
+    setTicketHandlerPrismaForTests(undefined);
+  }
 });
 
 test('createTaskHandler returns 400 for invalid JSON', async () => {

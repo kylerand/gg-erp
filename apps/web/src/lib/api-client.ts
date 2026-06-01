@@ -463,6 +463,12 @@ export interface CreateWorkOrderInput {
   scheduledDate?: string;
 }
 
+export type CreateExecutionWorkOrderInput = CreateWorkOrderInput & {
+  title?: string;
+  priority?: number;
+  stockLocationId?: string;
+};
+
 export type CartVehicleState = 'REGISTERED' | 'IN_BUILD' | 'QUALITY_HOLD' | 'COMPLETED' | 'RETIRED';
 
 export interface CartVehicle {
@@ -751,6 +757,17 @@ export interface WoOrder {
   completedAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export async function createExecutionWorkOrder(
+  input: CreateExecutionWorkOrderInput,
+): Promise<WoOrder> {
+  const data = await apiFetch<{ workOrder: WoOrder }>('/tickets/work-orders', {
+    method: 'POST',
+    headers: mutationHeaders(),
+    body: JSON.stringify(input),
+  });
+  return data.workOrder;
 }
 
 export interface WoOrderChecklistItem {

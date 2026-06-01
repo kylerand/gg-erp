@@ -154,14 +154,14 @@
           <h1>ShopMonkey Isolated Rehearsal</h1>
           <p class="muted">Source: packages/migration/shopmonkey-sanitized-1773274402708.json (sanitized-report)</p>
         </div>
-        <div class="stamp">Generated: 2026-06-01T06:06:17.157Z</div>
+        <div class="stamp">Generated: 2026-06-01T06:33:33.691Z</div>
       </header>
 
       <div class="summary">
         <div class="metric"><strong class="warn">WARN</strong><span>Overall status</span></div>
         <div class="metric"><strong>5</strong><span>Passed entity gates</span></div>
         <div class="metric"><strong>1,021</strong><span>Imported rows</span></div>
-        <div class="metric"><strong>disposable-docker</strong><span>Database mode</span></div>
+        <div class="metric"><strong>8</strong><span>Passed seed gates</span></div>
       </div>
 
       <section>
@@ -246,6 +246,78 @@
       </section>
 
       <section>
+        <h2>Reference Seed Gates</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Seed</th>
+              <th>Status</th>
+              <th>Expected</th>
+              <th>Actual</th>
+              <th>Detail</th>
+            </tr>
+          </thead>
+          <tbody>
+        <tr>
+          <td>Baseline roles</td>
+          <td><span class="pill pass">PASS</span></td>
+          <td>8</td>
+          <td>8</td>
+          <td>Baseline roles verified 8/8 required reference rows.</td>
+        </tr>
+        <tr>
+          <td>Baseline permissions</td>
+          <td><span class="pill pass">PASS</span></td>
+          <td>24</td>
+          <td>24</td>
+          <td>Baseline permissions verified 24/24 required reference rows.</td>
+        </tr>
+        <tr>
+          <td>ERP admin permission grants</td>
+          <td><span class="pill pass">PASS</span></td>
+          <td>24</td>
+          <td>24</td>
+          <td>ERP admin permission grants verified 24/24 required reference rows.</td>
+        </tr>
+        <tr>
+          <td>Stock locations</td>
+          <td><span class="pill pass">PASS</span></td>
+          <td>4</td>
+          <td>4</td>
+          <td>Stock locations verified 4/4 required reference rows.</td>
+        </tr>
+        <tr>
+          <td>Stock bins</td>
+          <td><span class="pill pass">PASS</span></td>
+          <td>4</td>
+          <td>4</td>
+          <td>Stock bins verified 4/4 required reference rows.</td>
+        </tr>
+        <tr>
+          <td>MVP planning scenario</td>
+          <td><span class="pill pass">PASS</span></td>
+          <td>1</td>
+          <td>1</td>
+          <td>MVP planning scenario verified 1/1 required reference rows.</td>
+        </tr>
+        <tr>
+          <td>MVP planning constraints</td>
+          <td><span class="pill pass">PASS</span></td>
+          <td>4</td>
+          <td>4</td>
+          <td>MVP planning constraints verified 4/4 required reference rows.</td>
+        </tr>
+        <tr>
+          <td>Dealer relationship tables</td>
+          <td><span class="pill pass">PASS</span></td>
+          <td>2</td>
+          <td>2</td>
+          <td>Dealer relationship tables verified 2/2 required reference rows.</td>
+        </tr></tbody>
+        </table>
+      </section>
+
+      <section>
         <h2>Commands</h2>
         <table>
           <thead>
@@ -262,21 +334,21 @@
           <td>Start disposable PostgreSQL</td>
           <td><span class="pill pass">PASS</span></td>
           <td>0</td>
-          <td>0.2s</td>
-          <td><code>docker run -d --name gg-erp-shopmonkey-rehearsal-1780293969859-7e7bcd7b -p 127.0.0.1::5432 postgres:16-alpine</code></td>
+          <td>0.1s</td>
+          <td><code>docker run -d --name gg-erp-shopmonkey-rehearsal-1780295604838-3fdfa962 -p 127.0.0.1::5432 postgres:16-alpine</code></td>
         </tr>
         <tr>
           <td>Apply Prisma migrations</td>
           <td><span class="pill pass">PASS</span></td>
           <td>0</td>
-          <td>0.8s</td>
+          <td>0.9s</td>
           <td><code>npm run db:deploy --workspace=packages/db</code></td>
         </tr>
         <tr>
           <td>Run ShopMonkey loader</td>
           <td><span class="pill pass">PASS</span></td>
           <td>0</td>
-          <td>4.9s</td>
+          <td>6.3s</td>
           <td><code>npx tsx packages/migration/src/cli/load-shopmonkey.ts packages/migration/shopmonkey-sanitized-1773274402708.json</code></td>
         </tr></tbody>
         </table>

@@ -52,6 +52,39 @@ describe('ShopMonkey isolated rehearsal report', () => {
     expect(report.entities[0].status).toBe('FAIL');
   });
 
+  it('fails when reference seed gates are missing required rows', () => {
+    const report = buildIsolatedRehearsalReport({
+      generatedAt: '2026-06-01T00:00:00.000Z',
+      sourceFile: 'shopmonkey-sanitized.json',
+      sourceKind: 'sanitized-report',
+      database: { mode: 'disposable-docker', image: 'postgres:16-alpine', keptContainer: false },
+      commands: [],
+      entities: [
+        {
+          key: 'customers',
+          label: 'Customers',
+          required: true,
+          sourceRows: 1,
+          sourceSkipped: 0,
+          importedRows: 1,
+          mappedRows: 1,
+        },
+      ],
+      referenceSeeds: [
+        {
+          key: 'baselinePermissions',
+          label: 'Baseline permissions',
+          expected: 24,
+          actual: 23,
+        },
+      ],
+    });
+
+    expect(report.overallStatus).toBe('FAIL');
+    expect(report.referenceSeeds[0].status).toBe('FAIL');
+    expect(report.nextActions).toContain('Repair failed reference seed coverage: Baseline permissions.');
+  });
+
   it('renders counts-only HTML evidence', () => {
     const report = buildIsolatedRehearsalReport({
       generatedAt: '2026-06-01T00:00:00.000Z',
@@ -70,6 +103,7 @@ describe('ShopMonkey isolated rehearsal report', () => {
           mappedRows: 2,
         },
       ],
+      referenceSeeds: [{ key: 'stockBins', label: 'Stock bins', expected: 4, actual: 4 }],
       supportingCounts: { 'Migration errors': 0 },
     });
 
@@ -77,6 +111,7 @@ describe('ShopMonkey isolated rehearsal report', () => {
     expect(report.overallStatus).toBe('PASS');
     expect(html).toContain('ShopMonkey Isolated Rehearsal');
     expect(html).toContain('Entity Reconciliation');
+    expect(html).toContain('Reference Seed Gates');
     expect(html).not.toContain('<script');
   });
 });

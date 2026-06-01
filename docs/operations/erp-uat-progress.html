@@ -506,9 +506,11 @@
                 `MVP_BASELINE` planning constraints are seeded through idempotent reference
                 migrations. Stock bins now exist in the deploy-applied Prisma schema with day-one
                 `GENERAL`, `INBOUND`, and bay `WIP` bins, and dealer account/relationship bootstrap
-                rows are derived from live commercial customer and cart ownership records.
+                rows are derived from live commercial customer and cart ownership records. The isolated
+                ShopMonkey cutover rehearsal now verifies those reference seed gates inside the
+                disposable database before emitting evidence.
               </td>
-              <td>Run staging seed verification during cutover rehearsal.</td>
+              <td>Keep seed gates in the cutover artifact as reference data evolves.</td>
             </tr>
             <tr>
               <td>Inventory stock-bin schema</td>

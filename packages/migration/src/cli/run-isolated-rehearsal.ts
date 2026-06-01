@@ -183,9 +183,66 @@ async function countSql(prisma: PrismaClient, sql: string): Promise<number> {
   return Number(rows[0]?.count ?? 0);
 }
 
+function sqlString(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+function sqlStrings(values: readonly string[]): string {
+  return values.map(sqlString).join(', ');
+}
+
+function sqlStringRows(values: ReadonlyArray<readonly string[]>): string {
+  return values.map((row) => `(${row.map(sqlString).join(', ')})`).join(', ');
+}
+
 async function collectCounts(dbUrl: string) {
   const prisma = new PrismaClient({ datasourceUrl: dbUrl });
   try {
+    const baselineRoleCodes = [
+      'ERP_ADMIN',
+      'SHOP_MANAGER',
+      'DISPATCH_PLANNER',
+      'TECHNICIAN',
+      'PARTS_COORDINATOR',
+      'TRAINING_COORDINATOR',
+      'ACCOUNTING_OPERATOR',
+      'INTEGRATION_OPERATOR',
+    ];
+    const baselinePermissionCodes = [
+      'identity.users.read',
+      'identity.users.manage_roles',
+      'customers.read',
+      'customers.write',
+      'work_orders.read',
+      'work_orders.write',
+      'work_orders.assign',
+      'inventory.read',
+      'inventory.reserve',
+      'inventory.adjust',
+      'planning.read',
+      'planning.run',
+      'planning.publish',
+      'sop_ojt.read',
+      'sop_ojt.assign_training',
+      'sop_ojt.manage_content',
+      'sales.read',
+      'sales.write',
+      'accounting.read',
+      'accounting.sync.manage',
+      'integrations.read',
+      'integrations.manage',
+      'audit.read',
+      'ops.retry_dead_letter',
+    ];
+    const stockLocationCodes = ['HQ-WH', 'HQ-STAGE', 'HQ-BAY-01', 'HQ-BAY-02'];
+    const stockBinPairs = [
+      ['HQ-WH', 'GENERAL'],
+      ['HQ-STAGE', 'INBOUND'],
+      ['HQ-BAY-01', 'WIP'],
+      ['HQ-BAY-02', 'WIP'],
+    ] as const;
+    const planningConstraintKeys = ['SKILL_REQUIRED', 'MATERIAL_READY_REQUIRED', 'DUE_DATE_WEIGHT', 'MAX_SHIFT_MINUTES'];
+
     const mappingCount = (entityType: string) =>
       countSql(
         prisma,
@@ -211,6 +268,14 @@ async function collectCounts(dbUrl: string) {
       workOrderParts,
       importBatches,
       migrationErrors,
+      baselineRoles,
+      baselinePermissions,
+      erpAdminGrants,
+      stockLocations,
+      stockBins,
+      mvpScenario,
+      mvpConstraints,
+      dealerTables,
     ] = await Promise.all([
       countSql(prisma, 'SELECT COUNT(*) AS count FROM hr.employees'),
       mappingCount('EMPLOYEE'),
@@ -230,6 +295,80 @@ async function collectCounts(dbUrl: string) {
       countSql(prisma, 'SELECT COUNT(*) AS count FROM work_orders.work_order_parts'),
       countSql(prisma, 'SELECT COUNT(*) AS count FROM migration."ImportBatch"'),
       countSql(prisma, 'SELECT COUNT(*) AS count FROM migration."MigrationError"'),
+      countSql(
+        prisma,
+        `SELECT COUNT(DISTINCT role_code) AS count
+         FROM identity.roles
+         WHERE deleted_at IS NULL
+           AND role_code IN (${sqlStrings(baselineRoleCodes)})`,
+      ),
+      countSql(
+        prisma,
+        `SELECT COUNT(DISTINCT permission_code) AS count
+         FROM identity.permissions
+         WHERE deleted_at IS NULL
+           AND permission_code IN (${sqlStrings(baselinePermissionCodes)})`,
+      ),
+      countSql(
+        prisma,
+        `SELECT COUNT(DISTINCT permissions.permission_code) AS count
+         FROM identity.role_permissions grants
+         JOIN identity.roles roles
+           ON roles.id = grants.role_id
+          AND roles.deleted_at IS NULL
+         JOIN identity.permissions permissions
+           ON permissions.id = grants.permission_id
+          AND permissions.deleted_at IS NULL
+         WHERE roles.role_code = 'ERP_ADMIN'
+           AND permissions.permission_code IN (${sqlStrings(baselinePermissionCodes)})`,
+      ),
+      countSql(
+        prisma,
+        `SELECT COUNT(DISTINCT location_code) AS count
+         FROM inventory.stock_locations
+         WHERE deleted_at IS NULL
+           AND location_code IN (${sqlStrings(stockLocationCodes)})`,
+      ),
+      countSql(
+        prisma,
+        `SELECT COUNT(*) AS count
+         FROM (VALUES ${sqlStringRows(stockBinPairs)}) AS expected(location_code, bin_code)
+         WHERE EXISTS (
+           SELECT 1
+           FROM inventory.stock_bins bins
+           JOIN inventory.stock_locations locations
+             ON locations.id = bins.stock_location_id
+            AND locations.deleted_at IS NULL
+           WHERE bins.deleted_at IS NULL
+             AND bins.bin_state = 'ACTIVE'
+             AND locations.location_code = expected.location_code
+             AND bins.bin_code = expected.bin_code
+         )`,
+      ),
+      countSql(
+        prisma,
+        `SELECT COUNT(*) AS count
+         FROM planning.planning_scenarios
+         WHERE scenario_name = 'MVP_BASELINE'
+           AND scenario_status = 'ACTIVE'`,
+      ),
+      countSql(
+        prisma,
+        `SELECT COUNT(DISTINCT constraints.constraint_key) AS count
+         FROM planning.planning_constraints constraints
+         JOIN planning.planning_scenarios scenarios
+           ON scenarios.id = constraints.scenario_id
+          AND scenarios.scenario_name = 'MVP_BASELINE'
+          AND scenarios.scenario_status = 'ACTIVE'
+         WHERE constraints.is_enabled = TRUE
+           AND constraints.constraint_key IN (${sqlStrings(planningConstraintKeys)})`,
+      ),
+      countSql(
+        prisma,
+        `SELECT COUNT(*) AS count
+         FROM (VALUES ('customers.dealer_accounts'), ('customers.customer_dealer_relationships')) AS expected(table_name)
+         WHERE to_regclass(expected.table_name) IS NOT NULL`,
+      ),
     ]);
 
     return {
@@ -254,6 +393,31 @@ async function collectCounts(dbUrl: string) {
         'Migration batches': importBatches,
         'Migration errors': migrationErrors,
       },
+      referenceSeeds: [
+        { key: 'baselineRoles', label: 'Baseline roles', expected: baselineRoleCodes.length, actual: baselineRoles },
+        {
+          key: 'baselinePermissions',
+          label: 'Baseline permissions',
+          expected: baselinePermissionCodes.length,
+          actual: baselinePermissions,
+        },
+        {
+          key: 'erpAdminGrants',
+          label: 'ERP admin permission grants',
+          expected: baselinePermissionCodes.length,
+          actual: erpAdminGrants,
+        },
+        { key: 'stockLocations', label: 'Stock locations', expected: stockLocationCodes.length, actual: stockLocations },
+        { key: 'stockBins', label: 'Stock bins', expected: stockBinPairs.length, actual: stockBins },
+        { key: 'mvpScenario', label: 'MVP planning scenario', expected: 1, actual: mvpScenario },
+        {
+          key: 'mvpConstraints',
+          label: 'MVP planning constraints',
+          expected: planningConstraintKeys.length,
+          actual: mvpConstraints,
+        },
+        { key: 'dealerTables', label: 'Dealer relationship tables', expected: 2, actual: dealerTables },
+      ],
     };
   } finally {
     await prisma.$disconnect();
@@ -357,6 +521,7 @@ async function main(): Promise<void> {
         mappedRows: dbEntity?.mappedRows ?? 0,
       };
     }),
+    referenceSeeds: collected?.referenceSeeds,
     supportingCounts: collected?.supportingCounts,
     failureDetail,
   });

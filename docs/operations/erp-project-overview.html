@@ -345,39 +345,39 @@
       <header>
         <h1>Golfin Garage ERP Project Overview</h1>
         <p class="lede">
-          High-level status after the blocked-alert triage, source-gate, and reporting automation
+          High-level status after the planning review-pack and accounting operational-ledger
           slices. The app has moved past polished static screens into a usable shop-ops ERP
           foundation, but ShopMonkey cutover remains blocked until complete parts and purchase-order
           source exports are captured.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 1, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 157</span>
-          <span class="chip">Active slice: Build configuration and BOM approval history</span>
+          <span class="chip">Baseline: origin/main through PR 164</span>
+          <span class="chip">Active slice: Accounting operational ledger foundation</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
 
       <div class="summary">
         <div class="metric">
-          <strong>77%</strong>
+          <strong>78%</strong>
           <span>Estimated production readiness for an internal ERP rollout.</span>
-          <div class="bar warn"><span style="width: 77%"></span></div>
+          <div class="bar warn"><span style="width: 78%"></span></div>
         </div>
         <div class="metric">
-          <strong>90%</strong>
+          <strong>91%</strong>
           <span>Actionability remediation from the UAT plan.</span>
-          <div class="bar good"><span style="width: 90%"></span></div>
+          <div class="bar good"><span style="width: 91%"></span></div>
         </div>
         <div class="metric">
-          <strong>77%</strong>
+          <strong>78%</strong>
           <span>Live workflow/API contract completeness.</span>
-          <div class="bar warn"><span style="width: 77%"></span></div>
+          <div class="bar warn"><span style="width: 78%"></span></div>
         </div>
         <div class="metric">
-          <strong>58%</strong>
+          <strong>61%</strong>
           <span>ERPNext-style breadth: ledgers, lifecycle, setup, reports.</span>
-          <div class="bar risk"><span style="width: 58%"></span></div>
+          <div class="bar risk"><span style="width: 61%"></span></div>
         </div>
       </div>
 
@@ -441,12 +441,15 @@
                 grows.
               </li>
               <li>
-                Accounting is still integration-first; internal GL, financial reports, and ledger
-                consequences are not mature yet.
+                Accounting is still integration-first, but the active slice adds a first-party
+                operational ledger surface from live payables, payments, and reconciliation
+                variance. Immutable GL journals, financial reports, and close controls remain
+                future maturity work.
               </li>
               <li>
-                API smoke route exceptions are back to zero after the routing-template routes
-                deployed and were verified live.
+                API smoke route exceptions are back to zero on deployed main. This branch adds one
+                pending-deploy accounting ledger route exception that should be removed after CD
+                proves the new API Gateway route reaches Lambda.
               </li>
             </ul>
           </div>
@@ -521,8 +524,8 @@
               </td>
               <td>The app behaves like one ERP, not a collection of good module pages.</td>
               <td>
-                Add inventory, labor, quality, and accounting ledger consequences; harden read
-                models and freshness signals; complete setup/configuration domains.
+                Convert operational accounting entries into immutable journal consequences; harden
+                read models and freshness signals; complete setup/configuration domains.
               </td>
             </tr>
             <tr>
@@ -541,9 +544,8 @@
                 workspaces are consistent across the ERP.
               </td>
               <td>
-                Standardize document lifecycle, internal accounting ledger consequences,
-                BOM/routing/job-card parity, financial reports, warranty/support flows, and setup
-                masters.
+                Standardize document lifecycle, immutable accounting journals, financial reports,
+                warranty/support flows, and setup masters.
               </td>
             </tr>
           </tbody>
@@ -635,13 +637,14 @@
           <div class="module-card">
             <header>
               <h3>Accounting And QuickBooks</h3>
-              <span class="pill doing">55%</span>
+              <span class="pill doing">62%</span>
             </header>
-            <div class="bar warn"><span style="width: 55%"></span></div>
+            <div class="bar warn"><span style="width: 62%"></span></div>
             <p>
               QuickBooks integration, sync status, reconciliation, payable review, mapping admin,
-              and reference views exist. Full ERP accounting still needs internal GL,
-              invoices/payments, financial reports, and a clean webhook error path.
+              reference views, and an operational ledger preview now exist. Full ERP accounting
+              still needs immutable GL journals, invoices/payments, financial reports, close
+              controls, and a clean webhook error path.
             </p>
           </div>
 
@@ -728,9 +731,9 @@
               <td>Latest production baseline</td>
               <td><span class="pill done">Merged</span></td>
               <td>
-                <code>origin/main</code> is at <code>862d508</code>, from PR 157: routing-template
-                approval history. This branch extends the same evidence pattern to build
-                configurations and BOM revisions.
+                <code>origin/main</code> is through PR 164 after the ECO review-pack deploy and
+                QA allowlist cleanup. This branch adds the first accounting operational-ledger
+                surface.
               </td>
             </tr>
             <tr>
@@ -738,40 +741,40 @@
               <td><span class="pill done">Green</span></td>
               <td>
                 Latest main CI, QA smoke, QA coverage, Pages, and CD runs completed successfully
-                after PR 157 merged; CD included Terraform apply, database migrations, and the
-                deployment health smoke.
+                after PR 164 merged. The latest CD path proved the planning review-pack route live;
+                this branch will require the same PR CI, main CD, and live-smoke loop.
               </td>
             </tr>
             <tr>
               <td>Route/API surface</td>
               <td><span class="pill info">Broad</span></td>
               <td>
-                Current smoke discovery covers 181 API routes. The branch has broad Lambda handler
-                and API test coverage across planning, inventory, tickets, reporting, accounting,
-                and sales.
+                Current smoke discovery covers 186 API routes after adding the accounting
+                operational-ledger API. The branch has broad Lambda handler and API test coverage
+                across planning, inventory, tickets, reporting, accounting, and sales.
               </td>
             </tr>
             <tr>
               <td>Web surface</td>
               <td><span class="pill info">Broad</span></td>
-              <td>The app has 64 route files under <code>apps/web/src/app</code>.</td>
+              <td>The app has 65 route files under <code>apps/web/src/app</code>.</td>
             </tr>
             <tr>
               <td>ERP registry direction</td>
               <td><span class="pill doing">In Progress</span></td>
               <td>
-                The registry defines 38 objects, 36 workspace links, 5 quick actions, and 14
-                reports after adding routing-template planning destinations.
+                The registry defines a live accounting-ledger object and Accounting workspace link
+                in addition to the existing planning, inventory, reporting, and integration
+                destinations.
               </td>
             </tr>
             <tr>
               <td>Known route exceptions</td>
-              <td><span class="pill done">0 Known</span></td>
+              <td><span class="pill watch">1 Pending Deploy</span></td>
               <td>
-                <code>known-broken.json</code> is empty. Live verification after CD confirmed
-                <code>GET /planning/routing-templates</code> returns a handler response and the
-                mutating routing-template routes return auth challenges, not API Gateway route
-                misses.
+                <code>known-broken.json</code> contains a short-lived pending-deploy entry for
+                <code>GET /accounting/operational-ledger</code>. Remove it after CD deploys the
+                Terraform route and live smoke confirms the request reaches Lambda.
               </td>
             </tr>
           </tbody>
@@ -797,8 +800,9 @@
             work-order provenance, and version diff workflows need a heavier change-control gate.
           </li>
           <li>
-            <strong>Move toward ERP ledgers:</strong> start internal accounting ledger design and
-            posting rules before adding more financial-report UI.
+            <strong>Turn ledger preview into journals:</strong> promote the operational ledger
+            source rules into immutable GL journal tables and posting services before adding more
+            financial-report UI.
           </li>
         </ol>
       </section>

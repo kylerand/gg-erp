@@ -3447,6 +3447,119 @@ export async function getFailureSummary(options?: ApiDataOptions): Promise<Failu
   );
 }
 
+export type OperationalLedgerSourceType =
+  | 'PAYABLE_RECEIPT'
+  | 'CUSTOMER_PAYMENT'
+  | 'RECONCILIATION_VARIANCE';
+export type OperationalLedgerStatus =
+  | 'READY_FOR_REVIEW'
+  | 'NEEDS_REVIEW'
+  | 'POSTED'
+  | 'PENDING'
+  | 'FAILED'
+  | 'MISMATCH'
+  | 'RESOLVED';
+
+export interface OperationalLedgerEntry {
+  id: string;
+  ledgerDate: string;
+  sourceType: OperationalLedgerSourceType;
+  sourceId: string;
+  documentNumber: string;
+  counterparty: string;
+  accountDebit: string;
+  accountCredit: string;
+  debitCents: number;
+  creditCents: number;
+  amountCents: number;
+  currency: 'USD';
+  status: OperationalLedgerStatus;
+  memo: string;
+  relatedRecordType: 'purchase-order' | 'payment-sync' | 'reconciliation-record';
+  relatedRecordId: string;
+}
+
+export interface OperationalLedgerPostingRule {
+  sourceType: OperationalLedgerSourceType;
+  trigger: string;
+  debitAccount: string;
+  creditAccount: string;
+  status: 'active-preview';
+}
+
+export interface OperationalLedgerSummary {
+  generatedAt: string;
+  entryCount: number;
+  totalDebitCents: number;
+  totalCreditCents: number;
+  sourceTotals: Record<OperationalLedgerSourceType, { count: number; amountCents: number }>;
+  statusTotals: Record<OperationalLedgerStatus, { count: number; amountCents: number }>;
+  exceptions: {
+    invoice: number;
+    customer: number;
+    payment: number;
+    reconciliation: number;
+  };
+}
+
+export interface OperationalLedgerResponse {
+  items: OperationalLedgerEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+  summary: OperationalLedgerSummary;
+  postingRules: OperationalLedgerPostingRule[];
+}
+
+export async function listOperationalLedger(
+  params?: {
+    sourceType?: OperationalLedgerSourceType;
+    status?: OperationalLedgerStatus;
+    limit?: number;
+    offset?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<OperationalLedgerResponse> {
+  const qs = new URLSearchParams();
+  if (params?.sourceType) qs.set('sourceType', params.sourceType);
+  if (params?.status) qs.set('status', params.status);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  return apiFetch(
+    `/accounting/operational-ledger${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    {
+      items: [],
+      total: 0,
+      limit: params?.limit ?? 50,
+      offset: params?.offset ?? 0,
+      summary: {
+        generatedAt: new Date(0).toISOString(),
+        entryCount: 0,
+        totalDebitCents: 0,
+        totalCreditCents: 0,
+        sourceTotals: {
+          PAYABLE_RECEIPT: { count: 0, amountCents: 0 },
+          CUSTOMER_PAYMENT: { count: 0, amountCents: 0 },
+          RECONCILIATION_VARIANCE: { count: 0, amountCents: 0 },
+        },
+        statusTotals: {
+          READY_FOR_REVIEW: { count: 0, amountCents: 0 },
+          NEEDS_REVIEW: { count: 0, amountCents: 0 },
+          POSTED: { count: 0, amountCents: 0 },
+          PENDING: { count: 0, amountCents: 0 },
+          FAILED: { count: 0, amountCents: 0 },
+          MISMATCH: { count: 0, amountCents: 0 },
+          RESOLVED: { count: 0, amountCents: 0 },
+        },
+        exceptions: { invoice: 0, customer: 0, payment: 0, reconciliation: 0 },
+      },
+      postingRules: [],
+    },
+    options,
+  );
+}
+
 // ─── Dealers (legacy alias) ───────────────────────────────────────────────────
 
 export interface Dealer {

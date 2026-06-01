@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import type { IntegrationAccountStatus, IntegrationProvider } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { wrapHandler, parseBody, jsonResponse, type LambdaResult } from '../../shared/lambda/index.js';
@@ -57,6 +57,337 @@ import { PaymentSyncState } from '../../../../../packages/domain/src/model/index
 
 const prisma = new PrismaClient();
 const tokenManager = createTokenManager();
+
+const ACCOUNTING_LEDGER_PURCHASE_ORDER_INCLUDE = Prisma.validator<Prisma.PurchaseOrderInclude>()({
+  vendor: { select: { vendorName: true, vendorCode: true } },
+  lines: {
+    include: {
+      part: { select: { sku: true, name: true } },
+    },
+    orderBy: { lineNumber: 'asc' },
+  },
+});
+
+type LedgerPurchaseOrder = Prisma.PurchaseOrderGetPayload<{
+  include: typeof ACCOUNTING_LEDGER_PURCHASE_ORDER_INCLUDE;
+}>;
+type LedgerPaymentSyncRecord = Awaited<
+  ReturnType<typeof prisma.paymentSyncRecord.findMany>
+>[number];
+type LedgerReconciliationRecord = Awaited<
+  ReturnType<typeof prisma.reconciliationRecord.findMany>
+>[number];
+
+type OperationalLedgerSourceType =
+  | 'PAYABLE_RECEIPT'
+  | 'CUSTOMER_PAYMENT'
+  | 'RECONCILIATION_VARIANCE';
+type OperationalLedgerStatus =
+  | 'READY_FOR_REVIEW'
+  | 'NEEDS_REVIEW'
+  | 'POSTED'
+  | 'PENDING'
+  | 'FAILED'
+  | 'MISMATCH'
+  | 'RESOLVED';
+
+interface OperationalLedgerEntry {
+  id: string;
+  ledgerDate: string;
+  sourceType: OperationalLedgerSourceType;
+  sourceId: string;
+  documentNumber: string;
+  counterparty: string;
+  accountDebit: string;
+  accountCredit: string;
+  debitCents: number;
+  creditCents: number;
+  amountCents: number;
+  currency: 'USD';
+  status: OperationalLedgerStatus;
+  memo: string;
+  relatedRecordType: 'purchase-order' | 'payment-sync' | 'reconciliation-record';
+  relatedRecordId: string;
+}
+
+interface LedgerExceptionCounts {
+  invoice: number;
+  customer: number;
+  payment: number;
+  reconciliation: number;
+}
+
+interface OperationalLedgerPostingRule {
+  sourceType: OperationalLedgerSourceType;
+  trigger: string;
+  debitAccount: string;
+  creditAccount: string;
+  status: 'active-preview';
+}
+
+const OPERATIONAL_LEDGER_SOURCE_TYPES = new Set<OperationalLedgerSourceType>([
+  'PAYABLE_RECEIPT',
+  'CUSTOMER_PAYMENT',
+  'RECONCILIATION_VARIANCE',
+]);
+const OPERATIONAL_LEDGER_STATUSES = new Set<OperationalLedgerStatus>([
+  'READY_FOR_REVIEW',
+  'NEEDS_REVIEW',
+  'POSTED',
+  'PENDING',
+  'FAILED',
+  'MISMATCH',
+  'RESOLVED',
+]);
+const PAYABLE_LEDGER_STATES = ['PARTIALLY_RECEIVED', 'RECEIVED'] as const;
+
+const OPERATIONAL_LEDGER_POSTING_RULES: OperationalLedgerPostingRule[] = [
+  {
+    sourceType: 'PAYABLE_RECEIPT',
+    trigger: 'Purchase order lines are received into inventory.',
+    debitAccount: 'Inventory received not billed',
+    creditAccount: 'Accounts payable - unbilled',
+    status: 'active-preview',
+  },
+  {
+    sourceType: 'CUSTOMER_PAYMENT',
+    trigger: 'QuickBooks payment webhook is matched to an ERP work order.',
+    debitAccount: 'Undeposited funds / bank clearing',
+    creditAccount: 'Accounts receivable',
+    status: 'active-preview',
+  },
+  {
+    sourceType: 'RECONCILIATION_VARIANCE',
+    trigger: 'ERP and QuickBooks reconciliation detects an amount mismatch.',
+    debitAccount: 'Reconciliation clearing',
+    creditAccount: 'Suspense / review clearing',
+    status: 'active-preview',
+  },
+];
+
+export const operationalLedgerQueries = {
+  async listPayablePurchaseOrders(take: number): Promise<LedgerPurchaseOrder[]> {
+    return prisma.purchaseOrder.findMany({
+      where: {
+        OR: [
+          { purchaseOrderState: { in: [...PAYABLE_LEDGER_STATES] } },
+          { lines: { some: { receivedQuantity: { gt: 0 } } } },
+          { lines: { some: { rejectedQuantity: { gt: 0 } } } },
+        ],
+      },
+      include: ACCOUNTING_LEDGER_PURCHASE_ORDER_INCLUDE,
+      orderBy: [{ updatedAt: 'desc' }, { orderedAt: 'desc' }],
+      take,
+    });
+  },
+
+  async listPaymentSyncRecords(take: number): Promise<LedgerPaymentSyncRecord[]> {
+    return prisma.paymentSyncRecord.findMany({
+      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+      take,
+    });
+  },
+
+  async listReconciliationRecords(take: number): Promise<LedgerReconciliationRecord[]> {
+    return prisma.reconciliationRecord.findMany({
+      where: { status: { in: ['MISMATCH', 'RESOLVED'] } },
+      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+      take,
+    });
+  },
+
+  async countInvoiceFailures(): Promise<number> {
+    return prisma.invoiceSyncRecord.count({ where: { state: 'FAILED' } });
+  },
+
+  async countCustomerFailures(): Promise<number> {
+    return prisma.customerSyncRecord.count({ where: { state: 'FAILED' } });
+  },
+
+  async countPaymentFailures(): Promise<number> {
+    return prisma.paymentSyncRecord.count({ where: { state: 'FAILED' } });
+  },
+
+  async countReconciliationMismatches(): Promise<number> {
+    return prisma.reconciliationRecord.count({ where: { status: 'MISMATCH' } });
+  },
+};
+
+function parseLedgerLimit(value: string | undefined): number {
+  const parsed = Number(value ?? 50);
+  if (!Number.isFinite(parsed) || parsed < 1) return 50;
+  return Math.min(Math.floor(parsed), 200);
+}
+
+function parseLedgerOffset(value: string | undefined): number {
+  const parsed = Number(value ?? 0);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return Math.floor(parsed);
+}
+
+function numberFromDecimal(value: unknown): number {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') return Number(value);
+  if (value && typeof (value as { toNumber?: unknown }).toNumber === 'function') {
+    return (value as { toNumber: () => number }).toNumber();
+  }
+  return Number(value ?? 0);
+}
+
+function centsFromDecimal(value: number): number {
+  return Math.round(value * 100);
+}
+
+function payableOpenQuantity(line: LedgerPurchaseOrder['lines'][number]): number {
+  return Math.max(
+    numberFromDecimal(line.orderedQuantity) -
+      numberFromDecimal(line.receivedQuantity) -
+      numberFromDecimal(line.rejectedQuantity),
+    0,
+  );
+}
+
+function buildPayableLedgerEntry(po: LedgerPurchaseOrder): OperationalLedgerEntry | undefined {
+  const receivedQuantity = po.lines.reduce(
+    (sum, line) => sum + numberFromDecimal(line.receivedQuantity),
+    0,
+  );
+  const rejectedQuantity = po.lines.reduce(
+    (sum, line) => sum + numberFromDecimal(line.rejectedQuantity),
+    0,
+  );
+  const openQuantity = po.lines.reduce((sum, line) => sum + payableOpenQuantity(line), 0);
+  const receivedValue = po.lines.reduce(
+    (sum, line) =>
+      sum + numberFromDecimal(line.receivedQuantity) * numberFromDecimal(line.unitCost),
+    0,
+  );
+
+  if (receivedQuantity === 0 && rejectedQuantity === 0) return undefined;
+
+  const amountCents = centsFromDecimal(receivedValue);
+  const partSummary = po.lines
+    .filter((line) => numberFromDecimal(line.receivedQuantity) > 0)
+    .slice(0, 3)
+    .map((line) => line.part?.sku ?? line.part?.name ?? `line ${line.lineNumber}`)
+    .join(', ');
+
+  return {
+    id: `payable-${po.id}`,
+    ledgerDate: po.closedAt?.toISOString() ?? po.updatedAt.toISOString(),
+    sourceType: 'PAYABLE_RECEIPT',
+    sourceId: po.id,
+    documentNumber: po.poNumber,
+    counterparty: po.vendor.vendorName || po.vendor.vendorCode,
+    accountDebit: 'Inventory received not billed',
+    accountCredit: 'Accounts payable - unbilled',
+    debitCents: amountCents,
+    creditCents: amountCents,
+    amountCents,
+    currency: 'USD',
+    status: openQuantity > 0 || rejectedQuantity > 0 ? 'NEEDS_REVIEW' : 'READY_FOR_REVIEW',
+    memo:
+      partSummary.length > 0
+        ? `${receivedQuantity} received from ${po.vendor.vendorName}: ${partSummary}`
+        : `${receivedQuantity} received from ${po.vendor.vendorName}`,
+    relatedRecordType: 'purchase-order',
+    relatedRecordId: po.id,
+  };
+}
+
+function paymentLedgerStatus(state: string): OperationalLedgerStatus {
+  if (state === 'SYNCED' || state === 'RECONCILED') return 'POSTED';
+  if (state === 'FAILED') return 'FAILED';
+  if (state === 'MISMATCH') return 'MISMATCH';
+  return 'PENDING';
+}
+
+function buildPaymentLedgerEntry(record: LedgerPaymentSyncRecord): OperationalLedgerEntry {
+  const amountCents = record.amountCents;
+  return {
+    id: `payment-${record.id}`,
+    ledgerDate:
+      record.paymentDate?.toISOString() ??
+      record.lastAttemptAt?.toISOString() ??
+      record.updatedAt.toISOString(),
+    sourceType: 'CUSTOMER_PAYMENT',
+    sourceId: record.id,
+    documentNumber: record.qbPaymentId ?? record.qbInvoiceId ?? record.id,
+    counterparty: record.customerId,
+    accountDebit: 'Undeposited funds / bank clearing',
+    accountCredit: 'Accounts receivable',
+    debitCents: amountCents,
+    creditCents: amountCents,
+    amountCents,
+    currency: 'USD',
+    status: paymentLedgerStatus(String(record.state)),
+    memo: record.errorMessage
+      ? `QuickBooks payment review: ${record.errorMessage}`
+      : `QuickBooks payment matched to work order ${record.workOrderId}`,
+    relatedRecordType: 'payment-sync',
+    relatedRecordId: record.id,
+  };
+}
+
+function reconciliationAmountCents(record: LedgerReconciliationRecord): number {
+  if (record.erpAmountCents != null && record.qbAmountCents != null) {
+    return Math.abs(record.erpAmountCents - record.qbAmountCents);
+  }
+  return Math.max(Math.abs(record.erpAmountCents ?? 0), Math.abs(record.qbAmountCents ?? 0));
+}
+
+function buildReconciliationLedgerEntry(
+  record: LedgerReconciliationRecord,
+): OperationalLedgerEntry {
+  const amountCents = reconciliationAmountCents(record);
+  return {
+    id: `reconciliation-${record.id}`,
+    ledgerDate: record.updatedAt.toISOString(),
+    sourceType: 'RECONCILIATION_VARIANCE',
+    sourceId: record.id,
+    documentNumber: `${record.reconciliationType}:${record.erpRecordId}`,
+    counterparty: record.qbRecordId ?? 'QuickBooks reconciliation',
+    accountDebit: 'Reconciliation clearing',
+    accountCredit: 'Suspense / review clearing',
+    debitCents: amountCents,
+    creditCents: amountCents,
+    amountCents,
+    currency: 'USD',
+    status: record.status === 'RESOLVED' ? 'RESOLVED' : 'MISMATCH',
+    memo: record.discrepancy ?? 'ERP and QuickBooks amounts require review.',
+    relatedRecordType: 'reconciliation-record',
+    relatedRecordId: record.id,
+  };
+}
+
+function summarizeLedgerEntries(entries: OperationalLedgerEntry[], exceptions: LedgerExceptionCounts) {
+  const sourceTotals = Object.fromEntries(
+    [...OPERATIONAL_LEDGER_SOURCE_TYPES].map((sourceType) => [
+      sourceType,
+      { count: 0, amountCents: 0 },
+    ]),
+  ) as Record<OperationalLedgerSourceType, { count: number; amountCents: number }>;
+  const statusTotals = Object.fromEntries(
+    [...OPERATIONAL_LEDGER_STATUSES].map((status) => [status, { count: 0, amountCents: 0 }]),
+  ) as Record<OperationalLedgerStatus, { count: number; amountCents: number }>;
+
+  for (const entry of entries) {
+    sourceTotals[entry.sourceType].count += 1;
+    sourceTotals[entry.sourceType].amountCents += entry.amountCents;
+    statusTotals[entry.status].count += 1;
+    statusTotals[entry.status].amountCents += entry.amountCents;
+  }
+
+  return {
+    generatedAt: new Date().toISOString(),
+    entryCount: entries.length,
+    totalDebitCents: entries.reduce((sum, entry) => sum + entry.debitCents, 0),
+    totalCreditCents: entries.reduce((sum, entry) => sum + entry.creditCents, 0),
+    sourceTotals,
+    statusTotals,
+    exceptions,
+  };
+}
 
 // ─── OAuth: redirect to QB ────────────────────────────────────────────────────
 
@@ -1136,6 +1467,69 @@ export const retryFailedHandler = wrapHandler(async (ctx) => {
     succeeded: results.filter((r) => r.success).length,
     failed: results.filter((r) => !r.success).length,
     results,
+  });
+}, { requireAuth: false });
+
+// ─── Operational ledger preview ─────────────────────────────────────────────
+
+export const listOperationalLedgerHandler = wrapHandler(async (ctx) => {
+  const qs = ctx.event.queryStringParameters ?? {};
+  const limit = parseLedgerLimit(qs.limit);
+  const offset = parseLedgerOffset(qs.offset);
+  const sourceType = qs.sourceType as OperationalLedgerSourceType | undefined;
+  const status = qs.status as OperationalLedgerStatus | undefined;
+
+  if (sourceType && !OPERATIONAL_LEDGER_SOURCE_TYPES.has(sourceType)) {
+    return jsonResponse(422, {
+      message: `Invalid sourceType. Must be one of: ${[...OPERATIONAL_LEDGER_SOURCE_TYPES].join(', ')}`,
+    });
+  }
+  if (status && !OPERATIONAL_LEDGER_STATUSES.has(status)) {
+    return jsonResponse(422, {
+      message: `Invalid status. Must be one of: ${[...OPERATIONAL_LEDGER_STATUSES].join(', ')}`,
+    });
+  }
+
+  const take = Math.min(limit + offset, 200);
+  const [
+    payables,
+    payments,
+    reconciliationRecords,
+    invoiceFailures,
+    customerFailures,
+    paymentFailures,
+    reconciliationMismatches,
+  ] = await Promise.all([
+    operationalLedgerQueries.listPayablePurchaseOrders(take),
+    operationalLedgerQueries.listPaymentSyncRecords(take),
+    operationalLedgerQueries.listReconciliationRecords(take),
+    operationalLedgerQueries.countInvoiceFailures(),
+    operationalLedgerQueries.countCustomerFailures(),
+    operationalLedgerQueries.countPaymentFailures(),
+    operationalLedgerQueries.countReconciliationMismatches(),
+  ]);
+
+  const entries = [
+    ...payables.map(buildPayableLedgerEntry).filter((entry): entry is OperationalLedgerEntry => !!entry),
+    ...payments.map(buildPaymentLedgerEntry),
+    ...reconciliationRecords.map(buildReconciliationLedgerEntry),
+  ]
+    .filter((entry) => !sourceType || entry.sourceType === sourceType)
+    .filter((entry) => !status || entry.status === status)
+    .sort((a, b) => Date.parse(b.ledgerDate) - Date.parse(a.ledgerDate));
+
+  return jsonResponse(200, {
+    items: entries.slice(offset, offset + limit),
+    total: entries.length,
+    limit,
+    offset,
+    summary: summarizeLedgerEntries(entries, {
+      invoice: invoiceFailures,
+      customer: customerFailures,
+      payment: paymentFailures,
+      reconciliation: reconciliationMismatches,
+    }),
+    postingRules: OPERATIONAL_LEDGER_POSTING_RULES,
   });
 }, { requireAuth: false });
 

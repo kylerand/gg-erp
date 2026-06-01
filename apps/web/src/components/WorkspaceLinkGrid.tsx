@@ -65,6 +65,7 @@ const ICON_BY_ITEM_KEY: Partial<Record<string, LucideIcon>> = {
   'build-configuration': ClipboardList,
   'build-bom': PackageCheck,
   'accounting-sync': Receipt,
+  'accounting-ledger': History,
   'accounting-reconciliation': Scale,
   'quickbooks-customer': Users,
   'quickbooks-invoice': FileText,

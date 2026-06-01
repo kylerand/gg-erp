@@ -1223,6 +1223,7 @@ test('admin migration cutover page uses live batch evidence', () => {
 test('accounting sync monitor exposes live purchase-order payable handoff', () => {
   const accountingSource = readSource('app/accounting/page.tsx');
   const syncSource = readSource('app/accounting/sync/page.tsx');
+  const ledgerSource = readSource('app/accounting/ledger/page.tsx');
   const apiClientSource = readSource('lib/api-client.ts');
   const workspaceSource = readFileSync(
     path.resolve(WEB_SRC_DIR, '../../../packages/domain/src/erp-workspaces.ts'),
@@ -1246,8 +1247,11 @@ test('accounting sync monitor exposes live purchase-order payable handoff', () =
       'listIntegrationAccounts(STRICT_LIVE_DATA)',
       'getFailureSummary(STRICT_LIVE_DATA)',
       'listPurchaseOrders({ pageSize: 200 }, STRICT_LIVE_DATA)',
+      'listOperationalLedger({ limit: 100 }, STRICT_LIVE_DATA)',
+      "erpRoute('accounting-ledger')",
       'LiveDataWarning',
       'PO bill review',
+      'Ledger entries',
     ].filter((snippet) => !accountingSource.includes(snippet)),
     [],
   );
@@ -1285,7 +1289,7 @@ test('accounting sync monitor exposes live purchase-order payable handoff', () =
   );
 
   assert.deepEqual(
-    ['vendor-payable', '/accounting/sync?view=payables'].filter(
+    ['vendor-payable', '/accounting/sync?view=payables', 'accounting-ledger', '/accounting/ledger'].filter(
       (snippet) => !workspaceSource.includes(snippet) || !registrySource.includes(snippet),
     ),
     [],
@@ -1296,7 +1300,23 @@ test('accounting sync monitor exposes live purchase-order payable handoff', () =
       'export async function getFailureSummary(options?: ApiDataOptions)',
       'export async function listPaymentSyncRecords',
       'export async function retryPaymentSync',
+      'export async function listOperationalLedger',
+      '/accounting/operational-ledger',
     ].filter((snippet) => !apiClientSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      'const STRICT_LIVE_DATA = { allowMockFallback: false } as const',
+      'listOperationalLedger(',
+      'Payable receipts',
+      'Customer payments',
+      'Reconciliation variance',
+      "erpRecordRoute('purchase-order'",
+      "erpRoute('accounting-sync', { view: 'payments' })",
+      "erpRoute('accounting-reconciliation')",
+    ].filter((snippet) => !ledgerSource.includes(snippet)),
     [],
   );
 });

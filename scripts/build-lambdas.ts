@@ -167,6 +167,7 @@ const lambdas: LambdaEntry[] = [
   { context: 'accounting', handler: 'get-reconciliation-run',    entry: 'apps/api/src/lambda/accounting/get-reconciliation-run.handler.ts' },
   { context: 'accounting', handler: 'list-mismatches',           entry: 'apps/api/src/lambda/accounting/list-mismatches.handler.ts' },
   { context: 'accounting', handler: 'resolve-reconciliation',    entry: 'apps/api/src/lambda/accounting/resolve-reconciliation.handler.ts' },
+  { context: 'accounting', handler: 'list-operational-ledger',   entry: 'apps/api/src/lambda/accounting/list-operational-ledger.handler.ts' },
   { context: 'accounting', handler: 'get-failure-summary',       entry: 'apps/api/src/lambda/accounting/get-failure-summary.handler.ts' },
   { context: 'accounting', handler: 'retry-failed',              entry: 'apps/api/src/lambda/accounting/retry-failed.handler.ts' },
 

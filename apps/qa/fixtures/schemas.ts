@@ -633,6 +633,68 @@ const accountingStatus = z.object({
   realmId: z.string().optional(),
 });
 
+const operationalLedgerEntry = z.object({
+  id: z.string(),
+  ledgerDate: isoDate,
+  sourceType: z.enum(['PAYABLE_RECEIPT', 'CUSTOMER_PAYMENT', 'RECONCILIATION_VARIANCE']),
+  sourceId: z.string(),
+  documentNumber: z.string(),
+  counterparty: z.string(),
+  accountDebit: z.string(),
+  accountCredit: z.string(),
+  debitCents: z.number(),
+  creditCents: z.number(),
+  amountCents: z.number(),
+  currency: z.literal('USD'),
+  status: z.enum([
+    'READY_FOR_REVIEW',
+    'NEEDS_REVIEW',
+    'POSTED',
+    'PENDING',
+    'FAILED',
+    'MISMATCH',
+    'RESOLVED',
+  ]),
+  memo: z.string(),
+  relatedRecordType: z.enum(['purchase-order', 'payment-sync', 'reconciliation-record']),
+  relatedRecordId: z.string(),
+});
+
+const operationalLedgerTotals = z.object({
+  count: positiveInt,
+  amountCents: z.number(),
+});
+
+const operationalLedger = z.object({
+  items: z.array(operationalLedgerEntry),
+  total: positiveInt,
+  limit: positiveInt,
+  offset: positiveInt,
+  summary: z.object({
+    generatedAt: isoDate,
+    entryCount: positiveInt,
+    totalDebitCents: z.number(),
+    totalCreditCents: z.number(),
+    sourceTotals: z.record(z.string(), operationalLedgerTotals),
+    statusTotals: z.record(z.string(), operationalLedgerTotals),
+    exceptions: z.object({
+      invoice: positiveInt,
+      customer: positiveInt,
+      payment: positiveInt,
+      reconciliation: positiveInt,
+    }),
+  }),
+  postingRules: z.array(
+    z.object({
+      sourceType: z.enum(['PAYABLE_RECEIPT', 'CUSTOMER_PAYMENT', 'RECONCILIATION_VARIANCE']),
+      trigger: z.string(),
+      debitAccount: z.string(),
+      creditAccount: z.string(),
+      status: z.literal('active-preview'),
+    }),
+  ),
+});
+
 const reportMetric = z.object({
   value: z.string(),
   label: z.string(),
@@ -747,6 +809,7 @@ const ROUTES: RouteEntry[] = [
 
   // Accounting
   { method: 'GET', template: '/accounting/status', schema: accountingStatus },
+  { method: 'GET', template: '/accounting/operational-ledger', schema: operationalLedger },
   {
     method: 'GET',
     template: '/accounting/reconciliation/runs',

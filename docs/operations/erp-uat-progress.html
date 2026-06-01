@@ -485,11 +485,13 @@
                 `GET /migration/batches` data with mock fallback disabled. The page summarizes
                 rehearsal batches, record coverage, migration errors, and cutover gate status, then
                 links into customers, parts, work orders, and accounting sync for imported-domain
-                inspection.
+                inspection. `validate:shopmonkey-cutover` now produces sanitized JSON/HTML
+                preflight evidence; the latest report is
+                `docs/operations/shopmonkey-cutover-preflight.html`.
               </td>
               <td>
-                Run the staging rehearsal from the latest ShopMonkey export and attach
-                row-count/reconciliation evidence.
+                Run the isolated staging loader rehearsal from the latest ShopMonkey export and
+                attach row-count/reconciliation evidence.
               </td>
             </tr>
             <tr>

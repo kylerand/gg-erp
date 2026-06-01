@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ShopMonkey Cutover Preflight</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #1f2933;
+        --muted: #697386;
+        --line: #d8dee9;
+        --brand: #b1581b;
+        --brand-bg: #fff3e8;
+        --pass: #11734b;
+        --warn: #a15c00;
+        --fail: #b42318;
+      }
+      body {
+        margin: 0;
+        background: #f7f4ed;
+        color: var(--ink);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      main {
+        max-width: 1160px;
+        margin: 0 auto;
+        padding: 32px 20px 48px;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        align-items: flex-start;
+        margin-bottom: 24px;
+      }
+      h1 {
+        margin: 0;
+        font-size: clamp(28px, 4vw, 44px);
+        line-height: 1.05;
+      }
+      h2 {
+        margin: 0 0 12px;
+        font-size: 18px;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .stamp {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        padding: 10px 12px;
+        color: var(--muted);
+        font-size: 13px;
+        white-space: nowrap;
+      }
+      .summary {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+      .metric,
+      section {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+      .metric {
+        padding: 16px;
+      }
+      .metric strong {
+        display: block;
+        font-size: 28px;
+      }
+      .metric span {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      section {
+        padding: 20px;
+        margin-bottom: 18px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th,
+      td {
+        border-bottom: 1px solid var(--line);
+        padding: 10px 8px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      tr:last-child td {
+        border-bottom: 0;
+      }
+      .pill {
+        display: inline-flex;
+        border: 1px solid currentColor;
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .pass {
+        color: var(--pass);
+      }
+      .warn {
+        color: var(--warn);
+      }
+      .fail {
+        color: var(--fail);
+      }
+      ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+      li + li {
+        margin-top: 8px;
+      }
+      @media (max-width: 780px) {
+        header,
+        .summary {
+          display: block;
+        }
+        .stamp,
+        .metric {
+          margin-top: 12px;
+        }
+        table {
+          display: block;
+          overflow-x: auto;
+          white-space: nowrap;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p class="muted">Sanitized readiness report</p>
+          <h1>ShopMonkey Cutover Preflight</h1>
+          <p class="muted">Source: shopmonkey-sanitized-1773274402708.json</p>
+        </div>
+        <div class="stamp">Generated: 2026-06-01T05:27:40.114Z</div>
+      </header>
+
+      <div class="summary">
+        <div class="metric"><strong class="warn">WARN</strong><span>Overall status</span></div>
+        <div class="metric"><strong>5</strong><span>Entity groups present</span></div>
+        <div class="metric"><strong>1,021</strong><span>Total rows</span></div>
+        <div class="metric"><strong>69</strong><span>Warned rows</span></div>
+        <div class="metric"><strong>0</strong><span>Skipped rows</span></div>
+      </div>
+
+      <section>
+        <h2>Entity Gates</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Entity</th>
+              <th>Status</th>
+              <th>Total</th>
+              <th>Valid</th>
+              <th>Warned</th>
+              <th>Skipped</th>
+              <th>Valid %</th>
+              <th>Detail</th>
+            </tr>
+          </thead>
+          <tbody>
+        <tr>
+          <td>Customers</td>
+          <td><span class="pill warn">WARN</span></td>
+          <td>447</td>
+          <td>446</td>
+          <td>1</td>
+          <td>0</td>
+          <td>99.8%</td>
+          <td>Customers is usable but needs review before cutover sign-off.</td>
+        </tr>
+        <tr>
+          <td>Vehicles</td>
+          <td><span class="pill pass">PASS</span></td>
+          <td>56</td>
+          <td>56</td>
+          <td>0</td>
+          <td>0</td>
+          <td>100.0%</td>
+          <td>Vehicles meets the preflight coverage gate.</td>
+        </tr>
+        <tr>
+          <td>Work Orders</td>
+          <td><span class="pill warn">WARN</span></td>
+          <td>465</td>
+          <td>397</td>
+          <td>68</td>
+          <td>0</td>
+          <td>85.4%</td>
+          <td>Work Orders is usable but needs review before cutover sign-off.</td>
+        </tr>
+        <tr>
+          <td>Employees</td>
+          <td><span class="pill pass">PASS</span></td>
+          <td>28</td>
+          <td>28</td>
+          <td>0</td>
+          <td>0</td>
+          <td>100.0%</td>
+          <td>Employees meets the preflight coverage gate.</td>
+        </tr>
+        <tr>
+          <td>Vendors</td>
+          <td><span class="pill pass">PASS</span></td>
+          <td>25</td>
+          <td>25</td>
+          <td>0</td>
+          <td>0</td>
+          <td>100.0%</td>
+          <td>Vendors meets the preflight coverage gate.</td>
+        </tr>
+        <tr>
+          <td>Parts</td>
+          <td><span class="pill warn">WARN</span></td>
+          <td>0</td>
+          <td>0</td>
+          <td>0</td>
+          <td>0</td>
+          <td>0.0%</td>
+          <td>Parts data is not present in this export.</td>
+        </tr>
+        <tr>
+          <td>Purchase Orders</td>
+          <td><span class="pill warn">WARN</span></td>
+          <td>0</td>
+          <td>0</td>
+          <td>0</td>
+          <td>0</td>
+          <td>0.0%</td>
+          <td>Purchase Orders data is not present in this export.</td>
+        </tr>
+        <tr>
+          <td>Line Item Assignments</td>
+          <td><span class="pill warn">WARN</span></td>
+          <td>0</td>
+          <td>0</td>
+          <td>0</td>
+          <td>0</td>
+          <td>0.0%</td>
+          <td>Line Item Assignments data was not included; confirm this is intentional for this rehearsal.</td>
+        </tr></tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Next Actions</h2>
+        <ul><li>Review warning gates: Customers, Work Orders, Parts, Purchase Orders, Line Item Assignments.</li><li>Run the loader against an isolated staging database and capture row-count reconciliation.</li><li>Compare imported customers, carts, work orders, parts, vendors, and accounting sync queues in the ERP UI.</li></ul>
+      </section>
+    </main>
+  </body>
+</html>

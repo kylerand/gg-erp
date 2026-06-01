@@ -4,11 +4,13 @@ import {
   getMissingReportingSnapshotKeys,
   type ErpBlockedAlert,
   type ErpBlockedAlertFeed,
+  type ErpBlockedAlertTriageResult,
   type ErpReportingSnapshot,
 } from '@gg-erp/domain';
 import {
   getBlockedAlertsHandler,
   getReportingSnapshotHandler,
+  recordBlockedAlertTriageActionHandler,
   reportingSnapshotQueries,
   type ReportingBlockedWorkOrderRow,
   type ReportingOpenArSummary,
@@ -141,6 +143,10 @@ test('GET /reporting/blocked-alerts returns unified blocker triage feed', async 
       nextAction: 'Confirm part availability, PO status, or substitution path.',
       route: '/work-orders/wo-1',
       actions: [{ label: 'Open work order', href: '/work-orders/wo-1' }],
+      triageState: 'ACKNOWLEDGED',
+      lastTriageAction: 'ACKNOWLEDGE',
+      lastTriagedAt: '2026-06-01T01:00:00.000Z',
+      lastTriageNote: 'Parts team owns this.',
     },
   ];
   const mocks = mockReportingQueries({ blockedAlerts });
@@ -156,11 +162,78 @@ test('GET /reporting/blocked-alerts returns unified blocker triage feed', async 
     const body = JSON.parse(response.body) as ErpBlockedAlertFeed;
     assert.equal(body.summary.total, 1);
     assert.equal(body.summary.p2, 1);
+    assert.equal(body.summary.acknowledged, 1);
     assert.equal(body.summary.averageAgeMinutes, 90);
     assert.equal(body.items[0].ownerLabel, 'Parts Coordinator');
+    assert.equal(body.items[0].triageState, 'ACKNOWLEDGED');
     assert.equal(body.items[0].route, '/work-orders/wo-1');
   } finally {
     for (const item of mocks) item.mock.restore();
+  }
+});
+
+test('POST /reporting/blocked-alerts/{alertId}/escalate records triage evidence', async () => {
+  const activeAlert: ErpBlockedAlert = {
+    id: 'OPERATION:op-1',
+    sourceType: 'OPERATION',
+    sourceId: 'op-1',
+    workOrderId: 'wo-1',
+    workOrderNumber: 'WO-100',
+    workOrderTitle: 'Battery tray - Wiring',
+    customerReference: 'Pier Motorsports',
+    assetReference: 'Cart 42',
+    reason: 'Waiting on controller PO.',
+    reasonCode: 'WAITING_PARTS',
+    ownerRole: 'parts_coordinator',
+    ownerLabel: 'Parts Coordinator',
+    severity: 'P2',
+    ageMinutes: 90,
+    updatedAt: '2026-06-01T00:00:00.000Z',
+    nextAction: 'Confirm part availability, PO status, or substitution path.',
+    route: '/work-orders/wo-1',
+    actions: [{ label: 'Open work order', href: '/work-orders/wo-1' }],
+    triageState: 'OPEN',
+  };
+
+  const listMock = mock.method(reportingSnapshotQueries, 'listBlockedAlerts', async () => [
+    activeAlert,
+  ]);
+  const recordMock = mock.method(
+    reportingSnapshotQueries,
+    'recordBlockedAlertTriageAction',
+    async (input: {
+      alert: ErpBlockedAlert;
+      action: 'ESCALATE';
+      note?: string;
+      ownerRole?: string;
+      correlationId: string;
+    }) => ({
+      id: 'triage-1',
+      alertId: input.alert.id,
+      action: input.action,
+      note: input.note,
+      ownerRole: input.ownerRole,
+      createdAt: '2026-06-01T02:00:00.000Z',
+    }),
+  );
+
+  try {
+    const response = await recordBlockedAlertTriageActionHandler({
+      httpMethod: 'POST',
+      path: '/reporting/blocked-alerts/OPERATION%3Aop-1/escalate',
+      body: JSON.stringify({ note: 'Vendor ETA missed.', ownerRole: 'shop_manager' }),
+      headers: { 'x-correlation-id': 'triage-test-1' },
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = JSON.parse(response.body) as ErpBlockedAlertTriageResult;
+    assert.equal(body.alertId, 'OPERATION:op-1');
+    assert.equal(body.triageState, 'ESCALATED');
+    assert.equal(body.event.note, 'Vendor ETA missed.');
+    assert.equal(body.event.ownerRole, 'shop_manager');
+  } finally {
+    listMock.mock.restore();
+    recordMock.mock.restore();
   }
 });
 

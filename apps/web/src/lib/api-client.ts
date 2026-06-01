@@ -1,5 +1,10 @@
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
-import type { ErpBlockedAlertFeed, ErpReportingSnapshot } from '@gg-erp/domain';
+import type {
+  ErpBlockedAlertFeed,
+  ErpBlockedAlertTriageActionType,
+  ErpBlockedAlertTriageResult,
+  ErpReportingSnapshot,
+} from '@gg-erp/domain';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
 const IS_AUTH_MOCK = process.env.NEXT_PUBLIC_AUTH_MODE === 'mock';
@@ -2739,6 +2744,24 @@ export async function getBlockedAlerts(
   return apiFetch<ErpBlockedAlertFeed>(
     `/reporting/blocked-alerts${qs.size ? `?${qs}` : ''}`,
     undefined,
+    undefined,
+    options,
+  );
+}
+
+export async function recordBlockedAlertTriageAction(
+  alertId: string,
+  action: ErpBlockedAlertTriageActionType,
+  payload?: { note?: string; ownerRole?: string },
+  options?: ApiDataOptions,
+): Promise<ErpBlockedAlertTriageResult> {
+  const actionPath = action === 'ESCALATE' ? 'escalate' : 'acknowledge';
+  return apiFetch<ErpBlockedAlertTriageResult>(
+    `/reporting/blocked-alerts/${encodeURIComponent(alertId)}/${actionPath}`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload ?? {}),
+    },
     undefined,
     options,
   );

@@ -856,21 +856,27 @@ test('blocked alerts page uses the live reporting triage feed', () => {
       'allowMockFallback: false',
       'ownerLabel',
       'nextAction',
+      'triageState',
+      'recordBlockedAlertTriageAction',
       'item.actions.map',
     ].filter((snippet) => !blockedAlertsSource.includes(snippet)),
     [],
   );
 
   assert.deepEqual(
-    ['export async function getBlockedAlerts', '/reporting/blocked-alerts'].filter(
-      (snippet) => !apiClientSource.includes(snippet),
-    ),
+    [
+      'export async function getBlockedAlerts',
+      'export async function recordBlockedAlertTriageAction',
+      '/reporting/blocked-alerts',
+    ].filter((snippet) => !apiClientSource.includes(snippet)),
     [],
   );
 
   assert.deepEqual(
     [
       'getBlockedAlertsHandler',
+      'recordBlockedAlertTriageActionHandler',
+      'recordBlockedAlertTriageAction',
       'listBlockedAlerts',
       'PART_SHORTAGE',
       'TECHNICIAN_TASK',
@@ -880,16 +886,22 @@ test('blocked alerts page uses the live reporting triage feed', () => {
   );
 
   assert.deepEqual(
-    ['getBlockedAlertsHandler', "pathname === '/reporting/blocked-alerts'"].filter(
-      (snippet) => !serverSource.includes(snippet),
-    ),
+    [
+      'getBlockedAlertsHandler',
+      'recordBlockedAlertTriageActionHandler',
+      "pathname === '/reporting/blocked-alerts'",
+      'blockedAlertActionMatch',
+    ].filter((snippet) => !serverSource.includes(snippet)),
     [],
   );
 
   assert.deepEqual(
-    ['reporting_blocked_alerts', 'GET /reporting/blocked-alerts'].filter(
-      (snippet) => !terraformSource.includes(snippet),
-    ),
+    [
+      'reporting_blocked_alerts',
+      'GET /reporting/blocked-alerts',
+      'reporting_blocked_alert_triage_action',
+      'POST /reporting/blocked-alerts/{alertId}/{action}',
+    ].filter((snippet) => !terraformSource.includes(snippet)),
     [],
   );
 });

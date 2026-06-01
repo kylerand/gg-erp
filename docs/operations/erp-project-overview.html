@@ -446,7 +446,7 @@
               </li>
               <li>
                 Known API smoke route exceptions are normally kept at zero; this active slice uses
-                six temporary pending-deploy allowances for the new planning-master routes.
+                one temporary pending-deploy allowance for the new blocked-alert triage action route.
               </li>
             </ul>
           </div>
@@ -666,13 +666,14 @@
           <div class="module-card">
             <header>
               <h3>Reporting And Admin</h3>
-              <span class="pill doing">70%</span>
+              <span class="pill doing">74%</span>
             </header>
-            <div class="bar warn"><span style="width: 70%"></span></div>
+            <div class="bar warn"><span style="width: 74%"></span></div>
             <p>
               Report catalog, saved views, CSV export, admin configuration catalog, access, audit,
-              integrations, and accounting settings are usable. Subscriptions, templates, API keys,
-              and webhook admin are still later-phase items.
+              integrations, accounting settings, and blocked-alert acknowledge/escalate triage are
+              usable. Subscriptions, templates, API keys, and webhook admin are still later-phase
+              items.
             </p>
           </div>
 
@@ -719,8 +720,8 @@
               <td>Latest production baseline</td>
               <td><span class="pill done">Merged</span></td>
               <td>
-                <code>origin/main</code> is at <code>529f4e9</code>, from PR 78: route allowlist
-                cleanup after PR 77 profile editing deployed.
+                <code>origin/main</code> is at <code>2c87d6e</code>, from PR 148: blocked-alert
+                route allowance cleanup after PR 147 deployed.
               </td>
             </tr>
             <tr>
@@ -735,8 +736,9 @@
               <td>Route/API surface</td>
               <td><span class="pill info">Broad</span></td>
               <td>
-                Recent smoke discovery covered 142 API routes. Main has 156 Lambda handler
-                entrypoints and 37 API test files.
+                Recent smoke discovery covered 173 API routes. Main has broad Lambda handler and
+                API test coverage across planning, inventory, tickets, reporting, accounting, and
+                sales.
               </td>
             </tr>
             <tr>

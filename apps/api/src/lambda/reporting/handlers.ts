@@ -3,6 +3,10 @@ import {
   type ErpBlockedAlert,
   type ErpBlockedAlertFeed,
   type ErpBlockedAlertSeverity,
+  type ErpBlockedAlertTriageActionType,
+  type ErpBlockedAlertTriageEvent,
+  type ErpBlockedAlertTriageResult,
+  type ErpBlockedAlertTriageState,
   getLiveErpReports,
   getMissingReportingSnapshotKeys,
   type ErpReportBlockedWorkOrder,
@@ -10,7 +14,7 @@ import {
   type ErpReportingSnapshot,
 } from '@gg-erp/domain';
 import { qbStatusHandler } from '../accounting/handlers.js';
-import { jsonResponse, wrapHandler } from '../../shared/lambda/index.js';
+import { jsonResponse, parseBody, wrapHandler } from '../../shared/lambda/index.js';
 
 const prisma = new PrismaClient();
 
@@ -49,6 +53,11 @@ interface BlockedAlertSourceRow {
 
 interface CountRow {
   count: number | bigint | string;
+}
+
+interface BlockedAlertTriageInput {
+  note?: unknown;
+  ownerRole?: unknown;
 }
 
 const OPEN_OPPORTUNITY_STAGES = ['PROSPECT', 'QUALIFIED', 'PROPOSAL', 'NEGOTIATION'] as const;
@@ -229,10 +238,54 @@ export const reportingSnapshotQueries = {
       })),
     ];
 
-    return rows
+    const alerts = rows
       .map(toBlockedAlert)
       .sort((a, b) => severityRank(a.severity) - severityRank(b.severity) || b.ageMinutes - a.ageMinutes)
       .slice(0, limit);
+
+    const latestTriage = await reportingSnapshotQueries.listLatestBlockedAlertTriage(
+      alerts.map((alert) => alert.id),
+    );
+    return alerts.map((alert) => applyBlockedAlertTriage(alert, latestTriage.get(alert.id)));
+  },
+
+  async listLatestBlockedAlertTriage(
+    alertIds: string[],
+  ): Promise<Map<string, ErpBlockedAlertTriageEvent>> {
+    if (alertIds.length === 0) return new Map();
+    const events = await prisma.blockedAlertTriageEvent.findMany({
+      where: { alertId: { in: alertIds } },
+      orderBy: [{ createdAt: 'desc' }],
+    });
+    const latest = new Map<string, ErpBlockedAlertTriageEvent>();
+    for (const event of events) {
+      if (latest.has(event.alertId)) continue;
+      latest.set(event.alertId, toBlockedAlertTriageEvent(event));
+    }
+    return latest;
+  },
+
+  async recordBlockedAlertTriageAction(input: {
+    alert: ErpBlockedAlert;
+    action: ErpBlockedAlertTriageActionType;
+    actorId?: string;
+    note?: string;
+    ownerRole?: string;
+    correlationId: string;
+  }): Promise<ErpBlockedAlertTriageEvent> {
+    const event = await prisma.blockedAlertTriageEvent.create({
+      data: {
+        alertId: input.alert.id,
+        sourceType: input.alert.sourceType,
+        sourceId: input.alert.sourceId,
+        action: input.action,
+        actorId: input.actorId,
+        note: input.note,
+        ownerRole: input.ownerRole ?? input.alert.ownerRole,
+        correlationId: input.correlationId,
+      },
+    });
+    return toBlockedAlertTriageEvent(event);
   },
 
   async countShortageParts(): Promise<number> {
@@ -569,11 +622,57 @@ export const getBlockedAlertsHandler = wrapHandler(
       p2: items.filter((item) => item.severity === 'P2').length,
       p3: items.filter((item) => item.severity === 'P3').length,
       unowned: items.filter((item) => item.ownerRole === 'shop_manager').length,
+      acknowledged: items.filter((item) => item.triageState === 'ACKNOWLEDGED').length,
+      escalated: items.filter((item) => item.triageState === 'ESCALATED').length,
       averageAgeMinutes: items.length > 0 ? Math.round(totalAge / items.length) : 0,
       oldestAgeMinutes: items.reduce((oldest, item) => Math.max(oldest, item.ageMinutes), 0),
     };
 
     return jsonResponse(200, { generatedAt, summary, items } satisfies ErpBlockedAlertFeed);
+  },
+  { requireAuth: false },
+);
+
+export const recordBlockedAlertTriageActionHandler = wrapHandler(
+  async (ctx) => {
+    const route = resolveBlockedAlertActionRoute(ctx.event);
+    if (!route) {
+      return jsonResponse(400, {
+        message: 'Blocked alert action route must include an alert ID and action.',
+      });
+    }
+
+    const parsed = parseBody<BlockedAlertTriageInput>(ctx.event);
+    if (!parsed.ok) return jsonResponse(400, { message: parsed.error });
+
+    const note = normalizeOptionalText(parsed.value.note, 'note', 1000);
+    if (!note.ok) return jsonResponse(422, { message: note.error });
+
+    const ownerRole = normalizeOptionalText(parsed.value.ownerRole, 'ownerRole', 80);
+    if (!ownerRole.ok) return jsonResponse(422, { message: ownerRole.error });
+
+    const activeAlerts = await reportingSnapshotQueries.listBlockedAlerts(500);
+    const alert = activeAlerts.find((item) => item.id === route.alertId);
+    if (!alert) {
+      return jsonResponse(404, {
+        message: `Blocked alert is no longer active: ${route.alertId}`,
+      });
+    }
+
+    const event = await reportingSnapshotQueries.recordBlockedAlertTriageAction({
+      alert,
+      action: route.action,
+      actorId: ctx.actorUserId,
+      note: note.value,
+      ownerRole: ownerRole.value,
+      correlationId: ctx.correlationId,
+    });
+
+    return jsonResponse(200, {
+      alertId: alert.id,
+      triageState: triageStateForAction(event.action),
+      event,
+    } satisfies ErpBlockedAlertTriageResult);
   },
   { requireAuth: false },
 );
@@ -602,7 +701,99 @@ function toBlockedAlert(row: BlockedAlertSourceRow): ErpBlockedAlert {
     nextAction: nextBlockedAlertAction(row.reasonCode, row.sourceType),
     route,
     actions: blockedAlertActions(row.workOrderId, row.reasonCode),
+    triageState: 'OPEN',
   };
+}
+
+function applyBlockedAlertTriage(
+  alert: ErpBlockedAlert,
+  event: ErpBlockedAlertTriageEvent | undefined,
+): ErpBlockedAlert {
+  if (!event) return alert;
+  return {
+    ...alert,
+    triageState: triageStateForAction(event.action),
+    lastTriageAction: event.action,
+    lastTriagedAt: event.createdAt,
+    lastTriagedBy: event.actorId,
+    lastTriageNote: event.note,
+  };
+}
+
+function toBlockedAlertTriageEvent(event: {
+  id: string;
+  alertId: string;
+  action: string;
+  actorId: string | null;
+  note: string | null;
+  ownerRole: string | null;
+  createdAt: Date;
+}): ErpBlockedAlertTriageEvent {
+  return {
+    id: event.id,
+    alertId: event.alertId,
+    action: event.action as ErpBlockedAlertTriageActionType,
+    actorId: event.actorId ?? undefined,
+    note: event.note ?? undefined,
+    ownerRole: event.ownerRole ?? undefined,
+    createdAt: event.createdAt.toISOString(),
+  };
+}
+
+function triageStateForAction(
+  action: ErpBlockedAlertTriageActionType,
+): ErpBlockedAlertTriageState {
+  return action === 'ESCALATE' ? 'ESCALATED' : 'ACKNOWLEDGED';
+}
+
+function resolveBlockedAlertActionRoute(event: {
+  pathParameters?: Record<string, string | undefined> | null;
+  path?: string;
+  rawPath?: string;
+}): { alertId: string; action: ErpBlockedAlertTriageActionType } | null {
+  const pathAction = event.pathParameters?.action?.toLowerCase();
+  const pathAlertId = event.pathParameters?.alertId;
+  if (pathAction && pathAlertId) {
+    const action = toBlockedAlertTriageAction(pathAction);
+    if (!action) return null;
+    return { alertId: decodePathSegment(pathAlertId), action };
+  }
+
+  const path = event.path ?? event.rawPath ?? '';
+  const match = /^\/reporting\/blocked-alerts\/([^/]+)\/(acknowledge|escalate)$/.exec(path);
+  if (!match) return null;
+  const action = toBlockedAlertTriageAction(match[2]!);
+  if (!action) return null;
+  return { alertId: decodePathSegment(match[1]!), action };
+}
+
+function toBlockedAlertTriageAction(value: string): ErpBlockedAlertTriageActionType | null {
+  if (value.toLowerCase() === 'acknowledge') return 'ACKNOWLEDGE';
+  if (value.toLowerCase() === 'escalate') return 'ESCALATE';
+  return null;
+}
+
+function decodePathSegment(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function normalizeOptionalText(
+  value: unknown,
+  field: string,
+  maxLength: number,
+): { ok: true; value?: string } | { ok: false; error: string } {
+  if (value === undefined || value === null) return { ok: true };
+  if (typeof value !== 'string') return { ok: false, error: `${field} must be a string.` };
+  const trimmed = value.trim();
+  if (!trimmed) return { ok: true };
+  if (trimmed.length > maxLength) {
+    return { ok: false, error: `${field} must be ${maxLength} characters or less.` };
+  }
+  return { ok: true, value: trimmed };
 }
 
 function blockedAlertActions(workOrderId: string, reasonCode: string) {

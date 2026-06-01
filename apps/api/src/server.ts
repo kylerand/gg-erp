@@ -203,7 +203,11 @@ import {
   publishScheduleHandler,
   updateCapacitySlotHandler,
 } from './lambda/scheduling/handlers.js';
-import { getBlockedAlertsHandler, getReportingSnapshotHandler } from './lambda/reporting/handlers.js';
+import {
+  getBlockedAlertsHandler,
+  getReportingSnapshotHandler,
+  recordBlockedAlertTriageActionHandler,
+} from './lambda/reporting/handlers.js';
 import { getWorkspaceTodayHandler } from './lambda/workspace/handlers.js';
 import { listVehiclesHandler, updateVehicleHandler } from './lambda/vehicles/handlers.js';
 
@@ -314,6 +318,9 @@ async function route(
   const capacitySlotMatch = pathname.match(/^\/scheduling\/capacity-slots\/([^/]+)(?:\/([^/]+))?$/);
   const buildConfigurationMatch = pathname.match(/^\/planning\/build-configurations\/([^/]+)(?:\/state)?$/);
   const bomApproveMatch = pathname.match(/^\/planning\/boms\/([^/]+)\/approve$/);
+  const blockedAlertActionMatch = pathname.match(
+    /^\/reporting\/blocked-alerts\/([^/]+)\/(acknowledge|escalate)$/,
+  );
 
   // ── Auth ───────────────────────────────────────────────────────────────────
   if (pathname === '/auth/me' && method === 'GET') {
@@ -328,6 +335,15 @@ async function route(
     result = await getReportingSnapshotHandler(event);
   } else if (pathname === '/reporting/blocked-alerts' && method === 'GET') {
     result = await getBlockedAlertsHandler(event);
+  } else if (blockedAlertActionMatch && method === 'POST') {
+    result = await recordBlockedAlertTriageActionHandler({
+      ...event,
+      pathParameters: {
+        ...event.pathParameters,
+        alertId: blockedAlertActionMatch[1],
+        action: blockedAlertActionMatch[2],
+      },
+    });
 
   // ── Planning ──────────────────────────────────────────────────────────────
   } else if (pathname === '/planning/work-orders' && method === 'POST') {
@@ -783,7 +799,9 @@ server.listen(PORT, () => {
   console.log(`\n🚀 GG ERP API (local dev) running at http://localhost:${PORT}`);
   console.log(`   Auth        GET /auth/me`);
   console.log(`   Workspace   GET /workspace/today`);
-  console.log(`   Reporting   GET /reporting/snapshot, GET /reporting/blocked-alerts`);
+  console.log(
+    `   Reporting   GET /reporting/snapshot, GET /reporting/blocked-alerts, POST /reporting/blocked-alerts/{alertId}/{action}`,
+  );
   console.log(`   Customers   GET|POST /identity/customers, GET|POST /:id/transition`);
   console.log(`   Inventory   GET|POST /inventory/parts, PATCH /inventory/parts/:id, GET /inventory/vendors, GET /inventory/ledger, POST /inventory/adjustments, POST /inventory/transfers, POST /inventory/cycle-counts`);
   console.log(`   Tickets     GET|POST /tickets/work-orders, /tickets/work-orders/:id/tasks|operations|rework|qc-gates|time-entries`);

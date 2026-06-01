@@ -3,6 +3,12 @@ import type {
   ErpBlockedAlertFeed,
   ErpBlockedAlertTriageActionType,
   ErpBlockedAlertTriageResult,
+  ErpReportExportRun,
+  ErpReportExportRunList,
+  ErpReportExportRunRequest,
+  ErpReportSubscription,
+  ErpReportSubscriptionCadence,
+  ErpReportSubscriptionList,
   ErpReportingSnapshot,
 } from '@gg-erp/domain';
 
@@ -1896,12 +1902,7 @@ export interface InventoryLocation {
 export async function listInventoryLocations(
   options?: ApiDataOptions,
 ): Promise<{ items: InventoryLocation[]; total: number }> {
-  return apiFetch(
-    '/inventory/locations',
-    undefined,
-    { items: [], total: 0 },
-    options,
-  );
+  return apiFetch('/inventory/locations', undefined, { items: [], total: 0 }, options);
 }
 
 export interface InventoryTransfer {
@@ -2761,6 +2762,86 @@ export async function recordBlockedAlertTriageAction(
     {
       method: 'POST',
       body: JSON.stringify(payload ?? {}),
+    },
+    undefined,
+    options,
+  );
+}
+
+export async function getReportSubscriptions(
+  options?: ApiDataOptions,
+): Promise<ErpReportSubscriptionList> {
+  return apiFetch<ErpReportSubscriptionList>(
+    '/reporting/subscriptions',
+    undefined,
+    undefined,
+    options,
+  );
+}
+
+export async function createReportSubscription(
+  payload: {
+    viewKey: string;
+    cadence?: ErpReportSubscriptionCadence;
+    timezone?: string;
+    enabled?: boolean;
+  },
+  options?: ApiDataOptions,
+): Promise<ErpReportSubscription> {
+  return apiFetch<ErpReportSubscription>(
+    '/reporting/subscriptions',
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+    undefined,
+    options,
+  );
+}
+
+export async function updateReportSubscription(
+  subscriptionId: string,
+  payload: {
+    cadence?: ErpReportSubscriptionCadence;
+    timezone?: string;
+    enabled?: boolean;
+  },
+  options?: ApiDataOptions,
+): Promise<ErpReportSubscription> {
+  return apiFetch<ErpReportSubscription>(
+    `/reporting/subscriptions/${encodeURIComponent(subscriptionId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+    undefined,
+    options,
+  );
+}
+
+export async function getReportExportRuns(
+  params?: { limit?: number },
+  options?: ApiDataOptions,
+): Promise<ErpReportExportRunList> {
+  const qs = new URLSearchParams();
+  if (params?.limit) qs.set('limit', String(params.limit));
+  return apiFetch<ErpReportExportRunList>(
+    `/reporting/exports${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    undefined,
+    options,
+  );
+}
+
+export async function runReportExportNow(
+  payload: ErpReportExportRunRequest,
+  options?: ApiDataOptions,
+): Promise<ErpReportExportRun> {
+  return apiFetch<ErpReportExportRun>(
+    '/reporting/exports/run-now',
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
     },
     undefined,
     options,

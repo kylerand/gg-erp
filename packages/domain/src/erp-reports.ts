@@ -41,6 +41,9 @@ export interface ErpSavedReportViewDescriptor {
 
 export type ErpReportMetricTone = 'neutral' | 'green' | 'amber' | 'red';
 export type ErpReportSnapshotFreshnessStatus = 'LIVE' | 'STALE' | 'ERROR';
+export type ErpReportSubscriptionCadence = 'daily' | 'weekly' | 'monthly';
+export type ErpReportDeliveryFormat = 'CSV';
+export type ErpReportExportRunStatus = 'RUNNING' | 'SUCCEEDED' | 'FAILED';
 
 export interface ErpReportSnapshotMetric {
   value: string;
@@ -146,6 +149,55 @@ export interface ErpReportingSnapshot {
   freshness: Record<string, ErpReportSnapshotFreshness>;
   blockedWorkOrders: ErpReportBlockedWorkOrder[];
   warnings: Array<{ source: string; message: string }>;
+}
+
+export interface ErpReportSubscription {
+  id: string;
+  viewKey: string;
+  viewLabel: string;
+  cadence: ErpReportSubscriptionCadence;
+  timezone: string;
+  format: ErpReportDeliveryFormat;
+  enabled: boolean;
+  createdByUserId?: string;
+  nextRunAt?: string;
+  lastRunAt?: string;
+  lastRunStatus?: ErpReportExportRunStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ErpReportSubscriptionList {
+  generatedAt: string;
+  items: ErpReportSubscription[];
+}
+
+export interface ErpReportExportRun {
+  id: string;
+  subscriptionId?: string;
+  viewKey: string;
+  viewLabel: string;
+  status: ErpReportExportRunStatus;
+  format: ErpReportDeliveryFormat;
+  requestedByUserId?: string;
+  scheduledFor: string;
+  startedAt: string;
+  completedAt?: string;
+  rowCount: number;
+  filename: string;
+  csvText?: string;
+  failureMessage?: string;
+  createdAt: string;
+}
+
+export interface ErpReportExportRunList {
+  generatedAt: string;
+  items: ErpReportExportRun[];
+}
+
+export interface ErpReportExportRunRequest {
+  subscriptionId?: string;
+  viewKey?: string;
 }
 
 export const ERP_REPORTS = [

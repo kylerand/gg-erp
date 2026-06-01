@@ -971,6 +971,46 @@ resource "aws_apigatewayv2_route" "reporting_blocked_alert_triage_action" {
   authorizer_id      = local.authorizer_id
 }
 
+resource "aws_apigatewayv2_route" "reporting_subscriptions" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /reporting/subscriptions"
+  target             = "integrations/${aws_apigatewayv2_integration.reporting_snapshot.id}"
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorizer_id      = local.authorizer_id
+}
+
+resource "aws_apigatewayv2_route" "reporting_create_subscription" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /reporting/subscriptions"
+  target             = "integrations/${aws_apigatewayv2_integration.reporting_snapshot.id}"
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorizer_id      = local.authorizer_id
+}
+
+resource "aws_apigatewayv2_route" "reporting_update_subscription" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /reporting/subscriptions/{subscriptionId}"
+  target             = "integrations/${aws_apigatewayv2_integration.reporting_snapshot.id}"
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorizer_id      = local.authorizer_id
+}
+
+resource "aws_apigatewayv2_route" "reporting_exports" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /reporting/exports"
+  target             = "integrations/${aws_apigatewayv2_integration.reporting_snapshot.id}"
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorizer_id      = local.authorizer_id
+}
+
+resource "aws_apigatewayv2_route" "reporting_run_export_now" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /reporting/exports/run-now"
+  target             = "integrations/${aws_apigatewayv2_integration.reporting_snapshot.id}"
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorizer_id      = local.authorizer_id
+}
+
 # ─── Identity Lambda Functions ─────────────────────────────────────────────────
 
 resource "aws_lambda_function" "identity_me" {

@@ -728,11 +728,9 @@ test('dashboard KPI cards deep-link to filtered destination views', () => {
   );
 
   assert.deepEqual(
-    [
-      'getLiveErpReports',
-      'loadReportSignals',
-      "erpRoute('report-work-order-blockers')",
-    ].filter((snippet) => !reportingSource.includes(snippet)),
+    ['getLiveErpReports', 'loadReportSignals', "erpRoute('report-work-order-blockers')"].filter(
+      (snippet) => !reportingSource.includes(snippet),
+    ),
     [],
   );
 
@@ -747,6 +745,7 @@ test('dashboard KPI cards deep-link to filtered destination views', () => {
 test('reporting catalog is registry-backed with filtered drill-through destinations', () => {
   const reportingSource = readSource('app/reporting/page.tsx');
   const reportingExportSource = readSource('app/reporting/ReportingExportActions.tsx');
+  const reportingSubscriptionsSource = readSource('app/reporting/ReportingSubscriptionsPanel.tsx');
   const apiClientSource = readSource('lib/api-client.ts');
   const assignmentsSource = readSource('app/training/assignments/page.tsx');
   const auditSource = readSource('app/admin/audit/page.tsx');
@@ -777,10 +776,13 @@ test('reporting catalog is registry-backed with filtered drill-through destinati
       'getLiveErpReports',
       'getErpSavedReportViews',
       'ReportingExportActions',
+      'ReportingSubscriptionsPanel',
       'Saved Views',
       'reportingHref',
       'ReportCard',
       'getReportingSnapshot',
+      'getReportSubscriptions',
+      'getReportExportRuns',
       'allowMockFallback: false',
       "erpRoute('report-work-order-blockers')",
     ].filter((snippet) => !reportingSource.includes(snippet)),
@@ -788,9 +790,17 @@ test('reporting catalog is registry-backed with filtered drill-through destinati
   );
 
   assert.deepEqual(
-    ['ErpReportingSnapshot', 'ErpBlockedAlertFeed', '/reporting/snapshot', '/reporting/blocked-alerts'].filter(
-      (snippet) => !apiClientSource.includes(snippet),
-    ),
+    [
+      'ErpReportingSnapshot',
+      'ErpBlockedAlertFeed',
+      'ErpReportSubscriptionList',
+      'ErpReportExportRunList',
+      '/reporting/snapshot',
+      '/reporting/blocked-alerts',
+      '/reporting/subscriptions',
+      '/reporting/exports',
+      '/reporting/exports/run-now',
+    ].filter((snippet) => !apiClientSource.includes(snippet)),
     [],
   );
 
@@ -801,6 +811,17 @@ test('reporting catalog is registry-backed with filtered drill-through destinati
       'Export saved views',
       'Copy drill-through links',
     ].filter((snippet) => !reportingExportSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    [
+      'createReportSubscription',
+      'updateReportSubscription',
+      'runReportExportNow',
+      'Download latest CSV',
+      'allowMockFallback: false',
+    ].filter((snippet) => !reportingSubscriptionsSource.includes(snippet)),
     [],
   );
 
@@ -1134,7 +1155,7 @@ test('admin migration cutover page uses live batch evidence', () => {
   assert.deepEqual(
     [
       'listMigrationBatches',
-      "allowMockFallback: false",
+      'allowMockFallback: false',
       'Readiness Checks',
       'Cutover Inspection',
       "erpRoute('customer'",

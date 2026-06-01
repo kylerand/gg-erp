@@ -345,14 +345,15 @@
       <header>
         <h1>Golfin Garage ERP Project Overview</h1>
         <p class="lede">
-          High-level status after the blocked-alert triage and QA cleanup slices. The app has moved
-          past polished static screens into a usable shop-ops ERP foundation, but ShopMonkey cutover
-          remains blocked until complete parts and purchase-order source exports are captured.
+          High-level status after the blocked-alert triage, source-gate, and reporting automation
+          slices. The app has moved past polished static screens into a usable shop-ops ERP
+          foundation, but ShopMonkey cutover remains blocked until complete parts and purchase-order
+          source exports are captured.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 1, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 150</span>
-          <span class="chip">Active slice: ShopMonkey cutover source gates</span>
+          <span class="chip">Baseline: origin/main through PR 151</span>
+          <span class="chip">Active slice: Report subscriptions and CSV export runs</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
@@ -415,6 +416,10 @@
                 CI, QA smoke, QA coverage, CD, and Pages are green on the latest merged production
                 baseline.
               </li>
+              <li>
+                Reporting now has a live in-app automation path: saved-view subscriptions,
+                pause/enable controls, run-now export evidence, and downloadable CSV output.
+              </li>
             </ul>
           </div>
           <div class="callout">
@@ -434,8 +439,9 @@
                 consequences are not mature yet.
               </li>
               <li>
-                Known API smoke route exceptions are back to zero after the blocked-alert triage
-                route deployed and the temporary allowance was removed.
+                Known API smoke route exceptions are limited to pending deployment of the new
+                reporting subscription/export routes and should return to zero after CD promotes
+                this slice.
               </li>
             </ul>
           </div>
@@ -725,9 +731,8 @@
               <td>Route/API surface</td>
               <td><span class="pill info">Broad</span></td>
               <td>
-                Recent smoke discovery covered 173 API routes. Main has broad Lambda handler and
-                API test coverage across planning, inventory, tickets, reporting, accounting, and
-                sales.
+                Recent smoke discovery covered 173 API routes. Main has broad Lambda handler and API
+                test coverage across planning, inventory, tickets, reporting, accounting, and sales.
               </td>
             </tr>
             <tr>

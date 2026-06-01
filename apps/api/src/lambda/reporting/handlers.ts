@@ -7,8 +7,18 @@ import {
   type ErpBlockedAlertTriageEvent,
   type ErpBlockedAlertTriageResult,
   type ErpBlockedAlertTriageState,
+  type ErpReportDeliveryFormat,
+  type ErpReportExportRun,
+  type ErpReportExportRunList,
+  type ErpReportExportRunRequest,
+  type ErpReportExportRunStatus,
+  type ErpReportSubscription,
+  type ErpReportSubscriptionCadence,
+  type ErpReportSubscriptionList,
   getLiveErpReports,
   getMissingReportingSnapshotKeys,
+  getErpSavedReportViews,
+  getErpReportByKey,
   type ErpReportBlockedWorkOrder,
   type ErpReportMetricTone,
   type ErpReportingSnapshot,
@@ -58,6 +68,35 @@ interface CountRow {
 interface BlockedAlertTriageInput {
   note?: unknown;
   ownerRole?: unknown;
+}
+
+interface ReportSubscriptionInput {
+  viewKey?: unknown;
+  cadence?: unknown;
+  timezone?: unknown;
+  enabled?: unknown;
+}
+
+interface ReportSubscriptionUpdateInput {
+  cadence?: unknown;
+  timezone?: unknown;
+  enabled?: unknown;
+}
+
+interface ReportExportRow {
+  viewKey: string;
+  viewLabel: string;
+  reportKey: string;
+  reportLabel: string;
+  category: string;
+  cadence: string;
+  metricValue: string;
+  metricLabel: string;
+  freshnessStatus: string;
+  freshnessMessage: string;
+  lastSuccessfulAt: string;
+  drillThroughRoute: string;
+  generatedAt: string;
 }
 
 const OPEN_OPPORTUNITY_STAGES = ['PROSPECT', 'QUALIFIED', 'PROPOSAL', 'NEGOTIATION'] as const;
@@ -170,7 +209,9 @@ export const reportingSnapshotQueries = {
               priority: true,
             },
           });
-    const taskWorkOrdersById = new Map(taskWorkOrders.map((workOrder) => [workOrder.id, workOrder]));
+    const taskWorkOrdersById = new Map(
+      taskWorkOrders.map((workOrder) => [workOrder.id, workOrder]),
+    );
 
     const rows: BlockedAlertSourceRow[] = [
       ...blockedOrders.map((workOrder) => ({
@@ -240,7 +281,10 @@ export const reportingSnapshotQueries = {
 
     const alerts = rows
       .map(toBlockedAlert)
-      .sort((a, b) => severityRank(a.severity) - severityRank(b.severity) || b.ageMinutes - a.ageMinutes)
+      .sort(
+        (a, b) =>
+          severityRank(a.severity) - severityRank(b.severity) || b.ageMinutes - a.ageMinutes,
+      )
       .slice(0, limit);
 
     const latestTriage = await reportingSnapshotQueries.listLatestBlockedAlertTriage(
@@ -286,6 +330,148 @@ export const reportingSnapshotQueries = {
       },
     });
     return toBlockedAlertTriageEvent(event);
+  },
+
+  async listReportSubscriptions(): Promise<ErpReportSubscription[]> {
+    const rows = await prisma.reportSubscription.findMany({
+      orderBy: [{ enabled: 'desc' }, { nextRunAt: 'asc' }, { updatedAt: 'desc' }],
+    });
+    return rows.map(toReportSubscription);
+  },
+
+  async getReportSubscription(id: string): Promise<ErpReportSubscription | null> {
+    const row = await prisma.reportSubscription.findUnique({ where: { id } });
+    return row ? toReportSubscription(row) : null;
+  },
+
+  async createReportSubscription(input: {
+    viewKey: string;
+    cadence: ErpReportSubscriptionCadence;
+    timezone: string;
+    enabled: boolean;
+    createdByUserId?: string;
+    correlationId: string;
+  }): Promise<ErpReportSubscription> {
+    const nextRunAt = input.enabled ? nextScheduledRun(input.cadence) : null;
+    const existing = await prisma.reportSubscription.findFirst({
+      where: {
+        viewKey: input.viewKey,
+        cadence: input.cadence,
+        createdByUserId: input.createdByUserId ?? null,
+      },
+    });
+    const row = existing
+      ? await prisma.reportSubscription.update({
+          where: { id: existing.id },
+          data: {
+            timezone: input.timezone,
+            enabled: input.enabled,
+            nextRunAt,
+            correlationId: input.correlationId,
+          },
+        })
+      : await prisma.reportSubscription.create({
+          data: {
+            viewKey: input.viewKey,
+            cadence: input.cadence,
+            timezone: input.timezone,
+            enabled: input.enabled,
+            createdByUserId: input.createdByUserId,
+            nextRunAt,
+            correlationId: input.correlationId,
+          },
+        });
+    return toReportSubscription(row);
+  },
+
+  async updateReportSubscription(input: {
+    id: string;
+    cadence?: ErpReportSubscriptionCadence;
+    timezone?: string;
+    enabled?: boolean;
+    correlationId: string;
+  }): Promise<ErpReportSubscription | null> {
+    const current = await prisma.reportSubscription.findUnique({ where: { id: input.id } });
+    if (!current) return null;
+    const cadence = input.cadence ?? (current.cadence as ErpReportSubscriptionCadence);
+    const enabled = input.enabled ?? current.enabled;
+    const row = await prisma.reportSubscription.update({
+      where: { id: input.id },
+      data: {
+        cadence,
+        timezone: input.timezone ?? current.timezone,
+        enabled,
+        nextRunAt: enabled ? nextScheduledRun(cadence) : null,
+        correlationId: input.correlationId,
+      },
+    });
+    return toReportSubscription(row);
+  },
+
+  async listReportExportRuns(limit: number): Promise<ErpReportExportRun[]> {
+    const rows = await prisma.reportExportRun.findMany({
+      orderBy: [{ createdAt: 'desc' }],
+      take: limit,
+    });
+    return rows.map(toReportExportRun);
+  },
+
+  async createReportExportRun(input: {
+    subscriptionId?: string;
+    viewKey: string;
+    requestedByUserId?: string;
+    scheduledFor: Date;
+    filename: string;
+    correlationId: string;
+  }): Promise<ErpReportExportRun> {
+    const row = await prisma.reportExportRun.create({
+      data: {
+        subscriptionId: input.subscriptionId,
+        viewKey: input.viewKey,
+        status: 'RUNNING',
+        requestedByUserId: input.requestedByUserId,
+        scheduledFor: input.scheduledFor,
+        startedAt: new Date(),
+        filename: input.filename,
+        correlationId: input.correlationId,
+      },
+    });
+    return toReportExportRun(row);
+  },
+
+  async completeReportExportRun(input: {
+    id: string;
+    status: Extract<ErpReportExportRunStatus, 'SUCCEEDED' | 'FAILED'>;
+    rowCount?: number;
+    csvText?: string;
+    failureMessage?: string;
+  }): Promise<ErpReportExportRun> {
+    const row = await prisma.reportExportRun.update({
+      where: { id: input.id },
+      data: {
+        status: input.status,
+        completedAt: new Date(),
+        rowCount: input.rowCount ?? 0,
+        csvText: input.csvText,
+        failureMessage: input.failureMessage,
+      },
+    });
+    return toReportExportRun(row);
+  },
+
+  async markSubscriptionExportResult(input: {
+    subscriptionId: string;
+    cadence: ErpReportSubscriptionCadence;
+    status: ErpReportExportRunStatus;
+  }): Promise<void> {
+    await prisma.reportSubscription.update({
+      where: { id: input.subscriptionId },
+      data: {
+        lastRunAt: new Date(),
+        lastRunStatus: input.status,
+        nextRunAt: input.status === 'SUCCEEDED' ? nextScheduledRun(input.cadence) : undefined,
+      },
+    });
   },
 
   async countShortageParts(): Promise<number> {
@@ -393,220 +579,222 @@ export const reportingSnapshotQueries = {
   },
 };
 
-export const getReportingSnapshotHandler = wrapHandler(
-  async () => {
-    const generatedAt = new Date();
-    const generatedAtIso = generatedAt.toISOString();
-    const metrics: ErpReportingSnapshot['metrics'] = {};
-    const freshness = Object.fromEntries(
-      getLiveErpReports().map((report) => [
-        report.key,
-        {
-          reportKey: report.key,
-          source: report.sourceObjectKeys.join(','),
-          status: 'STALE',
-          generatedAt: generatedAtIso,
-          message: 'Report source was not evaluated.',
-        },
-      ]),
-    ) as ErpReportingSnapshot['freshness'];
-    const warnings: Warning[] = [];
-    const blockedWorkOrders: ErpReportBlockedWorkOrder[] = [];
+export async function buildReportingSnapshot(): Promise<ErpReportingSnapshot> {
+  const generatedAt = new Date();
+  const generatedAtIso = generatedAt.toISOString();
+  const metrics: ErpReportingSnapshot['metrics'] = {};
+  const freshness = Object.fromEntries(
+    getLiveErpReports().map((report) => [
+      report.key,
+      {
+        reportKey: report.key,
+        source: report.sourceObjectKeys.join(','),
+        status: 'STALE',
+        generatedAt: generatedAtIso,
+        message: 'Report source was not evaluated.',
+      },
+    ]),
+  ) as ErpReportingSnapshot['freshness'];
+  const warnings: Warning[] = [];
+  const blockedWorkOrders: ErpReportBlockedWorkOrder[] = [];
 
-    await Promise.all([
-      captureMetric(
-        'report-work-order-blockers',
-        'work_orders.blocked',
-        generatedAtIso,
-        metrics,
-        freshness,
-        warnings,
-        async () => {
-          const [blockedRows, blockedCount] = await Promise.all([
-            reportingSnapshotQueries.listBlockedWorkOrders(5),
-            reportingSnapshotQueries.countWorkOrders('BLOCKED'),
-          ]);
-          blockedWorkOrders.push(
-            ...blockedRows.map((row) => ({
-              id: row.id,
-              workOrderNumber: row.workOrderNumber,
-              title: row.title,
-            })),
-          );
-          return {
-            value: String(blockedCount),
-            label: 'blocked',
-            tone: blockedCount > 0 ? 'red' : 'green',
-          };
-        },
-      ),
-      captureMetric(
-        'report-active-shop-load',
-        'work_orders.in_progress',
-        generatedAtIso,
-        metrics,
-        freshness,
-        warnings,
-        async () => {
-          const count = await reportingSnapshotQueries.countWorkOrders('IN_PROGRESS');
-          return {
-            value: String(count),
-            label: 'in progress',
-            tone: count > 0 ? 'amber' : 'green',
-          };
-        },
-      ),
-      captureMetric(
-        'report-completed-work-orders',
-        'work_orders.completed',
-        generatedAtIso,
-        metrics,
-        freshness,
-        warnings,
-        async () => {
-          const count = await reportingSnapshotQueries.countWorkOrders('COMPLETED');
-          return {
-            value: String(count),
-            label: 'completed',
-            tone: 'green',
-          };
-        },
-      ),
-      captureMetric(
-        'report-material-shortages',
-        'inventory.shortages',
-        generatedAtIso,
-        metrics,
-        freshness,
-        warnings,
-        async () => {
-          const count = await reportingSnapshotQueries.countShortageParts();
-          return {
-            value: String(count),
-            label: 'below minimum',
-            tone: count > 0 ? 'red' : 'green',
-          };
-        },
-      ),
-      captureMetric(
-        'report-open-reservations',
-        'inventory.reservations',
-        generatedAtIso,
-        metrics,
-        freshness,
-        warnings,
-        async () => {
-          const count = await reportingSnapshotQueries.countOpenReservations();
-          return {
-            value: String(count),
-            label: 'open reservations',
-            tone: count > 0 ? 'amber' : 'green',
-          };
-        },
-      ),
-      captureMetric(
-        'report-sales-forecast',
-        'sales.forecast',
-        generatedAtIso,
-        metrics,
-        freshness,
-        warnings,
-        async () => {
-          const forecast = await reportingSnapshotQueries.getSalesForecast();
-          return {
-            value:
-              forecast.weightedForecast > 0
-                ? formatCurrency(forecast.weightedForecast)
-                : String(forecast.dealCount),
-            label: forecast.weightedForecast > 0 ? 'weighted forecast' : 'forecast deals',
-            tone: forecast.dealCount > 0 ? 'green' : 'neutral',
-          };
-        },
-      ),
-      captureMetric(
-        'report-open-accounts-receivable',
-        'quickbooks.open_ar',
-        generatedAtIso,
-        metrics,
-        freshness,
-        warnings,
-        async () => {
-          const ar = await reportingSnapshotQueries.getOpenAccountsReceivable();
-          return {
-            value: `${ar.openInvoiceCount} / ${formatCurrency(ar.openInvoiceBalance)}`,
-            label: 'open invoices / balance',
-            tone: ar.openInvoiceCount > 0 ? 'amber' : 'green',
-          };
-        },
-      ),
-      captureMetric(
-        'report-quickbooks-sync-failures',
-        'accounting.invoice_sync',
-        generatedAtIso,
-        metrics,
-        freshness,
-        warnings,
-        async () => {
-          const count = await reportingSnapshotQueries.countFailedInvoiceSyncs();
-          return {
-            value: String(count),
-            label: 'failed syncs',
-            tone: count > 0 ? 'red' : 'green',
-          };
-        },
-      ),
-      captureMetric(
-        'report-overdue-training',
-        'training.assignments',
-        generatedAtIso,
-        metrics,
-        freshness,
-        warnings,
-        async () => {
-          const count = await reportingSnapshotQueries.countOverdueTrainingAssignments(generatedAt);
-          return {
-            value: String(count),
-            label: 'overdue',
-            tone: count > 0 ? 'red' : 'green',
-          };
-        },
-      ),
-      captureMetric(
-        'report-audit-events',
-        'admin.audit',
-        generatedAtIso,
-        metrics,
-        freshness,
-        warnings,
-        async () => {
-          const count = await reportingSnapshotQueries.countDeniedAuditEvents();
-          return {
-            value: String(count),
-            label: 'denied events',
-            tone: count > 0 ? 'amber' : 'green',
-          };
-        },
-      ),
-    ]);
-
-    const missingKeys = getMissingReportingSnapshotKeys({ metrics, freshness });
-    if (missingKeys.length > 0) {
-      warnings.push({
-        source: 'reporting.coverage',
-        message: `Snapshot missing report coverage for ${missingKeys.join(', ')}`,
-      });
-    }
-
-    const response: ErpReportingSnapshot = {
-      generatedAt: generatedAtIso,
+  await Promise.all([
+    captureMetric(
+      'report-work-order-blockers',
+      'work_orders.blocked',
+      generatedAtIso,
       metrics,
       freshness,
-      blockedWorkOrders,
       warnings,
-    };
+      async () => {
+        const [blockedRows, blockedCount] = await Promise.all([
+          reportingSnapshotQueries.listBlockedWorkOrders(5),
+          reportingSnapshotQueries.countWorkOrders('BLOCKED'),
+        ]);
+        blockedWorkOrders.push(
+          ...blockedRows.map((row) => ({
+            id: row.id,
+            workOrderNumber: row.workOrderNumber,
+            title: row.title,
+          })),
+        );
+        return {
+          value: String(blockedCount),
+          label: 'blocked',
+          tone: blockedCount > 0 ? 'red' : 'green',
+        };
+      },
+    ),
+    captureMetric(
+      'report-active-shop-load',
+      'work_orders.in_progress',
+      generatedAtIso,
+      metrics,
+      freshness,
+      warnings,
+      async () => {
+        const count = await reportingSnapshotQueries.countWorkOrders('IN_PROGRESS');
+        return {
+          value: String(count),
+          label: 'in progress',
+          tone: count > 0 ? 'amber' : 'green',
+        };
+      },
+    ),
+    captureMetric(
+      'report-completed-work-orders',
+      'work_orders.completed',
+      generatedAtIso,
+      metrics,
+      freshness,
+      warnings,
+      async () => {
+        const count = await reportingSnapshotQueries.countWorkOrders('COMPLETED');
+        return {
+          value: String(count),
+          label: 'completed',
+          tone: 'green',
+        };
+      },
+    ),
+    captureMetric(
+      'report-material-shortages',
+      'inventory.shortages',
+      generatedAtIso,
+      metrics,
+      freshness,
+      warnings,
+      async () => {
+        const count = await reportingSnapshotQueries.countShortageParts();
+        return {
+          value: String(count),
+          label: 'below minimum',
+          tone: count > 0 ? 'red' : 'green',
+        };
+      },
+    ),
+    captureMetric(
+      'report-open-reservations',
+      'inventory.reservations',
+      generatedAtIso,
+      metrics,
+      freshness,
+      warnings,
+      async () => {
+        const count = await reportingSnapshotQueries.countOpenReservations();
+        return {
+          value: String(count),
+          label: 'open reservations',
+          tone: count > 0 ? 'amber' : 'green',
+        };
+      },
+    ),
+    captureMetric(
+      'report-sales-forecast',
+      'sales.forecast',
+      generatedAtIso,
+      metrics,
+      freshness,
+      warnings,
+      async () => {
+        const forecast = await reportingSnapshotQueries.getSalesForecast();
+        return {
+          value:
+            forecast.weightedForecast > 0
+              ? formatCurrency(forecast.weightedForecast)
+              : String(forecast.dealCount),
+          label: forecast.weightedForecast > 0 ? 'weighted forecast' : 'forecast deals',
+          tone: forecast.dealCount > 0 ? 'green' : 'neutral',
+        };
+      },
+    ),
+    captureMetric(
+      'report-open-accounts-receivable',
+      'quickbooks.open_ar',
+      generatedAtIso,
+      metrics,
+      freshness,
+      warnings,
+      async () => {
+        const ar = await reportingSnapshotQueries.getOpenAccountsReceivable();
+        return {
+          value: `${ar.openInvoiceCount} / ${formatCurrency(ar.openInvoiceBalance)}`,
+          label: 'open invoices / balance',
+          tone: ar.openInvoiceCount > 0 ? 'amber' : 'green',
+        };
+      },
+    ),
+    captureMetric(
+      'report-quickbooks-sync-failures',
+      'accounting.invoice_sync',
+      generatedAtIso,
+      metrics,
+      freshness,
+      warnings,
+      async () => {
+        const count = await reportingSnapshotQueries.countFailedInvoiceSyncs();
+        return {
+          value: String(count),
+          label: 'failed syncs',
+          tone: count > 0 ? 'red' : 'green',
+        };
+      },
+    ),
+    captureMetric(
+      'report-overdue-training',
+      'training.assignments',
+      generatedAtIso,
+      metrics,
+      freshness,
+      warnings,
+      async () => {
+        const count = await reportingSnapshotQueries.countOverdueTrainingAssignments(generatedAt);
+        return {
+          value: String(count),
+          label: 'overdue',
+          tone: count > 0 ? 'red' : 'green',
+        };
+      },
+    ),
+    captureMetric(
+      'report-audit-events',
+      'admin.audit',
+      generatedAtIso,
+      metrics,
+      freshness,
+      warnings,
+      async () => {
+        const count = await reportingSnapshotQueries.countDeniedAuditEvents();
+        return {
+          value: String(count),
+          label: 'denied events',
+          tone: count > 0 ? 'amber' : 'green',
+        };
+      },
+    ),
+  ]);
 
-    return jsonResponse(200, response);
-  },
+  const missingKeys = getMissingReportingSnapshotKeys({ metrics, freshness });
+  if (missingKeys.length > 0) {
+    warnings.push({
+      source: 'reporting.coverage',
+      message: `Snapshot missing report coverage for ${missingKeys.join(', ')}`,
+    });
+  }
+
+  const response: ErpReportingSnapshot = {
+    generatedAt: generatedAtIso,
+    metrics,
+    freshness,
+    blockedWorkOrders,
+    warnings,
+  };
+
+  return response;
+}
+
+export const getReportingSnapshotHandler = wrapHandler(
+  async () => jsonResponse(200, await buildReportingSnapshot()),
   { requireAuth: false },
 );
 
@@ -677,6 +865,362 @@ export const recordBlockedAlertTriageActionHandler = wrapHandler(
   { requireAuth: false },
 );
 
+export const listReportSubscriptionsHandler = wrapHandler(
+  async () => {
+    const items = await reportingSnapshotQueries.listReportSubscriptions();
+    return jsonResponse(200, {
+      generatedAt: new Date().toISOString(),
+      items,
+    } satisfies ErpReportSubscriptionList);
+  },
+  { requireAuth: false },
+);
+
+export const createReportSubscriptionHandler = wrapHandler(
+  async (ctx) => {
+    const parsed = parseBody<ReportSubscriptionInput>(ctx.event);
+    if (!parsed.ok) return jsonResponse(400, { message: parsed.error });
+
+    const view = resolveSavedReportView(parsed.value.viewKey);
+    if (!view) return jsonResponse(422, { message: 'viewKey must reference a saved report view.' });
+
+    const cadence = normalizeSubscriptionCadence(parsed.value.cadence, view.cadence);
+    if (!cadence.ok) return jsonResponse(422, { message: cadence.error });
+
+    const timezone = normalizeTimezone(parsed.value.timezone, 'America/New_York');
+    if (!timezone.ok) return jsonResponse(422, { message: timezone.error });
+
+    const enabled = normalizeOptionalBoolean(parsed.value.enabled, true);
+    if (!enabled.ok) return jsonResponse(422, { message: enabled.error });
+
+    const subscription = await reportingSnapshotQueries.createReportSubscription({
+      viewKey: view.key,
+      cadence: cadence.value ?? 'daily',
+      timezone: timezone.value ?? 'America/New_York',
+      enabled: enabled.value ?? true,
+      createdByUserId: ctx.actorUserId,
+      correlationId: ctx.correlationId,
+    });
+
+    return jsonResponse(201, subscription);
+  },
+  { requireAuth: false },
+);
+
+export const updateReportSubscriptionHandler = wrapHandler(
+  async (ctx) => {
+    const subscriptionId = resolvePathParameter(ctx.event, 'subscriptionId');
+    if (!subscriptionId) {
+      return jsonResponse(400, { message: 'subscriptionId is required.' });
+    }
+
+    const parsed = parseBody<ReportSubscriptionUpdateInput>(ctx.event);
+    if (!parsed.ok) return jsonResponse(400, { message: parsed.error });
+
+    const cadence = normalizeSubscriptionCadence(parsed.value.cadence);
+    if (!cadence.ok) return jsonResponse(422, { message: cadence.error });
+
+    const timezone = normalizeTimezone(parsed.value.timezone);
+    if (!timezone.ok) return jsonResponse(422, { message: timezone.error });
+
+    const enabled = normalizeOptionalBoolean(parsed.value.enabled);
+    if (!enabled.ok) return jsonResponse(422, { message: enabled.error });
+
+    const subscription = await reportingSnapshotQueries.updateReportSubscription({
+      id: subscriptionId,
+      cadence: cadence.value,
+      timezone: timezone.value,
+      enabled: enabled.value,
+      correlationId: ctx.correlationId,
+    });
+
+    if (!subscription) {
+      return jsonResponse(404, { message: `Report subscription not found: ${subscriptionId}` });
+    }
+
+    return jsonResponse(200, subscription);
+  },
+  { requireAuth: false },
+);
+
+export const listReportExportRunsHandler = wrapHandler(
+  async (ctx) => {
+    const limit = clampInt(ctx.event.queryStringParameters?.limit, 1, 100, 20);
+    const items = await reportingSnapshotQueries.listReportExportRuns(limit);
+    return jsonResponse(200, {
+      generatedAt: new Date().toISOString(),
+      items,
+    } satisfies ErpReportExportRunList);
+  },
+  { requireAuth: false },
+);
+
+export const runReportExportNowHandler = wrapHandler(
+  async (ctx) => {
+    const parsed = parseBody<ErpReportExportRunRequest>(ctx.event);
+    if (!parsed.ok) return jsonResponse(400, { message: parsed.error });
+
+    const subscription = parsed.value.subscriptionId
+      ? await reportingSnapshotQueries.getReportSubscription(parsed.value.subscriptionId)
+      : null;
+    if (parsed.value.subscriptionId && !subscription) {
+      return jsonResponse(404, {
+        message: `Report subscription not found: ${parsed.value.subscriptionId}`,
+      });
+    }
+
+    const view = resolveSavedReportView(subscription?.viewKey ?? parsed.value.viewKey);
+    if (!view) {
+      return jsonResponse(422, {
+        message: 'subscriptionId or viewKey must reference a saved report view.',
+      });
+    }
+
+    const filename = reportExportFilename(view.exportFilename, new Date());
+    const run = await reportingSnapshotQueries.createReportExportRun({
+      subscriptionId: subscription?.id,
+      viewKey: view.key,
+      requestedByUserId: ctx.actorUserId,
+      scheduledFor: new Date(),
+      filename,
+      correlationId: ctx.correlationId,
+    });
+
+    try {
+      const snapshot = await buildReportingSnapshot();
+      const rows = buildSavedViewExportRows(view, snapshot);
+      const csvText = toCsv(rows, [
+        'viewKey',
+        'viewLabel',
+        'reportKey',
+        'reportLabel',
+        'category',
+        'cadence',
+        'metricValue',
+        'metricLabel',
+        'freshnessStatus',
+        'freshnessMessage',
+        'lastSuccessfulAt',
+        'drillThroughRoute',
+        'generatedAt',
+      ]);
+      const completed = await reportingSnapshotQueries.completeReportExportRun({
+        id: run.id,
+        status: 'SUCCEEDED',
+        rowCount: rows.length,
+        csvText,
+      });
+      if (subscription) {
+        await reportingSnapshotQueries.markSubscriptionExportResult({
+          subscriptionId: subscription.id,
+          cadence: subscription.cadence,
+          status: 'SUCCEEDED',
+        });
+      }
+      return jsonResponse(201, completed);
+    } catch (error) {
+      const failureMessage =
+        error instanceof Error ? error.message : 'Report export failed during snapshot generation.';
+      const failed = await reportingSnapshotQueries.completeReportExportRun({
+        id: run.id,
+        status: 'FAILED',
+        failureMessage,
+      });
+      if (subscription) {
+        await reportingSnapshotQueries.markSubscriptionExportResult({
+          subscriptionId: subscription.id,
+          cadence: subscription.cadence,
+          status: 'FAILED',
+        });
+      }
+      return jsonResponse(500, failed);
+    }
+  },
+  { requireAuth: false },
+);
+
+function toReportSubscription(row: {
+  id: string;
+  viewKey: string;
+  cadence: string;
+  timezone: string;
+  format: string;
+  enabled: boolean;
+  createdByUserId: string | null;
+  nextRunAt: Date | null;
+  lastRunAt: Date | null;
+  lastRunStatus: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): ErpReportSubscription {
+  const view = resolveSavedReportView(row.viewKey);
+  return {
+    id: row.id,
+    viewKey: row.viewKey,
+    viewLabel: view?.label ?? row.viewKey,
+    cadence: row.cadence as ErpReportSubscriptionCadence,
+    timezone: row.timezone,
+    format: row.format as ErpReportDeliveryFormat,
+    enabled: row.enabled,
+    createdByUserId: row.createdByUserId ?? undefined,
+    nextRunAt: row.nextRunAt?.toISOString(),
+    lastRunAt: row.lastRunAt?.toISOString(),
+    lastRunStatus: (row.lastRunStatus as ErpReportExportRunStatus | null) ?? undefined,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+function toReportExportRun(row: {
+  id: string;
+  subscriptionId: string | null;
+  viewKey: string;
+  status: string;
+  format: string;
+  requestedByUserId: string | null;
+  scheduledFor: Date;
+  startedAt: Date;
+  completedAt: Date | null;
+  rowCount: number;
+  filename: string;
+  csvText: string | null;
+  failureMessage: string | null;
+  createdAt: Date;
+}): ErpReportExportRun {
+  const view = resolveSavedReportView(row.viewKey);
+  return {
+    id: row.id,
+    subscriptionId: row.subscriptionId ?? undefined,
+    viewKey: row.viewKey,
+    viewLabel: view?.label ?? row.viewKey,
+    status: row.status as ErpReportExportRunStatus,
+    format: row.format as ErpReportDeliveryFormat,
+    requestedByUserId: row.requestedByUserId ?? undefined,
+    scheduledFor: row.scheduledFor.toISOString(),
+    startedAt: row.startedAt.toISOString(),
+    completedAt: row.completedAt?.toISOString(),
+    rowCount: row.rowCount,
+    filename: row.filename,
+    csvText: row.csvText ?? undefined,
+    failureMessage: row.failureMessage ?? undefined,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+function resolveSavedReportView(value: unknown) {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  return getErpSavedReportViews().find((view) => view.key === value.trim());
+}
+
+function normalizeSubscriptionCadence(
+  value: unknown,
+  fallback?: string,
+): { ok: true; value?: ErpReportSubscriptionCadence } | { ok: false; error: string } {
+  const raw = value === undefined || value === null || value === '' ? fallback : value;
+  if (raw === undefined || raw === null || raw === '') return { ok: true };
+  if (raw === 'daily' || raw === 'weekly' || raw === 'monthly') {
+    return { ok: true, value: raw };
+  }
+  return { ok: false, error: 'cadence must be daily, weekly, or monthly.' };
+}
+
+function normalizeTimezone(
+  value: unknown,
+  fallback?: string,
+): { ok: true; value?: string } | { ok: false; error: string } {
+  if (value === undefined || value === null || value === '') {
+    return fallback ? { ok: true, value: fallback } : { ok: true };
+  }
+  if (typeof value !== 'string') return { ok: false, error: 'timezone must be a string.' };
+  const trimmed = value.trim();
+  if (!trimmed) return fallback ? { ok: true, value: fallback } : { ok: true };
+  if (!/^[A-Za-z0-9_/-]{1,64}$/.test(trimmed)) {
+    return { ok: false, error: 'timezone must be an IANA-style timezone name.' };
+  }
+  return { ok: true, value: trimmed };
+}
+
+function normalizeOptionalBoolean(
+  value: unknown,
+  fallback?: boolean,
+): { ok: true; value?: boolean } | { ok: false; error: string } {
+  if (value === undefined || value === null) {
+    return fallback === undefined ? { ok: true } : { ok: true, value: fallback };
+  }
+  if (typeof value !== 'boolean') return { ok: false, error: 'enabled must be a boolean.' };
+  return { ok: true, value };
+}
+
+function resolvePathParameter(
+  event: {
+    pathParameters?: Record<string, string | undefined> | null;
+    path?: string;
+    rawPath?: string;
+  },
+  name: string,
+): string | undefined {
+  const direct = event.pathParameters?.[name];
+  if (direct) return decodePathSegment(direct);
+  const path = event.path ?? event.rawPath ?? '';
+  const match = /^\/reporting\/subscriptions\/([^/]+)$/.exec(path);
+  return match ? decodePathSegment(match[1]!) : undefined;
+}
+
+function nextScheduledRun(cadence: ErpReportSubscriptionCadence, from = new Date()): Date {
+  const next = new Date(from);
+  if (cadence === 'daily') next.setUTCDate(next.getUTCDate() + 1);
+  if (cadence === 'weekly') next.setUTCDate(next.getUTCDate() + 7);
+  if (cadence === 'monthly') next.setUTCMonth(next.getUTCMonth() + 1);
+  next.setUTCSeconds(0, 0);
+  return next;
+}
+
+function buildSavedViewExportRows(
+  view: ReturnType<typeof getErpSavedReportViews>[number],
+  snapshot: ErpReportingSnapshot,
+): ReportExportRow[] {
+  return view.reportKeys.map((reportKey) => {
+    const report = getErpReportByKey(reportKey);
+    const metric = snapshot.metrics[reportKey];
+    const freshness = snapshot.freshness[reportKey];
+    return {
+      viewKey: view.key,
+      viewLabel: view.label,
+      reportKey,
+      reportLabel: report?.label ?? reportKey,
+      category: report?.category ?? view.category,
+      cadence: report?.cadence ?? view.cadence,
+      metricValue: metric?.value ?? '',
+      metricLabel: metric?.label ?? report?.metricLabel ?? '',
+      freshnessStatus: freshness?.status ?? 'ERROR',
+      freshnessMessage: freshness?.message ?? '',
+      lastSuccessfulAt: freshness?.lastSuccessfulAt ?? '',
+      drillThroughRoute: report?.route ?? view.route,
+      generatedAt: snapshot.generatedAt,
+    };
+  });
+}
+
+function reportExportFilename(exportFilename: string, generatedAt: Date): string {
+  const date = generatedAt.toISOString().slice(0, 10);
+  const safeName = exportFilename
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-|-$/g, '');
+  return `${safeName || 'report-export'}-${date}.csv`;
+}
+
+function toCsv<T>(rows: readonly T[], columns: readonly (keyof T)[]): string {
+  const header = columns.map((column) => escapeCsvCell(String(column))).join(',');
+  const body = rows.map((row) => columns.map((column) => escapeCsvCell(row[column])).join(','));
+  return [header, ...body].join('\n');
+}
+
+function escapeCsvCell(value: unknown): string {
+  const text = value === null || value === undefined ? '' : String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
 function toBlockedAlert(row: BlockedAlertSourceRow): ErpBlockedAlert {
   const updatedAt = row.updatedAt.toISOString();
   const ageMinutes = Math.max(0, Math.floor((Date.now() - row.updatedAt.getTime()) / 60_000));
@@ -740,9 +1284,7 @@ function toBlockedAlertTriageEvent(event: {
   };
 }
 
-function triageStateForAction(
-  action: ErpBlockedAlertTriageActionType,
-): ErpBlockedAlertTriageState {
+function triageStateForAction(action: ErpBlockedAlertTriageActionType): ErpBlockedAlertTriageState {
   return action === 'ESCALATE' ? 'ESCALATED' : 'ACKNOWLEDGED';
 }
 
@@ -809,11 +1351,17 @@ function blockedAlertActions(workOrderId: string, reasonCode: string) {
   return actions;
 }
 
-function nextBlockedAlertAction(reasonCode: string, sourceType: ErpBlockedAlert['sourceType']): string {
-  if (reasonCode === 'WAITING_PARTS') return 'Confirm part availability, PO status, or substitution path.';
-  if (reasonCode === 'CUSTOMER_HOLD') return 'Confirm customer decision or sales/account owner follow-up.';
+function nextBlockedAlertAction(
+  reasonCode: string,
+  sourceType: ErpBlockedAlert['sourceType'],
+): string {
+  if (reasonCode === 'WAITING_PARTS')
+    return 'Confirm part availability, PO status, or substitution path.';
+  if (reasonCode === 'CUSTOMER_HOLD')
+    return 'Confirm customer decision or sales/account owner follow-up.';
   if (reasonCode === 'SAFETY_CONCERN') return 'Escalate to shop manager before restarting work.';
-  if (sourceType === 'TECHNICIAN_TASK') return 'Assign owner and resolve the technician task blocker.';
+  if (sourceType === 'TECHNICIAN_TASK')
+    return 'Assign owner and resolve the technician task blocker.';
   return 'Assign an owner, resolve the blocker, then move the work back into execution.';
 }
 
@@ -829,9 +1377,12 @@ function severityRank(severity: ErpBlockedAlertSeverity): number {
   return 3;
 }
 
-function ownerForReason(reason?: string | null): Pick<BlockedAlertSourceRow, 'ownerRole' | 'ownerLabel'> {
+function ownerForReason(
+  reason?: string | null,
+): Pick<BlockedAlertSourceRow, 'ownerRole' | 'ownerLabel'> {
   const code = classifyBlockedReason(reason);
-  if (code === 'WAITING_PARTS') return { ownerRole: 'parts_coordinator', ownerLabel: 'Parts Coordinator' };
+  if (code === 'WAITING_PARTS')
+    return { ownerRole: 'parts_coordinator', ownerLabel: 'Parts Coordinator' };
   if (code === 'CUSTOMER_HOLD') return { ownerRole: 'sales', ownerLabel: 'Sales / Customer Owner' };
   if (code === 'SAFETY_CONCERN') return { ownerRole: 'shop_manager', ownerLabel: 'Shop Manager' };
   return { ownerRole: 'shop_manager', ownerLabel: 'Shop Manager' };

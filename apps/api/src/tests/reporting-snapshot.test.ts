@@ -5,30 +5,38 @@ import {
   type ErpBlockedAlert,
   type ErpBlockedAlertFeed,
   type ErpBlockedAlertTriageResult,
+  type ErpReportExportRun,
+  type ErpReportSubscription,
+  type ErpReportSubscriptionList,
   type ErpReportingSnapshot,
 } from '@gg-erp/domain';
 import {
+  createReportSubscriptionHandler,
   getBlockedAlertsHandler,
   getReportingSnapshotHandler,
+  listReportSubscriptionsHandler,
   recordBlockedAlertTriageActionHandler,
+  runReportExportNowHandler,
   reportingSnapshotQueries,
   type ReportingBlockedWorkOrderRow,
   type ReportingOpenArSummary,
   type ReportingSalesForecastSummary,
 } from '../lambda/reporting/handlers.js';
 
-function mockReportingQueries(overrides: {
-  workOrderCounts?: Partial<Record<'BLOCKED' | 'IN_PROGRESS' | 'COMPLETED', number>>;
-  blockedWorkOrders?: ReportingBlockedWorkOrderRow[];
-  shortageParts?: number | Error;
-  openReservations?: number | Error;
-  salesForecast?: ReportingSalesForecastSummary;
-  openAr?: ReportingOpenArSummary | Error;
-  failedInvoiceSyncs?: number;
-  overdueTraining?: number;
-  deniedAuditEvents?: number;
-  blockedAlerts?: ErpBlockedAlert[];
-} = {}) {
+function mockReportingQueries(
+  overrides: {
+    workOrderCounts?: Partial<Record<'BLOCKED' | 'IN_PROGRESS' | 'COMPLETED', number>>;
+    blockedWorkOrders?: ReportingBlockedWorkOrderRow[];
+    shortageParts?: number | Error;
+    openReservations?: number | Error;
+    salesForecast?: ReportingSalesForecastSummary;
+    openAr?: ReportingOpenArSummary | Error;
+    failedInvoiceSyncs?: number;
+    overdueTraining?: number;
+    deniedAuditEvents?: number;
+    blockedAlerts?: ErpBlockedAlert[];
+  } = {},
+) {
   return [
     mock.method(
       reportingSnapshotQueries,
@@ -234,6 +242,155 @@ test('POST /reporting/blocked-alerts/{alertId}/escalate records triage evidence'
   } finally {
     listMock.mock.restore();
     recordMock.mock.restore();
+  }
+});
+
+test('GET /reporting/subscriptions returns persisted saved-view schedules', async () => {
+  const listMock = mock.method(reportingSnapshotQueries, 'listReportSubscriptions', async () => [
+    {
+      id: 'sub-1',
+      viewKey: 'saved-report-daily-shop-pulse',
+      viewLabel: 'Daily Shop Pulse',
+      cadence: 'daily',
+      timezone: 'America/New_York',
+      format: 'CSV',
+      enabled: true,
+      nextRunAt: '2026-06-02T12:00:00.000Z',
+      createdAt: '2026-06-01T12:00:00.000Z',
+      updatedAt: '2026-06-01T12:00:00.000Z',
+    } satisfies ErpReportSubscription,
+  ]);
+
+  try {
+    const response = await listReportSubscriptionsHandler({
+      httpMethod: 'GET',
+      path: '/reporting/subscriptions',
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = JSON.parse(response.body) as ErpReportSubscriptionList;
+    assert.equal(body.items.length, 1);
+    assert.equal(body.items[0].viewLabel, 'Daily Shop Pulse');
+    assert.equal(body.items[0].enabled, true);
+  } finally {
+    listMock.mock.restore();
+  }
+});
+
+test('POST /reporting/subscriptions persists an in-app CSV subscription', async () => {
+  const createMock = mock.method(
+    reportingSnapshotQueries,
+    'createReportSubscription',
+    async (input: {
+      viewKey: string;
+      cadence: 'daily';
+      timezone: string;
+      enabled: boolean;
+      createdByUserId?: string;
+      correlationId: string;
+    }) => ({
+      id: 'sub-1',
+      viewKey: input.viewKey,
+      viewLabel: 'Daily Shop Pulse',
+      cadence: input.cadence,
+      timezone: input.timezone,
+      format: 'CSV',
+      enabled: input.enabled,
+      createdByUserId: input.createdByUserId,
+      nextRunAt: '2026-06-02T12:00:00.000Z',
+      createdAt: '2026-06-01T12:00:00.000Z',
+      updatedAt: '2026-06-01T12:00:00.000Z',
+    }),
+  );
+
+  try {
+    const response = await createReportSubscriptionHandler({
+      httpMethod: 'POST',
+      path: '/reporting/subscriptions',
+      headers: { 'x-actor-id': '00000000-0000-4000-8000-000000000001' },
+      body: JSON.stringify({
+        viewKey: 'saved-report-daily-shop-pulse',
+        cadence: 'daily',
+        timezone: 'America/New_York',
+        enabled: true,
+      }),
+    });
+
+    assert.equal(response.statusCode, 201);
+    const body = JSON.parse(response.body) as ErpReportSubscription;
+    assert.equal(body.viewKey, 'saved-report-daily-shop-pulse');
+    assert.equal(body.cadence, 'daily');
+    assert.equal(body.format, 'CSV');
+  } finally {
+    createMock.mock.restore();
+  }
+});
+
+test('POST /reporting/exports/run-now generates CSV evidence for a saved view', async () => {
+  const mocks = mockReportingQueries({
+    workOrderCounts: { BLOCKED: 1, IN_PROGRESS: 4, COMPLETED: 8 },
+    shortageParts: 2,
+    openReservations: 3,
+    salesForecast: { dealCount: 0, weightedForecast: 0 },
+    openAr: { openInvoiceCount: 0, openInvoiceBalance: 0 },
+    failedInvoiceSyncs: 0,
+    overdueTraining: 0,
+    deniedAuditEvents: 0,
+  });
+  const createRunMock = mock.method(
+    reportingSnapshotQueries,
+    'createReportExportRun',
+    async (input: { viewKey: string; filename: string }) =>
+      ({
+        id: 'run-1',
+        viewKey: input.viewKey,
+        viewLabel: 'Daily Shop Pulse',
+        status: 'RUNNING',
+        format: 'CSV',
+        scheduledFor: '2026-06-01T12:00:00.000Z',
+        startedAt: '2026-06-01T12:00:00.000Z',
+        rowCount: 0,
+        filename: input.filename,
+        createdAt: '2026-06-01T12:00:00.000Z',
+      }) satisfies ErpReportExportRun,
+  );
+  const completeRunMock = mock.method(
+    reportingSnapshotQueries,
+    'completeReportExportRun',
+    async (input: { id: string; status: 'SUCCEEDED'; rowCount?: number; csvText?: string }) =>
+      ({
+        id: input.id,
+        viewKey: 'saved-report-daily-shop-pulse',
+        viewLabel: 'Daily Shop Pulse',
+        status: input.status,
+        format: 'CSV',
+        scheduledFor: '2026-06-01T12:00:00.000Z',
+        startedAt: '2026-06-01T12:00:00.000Z',
+        completedAt: '2026-06-01T12:00:01.000Z',
+        rowCount: input.rowCount ?? 0,
+        filename: 'daily-shop-pulse-2026-06-01.csv',
+        csvText: input.csvText,
+        createdAt: '2026-06-01T12:00:00.000Z',
+      }) satisfies ErpReportExportRun,
+  );
+
+  try {
+    const response = await runReportExportNowHandler({
+      httpMethod: 'POST',
+      path: '/reporting/exports/run-now',
+      body: JSON.stringify({ viewKey: 'saved-report-daily-shop-pulse' }),
+    });
+
+    assert.equal(response.statusCode, 201);
+    const body = JSON.parse(response.body) as ErpReportExportRun;
+    assert.equal(body.status, 'SUCCEEDED');
+    assert.equal(body.rowCount, 4);
+    assert.ok(body.csvText?.includes('report-active-shop-load'));
+    assert.ok(body.csvText?.includes('metricValue'));
+  } finally {
+    createRunMock.mock.restore();
+    completeRunMock.mock.restore();
+    for (const item of mocks) item.mock.restore();
   }
 });
 

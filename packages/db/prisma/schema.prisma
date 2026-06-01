@@ -292,6 +292,54 @@ model BlockedAlertTriageEvent {
   @@schema("reporting")
 }
 
+model ReportSubscription {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  viewKey         String            @map("view_key")
+  cadence         String
+  timezone        String            @default("America/New_York")
+  format          String            @default("CSV")
+  enabled         Boolean           @default(true)
+  createdByUserId String?           @map("created_by_user_id") @db.Uuid
+  nextRunAt       DateTime?         @map("next_run_at") @db.Timestamptz(6)
+  lastRunAt       DateTime?         @map("last_run_at") @db.Timestamptz(6)
+  lastRunStatus   String?           @map("last_run_status")
+  correlationId   String            @map("correlation_id")
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  exportRuns      ReportExportRun[]
+
+  @@unique([viewKey, cadence, createdByUserId], map: "report_subscriptions_view_cadence_actor_key")
+  @@index([enabled, nextRunAt], map: "report_subscriptions_enabled_next_run_idx")
+  @@index([viewKey, enabled], map: "report_subscriptions_view_enabled_idx")
+  @@map("report_subscriptions")
+  @@schema("reporting")
+}
+
+model ReportExportRun {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  subscriptionId    String?             @map("subscription_id") @db.Uuid
+  subscription      ReportSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  viewKey           String              @map("view_key")
+  status            String
+  format            String              @default("CSV")
+  requestedByUserId String?             @map("requested_by_user_id") @db.Uuid
+  scheduledFor      DateTime            @map("scheduled_for") @db.Timestamptz(6)
+  startedAt         DateTime            @map("started_at") @db.Timestamptz(6)
+  completedAt       DateTime?           @map("completed_at") @db.Timestamptz(6)
+  rowCount          Int                 @default(0) @map("row_count")
+  filename          String
+  csvText           String?             @map("csv_text")
+  failureMessage    String?             @map("failure_message")
+  correlationId     String              @map("correlation_id")
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([viewKey, createdAt], map: "report_export_runs_view_created_idx")
+  @@index([subscriptionId, createdAt], map: "report_export_runs_subscription_created_idx")
+  @@index([status, scheduledFor], map: "report_export_runs_status_scheduled_idx")
+  @@map("report_export_runs")
+  @@schema("reporting")
+}
+
 // ============================================================
 // ShopMonkey Migration Staging Schema
 // ============================================================

@@ -7,7 +7,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DB_DATABASE_URL")
-  schemas  = ["planning", "audit", "obs", "migration", "identity", "hr", "inventory", "work_orders", "integrations", "sop_ojt", "customers", "tickets", "accounting", "communication", "sales"]
+  schemas  = ["planning", "audit", "obs", "reporting", "migration", "identity", "hr", "inventory", "work_orders", "integrations", "sop_ojt", "customers", "tickets", "accounting", "communication", "sales"]
 }
 
 enum WorkOrderStatus {
@@ -272,6 +272,24 @@ model EventOutbox {
   @@index([state, createdAt], map: "event_outbox_state_created_idx")
   @@map("event_outbox")
   @@schema("obs")
+}
+
+model BlockedAlertTriageEvent {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  alertId       String   @map("alert_id")
+  sourceType    String   @map("source_type")
+  sourceId      String   @map("source_id")
+  action        String
+  actorId       String?  @map("actor_id") @db.Uuid
+  ownerRole     String?  @map("owner_role")
+  note          String?
+  correlationId String   @map("correlation_id")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([alertId, createdAt], map: "blocked_alert_triage_alert_created_idx")
+  @@index([action, createdAt], map: "blocked_alert_triage_action_created_idx")
+  @@map("blocked_alert_triage_events")
+  @@schema("reporting")
 }
 
 // ============================================================

@@ -72,6 +72,8 @@ export type ErpBlockedAlertSourceType =
   | 'PART_SHORTAGE';
 
 export type ErpBlockedAlertSeverity = 'P1' | 'P2' | 'P3';
+export type ErpBlockedAlertTriageActionType = 'ACKNOWLEDGE' | 'ESCALATE';
+export type ErpBlockedAlertTriageState = 'OPEN' | 'ACKNOWLEDGED' | 'ESCALATED';
 
 export interface ErpBlockedAlertAction {
   label: string;
@@ -97,6 +99,11 @@ export interface ErpBlockedAlert {
   nextAction: string;
   route: string;
   actions: ErpBlockedAlertAction[];
+  triageState: ErpBlockedAlertTriageState;
+  lastTriageAction?: ErpBlockedAlertTriageActionType;
+  lastTriagedAt?: string;
+  lastTriagedBy?: string;
+  lastTriageNote?: string;
 }
 
 export interface ErpBlockedAlertSummary {
@@ -105,6 +112,8 @@ export interface ErpBlockedAlertSummary {
   p2: number;
   p3: number;
   unowned: number;
+  acknowledged: number;
+  escalated: number;
   averageAgeMinutes: number;
   oldestAgeMinutes: number;
 }
@@ -113,6 +122,22 @@ export interface ErpBlockedAlertFeed {
   generatedAt: string;
   summary: ErpBlockedAlertSummary;
   items: ErpBlockedAlert[];
+}
+
+export interface ErpBlockedAlertTriageEvent {
+  id: string;
+  alertId: string;
+  action: ErpBlockedAlertTriageActionType;
+  actorId?: string;
+  note?: string;
+  ownerRole?: string;
+  createdAt: string;
+}
+
+export interface ErpBlockedAlertTriageResult {
+  alertId: string;
+  triageState: ErpBlockedAlertTriageState;
+  event: ErpBlockedAlertTriageEvent;
 }
 
 export interface ErpReportingSnapshot {

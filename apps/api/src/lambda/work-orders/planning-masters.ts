@@ -15,6 +15,7 @@ const prisma = new PrismaClient();
 type BuildConfigurationStatus = 'DRAFT' | 'LOCKED' | 'RELEASED' | 'SUPERSEDED';
 type BomStatus = 'DRAFT' | 'APPROVED' | 'OBSOLETE';
 type RoutingTemplateStatus = 'DRAFT' | 'ACTIVE' | 'RETIRED';
+type RoutingTemplateChangeKind = 'CREATED' | 'ACTIVATED' | 'RETIRED' | 'AUTO_RETIRED';
 
 const BUILD_CONFIGURATION_STATUSES: BuildConfigurationStatus[] = [
   'DRAFT',
@@ -112,6 +113,22 @@ export interface RoutingTemplateStepResponse {
   evidenceRequired: boolean;
 }
 
+export interface RoutingTemplateChangeEventResponse {
+  id: string;
+  routingTemplateId: string;
+  routeCode: string;
+  routeVersion: number;
+  changeKind: RoutingTemplateChangeKind;
+  previousStatus?: RoutingTemplateStatus;
+  newStatus: RoutingTemplateStatus;
+  changeSummary: string;
+  approvalNote?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  appliedBy?: string;
+  createdAt: string;
+}
+
 export interface RoutingTemplateResponse {
   id: string;
   routeCode: string;
@@ -132,6 +149,7 @@ export interface RoutingTemplateResponse {
   estimatedMinutes: number;
   estimatedLaborCostCents: number;
   steps: RoutingTemplateStepResponse[];
+  changeEvents: RoutingTemplateChangeEventResponse[];
 }
 
 export interface CreateBuildConfigurationInput {
@@ -167,6 +185,8 @@ export interface CreateRoutingTemplateInput {
 
 export interface TransitionRoutingTemplateInput {
   status: RoutingTemplateStatus;
+  approvalNote?: string;
+  changeSummary?: string;
 }
 
 export interface PlanningMasterStore {
@@ -235,6 +255,10 @@ function isUuid(value: string | undefined): value is string {
 
 function actorUuid(actorId: string | undefined): string | null {
   return isUuid(actorId) ? actorId : null;
+}
+
+function actorRef(actorId: string | undefined): string | null {
+  return actorId?.trim() || null;
 }
 
 function normalizeOptions(value: unknown): string[] {
@@ -378,6 +402,22 @@ interface RoutingTemplateStepRow {
   evidenceRequired: boolean;
 }
 
+interface RoutingTemplateChangeEventRow {
+  id: string;
+  routingTemplateId: string;
+  routeCode: string;
+  routeVersion: number;
+  changeKind: RoutingTemplateChangeKind;
+  previousStatus: RoutingTemplateStatus | null;
+  newStatus: RoutingTemplateStatus;
+  changeSummary: string;
+  approvalNote: string | null;
+  approvedBy: string | null;
+  approvedAt: Date | string | null;
+  appliedBy: string | null;
+  createdAt: Date | string;
+}
+
 function mapConfiguration(row: BuildConfigurationRow): BuildConfigurationResponse {
   return {
     id: row.id,
@@ -446,9 +486,30 @@ function mapRoutingTemplateStep(row: RoutingTemplateStepRow): RoutingTemplateSte
   };
 }
 
+function mapRoutingTemplateChangeEvent(
+  row: RoutingTemplateChangeEventRow,
+): RoutingTemplateChangeEventResponse {
+  return {
+    id: row.id,
+    routingTemplateId: row.routingTemplateId,
+    routeCode: row.routeCode,
+    routeVersion: Number(row.routeVersion),
+    changeKind: row.changeKind,
+    previousStatus: row.previousStatus ?? undefined,
+    newStatus: row.newStatus,
+    changeSummary: row.changeSummary,
+    approvalNote: row.approvalNote ?? undefined,
+    approvedBy: row.approvedBy ?? undefined,
+    approvedAt: optionalIso(row.approvedAt),
+    appliedBy: row.appliedBy ?? undefined,
+    createdAt: iso(row.createdAt),
+  };
+}
+
 function mapRoutingTemplate(
   row: RoutingTemplateRow,
   steps: RoutingTemplateStepResponse[],
+  changeEvents: RoutingTemplateChangeEventResponse[],
 ): RoutingTemplateResponse {
   return {
     id: row.id,
@@ -470,6 +531,7 @@ function mapRoutingTemplate(
     estimatedMinutes: Number(row.estimatedMinutes),
     estimatedLaborCostCents: Number(row.estimatedLaborCostCents),
     steps,
+    changeEvents,
   };
 }
 
@@ -616,6 +678,51 @@ async function loadRoutingTemplateSteps(
   return byTemplate;
 }
 
+async function loadRoutingTemplateChangeEvents(
+  db: DbClient,
+  routingTemplateIds: string[],
+): Promise<Map<string, RoutingTemplateChangeEventResponse[]>> {
+  if (routingTemplateIds.length === 0) return new Map();
+  const rows = await db.$queryRaw<RoutingTemplateChangeEventRow[]>`
+    SELECT
+      id::text AS "id",
+      routing_template_id::text AS "routingTemplateId",
+      route_code AS "routeCode",
+      route_version AS "routeVersion",
+      change_kind::text AS "changeKind",
+      previous_status::text AS "previousStatus",
+      new_status::text AS "newStatus",
+      change_summary AS "changeSummary",
+      approval_note AS "approvalNote",
+      coalesce(approved_by_ref, approved_by_user_id::text) AS "approvedBy",
+      approved_at AS "approvedAt",
+      coalesce(applied_by_ref, applied_by_user_id::text) AS "appliedBy",
+      created_at AS "createdAt"
+    FROM (
+      SELECT
+        rtce.*,
+        row_number() OVER (
+          PARTITION BY rtce.routing_template_id
+          ORDER BY rtce.created_at DESC, rtce.id DESC
+        ) AS row_number
+      FROM planning.routing_template_change_events rtce
+      WHERE rtce.routing_template_id::text IN (${Prisma.join(routingTemplateIds)})
+    ) ranked
+    WHERE row_number <= 5
+    ORDER BY routing_template_id, created_at DESC
+  `;
+
+  const byTemplate = new Map<string, RoutingTemplateChangeEventResponse[]>();
+  for (const row of rows) {
+    const item = mapRoutingTemplateChangeEvent(row);
+    byTemplate.set(item.routingTemplateId, [
+      ...(byTemplate.get(item.routingTemplateId) ?? []),
+      item,
+    ]);
+  }
+  return byTemplate;
+}
+
 async function getConfigurationById(
   db: DbClient,
   id: string,
@@ -649,7 +756,71 @@ async function getRoutingTemplateById(
   const row = rows[0];
   if (!row) return undefined;
   const stepsByTemplate = await loadRoutingTemplateSteps(db, [row.id]);
-  return mapRoutingTemplate(row, stepsByTemplate.get(row.id) ?? []);
+  const changesByTemplate = await loadRoutingTemplateChangeEvents(db, [row.id]);
+  return mapRoutingTemplate(
+    row,
+    stepsByTemplate.get(row.id) ?? [],
+    changesByTemplate.get(row.id) ?? [],
+  );
+}
+
+async function recordRoutingTemplateChangeEvent(
+  db: DbClient,
+  template: Pick<
+    RoutingTemplateResponse,
+    'id' | 'routeCode' | 'routeVersion' | 'templateStatus'
+  >,
+  input: {
+    changeKind: RoutingTemplateChangeKind;
+    previousStatus?: RoutingTemplateStatus;
+    newStatus: RoutingTemplateStatus;
+    changeSummary: string;
+    approvalNote?: string;
+  },
+  context: RequestContext,
+): Promise<void> {
+  const approvalRequired =
+    input.changeKind === 'ACTIVATED' ||
+    input.changeKind === 'RETIRED' ||
+    input.changeKind === 'AUTO_RETIRED';
+  const actorUserId = actorUuid(context.actorId);
+  const actorReference = actorRef(context.actorId);
+  await db.$executeRaw`
+    INSERT INTO planning.routing_template_change_events (
+      routing_template_id,
+      route_code,
+      route_version,
+      change_kind,
+      previous_status,
+      new_status,
+      change_summary,
+      approval_note,
+      approved_by_user_id,
+      approved_by_ref,
+      approved_at,
+      applied_by_user_id,
+      applied_by_ref,
+      last_correlation_id,
+      last_request_id
+    )
+    VALUES (
+      ${template.id}::uuid,
+      ${template.routeCode},
+      ${template.routeVersion},
+      ${input.changeKind}::planning."RoutingTemplateChangeKind",
+      ${input.previousStatus ?? null}::planning."RoutingTemplateStatus",
+      ${input.newStatus}::planning."RoutingTemplateStatus",
+      ${input.changeSummary},
+      ${input.approvalNote ?? null},
+      ${approvalRequired ? actorUserId : null}::uuid,
+      ${approvalRequired ? actorReference : null},
+      ${approvalRequired ? new Date().toISOString() : null}::timestamptz,
+      ${actorUserId}::uuid,
+      ${actorReference},
+      ${context.correlationId},
+      ${context.requestId ?? null}
+    )
+  `;
 }
 
 function validationError(
@@ -1257,9 +1428,19 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
       prisma,
       rows.map((row) => row.id),
     );
+    const changesByTemplate = await loadRoutingTemplateChangeEvents(
+      prisma,
+      rows.map((row) => row.id),
+    );
 
     return {
-      items: rows.map((row) => mapRoutingTemplate(row, stepsByTemplate.get(row.id) ?? [])),
+      items: rows.map((row) =>
+        mapRoutingTemplate(
+          row,
+          stepsByTemplate.get(row.id) ?? [],
+          changesByTemplate.get(row.id) ?? [],
+        ),
+      ),
       total: Number(totalRows[0]?.count ?? 0),
       limit: input.limit,
       offset: input.offset,
@@ -1358,6 +1539,22 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
         )}
       `;
 
+      await recordRoutingTemplateChangeEvent(
+        tx,
+        {
+          id: routingTemplateId,
+          routeCode: input.routeCode,
+          routeVersion,
+          templateStatus: 'DRAFT',
+        },
+        {
+          changeKind: 'CREATED',
+          newStatus: 'DRAFT',
+          changeSummary: 'Route version created for engineering review.',
+        },
+        context,
+      );
+
       const created = await getRoutingTemplateById(tx, routingTemplateId);
       if (!created) throw new PlanningMasterCommandError('Routing template was not created.', 500);
       return created;
@@ -1373,10 +1570,33 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
     if (!ROUTING_TEMPLATE_STATUSES.includes(input.status)) {
       throw new PlanningMasterCommandError(`Invalid routing template status: ${input.status}`, 422);
     }
+    if (input.status === 'DRAFT') {
+      throw new PlanningMasterCommandError('Routing templates cannot transition back to DRAFT.', 422);
+    }
 
     return prisma.$transaction(async (tx) => {
       const current = await getRoutingTemplateById(tx, id);
       if (!current) throw new PlanningMasterCommandError('Routing template was not found.', 404);
+      const approvalNote = normalizeText(input.approvalNote);
+      const approvalRequired = input.status === 'ACTIVE' || input.status === 'RETIRED';
+      if (approvalRequired && !approvalNote) {
+        throw new PlanningMasterCommandError(
+          'Routing template activation and retirement require an approval note.',
+          422,
+        );
+      }
+      if (current.templateStatus === input.status) {
+        throw new PlanningMasterCommandError(
+          `Routing template is already ${input.status}.`,
+          409,
+        );
+      }
+      if (current.templateStatus === 'RETIRED' && input.status === 'ACTIVE') {
+        throw new PlanningMasterCommandError(
+          'Retired routing templates cannot be reactivated; create a new route version instead.',
+          409,
+        );
+      }
       if (input.status === 'ACTIVE' && current.steps.length === 0) {
         throw new PlanningMasterCommandError(
           'Routing template requires at least one step before activation.',
@@ -1389,6 +1609,26 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
           409,
         );
       }
+
+      const autoRetiredRows =
+        input.status === 'ACTIVE'
+          ? await tx.$queryRaw<Array<{
+              id: string;
+              routeCode: string;
+              routeVersion: number;
+              templateStatus: RoutingTemplateStatus;
+            }>>`
+              SELECT
+                id::text AS "id",
+                route_code AS "routeCode",
+                route_version AS "routeVersion",
+                template_status::text AS "templateStatus"
+              FROM planning.routing_templates
+              WHERE route_code = ${current.routeCode}
+                AND template_status = 'ACTIVE'
+                AND id <> ${id}::uuid
+            `
+          : [];
 
       if (input.status === 'ACTIVE') {
         await tx.$executeRaw`
@@ -1404,6 +1644,20 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
             AND template_status = 'ACTIVE'
             AND id <> ${id}::uuid
         `;
+      }
+      for (const retired of autoRetiredRows) {
+        await recordRoutingTemplateChangeEvent(
+          tx,
+          retired,
+          {
+            changeKind: 'AUTO_RETIRED',
+            previousStatus: 'ACTIVE',
+            newStatus: 'RETIRED',
+            changeSummary: `Route version auto-retired because ${current.routeCode} v${current.routeVersion} was activated.`,
+            approvalNote,
+          },
+          context,
+        );
       }
 
       await tx.$executeRaw`
@@ -1424,6 +1678,21 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
             version = version + 1
         WHERE id = ${id}::uuid
       `;
+
+      await recordRoutingTemplateChangeEvent(
+        tx,
+        current,
+        {
+          changeKind: input.status === 'ACTIVE' ? 'ACTIVATED' : 'RETIRED',
+          previousStatus: current.templateStatus,
+          newStatus: input.status,
+          changeSummary:
+            normalizeText(input.changeSummary) ??
+            `Route version moved from ${current.templateStatus} to ${input.status}.`,
+          approvalNote,
+        },
+        context,
+      );
 
       const updated = await getRoutingTemplateById(tx, id);
       if (!updated) throw new PlanningMasterCommandError('Routing template was not found.', 404);
@@ -1755,9 +2024,11 @@ export async function transitionRoutingTemplateHandler(
     } | undefined;
     const status = body?.status ?? body?.state;
     if (!status) return json(400, { message: 'Body must include { status }.' });
+    const approvalNote = normalizeText(body?.approvalNote);
+    const changeSummary = normalizeText(body?.changeSummary);
     const item = await planningMasterStore.transitionRoutingTemplate(
       id,
-      { status },
+      { status, approvalNote, changeSummary },
       requestContext(event),
     );
     return json(200, { routingTemplate: item });

@@ -608,15 +608,17 @@
           <div class="module-card">
             <header>
               <h3>Planning Masters</h3>
-              <span class="pill doing">68%</span>
+              <span class="pill doing">72%</span>
             </header>
-            <div class="bar warn"><span style="width: 68%"></span></div>
+            <div class="bar warn"><span style="width: 72%"></span></div>
             <p>
               Build package selection no longer depends only on historical work orders. Operators
               can author build configurations, lock/release them, create BOM revisions from active
               parts, approve BOMs, publish approved pairs into the package catalog, and attach
               effective-dated costed job-card routes that seed execution operations and QC gates.
-              Remaining depth is engineering change control and approval history.
+              Route activation and retirement now require approval notes and expose the latest
+              change event inline. Remaining depth is bringing the same change-control evidence to
+              released configurations and approved BOMs.
             </p>
           </div>
 
@@ -716,17 +718,17 @@
               <td>Latest production baseline</td>
               <td><span class="pill done">Merged</span></td>
               <td>
-                <code>origin/main</code> is at <code>c24b41c</code>, from PR 155: routing-template
-                route QA allowance cleanup after PR 154 deployed.
+                <code>origin/main</code> is at <code>6fbd22e</code>, from PR 156: routing-template
+                effective-date, cost, QC/evidence, and execution-control deployment.
               </td>
             </tr>
             <tr>
               <td>Recent pipeline health</td>
               <td><span class="pill done">Green</span></td>
               <td>
-                Latest main CI, QA, and Pages runs completed successfully after PR 155 merged; PR
-                154 CD also completed successfully. Latest scheduled QA on May 21, 2026 also
-                succeeded.
+                Latest main CI, QA smoke, QA coverage, Pages, and CD runs completed successfully
+                after PR 156 merged; CD included Terraform apply, database migrations, and the
+                deployment health smoke.
               </td>
             </tr>
             <tr>
@@ -779,8 +781,8 @@
             in live UAT runs.
           </li>
           <li>
-            <strong>Deepen planning execution:</strong> add engineering change control and approval
-            history around released configurations, approved BOMs, and active routing templates.
+            <strong>Deepen planning execution:</strong> extend engineering change-control evidence
+            from active routing templates into released configurations and approved BOM revisions.
           </li>
           <li>
             <strong>Move toward ERP ledgers:</strong> start internal accounting ledger design and

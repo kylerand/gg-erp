@@ -166,6 +166,18 @@ function createPlanningMasterStoreForTests(): PlanningMasterStore {
     stepCount: 1,
     estimatedMinutes: 90,
     estimatedLaborCostCents: 14250,
+    changeEvents: [
+      {
+        id: '00000000-0000-4000-8000-000000000801',
+        routingTemplateId: '00000000-0000-4000-8000-000000000601',
+        routeCode: 'RT-GG4-STREET',
+        routeVersion: 1,
+        changeKind: 'CREATED' as const,
+        newStatus: 'DRAFT' as const,
+        changeSummary: 'Route version created for engineering review.',
+        createdAt: '2026-06-01T00:00:00.000Z',
+      },
+    ],
     steps: [
       {
         id: '00000000-0000-4000-8000-000000000701',
@@ -247,7 +259,27 @@ function createPlanningMasterStoreForTests(): PlanningMasterStore {
       };
     },
     async transitionRoutingTemplate(_id, input) {
-      return { ...routingTemplate, templateStatus: input.status };
+      return {
+        ...routingTemplate,
+        templateStatus: input.status,
+        changeEvents: [
+          {
+            id: '00000000-0000-4000-8000-000000000802',
+            routingTemplateId: routingTemplate.id,
+            routeCode: routingTemplate.routeCode,
+            routeVersion: routingTemplate.routeVersion,
+            changeKind: 'ACTIVATED' as const,
+            previousStatus: 'DRAFT' as const,
+            newStatus: input.status,
+            changeSummary: input.changeSummary ?? 'Route version moved from DRAFT to ACTIVE.',
+            approvalNote: input.approvalNote,
+            approvedBy: 'planner',
+            approvedAt: '2026-06-01T00:00:00.000Z',
+            appliedBy: 'planner',
+            createdAt: '2026-06-01T00:00:00.000Z',
+          },
+        ],
+      };
     },
     async listBuildPackages(input) {
       return {
@@ -379,13 +411,17 @@ test('planning routing template handlers validate, create, and activate job-card
 
     const activateResponse = await transitionRoutingTemplateHandler({
       pathParameters: { id: '00000000-0000-4000-8000-000000000601' },
-      body: JSON.stringify({ status: 'ACTIVE' }),
+      body: JSON.stringify({ status: 'ACTIVE', approvalNote: 'Approved ECO-42' }),
     });
     assert.equal(activateResponse.statusCode, 200);
     const activatePayload = JSON.parse(activateResponse.body) as {
-      routingTemplate: { templateStatus: string };
+      routingTemplate: {
+        templateStatus: string;
+        changeEvents: Array<{ approvalNote?: string }>;
+      };
     };
     assert.equal(activatePayload.routingTemplate.templateStatus, 'ACTIVE');
+    assert.equal(activatePayload.routingTemplate.changeEvents[0]?.approvalNote, 'Approved ECO-42');
   } finally {
     resetPlanningMasterStoreForTests();
   }

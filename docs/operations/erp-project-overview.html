@@ -436,8 +436,9 @@
                 Planning now has routing/job-card, build-configuration, and BOM masters with
                 effective windows, costing metadata, QC/evidence seeding, and approval history.
                 Work-order execution now links back to the source configuration, BOM, route template,
-                and ECO history, leaving formal ECO approval packages as the next manufacturing-depth
-                gap.
+                and ECO history, and released packages now expose a live ECO review pack. Stateful
+                package-level sign-off is the remaining manufacturing-depth gap if change volume
+                grows.
               </li>
               <li>
                 Accounting is still integration-first; internal GL, financial reports, and ledger
@@ -612,9 +613,9 @@
           <div class="module-card">
             <header>
               <h3>Planning Masters</h3>
-              <span class="pill doing">86%</span>
+              <span class="pill doing">88%</span>
             </header>
-            <div class="bar good"><span style="width: 86%"></span></div>
+            <div class="bar good"><span style="width: 88%"></span></div>
             <p>
               Build package selection no longer depends only on historical work orders. Operators
               can author build configurations, lock/release them, create BOM revisions from active
@@ -624,8 +625,10 @@
               approval notes, expose the latest change event inline, compare live versions, roll
               events into an ECO report, prefill new revision drafts from existing masters, and
               expose full engineering-change history through a dedicated route. Work orders now
-              surface their source configuration, BOM, route template, and ECO history. Remaining
-              depth is formal ECO approval packages and report-pack review.
+              surface their source configuration, BOM, route template, and ECO history. Released
+              packages now open an ECO review pack with BOM lines, active routes, approval evidence,
+              and a copyable summary. Remaining depth is stateful package-level sign-off or external
+              delivery if change volume requires it.
             </p>
           </div>
 
@@ -789,9 +792,9 @@
             in live UAT runs.
           </li>
           <li>
-            <strong>Deepen planning execution:</strong> add formal ECO approval packages and
-            report-pack review on top of the route/configuration/BOM approval history, work-order
-            provenance, and version diff workflows.
+            <strong>Deepen planning execution:</strong> add stateful package-level ECO sign-off or
+            external review-pack delivery if the current route/configuration/BOM approval history,
+            work-order provenance, and version diff workflows need a heavier change-control gate.
           </li>
           <li>
             <strong>Move toward ERP ledgers:</strong> start internal accounting ledger design and

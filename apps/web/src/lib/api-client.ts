@@ -396,6 +396,39 @@ export interface WorkOrderBuildPackage {
   stateCounts: Record<string, number>;
 }
 
+export interface BuildPackageApprovalEvidence {
+  id: string;
+  entityType: PlanningChangeEntityType;
+  recordCode: string;
+  versionLabel: string;
+  changeKind: string;
+  approvalNote?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  appliedBy?: string;
+  createdAt: string;
+}
+
+export interface BuildPackageReviewPack {
+  id: string;
+  generatedAt: string;
+  package: WorkOrderBuildPackage;
+  configuration: BuildConfiguration;
+  bom: BuildBom;
+  routeTemplates: RoutingTemplate[];
+  changeEvents: PlanningChangeEvent[];
+  approvalEvidence: BuildPackageApprovalEvidence[];
+  summary: {
+    bomLineCount: number;
+    routeCount: number;
+    routeStepCount: number;
+    estimatedMinutes: number;
+    estimatedLaborCostCents: number;
+    changeCount: number;
+    approvalCount: number;
+  };
+}
+
 export type BuildConfigurationStatus = 'DRAFT' | 'LOCKED' | 'RELEASED' | 'SUPERSEDED';
 export type BomStatus = 'DRAFT' | 'APPROVED' | 'OBSOLETE';
 export type RoutingTemplateStatus = 'DRAFT' | 'ACTIVE' | 'RETIRED';
@@ -728,6 +761,22 @@ export async function listBuildPackages(
     { items: [], total: 0 },
     options,
   );
+}
+
+export async function getBuildPackageReviewPack(
+  params: { buildConfigurationId: string; bomId: string },
+  options?: ApiDataOptions,
+): Promise<BuildPackageReviewPack> {
+  const qs = new URLSearchParams();
+  qs.set('buildConfigurationId', params.buildConfigurationId);
+  qs.set('bomId', params.bomId);
+  const data = await apiFetch<{ reviewPack: BuildPackageReviewPack }>(
+    `/planning/build-packages/review-pack?${qs}`,
+    undefined,
+    undefined,
+    options,
+  );
+  return data.reviewPack;
 }
 
 export async function listWorkOrderBuildPackages(

@@ -331,6 +331,39 @@ const planningChangeEvent = z.object({
   createdAt: isoDate,
 });
 
+const buildPackageApprovalEvidence = z.object({
+  id: uuid,
+  entityType: z.enum(['CONFIGURATION', 'BOM', 'ROUTE']),
+  recordCode: z.string(),
+  versionLabel: z.string(),
+  changeKind: z.string(),
+  approvalNote: z.string().optional(),
+  approvedBy: z.string().optional(),
+  approvedAt: isoDate.optional(),
+  appliedBy: z.string().optional(),
+  createdAt: isoDate,
+});
+
+const buildPackageReviewPack = z.object({
+  id: z.string(),
+  generatedAt: isoDate,
+  package: buildPackage,
+  configuration: buildConfiguration,
+  bom: buildBom,
+  routeTemplates: z.array(routingTemplate),
+  changeEvents: z.array(planningChangeEvent),
+  approvalEvidence: z.array(buildPackageApprovalEvidence),
+  summary: z.object({
+    bomLineCount: z.number().int().nonnegative(),
+    routeCount: z.number().int().nonnegative(),
+    routeStepCount: z.number().int().nonnegative(),
+    estimatedMinutes: z.number().int().nonnegative(),
+    estimatedLaborCostCents: z.number().int().nonnegative(),
+    changeCount: z.number().int().nonnegative(),
+    approvalCount: z.number().int().nonnegative(),
+  }),
+});
+
 // ─── Inventory ────────────────────────────────────────────────────────────
 
 const partLifecycleLevel = z.enum(['RAW_COMPONENT', 'PREPARED_COMPONENT', 'ASSEMBLED_COMPONENT']);
@@ -645,6 +678,7 @@ const ROUTES: RouteEntry[] = [
   // Work Orders
   { method: 'GET', template: '/planning/work-orders', schema: paginated(workOrder) },
   { method: 'GET', template: '/planning/build-packages', schema: paginated(buildPackage) },
+  { method: 'GET', template: '/planning/build-packages/review-pack', schema: z.object({ reviewPack: buildPackageReviewPack }) },
   { method: 'GET', template: '/planning/change-events', schema: paginated(planningChangeEvent) },
   { method: 'GET', template: '/planning/build-configurations', schema: paginated(buildConfiguration) },
   { method: 'POST', template: '/planning/build-configurations', schema: z.object({ buildConfiguration }) },

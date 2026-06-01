@@ -209,6 +209,44 @@ export interface PlanningChangeEventResponse {
   createdAt: string;
 }
 
+export interface BuildPackageApprovalEvidenceResponse {
+  id: string;
+  entityType: PlanningChangeEntityType;
+  recordCode: string;
+  versionLabel: string;
+  changeKind: string;
+  approvalNote?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  appliedBy?: string;
+  createdAt: string;
+}
+
+export interface BuildPackageReviewPackResponse {
+  id: string;
+  generatedAt: string;
+  package: WorkOrderBuildPackageResponse;
+  configuration: BuildConfigurationResponse;
+  bom: BomResponse;
+  routeTemplates: RoutingTemplateResponse[];
+  changeEvents: PlanningChangeEventResponse[];
+  approvalEvidence: BuildPackageApprovalEvidenceResponse[];
+  summary: {
+    bomLineCount: number;
+    routeCount: number;
+    routeStepCount: number;
+    estimatedMinutes: number;
+    estimatedLaborCostCents: number;
+    changeCount: number;
+    approvalCount: number;
+  };
+}
+
+export interface GetBuildPackageReviewPackInput {
+  buildConfigurationId: string;
+  bomId: string;
+}
+
 export interface CreateBuildConfigurationInput {
   configurationCode: string;
   vehicleId: string;
@@ -303,6 +341,9 @@ export interface PlanningMasterStore {
     limit: number;
     offset: number;
   }): Promise<{ items: PlanningChangeEventResponse[]; total: number; limit: number; offset: number }>;
+  getBuildPackageReviewPack(
+    input: GetBuildPackageReviewPackInput,
+  ): Promise<BuildPackageReviewPackResponse | undefined>;
 }
 
 class PlanningMasterCommandError extends Error {
@@ -695,6 +736,23 @@ function mapPlanningChangeEvent(row: PlanningChangeEventRow): PlanningChangeEven
   };
 }
 
+function mapBuildPackageApprovalEvidence(
+  event: PlanningChangeEventResponse,
+): BuildPackageApprovalEvidenceResponse {
+  return {
+    id: event.id,
+    entityType: event.entityType,
+    recordCode: event.recordCode,
+    versionLabel: event.versionLabel,
+    changeKind: event.changeKind,
+    approvalNote: event.approvalNote,
+    approvedBy: event.approvedBy,
+    approvedAt: event.approvedAt,
+    appliedBy: event.appliedBy,
+    createdAt: event.createdAt,
+  };
+}
+
 function mapRoutingTemplate(
   row: RoutingTemplateRow,
   steps: RoutingTemplateStepResponse[],
@@ -998,6 +1056,40 @@ async function loadRoutingTemplateChangeEvents(
     ]);
   }
   return byTemplate;
+}
+
+async function loadPlanningChangeEventsForEntities(
+  db: DbClient,
+  entityIds: string[],
+): Promise<PlanningChangeEventResponse[]> {
+  const uniqueEntityIds = Array.from(new Set(entityIds.filter(Boolean)));
+  if (uniqueEntityIds.length === 0) return [];
+
+  const rows = await db.$queryRaw<PlanningChangeEventRow[]>`
+    ${planningChangeEventsCte()}
+    SELECT
+      id,
+      entity_type AS "entityType",
+      entity_id AS "entityId",
+      record_code AS "recordCode",
+      version_number AS "versionNumber",
+      version_label AS "versionLabel",
+      change_kind AS "changeKind",
+      previous_status AS "previousStatus",
+      new_status AS "newStatus",
+      change_summary AS "changeSummary",
+      approval_note AS "approvalNote",
+      approved_by AS "approvedBy",
+      approved_at AS "approvedAt",
+      applied_by AS "appliedBy",
+      created_at AS "createdAt"
+    FROM events
+    WHERE entity_id IN (${Prisma.join(uniqueEntityIds)})
+    ORDER BY created_at DESC, id DESC
+    LIMIT 100
+  `;
+
+  return rows.map(mapPlanningChangeEvent);
 }
 
 function planningChangeEventsCte(): Prisma.Sql {
@@ -2146,6 +2238,123 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
     };
   }
 
+  async getBuildPackageReviewPack(
+    input: GetBuildPackageReviewPackInput,
+  ): Promise<BuildPackageReviewPackResponse | undefined> {
+    const [configuration, bom] = await Promise.all([
+      getConfigurationById(prisma, input.buildConfigurationId),
+      getBomById(prisma, input.bomId),
+    ]);
+
+    if (!configuration || !bom) return undefined;
+    if (bom.buildConfigurationId !== configuration.id) {
+      throw new PlanningMasterCommandError(
+        'BOM does not belong to the requested build configuration.',
+        409,
+      );
+    }
+    if (configuration.configurationStatus !== 'RELEASED' || bom.bomStatus !== 'APPROVED') {
+      throw new PlanningMasterCommandError(
+        'Build package review packs require a released configuration and approved BOM.',
+        409,
+      );
+    }
+
+    const routes = await this.listRoutingTemplates({
+      buildConfigurationId: configuration.id,
+      status: 'ACTIVE',
+      limit: 25,
+      offset: 0,
+    });
+    const packageRows = await prisma.$queryRaw<
+      Array<{
+        workOrderCount: bigint;
+        lastUsedAt: Date | string;
+        lastWorkOrderId: string | null;
+        lastWorkOrderNumber: string | null;
+      }>
+    >`
+      SELECT
+        count(wo.id)::bigint AS "workOrderCount",
+        coalesce(max(wo.updated_at), greatest(bc.updated_at, b.updated_at)) AS "lastUsedAt",
+        (array_remove(array_agg(wo.id::text ORDER BY wo.updated_at DESC), NULL))[1] AS "lastWorkOrderId",
+        (array_remove(array_agg(wo.work_order_number ORDER BY wo.updated_at DESC), NULL))[1] AS "lastWorkOrderNumber"
+      FROM planning.build_configurations bc
+      JOIN planning.build_boms b ON b.build_configuration_id = bc.id
+      LEFT JOIN planning.work_orders wo
+        ON wo.build_configuration_id = bc.id::text
+       AND wo.bom_id = b.id::text
+      WHERE bc.id = ${configuration.id}::uuid
+        AND b.id = ${bom.id}::uuid
+      GROUP BY bc.id, b.id
+      LIMIT 1
+    `;
+
+    const routeTemplates = routes.items;
+    const changeEvents = await loadPlanningChangeEventsForEntities(prisma, [
+      configuration.id,
+      bom.id,
+      ...routeTemplates.map((template) => template.id),
+    ]);
+    const approvalEvidence = changeEvents
+      .filter((event) => event.approvalNote || event.approvedAt || event.approvedBy)
+      .map(mapBuildPackageApprovalEvidence);
+    const packageRow = packageRows[0];
+    const routeStepCount = routeTemplates.reduce((total, template) => total + template.stepCount, 0);
+    const estimatedMinutes = routeTemplates.reduce(
+      (total, template) => total + template.estimatedMinutes,
+      0,
+    );
+    const estimatedLaborCostCents = routeTemplates.reduce(
+      (total, template) => total + template.estimatedLaborCostCents,
+      0,
+    );
+
+    return {
+      id: `${configuration.id}:${bom.id}`,
+      generatedAt: new Date().toISOString(),
+      package: {
+        id: `${configuration.id}:${bom.id}`,
+        buildConfigurationId: configuration.id,
+        bomId: bom.id,
+        label: `${configuration.configurationCode} / ${bom.bomCode}`,
+        description: [
+          `Version ${configuration.configurationVersion}`,
+          `Revision ${bom.revision}`,
+          configuration.customerDisplayName,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+        source: 'PLANNING_MASTER',
+        workOrderCount: Number(packageRow?.workOrderCount ?? 0),
+        lastUsedAt: iso(packageRow?.lastUsedAt ?? configuration.updatedAt),
+        lastWorkOrderId: packageRow?.lastWorkOrderId ?? undefined,
+        lastWorkOrderNumber: packageRow?.lastWorkOrderNumber ?? undefined,
+        lastVehicleDisplayName: configuration.vehicleDisplayName,
+        lastCustomerDisplayName: configuration.customerDisplayName,
+        stateCounts: {
+          [`CONFIG_${configuration.configurationStatus}`]: 1,
+          [`BOM_${bom.bomStatus}`]: 1,
+          ACTIVE_ROUTES: routeTemplates.length,
+        },
+      },
+      configuration,
+      bom,
+      routeTemplates,
+      changeEvents,
+      approvalEvidence,
+      summary: {
+        bomLineCount: bom.lines.length,
+        routeCount: routeTemplates.length,
+        routeStepCount,
+        estimatedMinutes,
+        estimatedLaborCostCents,
+        changeCount: changeEvents.length,
+        approvalCount: approvalEvidence.length,
+      },
+    };
+  }
+
   async createRoutingTemplate(
     input: CreateRoutingTemplateInput,
     context: RequestContext,
@@ -2606,6 +2815,35 @@ export async function listPlanningChangeEventsHandler(
     offset,
   });
   return json(200, result);
+}
+
+export async function getBuildPackageReviewPackHandler(
+  event: ApiGatewayProxyEventLike,
+): Promise<ApiGatewayProxyResultLike> {
+  try {
+    const query = event.queryStringParameters ?? {};
+    const buildConfigurationId = query.buildConfigurationId?.trim();
+    const bomId = query.bomId?.trim();
+
+    if (!buildConfigurationId || !isUuid(buildConfigurationId)) {
+      return json(422, { message: 'buildConfigurationId must be a UUID.' });
+    }
+    if (!bomId || !isUuid(bomId)) {
+      return json(422, { message: 'bomId must be a UUID.' });
+    }
+
+    const reviewPack = await planningMasterStore.getBuildPackageReviewPack({
+      buildConfigurationId,
+      bomId,
+    });
+    if (!reviewPack) {
+      return json(404, { message: 'Build package review pack was not found.' });
+    }
+
+    return json(200, { reviewPack });
+  } catch (error) {
+    return errorJson(error);
+  }
 }
 
 export async function createBuildConfigurationHandler(

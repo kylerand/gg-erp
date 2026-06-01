@@ -23,6 +23,7 @@ import {
   createBom,
   createBuildConfiguration,
   createRoutingTemplate,
+  getBuildPackageReviewPack,
   listBoms,
   listBuildConfigurations,
   listBuildPackages,
@@ -31,6 +32,7 @@ import {
   listRoutingTemplates,
   transitionRoutingTemplate,
   transitionBuildConfiguration,
+  type BuildPackageReviewPack,
   type BuildBom,
   type BuildConfiguration,
   type CartVehicle,
@@ -106,6 +108,25 @@ function stateSummary(pkg: WorkOrderBuildPackage): string {
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([state, count]) => `${count} ${statusText(state)}`)
     .join(' · ');
+}
+
+function reviewPackSummaryText(reviewPack: BuildPackageReviewPack): string {
+  const routeLines = reviewPack.routeTemplates.length
+    ? reviewPack.routeTemplates.map(
+        (route) =>
+          `${route.routeCode} v${route.routeVersion}: ${route.stepCount} steps, ${route.estimatedMinutes} minutes`,
+      )
+    : ['No active route template linked'];
+
+  return [
+    `ECO Review Pack: ${reviewPack.package.label}`,
+    `Generated: ${formatDate(reviewPack.generatedAt)}`,
+    `Configuration: ${reviewPack.configuration.configurationCode} v${reviewPack.configuration.configurationVersion} (${statusText(reviewPack.configuration.configurationStatus)})`,
+    `BOM: ${reviewPack.bom.bomCode} rev ${reviewPack.bom.revision} (${statusText(reviewPack.bom.bomStatus)})`,
+    `BOM lines: ${reviewPack.summary.bomLineCount}`,
+    `Route coverage: ${routeLines.join('; ')}`,
+    `Approval evidence: ${reviewPack.summary.approvalCount} approvals across ${reviewPack.summary.changeCount} changes`,
+  ].join('\n');
 }
 
 function vehicleLabel(vehicle: CartVehicle): string {
@@ -342,6 +363,9 @@ export default function BuildPackagesPage() {
   const [configurationApprovalNotes, setConfigurationApprovalNotes] = useState<Record<string, string>>({});
   const [bomApprovalNotes, setBomApprovalNotes] = useState<Record<string, string>>({});
   const [routeApprovalNotes, setRouteApprovalNotes] = useState<Record<string, string>>({});
+  const [selectedReviewPack, setSelectedReviewPack] = useState<BuildPackageReviewPack | undefined>();
+  const [reviewPackLoading, setReviewPackLoading] = useState(false);
+  const [reviewPackError, setReviewPackError] = useState<string | undefined>();
 
   useEffect(() => {
     setSearch(routeSearch);
@@ -562,6 +586,37 @@ export default function BuildPackagesPage() {
 
   function reload(): void {
     setReloadToken((current) => current + 1);
+  }
+
+  async function loadReviewPack(pkg: WorkOrderBuildPackage): Promise<void> {
+    setReviewPackLoading(true);
+    setReviewPackError(undefined);
+    try {
+      const reviewPack = await getBuildPackageReviewPack(
+        {
+          buildConfigurationId: pkg.buildConfigurationId,
+          bomId: pkg.bomId,
+        },
+        { allowMockFallback: false },
+      );
+      setSelectedReviewPack(reviewPack);
+      toast.success('Review pack loaded');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Review pack failed to load.';
+      setReviewPackError(message);
+      toast.error(message);
+    } finally {
+      setReviewPackLoading(false);
+    }
+  }
+
+  async function copyReviewPack(reviewPack: BuildPackageReviewPack): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(reviewPackSummaryText(reviewPack));
+      toast.success('Review summary copied');
+    } catch {
+      toast.error('Review summary could not be copied.');
+    }
   }
 
   function scrollToForm(id: string): void {
@@ -1628,12 +1683,24 @@ export default function BuildPackagesPage() {
                         {stateSummary(pkg) || statusText(pkg.source)}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <Link
-                          className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                          href={erpRoute('create-work-order', { buildPackageId: pkg.id })}
-                        >
-                          Use Package
-                        </Link>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void loadReviewPack(pkg)}
+                            disabled={reviewPackLoading}
+                          >
+                            <FileText className="mr-2 h-4 w-4" />
+                            Review Pack
+                          </Button>
+                          <Link
+                            className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                            href={erpRoute('create-work-order', { buildPackageId: pkg.id })}
+                          >
+                            Use Package
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1643,6 +1710,246 @@ export default function BuildPackagesPage() {
           )}
         </CardContent>
       </Card>
+
+      {(selectedReviewPack || reviewPackError || reviewPackLoading) && (
+        <Card>
+          <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <ClipboardList className="h-5 w-5 text-[#E87820]" />
+                ECO Review Pack
+              </CardTitle>
+              <p className="mt-1 text-sm text-[#6E625A]">
+                {selectedReviewPack?.package.label ?? 'Loading released package evidence'}
+              </p>
+            </div>
+            {selectedReviewPack && (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void copyReviewPack(selectedReviewPack)}
+                >
+                  <Copy className="mr-2 h-4 w-4" />
+                  Copy Summary
+                </Button>
+                <Link
+                  className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                  href={erpRoute('planning-change-event', {
+                    search: selectedReviewPack.configuration.configurationCode,
+                  })}
+                >
+                  Change History
+                </Link>
+              </div>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {reviewPackError ? (
+              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {reviewPackError}
+              </div>
+            ) : reviewPackLoading && !selectedReviewPack ? (
+              <div className="rounded-md border border-[#E8DDD2] p-3 text-sm text-[#6E625A]">
+                Loading review pack...
+              </div>
+            ) : selectedReviewPack ? (
+              <>
+                <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+                  <div className="rounded-md border border-[#E8DDD2] p-3">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[#9A4A12]">
+                      Configuration
+                    </div>
+                    <div className="mt-1 font-semibold text-[#211F1E]">
+                      {selectedReviewPack.configuration.configurationCode} v
+                      {selectedReviewPack.configuration.configurationVersion}
+                    </div>
+                    <div className="mt-1 text-xs text-[#6E625A]">
+                      {statusText(selectedReviewPack.configuration.configurationStatus)}
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-[#E8DDD2] p-3">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[#9A4A12]">
+                      BOM
+                    </div>
+                    <div className="mt-1 font-semibold text-[#211F1E]">
+                      {selectedReviewPack.bom.bomCode} rev {selectedReviewPack.bom.revision}
+                    </div>
+                    <div className="mt-1 text-xs text-[#6E625A]">
+                      {selectedReviewPack.summary.bomLineCount} lines
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-[#E8DDD2] p-3">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[#9A4A12]">
+                      Routes
+                    </div>
+                    <div className="mt-1 font-semibold text-[#211F1E]">
+                      {selectedReviewPack.summary.routeCount}
+                    </div>
+                    <div className="mt-1 text-xs text-[#6E625A]">
+                      {selectedReviewPack.summary.routeStepCount} steps
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-[#E8DDD2] p-3">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[#9A4A12]">
+                      Labor
+                    </div>
+                    <div className="mt-1 font-semibold text-[#211F1E]">
+                      {selectedReviewPack.summary.estimatedMinutes} min
+                    </div>
+                    <div className="mt-1 text-xs text-[#6E625A]">
+                      {formatCurrencyCents(selectedReviewPack.summary.estimatedLaborCostCents)}
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-[#E8DDD2] p-3">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[#9A4A12]">
+                      Approvals
+                    </div>
+                    <div className="mt-1 font-semibold text-[#211F1E]">
+                      {selectedReviewPack.summary.approvalCount}
+                    </div>
+                    <div className="mt-1 text-xs text-[#6E625A]">
+                      {selectedReviewPack.summary.changeCount} changes
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-[#E8DDD2] p-3">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[#9A4A12]">
+                      Last Used
+                    </div>
+                    <div className="mt-1 font-semibold text-[#211F1E]">
+                      {selectedReviewPack.package.lastWorkOrderNumber ?? 'No work orders'}
+                    </div>
+                    <div className="mt-1 text-xs text-[#6E625A]">
+                      {formatDate(selectedReviewPack.package.lastUsedAt)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+                  <section className="rounded-md border border-[#E8DDD2]">
+                    <div className="border-b border-[#E8DDD2] px-4 py-3 font-semibold text-[#211F1E]">
+                      BOM Lines
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-[#EFE6DC] text-sm">
+                        <thead className="bg-[#F7F1EA] text-left text-xs uppercase tracking-wide text-[#6E625A]">
+                          <tr>
+                            <th className="px-4 py-2">Part</th>
+                            <th className="px-4 py-2">Qty</th>
+                            <th className="px-4 py-2">Scrap</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#EFE6DC]">
+                          {selectedReviewPack.bom.lines.map((line) => (
+                            <tr key={line.id}>
+                              <td className="px-4 py-2">
+                                <div className="font-semibold text-[#211F1E]">{line.sku}</div>
+                                <div className="text-xs text-[#6E625A]">{line.partName}</div>
+                              </td>
+                              <td className="px-4 py-2 text-[#4A4039]">
+                                {line.quantityPerUnit} {line.unitOfMeasure}
+                              </td>
+                              <td className="px-4 py-2 text-[#4A4039]">{line.scrapFactor}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+
+                  <section className="rounded-md border border-[#E8DDD2]">
+                    <div className="border-b border-[#E8DDD2] px-4 py-3 font-semibold text-[#211F1E]">
+                      Approval Evidence
+                    </div>
+                    <div className="divide-y divide-[#EFE6DC]">
+                      {selectedReviewPack.approvalEvidence.length === 0 ? (
+                        <div className="p-4 text-sm text-[#6E625A]">No approval evidence found.</div>
+                      ) : (
+                        selectedReviewPack.approvalEvidence.map((event) => (
+                          <div key={event.id} className="p-4 text-sm">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="text-xs font-semibold uppercase tracking-wide text-[#9A4A12]">
+                                  {statusText(event.entityType)} · {statusText(event.changeKind)}
+                                </div>
+                                <div className="font-semibold text-[#211F1E]">
+                                  {event.recordCode} · {event.versionLabel}
+                                </div>
+                              </div>
+                              <div className="text-right text-xs text-[#6E625A]">
+                                {formatDate(event.approvedAt ?? event.createdAt)}
+                              </div>
+                            </div>
+                            {event.approvalNote && (
+                              <div className="mt-2 rounded-md bg-[#F7F1EA] px-3 py-2 text-xs text-[#4A4039]">
+                                {event.approvalNote}
+                              </div>
+                            )}
+                            <div className="mt-2 text-xs text-[#6E625A]">
+                              {event.approvedBy ?? event.appliedBy ?? 'system'}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </section>
+                </div>
+
+                <section className="rounded-md border border-[#E8DDD2]">
+                  <div className="border-b border-[#E8DDD2] px-4 py-3 font-semibold text-[#211F1E]">
+                    Active Routes
+                  </div>
+                  <div className="divide-y divide-[#EFE6DC]">
+                    {selectedReviewPack.routeTemplates.length === 0 ? (
+                      <div className="p-4 text-sm text-[#6E625A]">No active route is linked.</div>
+                    ) : (
+                      selectedReviewPack.routeTemplates.map((route) => (
+                        <div key={route.id} className="p-4">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <div className="font-semibold text-[#211F1E]">
+                                {route.routeCode} v{route.routeVersion}
+                              </div>
+                              <div className="text-sm text-[#6E625A]">{route.routeName}</div>
+                            </div>
+                            <div className="text-sm text-[#4A4039]">
+                              {route.stepCount} steps · {route.estimatedMinutes} min ·{' '}
+                              {formatCurrencyCents(route.estimatedLaborCostCents)}
+                            </div>
+                          </div>
+                          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                            {route.steps.map((step) => (
+                              <div key={step.id} className="rounded-md bg-[#F7F1EA] px-3 py-2 text-sm">
+                                <div className="font-semibold text-[#211F1E]">
+                                  {step.sequenceNo}. {step.operationCode}
+                                </div>
+                                <div className="text-xs text-[#6E625A]">
+                                  {step.operationName} · {step.estimatedMinutes} min
+                                </div>
+                                {(step.qcRequired || step.evidenceRequired) && (
+                                  <div className="mt-1 text-xs text-[#9A4A12]">
+                                    {[
+                                      step.qcRequired ? 'QC' : undefined,
+                                      step.evidenceRequired ? 'Evidence' : undefined,
+                                    ]
+                                      .filter(Boolean)
+                                      .join(' · ')}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </section>
+              </>
+            ) : null}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 xl:grid-cols-3">
         <Card>

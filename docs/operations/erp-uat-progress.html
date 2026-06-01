@@ -301,8 +301,8 @@
                 engineering-change history.
               </td>
               <td>
-                Add formal ECO approval packages and report-pack actions once engineering-change
-                review workflows need sign-off bundles.
+                Keep work-order provenance aligned if stateful package-level ECO sign-off lands
+                later.
               </td>
             </tr>
             <tr>
@@ -354,10 +354,13 @@
                 an ECO report, and preloads new revisions from existing master records. Engineering
                 changes also have a dedicated live history route backed by
                 <code>GET /planning/change-events</code>, and execution work orders now link back to
-                their source configuration, BOM, route template, and filtered ECO history.
+                their source configuration, BOM, route template, and filtered ECO history. Released
+                configuration/approved-BOM packages now open a live ECO review pack with BOM lines,
+                active routes, approval evidence, change history, and a copyable summary.
               </td>
               <td>
-                Add formal ECO approval packages and report-pack review flows as change volume grows.
+                Add stateful package-level ECO sign-off or external report delivery only if change
+                volume requires it.
               </td>
             </tr>
             <tr>

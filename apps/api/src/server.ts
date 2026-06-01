@@ -19,6 +19,7 @@ import {
   createBomHandler,
   createBuildConfigurationHandler,
   createRoutingTemplateHandler,
+  getBuildPackageReviewPackHandler,
   listBomsHandler,
   listBuildConfigurationsHandler,
   listPlanningChangeEventsHandler,
@@ -390,6 +391,8 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     result = await listWorkOrdersHandler(event);
   } else if (pathname === '/planning/build-packages' && method === 'GET') {
     result = await listBuildPackagesHandler(event);
+  } else if (pathname === '/planning/build-packages/review-pack' && method === 'GET') {
+    result = await getBuildPackageReviewPackHandler(event);
   } else if (pathname === '/planning/change-events' && method === 'GET') {
     result = await listPlanningChangeEventsHandler(event);
   } else if (pathname === '/planning/build-configurations' && method === 'GET') {

@@ -226,11 +226,15 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
       'createBuildConfiguration',
       'createBom',
       'createRoutingTemplate',
+      'getBuildPackageReviewPack',
       'transitionRoutingTemplate',
       'allowMockFallback: false',
       "erpRoute('create-work-order'",
       'Version Review',
       'ECO Report',
+      'ECO Review Pack',
+      'loadReviewPack',
+      'copyReviewPack',
       'prepareConfigurationRevision',
       'prepareBomRevision',
       'prepareRouteRevision',
@@ -238,6 +242,7 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
     [],
   );
   assert.ok(apiClientSource.includes('/planning/build-packages'));
+  assert.ok(apiClientSource.includes('/planning/build-packages/review-pack'));
   assert.ok(apiClientSource.includes('/planning/change-events'));
   assert.ok(apiClientSource.includes('/planning/build-configurations'));
   assert.ok(apiClientSource.includes('/planning/boms'));

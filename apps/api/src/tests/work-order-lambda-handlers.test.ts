@@ -12,6 +12,7 @@ import {
   createBomHandler,
   createBuildConfigurationHandler,
   createRoutingTemplateHandler,
+  getBuildPackageReviewPackHandler,
   listBuildConfigurationsHandler,
   listPlanningChangeEventsHandler,
   listRoutingTemplatesHandler,
@@ -344,6 +345,151 @@ function createPlanningMasterStoreForTests(): PlanningMasterStore {
         offset: input.offset,
       };
     },
+    async getBuildPackageReviewPack(input) {
+      const releasedConfig = {
+        ...config,
+        id: input.buildConfigurationId,
+        configurationStatus: 'RELEASED' as const,
+        releasedAt: '2026-06-01T00:00:00.000Z',
+        changeEvents: [
+          {
+            id: '00000000-0000-4000-8000-000000000813',
+            buildConfigurationId: input.buildConfigurationId,
+            configurationCode: config.configurationCode,
+            configurationVersion: config.configurationVersion,
+            changeKind: 'RELEASED' as const,
+            previousStatus: 'LOCKED' as const,
+            newStatus: 'RELEASED' as const,
+            changeSummary: 'Build configuration released for production.',
+            approvalNote: 'ECO-101 released',
+            approvedBy: 'planner',
+            approvedAt: '2026-06-01T00:00:00.000Z',
+            appliedBy: 'planner',
+            createdAt: '2026-06-01T00:00:00.000Z',
+          },
+        ],
+      };
+      const approvedBom = {
+        ...bom,
+        id: input.bomId,
+        buildConfigurationId: input.buildConfigurationId,
+        bomStatus: 'APPROVED' as const,
+        approvedAt: '2026-06-01T00:00:00.000Z',
+        changeEvents: [
+          {
+            id: '00000000-0000-4000-8000-000000000823',
+            bomId: input.bomId,
+            bomCode: bom.bomCode,
+            buildConfigurationId: input.buildConfigurationId,
+            revision: bom.revision,
+            changeKind: 'APPROVED' as const,
+            previousStatus: 'DRAFT' as const,
+            newStatus: 'APPROVED' as const,
+            changeSummary: 'BOM revision approved for production.',
+            approvalNote: 'Parts reviewed for ECO-101',
+            approvedBy: 'planner',
+            approvedAt: '2026-06-01T00:00:00.000Z',
+            appliedBy: 'planner',
+            createdAt: '2026-06-01T00:00:00.000Z',
+          },
+        ],
+      };
+      const activeRoute = {
+        ...routingTemplate,
+        templateStatus: 'ACTIVE' as const,
+        activatedAt: '2026-06-01T00:00:00.000Z',
+        changeEvents: [
+          {
+            id: '00000000-0000-4000-8000-000000000803',
+            routingTemplateId: routingTemplate.id,
+            routeCode: routingTemplate.routeCode,
+            routeVersion: routingTemplate.routeVersion,
+            changeKind: 'ACTIVATED' as const,
+            previousStatus: 'DRAFT' as const,
+            newStatus: 'ACTIVE' as const,
+            changeSummary: 'Route activated for production.',
+            approvalNote: 'QC gates reviewed',
+            approvedBy: 'planner',
+            approvedAt: '2026-06-01T00:00:00.000Z',
+            appliedBy: 'planner',
+            createdAt: '2026-06-01T00:00:00.000Z',
+          },
+        ],
+      };
+      const changeEvents = [
+        releasedConfig.changeEvents[0],
+        approvedBom.changeEvents[0],
+        activeRoute.changeEvents[0],
+      ].map((event) => ({
+        id: event.id,
+        entityType:
+          'configurationCode' in event ? ('CONFIGURATION' as const) : 'bomId' in event ? ('BOM' as const) : ('ROUTE' as const),
+        entityId:
+          'buildConfigurationId' in event && !('bomId' in event)
+            ? event.buildConfigurationId
+            : 'bomId' in event
+              ? event.bomId
+              : event.routingTemplateId,
+        recordCode:
+          'configurationCode' in event
+            ? event.configurationCode
+            : 'bomCode' in event
+              ? event.bomCode
+              : event.routeCode,
+        versionNumber:
+          'configurationVersion' in event
+            ? event.configurationVersion
+            : 'revision' in event
+              ? event.revision
+              : event.routeVersion,
+        versionLabel:
+          'configurationVersion' in event
+            ? `v${event.configurationVersion}`
+            : 'revision' in event
+              ? `rev ${event.revision}`
+              : `v${event.routeVersion}`,
+        changeKind: event.changeKind,
+        previousStatus: event.previousStatus,
+        newStatus: event.newStatus,
+        changeSummary: event.changeSummary,
+        approvalNote: event.approvalNote,
+        approvedBy: event.approvedBy,
+        approvedAt: event.approvedAt,
+        appliedBy: event.appliedBy,
+        createdAt: event.createdAt,
+      }));
+      return {
+        id: `${input.buildConfigurationId}:${input.bomId}`,
+        generatedAt: '2026-06-01T00:00:00.000Z',
+        package: {
+          id: `${input.buildConfigurationId}:${input.bomId}`,
+          buildConfigurationId: input.buildConfigurationId,
+          bomId: input.bomId,
+          label: `${releasedConfig.configurationCode} / ${approvedBom.bomCode}`,
+          description: 'Version 1 · Revision 1 · Acme Golf',
+          source: 'PLANNING_MASTER' as const,
+          workOrderCount: 2,
+          lastUsedAt: '2026-06-01T00:00:00.000Z',
+          lastVehicleDisplayName: releasedConfig.vehicleDisplayName,
+          lastCustomerDisplayName: releasedConfig.customerDisplayName,
+          stateCounts: { CONFIG_RELEASED: 1, BOM_APPROVED: 1, ACTIVE_ROUTES: 1 },
+        },
+        configuration: releasedConfig,
+        bom: approvedBom,
+        routeTemplates: [activeRoute],
+        changeEvents,
+        approvalEvidence: changeEvents,
+        summary: {
+          bomLineCount: approvedBom.lines.length,
+          routeCount: 1,
+          routeStepCount: activeRoute.stepCount,
+          estimatedMinutes: activeRoute.estimatedMinutes,
+          estimatedLaborCostCents: activeRoute.estimatedLaborCostCents,
+          changeCount: changeEvents.length,
+          approvalCount: changeEvents.length,
+        },
+      };
+    },
     async createRoutingTemplate(input) {
       return {
         ...routingTemplate,
@@ -489,6 +635,43 @@ test('planning change event handler returns full engineering change history', as
 
     const invalidResponse = await listPlanningChangeEventsHandler({
       queryStringParameters: { entityType: 'PART' },
+    });
+    assert.equal(invalidResponse.statusCode, 422);
+  } finally {
+    resetPlanningMasterStoreForTests();
+  }
+});
+
+test('build package review pack handler returns approval evidence and package details', async () => {
+  setPlanningMasterStoreForTests(createPlanningMasterStoreForTests());
+  try {
+    const response = await getBuildPackageReviewPackHandler({
+      queryStringParameters: {
+        buildConfigurationId: '00000000-0000-4000-8000-000000000101',
+        bomId: '00000000-0000-4000-8000-000000000301',
+      },
+    });
+    assert.equal(response.statusCode, 200);
+    const payload = JSON.parse(response.body) as {
+      reviewPack: {
+        package: { source: string; label: string };
+        summary: { bomLineCount: number; routeStepCount: number; approvalCount: number };
+        approvalEvidence: Array<{ approvalNote?: string }>;
+      };
+    };
+    assert.equal(payload.reviewPack.package.source, 'PLANNING_MASTER');
+    assert.equal(payload.reviewPack.package.label, 'CFG-GG4-STREET / BOM-GG4-STREET-R01');
+    assert.equal(payload.reviewPack.summary.bomLineCount, 1);
+    assert.equal(payload.reviewPack.summary.routeStepCount, 1);
+    assert.equal(payload.reviewPack.summary.approvalCount, 3);
+    assert.ok(
+      payload.reviewPack.approvalEvidence.some((event) =>
+        event.approvalNote?.includes('ECO-101'),
+      ),
+    );
+
+    const invalidResponse = await getBuildPackageReviewPackHandler({
+      queryStringParameters: { buildConfigurationId: 'not-a-uuid' },
     });
     assert.equal(invalidResponse.statusCode, 422);
   } finally {

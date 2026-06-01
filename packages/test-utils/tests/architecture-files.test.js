@@ -42,6 +42,8 @@ const requiredFiles = [
   'apps/api/src/migrations/0001_initial_schema.sql',
   'apps/api/src/migrations/0002_canonical_erp_domain.sql',
   'apps/api/src/migrations/0003_identity_authn_authz_rbac.sql',
+  'apps/api/src/migrations/0004_inventory_module_scaffold.sql',
+  'apps/api/src/migrations/0005_seed_reference_data.sql',
   'apps/api/src/tests/authenticate-cognito.test.ts',
   'apps/api/src/tests/authz-middleware-guards.test.ts',
   'apps/api/src/tests/row-level-access.test.ts',

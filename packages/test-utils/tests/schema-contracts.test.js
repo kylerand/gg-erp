@@ -3,7 +3,14 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const migrationArtifactsPromise = (async () => {
-  const [canonical, prismaInit, identityAuthz, reservationStorage] = await Promise.all([
+  const [
+    canonical,
+    prismaInit,
+    identityAuthz,
+    reservationStorage,
+    referenceSeed,
+    prismaReferenceSeed
+  ] = await Promise.all([
     readFile(new URL('../../../apps/api/src/migrations/0002_canonical_erp_domain.sql', import.meta.url), 'utf8'),
     readFile(new URL('../../../packages/db/prisma/migrations/0001_init/migration.sql', import.meta.url), 'utf8'),
     readFile(
@@ -16,10 +23,21 @@ const migrationArtifactsPromise = (async () => {
         import.meta.url
       ),
       'utf8'
+    ),
+    readFile(
+      new URL('../../../apps/api/src/migrations/0005_seed_reference_data.sql', import.meta.url),
+      'utf8'
+    ),
+    readFile(
+      new URL(
+        '../../../packages/db/prisma/migrations/20260601030000_seed_reference_data/migration.sql',
+        import.meta.url
+      ),
+      'utf8'
     )
   ]);
 
-  return { canonical, prismaInit, identityAuthz, reservationStorage };
+  return { canonical, prismaInit, identityAuthz, reservationStorage, referenceSeed, prismaReferenceSeed };
 })();
 
 function escapeRegex(value) {
@@ -225,4 +243,69 @@ test('identity authz migration remains coherent with canonical identity entities
   assert.match(canonical, /create table if not exists identity\.roles/i);
   assert.match(identityAuthz, /role_id uuid not null references identity\.roles\(id\) on delete cascade/i);
   assert.match(identityAuthz, /user_id uuid not null references identity\.users\(id\) on delete cascade/i);
+});
+
+test('reference data seed is idempotent and avoids transaction-like rows', async () => {
+  const { referenceSeed, prismaReferenceSeed } = await migrationArtifactsPromise;
+
+  assert.match(referenceSeed, /insert into identity\.roles/i);
+  assert.match(referenceSeed, /insert into identity\.permissions/i);
+  assert.match(referenceSeed, /insert into identity\.role_permissions/i);
+  assert.match(referenceSeed, /insert into inventory\.stock_locations/i);
+  assert.match(referenceSeed, /insert into inventory\.stock_bins/i);
+  assert.match(referenceSeed, /insert into planning\.planning_scenarios/i);
+  assert.match(referenceSeed, /insert into planning\.planning_constraints/i);
+
+  assert.match(referenceSeed, /where not exists\s*\(/i);
+  assert.doesNotMatch(referenceSeed, /on conflict/i);
+  assert.doesNotMatch(referenceSeed, /insert into planning\.plan_publications/i);
+  assert.doesNotMatch(referenceSeed, /\bDO\s+\$\$/i);
+
+  assert.match(prismaReferenceSeed, /insert into identity\.roles/i);
+  assert.match(prismaReferenceSeed, /insert into identity\.permissions/i);
+  assert.match(prismaReferenceSeed, /insert into identity\.role_permissions/i);
+  assert.match(prismaReferenceSeed, /insert into inventory\.stock_locations/i);
+  assert.match(prismaReferenceSeed, /insert into planning\.planning_scenarios/i);
+  assert.match(prismaReferenceSeed, /insert into planning\.planning_constraints/i);
+  assert.match(prismaReferenceSeed, /where not exists\s*\(/i);
+  assert.doesNotMatch(prismaReferenceSeed, /on conflict/i);
+  assert.doesNotMatch(prismaReferenceSeed, /insert into inventory\.stock_bins/i);
+  assert.doesNotMatch(prismaReferenceSeed, /\bhorizon_start\b/i);
+  assert.doesNotMatch(prismaReferenceSeed, /\bobjective_weights\b/i);
+  assert.doesNotMatch(prismaReferenceSeed, /\bconstraint_payload\b/i);
+  assert.doesNotMatch(prismaReferenceSeed, /\blast_correlation_id\b/i);
+  assert.doesNotMatch(prismaReferenceSeed, /insert into planning\.plan_publications/i);
+  assert.doesNotMatch(prismaReferenceSeed, /\bDO\s+\$\$/i);
+
+  for (const roleCode of [
+    'ERP_ADMIN',
+    'SHOP_MANAGER',
+    'DISPATCH_PLANNER',
+    'TECHNICIAN',
+    'PARTS_COORDINATOR',
+    'TRAINING_COORDINATOR',
+    'ACCOUNTING_OPERATOR',
+    'INTEGRATION_OPERATOR'
+  ]) {
+    assert.match(referenceSeed, new RegExp(`'${roleCode}'`));
+    assert.match(prismaReferenceSeed, new RegExp(`'${roleCode}'`));
+  }
+
+  for (const requiredSeed of [
+    "'identity.users.read'",
+    "'work_orders.read'",
+    "'inventory.reserve'",
+    "'planning.publish'",
+    "'sop_ojt.assign_training'",
+    "'accounting.sync.manage'",
+    "'HQ-WH'",
+    "'MVP_BASELINE'",
+    "'MATERIAL_READY_REQUIRED'"
+  ]) {
+    assert.ok(referenceSeed.includes(requiredSeed), `Expected seed to include ${requiredSeed}`);
+    assert.ok(prismaReferenceSeed.includes(requiredSeed), `Expected Prisma seed to include ${requiredSeed}`);
+  }
+
+  assert.ok(referenceSeed.includes("'WIP'"), 'Expected architecture seed to include bay bins');
+  assert.ok(prismaReferenceSeed.includes('inventory."StockLocationType"'));
 });

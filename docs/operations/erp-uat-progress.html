@@ -487,11 +487,15 @@
                 links into customers, parts, work orders, and accounting sync for imported-domain
                 inspection. `validate:shopmonkey-cutover` now produces sanitized JSON/HTML
                 preflight evidence; the latest report is
-                `docs/operations/shopmonkey-cutover-preflight.html`.
+                `docs/operations/shopmonkey-cutover-preflight.html`. `rehearse:shopmonkey-cutover`
+                now runs the loader against a disposable PostgreSQL database and writes counts-only
+                evidence to `docs/operations/shopmonkey-isolated-rehearsal.html`; the current
+                rehearsal loads 28 employees, 447 customers, 56 vehicles, 465 work orders, and 25
+                vendors with zero migration errors.
               </td>
               <td>
-                Run the isolated staging loader rehearsal from the latest ShopMonkey export and
-                attach row-count/reconciliation evidence.
+                Capture or confirm the missing ShopMonkey parts and purchase-order source rows, then
+                run shared staging cutover UAT from the isolated rehearsal baseline.
               </td>
             </tr>
             <tr>

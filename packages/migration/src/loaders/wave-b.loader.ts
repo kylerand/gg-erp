@@ -1,8 +1,6 @@
-import { readFile } from 'node:fs/promises';
 import type { PrismaClient } from '@prisma/client';
 import type { SanitizedUser } from '../sanitize/sanitize-export.js';
-import { sanitizeExport } from '../sanitize/sanitize-export.js';
-import type { ShopMonkeyExport } from '../connectors/shopmonkey-api.connector.js';
+import { readShopMonkeySource } from './shopmonkey-source.js';
 import { isAlreadyImported, recordImportMapping } from './idempotency.js';
 import { createBatch, completeBatch, recordRawRecord, recordError } from './loader.js';
 import type { LoadResult } from './loader.js';
@@ -26,9 +24,7 @@ export async function runWaveB(
 ): Promise<LoadResult> {
   const batchId = await createBatch(prisma, 'B', sourceFile);
 
-  const raw = await readFile(sourceFile, 'utf8');
-  const exportData: ShopMonkeyExport = JSON.parse(raw);
-  const report = sanitizeExport(exportData, sourceFile);
+  const { report } = await readShopMonkeySource(sourceFile);
   const users: SanitizedUser[] = report.users;
 
   let inserted = 0;
@@ -126,4 +122,3 @@ export async function runWaveB(
   await completeBatch(prisma, batchId, users.length, errorCount, errorCount === 0 ? 'COMPLETED' : 'FAILED');
   return { batchId, wave: 'B', inserted, skipped, errors: errorCount };
 }
-

@@ -1,9 +1,8 @@
-import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import type { SanitizedOrder } from '../sanitize/sanitize-export.js';
-import { sanitizeExport } from '../sanitize/sanitize-export.js';
 import type { ShopMonkeyExport, SmService, SmServicePart } from '../connectors/shopmonkey-api.connector.js';
+import { readShopMonkeySource } from './shopmonkey-source.js';
 import { isAlreadyImported, recordImportMapping } from './idempotency.js';
 import { createBatch, completeBatch, recordRawRecord, recordError } from './loader.js';
 import type { LoadResult } from './loader.js';
@@ -13,6 +12,11 @@ export { MIGRATION_SYSTEM_USER_ID };
 
 /** Valid WoStatus values from the Prisma enum. */
 const VALID_WO_STATUSES = new Set(['DRAFT', 'READY', 'SCHEDULED', 'IN_PROGRESS', 'BLOCKED', 'COMPLETED', 'CANCELLED']);
+
+function workOrderNumber(order: SanitizedOrder, duplicateCounts: ReadonlyMap<string, number>): string {
+  const baseNumber = order.orderNumber ?? `SM-${order.smId.slice(0, 8)}`;
+  return (duplicateCounts.get(baseNumber) ?? 0) > 1 ? `${baseNumber}-${order.smId.slice(0, 8)}` : baseNumber;
+}
 
 /**
  * Wave G — All Work Orders.
@@ -34,12 +38,16 @@ export async function runWaveG(
 ): Promise<LoadResult> {
   const batchId = await createBatch(prisma, 'G', sourceFile);
 
-  const raw = await readFile(sourceFile, 'utf8');
-  const exportData: ShopMonkeyExport = JSON.parse(raw);
-  const report = sanitizeExport(exportData, sourceFile);
+  const { rawExport, report } = await readShopMonkeySource(sourceFile);
+  const exportData: ShopMonkeyExport = rawExport;
 
   // Import ALL non-skipped orders
   const orders: SanitizedOrder[] = report.orders.filter(o => !o.skip);
+  const workOrderNumberCounts = new Map<string, number>();
+  for (const order of orders) {
+    const baseNumber = order.orderNumber ?? `SM-${order.smId.slice(0, 8)}`;
+    workOrderNumberCounts.set(baseNumber, (workOrderNumberCounts.get(baseNumber) ?? 0) + 1);
+  }
 
   let inserted = 0;
   let skipped = 0;
@@ -96,7 +104,7 @@ export async function runWaveG(
           customerRef = `sm:${order.smCustomerId}`;
         }
 
-        const woNumber = order.orderNumber ?? `SM-${order.smId.slice(0, 8)}`;
+        const woNumber = workOrderNumber(order, workOrderNumberCounts);
         const title = [
           order.orderNumber ? `Order #${order.orderNumber}` : null,
           assetRef ? null : order.smVehicleId ? `(vehicle: ${order.smVehicleId})` : null,

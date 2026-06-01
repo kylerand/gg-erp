@@ -253,7 +253,7 @@ async function main() {
       { entity: 'EMPLOYEE', label: 'Users/Employees' },
       { entity: 'CUSTOMER', label: 'Customers' },
       { entity: 'ASSET', label: 'Vehicles' },
-      { entity: 'INVENTORY_PART', label: 'Parts' },
+      { entity: 'PART', label: 'Parts' },
       { entity: 'VENDOR', label: 'Vendors' },
       { entity: 'PURCHASE_ORDER', label: 'Purchase Orders' },
       { entity: 'WORK_ORDER', label: 'Work Orders' },

@@ -53,6 +53,7 @@
     "package:lambdas": "tsx scripts/package-lambdas.ts",
     "migrate:shopmonkey": "tsx scripts/migrate-from-shopmonkey.ts",
     "validate:shopmonkey-cutover": "tsx packages/migration/src/cli/validate-cutover-preflight.ts",
+    "rehearse:shopmonkey-cutover": "tsx packages/migration/src/cli/run-isolated-rehearsal.ts",
     "extract:shopmonkey": "tsx scripts/extract-shopmonkey-csvs.ts",
     "hackathon:check": "bash scripts/hackathon-check.sh"
   },

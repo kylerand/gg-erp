@@ -28,7 +28,37 @@ export async function runWaveA(
   let skipped = 0;
   let errorCount = 0;
 
-  // ── 1. Stock Location ────────────────────────────────────────────────────
+  // ── 1. Integration Account ───────────────────────────────────────────────
+  // External ID mappings have a FK to this account, so it must exist before
+  // any seed row records a ShopMonkey mapping.
+  try {
+    const existing = await prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM integrations.integration_accounts
+      WHERE id = CAST(${MIGRATION_INTEGRATION_ACCOUNT_ID} AS uuid)
+      LIMIT 1
+    `;
+    if (existing[0]) {
+      skipped++;
+    } else if (!dryRun) {
+      await prisma.$executeRaw`
+        INSERT INTO integrations.integration_accounts
+          (id, provider, account_key, display_name, account_status, configuration, created_at, updated_at, version)
+        VALUES
+          (CAST(${MIGRATION_INTEGRATION_ACCOUNT_ID} AS uuid),
+           'SHOPMONKEY', 'shopmonkey-migration', 'ShopMonkey Migration',
+           'ACTIVE', '{}', NOW(), NOW(), 0)
+        ON CONFLICT DO NOTHING
+      `;
+      inserted++;
+    } else {
+      inserted++;
+    }
+  } catch (err) {
+    errorCount++;
+    await recordError(prisma, batchId, 'LOAD', 'SEED_INTEGRATION_FAILED', err instanceof Error ? err.message : String(err));
+  }
+
+  // ── 2. Stock Location ────────────────────────────────────────────────────
   try {
     if (await isAlreadyImported(prisma, 'LOCATION', GG_LOCATION_SOURCE_ID)) {
       skipped++;
@@ -60,34 +90,6 @@ export async function runWaveA(
   } catch (err) {
     errorCount++;
     await recordError(prisma, batchId, 'LOAD', 'SEED_LOCATION_FAILED', err instanceof Error ? err.message : String(err));
-  }
-
-  // ── 2. Integration Account ───────────────────────────────────────────────
-  try {
-    const existing = await prisma.$queryRaw<Array<{ id: string }>>`
-      SELECT id FROM integrations.integration_accounts
-      WHERE id = CAST(${MIGRATION_INTEGRATION_ACCOUNT_ID} AS uuid)
-      LIMIT 1
-    `;
-    if (existing[0]) {
-      skipped++;
-    } else if (!dryRun) {
-      await prisma.$executeRaw`
-        INSERT INTO integrations.integration_accounts
-          (id, provider, account_key, display_name, account_status, configuration, created_at, updated_at, version)
-        VALUES
-          (CAST(${MIGRATION_INTEGRATION_ACCOUNT_ID} AS uuid),
-           'SHOPMONKEY', 'shopmonkey-migration', 'ShopMonkey Migration',
-           'ACTIVE', '{}', NOW(), NOW(), 0)
-        ON CONFLICT DO NOTHING
-      `;
-      inserted++;
-    } else {
-      inserted++;
-    }
-  } catch (err) {
-    errorCount++;
-    await recordError(prisma, batchId, 'LOAD', 'SEED_INTEGRATION_FAILED', err instanceof Error ? err.message : String(err));
   }
 
   // ── 3. Migration System User ─────────────────────────────────────────────

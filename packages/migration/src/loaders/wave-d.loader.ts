@@ -1,72 +1,34 @@
-import { readFileSync } from 'fs';
 import type { PrismaClient } from '@prisma/client';
+import type { SanitizedCustomer, SanitizedVehicle } from '../sanitize/sanitize-export.js';
+import { readShopMonkeySource } from './shopmonkey-source.js';
 import { isAlreadyImported, recordImportMapping } from './idempotency.js';
 import { createBatch, completeBatch, recordRawRecord, recordError } from './loader.js';
 import type { LoadResult } from './loader.js';
 
-interface SmCustomer {
-  id: string;
-  firstName: string;
-  lastName: string;
-  companyName: string;
-  emails: Array<{ address: string; primary?: boolean }>;
-  phoneNumbers: Array<{ number: string; primary?: boolean }>;
-  address1?: string;
-  city?: string;
-  state?: string;
-  postalCode?: string;
-  customerType?: string;
-}
-
-interface SmVehicle {
-  id: string;
-  vin?: string | null;
-  serial?: string | null;
-  year?: number | null;
-  make?: string | null;
-  model?: string | null;
-  color?: string | null;
-}
-
-interface SmOrder {
-  customerId?: string | null;
-  vehicleId?: string | null;
-}
-
-interface SmExport {
-  customers: SmCustomer[];
-  vehicles: SmVehicle[];
-  orders: SmOrder[];
-}
-
-function buildFullName(c: SmCustomer): string {
-  const parts = [c.firstName, c.lastName].filter(Boolean);
-  return parts.length > 0 ? parts.join(' ') : (c.companyName || 'Unknown');
-}
-
-function primaryEmail(c: SmCustomer, fallbackId: string): string {
-  const primary = c.emails?.find(e => e.primary) ?? c.emails?.[0];
-  return primary?.address || `noemail+${fallbackId}@noemail.local`;
-}
-
-function primaryPhone(c: SmCustomer): string | null {
-  const primary = c.phoneNumbers?.find(p => p.primary) ?? c.phoneNumbers?.[0];
-  return primary?.number ?? null;
-}
-
-function billingAddress(c: SmCustomer): string | null {
-  const parts = [c.address1, c.city, c.state, c.postalCode].filter(Boolean);
-  return parts.length > 0 ? parts.join(', ') : null;
-}
-
 /** Derive a stable VIN placeholder when the vehicle has no real VIN. */
-function resolvedVin(v: SmVehicle): string {
-  return v.vin || (v.serial ? `SER-${v.serial}` : `IMPORT-${v.id}`);
+function resolvedVin(v: SanitizedVehicle): string {
+  return v.vin || `IMPORT-${v.smId}`;
 }
 
 /** Derive a stable serial placeholder when the vehicle has no real serial. */
-function resolvedSerial(v: SmVehicle): string {
-  return v.serial || (v.vin ? `VIN-${v.vin}` : `IMPORT-${v.id}`);
+function resolvedSerial(v: SanitizedVehicle): string {
+  return v.vin ? `VIN-${v.vin}` : `IMPORT-${v.smId}`;
+}
+
+function primaryEmail(c: SanitizedCustomer): string {
+  return c.email || `noemail+${c.smId}@noemail.local`;
+}
+
+function buildValueCounts(values: string[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function uniquifyIfDuplicate(value: string, sourceId: string, counts: ReadonlyMap<string, number>): string {
+  return (counts.get(value) ?? 0) > 1 ? `${value}-SM-${sourceId.slice(0, 8)}` : value;
 }
 
 export async function runWaveD(
@@ -75,15 +37,23 @@ export async function runWaveD(
   _unused?: string,
   dryRun = false,
 ): Promise<{ customers: LoadResult; vehicles: LoadResult }> {
-  const raw = JSON.parse(readFileSync(exportJsonPath, 'utf-8')) as SmExport;
-  const smCustomers = raw.customers ?? [];
-  const smVehicles = raw.vehicles ?? [];
+  const { report } = await readShopMonkeySource(exportJsonPath);
+  const smCustomers = report.customers.filter((customer) => !customer.skip);
+  const smVehicles = report.vehicles.filter((vehicle) => !vehicle.skip);
+  const vinCounts = buildValueCounts(smVehicles.map(resolvedVin));
+  const serialCounts = buildValueCounts(smVehicles.map(resolvedSerial));
 
-  // Build vehicle → customer map from orders (most reliable link in ShopMonkey)
+  // Build vehicle → customer map from the vehicle owner field, then fill gaps
+  // from work orders. Sanitized reports already carry both references.
   const vehicleCustomerMap = new Map<string, string>();
-  for (const order of raw.orders ?? []) {
-    if (order.vehicleId && order.customerId && !vehicleCustomerMap.has(order.vehicleId)) {
-      vehicleCustomerMap.set(order.vehicleId, order.customerId);
+  for (const vehicle of report.vehicles) {
+    if (vehicle.smCustomerId) {
+      vehicleCustomerMap.set(vehicle.smId, vehicle.smCustomerId);
+    }
+  }
+  for (const order of report.orders) {
+    if (order.smVehicleId && order.smCustomerId && !vehicleCustomerMap.has(order.smVehicleId)) {
+      vehicleCustomerMap.set(order.smVehicleId, order.smCustomerId);
     }
   }
 
@@ -93,14 +63,13 @@ export async function runWaveD(
 
   for (const cust of smCustomers) {
     try {
-      if (await isAlreadyImported(prisma, 'CUSTOMER', cust.id)) { custSkipped++; continue; }
-      await recordRawRecord(prisma, custBatchId, 'CUSTOMER', cust.id, cust as unknown as Record<string, unknown>);
+      if (await isAlreadyImported(prisma, 'CUSTOMER', cust.smId)) { custSkipped++; continue; }
+      await recordRawRecord(prisma, custBatchId, 'CUSTOMER', cust.smId, cust);
 
       if (!dryRun) {
-        const fullName = buildFullName(cust);
-        const email = primaryEmail(cust, cust.id);
-        const phone = primaryPhone(cust);
-        const address = billingAddress(cust);
+        const fullName = cust.fullName || cust.companyName || 'Unknown';
+        const email = primaryEmail(cust);
+        const phone = cust.phone ?? null;
         const contactMethod = phone ? 'PHONE' : 'EMAIL';
 
         const result = await prisma.$queryRaw<Array<{ id: string }>>`
@@ -109,15 +78,15 @@ export async function runWaveD(
              external_reference, preferred_contact_method,
              state, created_at, updated_at, version)
           VALUES (
-            ${fullName}, ${cust.companyName || null}, ${email}, ${phone}, ${address},
-            ${cust.id}, ${contactMethod},
+            ${fullName}, ${cust.companyName || null}, ${email}, ${phone}, ${null},
+            ${cust.smId}, ${contactMethod},
             'ACTIVE', NOW(), NOW(), 0
           )
           ON CONFLICT DO NOTHING
           RETURNING id
         `;
         if (result[0]) {
-          await recordImportMapping(prisma, 'CUSTOMER', cust.id, result[0].id);
+          await recordImportMapping(prisma, 'CUSTOMER', cust.smId, result[0].id);
           custInserted++;
         } else {
           custSkipped++;
@@ -139,9 +108,9 @@ export async function runWaveD(
 
   for (const veh of smVehicles) {
     try {
-      if (await isAlreadyImported(prisma, 'ASSET', veh.id)) { vehSkipped++; continue; }
+      if (await isAlreadyImported(prisma, 'ASSET', veh.smId)) { vehSkipped++; continue; }
 
-      const smCustomerId = vehicleCustomerMap.get(veh.id);
+      const smCustomerId = veh.smCustomerId ?? vehicleCustomerMap.get(veh.smId);
       if (!smCustomerId) {
         // Vehicle not linked to any order — skip quietly
         vehSkipped++;
@@ -150,12 +119,12 @@ export async function runWaveD(
 
       if (!veh.year || !veh.model) {
         await recordError(prisma, vehBatchId, 'LOAD', 'MISSING_DATA',
-          `Vehicle ${veh.id} missing year or model — skipping`);
+          `Vehicle ${veh.smId} missing year or model — skipping`);
         vehErrors++;
         continue;
       }
 
-      await recordRawRecord(prisma, vehBatchId, 'ASSET', veh.id, veh as unknown as Record<string, unknown>);
+      await recordRawRecord(prisma, vehBatchId, 'ASSET', veh.smId, veh);
 
       if (!dryRun) {
         const custRow = await prisma.$queryRaw<Array<{ entity_id: string }>>`
@@ -172,8 +141,8 @@ export async function runWaveD(
           continue;
         }
 
-        const vin = resolvedVin(veh);
-        const serial = resolvedSerial(veh);
+        const vin = uniquifyIfDuplicate(resolvedVin(veh), veh.smId, vinCounts);
+        const serial = uniquifyIfDuplicate(resolvedSerial(veh), veh.smId, serialCounts);
         const modelCode = [veh.make, veh.model].filter(Boolean).join(' ') || 'UNKNOWN';
 
         const result = await prisma.$queryRaw<Array<{ id: string }>>`
@@ -188,7 +157,7 @@ export async function runWaveD(
           RETURNING id
         `;
         if (result[0]) {
-          await recordImportMapping(prisma, 'ASSET', veh.id, result[0].id);
+          await recordImportMapping(prisma, 'ASSET', veh.smId, result[0].id);
           vehInserted++;
         } else {
           vehSkipped++;

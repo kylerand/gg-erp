@@ -225,6 +225,7 @@ model RoutingTemplateStep {
   operationName       String   @map("operation_name")
   workstationCode     String?  @map("workstation_code")
   estimatedMinutes    Int      @map("estimated_minutes")
+  laborRateCents      Int?     @map("labor_rate_cents")
   requiredSkillCode   String?  @map("required_skill_code")
   jobCardTitle        String?  @map("job_card_title")
   jobCardInstructions String?  @map("job_card_instructions")
@@ -1156,23 +1157,25 @@ enum WoOperationStatus {
 }
 
 model WoOperation {
-  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workOrderId       String            @map("work_order_id") @db.Uuid
-  operationCode     String            @map("operation_code")
-  sequenceNo        Int               @map("sequence_no")
-  operationName     String            @map("operation_name")
-  requiredSkillCode String?           @map("required_skill_code")
-  estimatedMinutes  Int               @map("estimated_minutes")
-  operationStatus   WoOperationStatus @default(PENDING) @map("operation_status")
-  plannedStartAt    DateTime?         @map("planned_start_at") @db.Timestamptz(6)
-  plannedEndAt      DateTime?         @map("planned_end_at") @db.Timestamptz(6)
-  actualStartAt     DateTime?         @map("actual_start_at") @db.Timestamptz(6)
-  actualEndAt       DateTime?         @map("actual_end_at") @db.Timestamptz(6)
-  blockingReason    String?           @map("blocking_reason")
-  correlationId     String?           @map("correlation_id")
-  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime          @default(now()) @map("updated_at") @db.Timestamptz(6)
-  version           Int               @default(0)
+  id                     String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workOrderId            String            @map("work_order_id") @db.Uuid
+  operationCode          String            @map("operation_code")
+  sequenceNo             Int               @map("sequence_no")
+  operationName          String            @map("operation_name")
+  requiredSkillCode      String?           @map("required_skill_code")
+  estimatedMinutes       Int               @map("estimated_minutes")
+  routingTemplateStepId  String?           @map("routing_template_step_id") @db.Uuid
+  standardLaborCostCents Int               @default(0) @map("standard_labor_cost_cents")
+  operationStatus        WoOperationStatus @default(PENDING) @map("operation_status")
+  plannedStartAt         DateTime?         @map("planned_start_at") @db.Timestamptz(6)
+  plannedEndAt           DateTime?         @map("planned_end_at") @db.Timestamptz(6)
+  actualStartAt          DateTime?         @map("actual_start_at") @db.Timestamptz(6)
+  actualEndAt            DateTime?         @map("actual_end_at") @db.Timestamptz(6)
+  blockingReason         String?           @map("blocking_reason")
+  correlationId          String?           @map("correlation_id")
+  createdAt              DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime          @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version                Int               @default(0)
 
   workOrder   WoOrder        @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
   assignments WoAssignment[]
@@ -1180,6 +1183,7 @@ model WoOperation {
 
   @@unique([workOrderId, sequenceNo])
   @@index([operationStatus])
+  @@index([routingTemplateStepId], map: "work_order_operations_routing_template_step_idx")
   @@map("work_order_operations")
   @@schema("work_orders")
 }

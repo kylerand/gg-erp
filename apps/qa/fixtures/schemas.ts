@@ -146,6 +146,8 @@ const routingTemplateStep = z.object({
   operationName: z.string(),
   workstationCode: z.string().optional(),
   estimatedMinutes: z.number().int().positive(),
+  laborRateCents: z.number().int().nonnegative().optional(),
+  laborCostCents: z.number().int().nonnegative(),
   requiredSkillCode: z.string().optional(),
   jobCardTitle: z.string().optional(),
   jobCardInstructions: z.string().optional(),
@@ -171,6 +173,7 @@ const routingTemplate = z.object({
   version: z.number().int().nonnegative(),
   stepCount: z.number().int().nonnegative(),
   estimatedMinutes: z.number().int().nonnegative(),
+  estimatedLaborCostCents: z.number().int().nonnegative(),
   steps: z.array(routingTemplateStep),
 });
 

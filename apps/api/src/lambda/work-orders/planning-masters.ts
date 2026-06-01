@@ -87,6 +87,7 @@ export interface RoutingTemplateStepInput {
   operationName: string;
   workstationCode?: string;
   estimatedMinutes: number;
+  laborRateCents?: number;
   requiredSkillCode?: string;
   jobCardTitle?: string;
   jobCardInstructions?: string;
@@ -102,6 +103,8 @@ export interface RoutingTemplateStepResponse {
   operationName: string;
   workstationCode?: string;
   estimatedMinutes: number;
+  laborRateCents?: number;
+  laborCostCents: number;
   requiredSkillCode?: string;
   jobCardTitle?: string;
   jobCardInstructions?: string;
@@ -127,6 +130,7 @@ export interface RoutingTemplateResponse {
   version: number;
   stepCount: number;
   estimatedMinutes: number;
+  estimatedLaborCostCents: number;
   steps: RoutingTemplateStepResponse[];
 }
 
@@ -195,6 +199,7 @@ export interface PlanningMasterStore {
     search?: string;
     status?: RoutingTemplateStatus;
     buildConfigurationId?: string;
+    effectiveOn?: string;
     limit: number;
     offset: number;
   }): Promise<{ items: RoutingTemplateResponse[]; total: number; limit: number; offset: number }>;
@@ -264,6 +269,12 @@ function toPositiveNumber(value: unknown): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : Number.NaN;
 }
 
+function toNonNegativeInt(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : Number.NaN;
+}
+
 function toBoolean(value: unknown): boolean {
   return value === true || value === 'true' || value === 1 || value === '1';
 }
@@ -281,6 +292,11 @@ function iso(value: unknown): string {
 
 function optionalIso(value: unknown): string | undefined {
   return value ? iso(value) : undefined;
+}
+
+function laborCostCents(estimatedMinutes: number, laborRateCents?: number): number {
+  if (laborRateCents === undefined) return 0;
+  return Math.round((estimatedMinutes / 60) * laborRateCents);
 }
 
 interface BuildConfigurationRow {
@@ -343,6 +359,7 @@ interface RoutingTemplateRow {
   version: number;
   stepCount: bigint | number | string;
   estimatedMinutes: bigint | number | string;
+  estimatedLaborCostCents: bigint | number | string;
 }
 
 interface RoutingTemplateStepRow {
@@ -353,6 +370,7 @@ interface RoutingTemplateStepRow {
   operationName: string;
   workstationCode: string | null;
   estimatedMinutes: number;
+  laborRateCents: number | null;
   requiredSkillCode: string | null;
   jobCardTitle: string | null;
   jobCardInstructions: string | null;
@@ -418,6 +436,8 @@ function mapRoutingTemplateStep(row: RoutingTemplateStepRow): RoutingTemplateSte
     operationName: row.operationName,
     workstationCode: row.workstationCode ?? undefined,
     estimatedMinutes: Number(row.estimatedMinutes),
+    laborRateCents: row.laborRateCents ?? undefined,
+    laborCostCents: laborCostCents(Number(row.estimatedMinutes), row.laborRateCents ?? undefined),
     requiredSkillCode: row.requiredSkillCode ?? undefined,
     jobCardTitle: row.jobCardTitle ?? undefined,
     jobCardInstructions: row.jobCardInstructions ?? undefined,
@@ -448,6 +468,7 @@ function mapRoutingTemplate(
     version: Number(row.version),
     stepCount: Number(row.stepCount),
     estimatedMinutes: Number(row.estimatedMinutes),
+    estimatedLaborCostCents: Number(row.estimatedLaborCostCents),
     steps,
   };
 }
@@ -516,7 +537,16 @@ function routingTemplateSelect(where: Prisma.Sql, orderLimit: Prisma.Sql): Prism
       rt.updated_at AS "updatedAt",
       rt.version AS "version",
       count(rts.id)::bigint AS "stepCount",
-      coalesce(sum(rts.estimated_minutes), 0)::bigint AS "estimatedMinutes"
+      coalesce(sum(rts.estimated_minutes), 0)::bigint AS "estimatedMinutes",
+      coalesce(
+        sum(
+          CASE
+            WHEN rts.labor_rate_cents IS NULL THEN 0
+            ELSE round((rts.estimated_minutes::numeric / 60) * rts.labor_rate_cents)
+          END
+        ),
+        0
+      )::bigint AS "estimatedLaborCostCents"
     FROM planning.routing_templates rt
     LEFT JOIN planning.build_configurations bc ON bc.id = rt.build_configuration_id
     LEFT JOIN planning.routing_template_steps rts ON rts.routing_template_id = rt.id
@@ -567,6 +597,7 @@ async function loadRoutingTemplateSteps(
       operation_name AS "operationName",
       workstation_code AS "workstationCode",
       estimated_minutes AS "estimatedMinutes",
+      labor_rate_cents AS "laborRateCents",
       required_skill_code AS "requiredSkillCode",
       job_card_title AS "jobCardTitle",
       job_card_instructions AS "jobCardInstructions",
@@ -768,6 +799,7 @@ function validateCreateRoutingTemplate(input: unknown): CreateRoutingTemplateInp
     const operationCode = normalizeText(step?.operationCode);
     const operationName = normalizeText(step?.operationName);
     const estimatedMinutes = toPositiveInt(step?.estimatedMinutes);
+    const laborRateCents = toNonNegativeInt(step?.laborRateCents);
     const workstationCode = normalizeText(step?.workstationCode);
     const requiredSkillCode = normalizeText(step?.requiredSkillCode);
     const jobCardTitle = normalizeText(step?.jobCardTitle);
@@ -797,6 +829,12 @@ function validateCreateRoutingTemplate(input: unknown): CreateRoutingTemplateInp
         message: 'estimatedMinutes must be a positive integer.',
       });
     }
+    if (Number.isNaN(laborRateCents)) {
+      issues.push({
+        field: `steps.${index}.laborRateCents`,
+        message: 'laborRateCents must be a non-negative integer.',
+      });
+    }
 
     return {
       sequenceNo,
@@ -804,6 +842,7 @@ function validateCreateRoutingTemplate(input: unknown): CreateRoutingTemplateInp
       operationName: operationName ?? '',
       workstationCode,
       estimatedMinutes: estimatedMinutes ?? Number.NaN,
+      laborRateCents,
       requiredSkillCode,
       jobCardTitle,
       jobCardInstructions,
@@ -1171,6 +1210,7 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
     search?: string;
     status?: RoutingTemplateStatus;
     buildConfigurationId?: string;
+    effectiveOn?: string;
     limit: number;
     offset: number;
   }): Promise<{ items: RoutingTemplateResponse[]; total: number; limit: number; offset: number }> {
@@ -1180,6 +1220,12 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
     }
     if (input.buildConfigurationId) {
       predicates.push(Prisma.sql`rt.build_configuration_id = ${input.buildConfigurationId}::uuid`);
+    }
+    if (input.effectiveOn) {
+      predicates.push(Prisma.sql`(
+        rt.effective_from <= ${input.effectiveOn}::timestamptz
+        AND (rt.effective_to IS NULL OR rt.effective_to > ${input.effectiveOn}::timestamptz)
+      )`);
     }
     if (input.search) {
       const pattern = `%${input.search}%`;
@@ -1287,6 +1333,7 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
           operation_name,
           workstation_code,
           estimated_minutes,
+          labor_rate_cents,
           required_skill_code,
           job_card_title,
           job_card_instructions,
@@ -1301,6 +1348,7 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
             ${step.operationName},
             ${step.workstationCode ?? null},
             ${step.estimatedMinutes},
+            ${step.laborRateCents ?? null},
             ${step.requiredSkillCode ?? null},
             ${step.jobCardTitle ?? null},
             ${step.jobCardInstructions ?? null},
@@ -1332,6 +1380,12 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
       if (input.status === 'ACTIVE' && current.steps.length === 0) {
         throw new PlanningMasterCommandError(
           'Routing template requires at least one step before activation.',
+          409,
+        );
+      }
+      if (input.status === 'ACTIVE' && current.effectiveTo && new Date(current.effectiveTo) <= new Date()) {
+        throw new PlanningMasterCommandError(
+          'Routing template effective window has already ended.',
           409,
         );
       }
@@ -1654,6 +1708,7 @@ export async function listRoutingTemplatesHandler(
   const offset = toOffset(query.offset);
   const status = query.status?.trim() as RoutingTemplateStatus | undefined;
   const buildConfigurationId = query.buildConfigurationId?.trim();
+  const effectiveOn = toDateTime(query.effectiveOn);
   if (Number.isNaN(limit)) return json(422, { message: 'limit must be a positive integer.' });
   if (Number.isNaN(offset)) return json(422, { message: 'offset must be a non-negative integer.' });
   if (status && !ROUTING_TEMPLATE_STATUSES.includes(status)) {
@@ -1662,11 +1717,15 @@ export async function listRoutingTemplatesHandler(
   if (buildConfigurationId && !isUuid(buildConfigurationId)) {
     return json(422, { message: 'buildConfigurationId must be a UUID.' });
   }
+  if (query.effectiveOn !== undefined && !effectiveOn) {
+    return json(422, { message: 'effectiveOn must be a valid date.' });
+  }
 
   const result = await planningMasterStore.listRoutingTemplates({
     search: query.search?.trim() || undefined,
     status,
     buildConfigurationId,
+    effectiveOn,
     limit,
     offset,
   });

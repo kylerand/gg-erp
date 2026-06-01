@@ -165,6 +165,7 @@ function createPlanningMasterStoreForTests(): PlanningMasterStore {
     version: 0,
     stepCount: 1,
     estimatedMinutes: 90,
+    estimatedLaborCostCents: 14250,
     steps: [
       {
         id: '00000000-0000-4000-8000-000000000701',
@@ -174,6 +175,8 @@ function createPlanningMasterStoreForTests(): PlanningMasterStore {
         operationName: 'Frame assembly',
         workstationCode: 'BAY-1',
         estimatedMinutes: 90,
+        laborRateCents: 9500,
+        laborCostCents: 14250,
         requiredSkillCode: 'MECHANICAL',
         jobCardTitle: 'Frame assembly',
         jobCardInstructions: 'Install lift and torque suspension hardware.',
@@ -230,6 +233,11 @@ function createPlanningMasterStoreForTests(): PlanningMasterStore {
           operationName: step.operationName,
           workstationCode: step.workstationCode,
           estimatedMinutes: step.estimatedMinutes,
+          laborRateCents: step.laborRateCents,
+          laborCostCents:
+            step.laborRateCents === undefined
+              ? 0
+              : Math.round((step.estimatedMinutes / 60) * step.laborRateCents),
           requiredSkillCode: step.requiredSkillCode,
           jobCardTitle: step.jobCardTitle,
           jobCardInstructions: step.jobCardInstructions,
@@ -350,6 +358,7 @@ test('planning routing template handlers validate, create, and activate job-card
             operationCode: 'FRAME',
             operationName: 'Frame assembly',
             estimatedMinutes: 75,
+            laborRateCents: 9000,
             jobCardTitle: 'Frame install',
             qcRequired: true,
           },
@@ -358,11 +367,15 @@ test('planning routing template handlers validate, create, and activate job-card
     });
     assert.equal(createResponse.statusCode, 201);
     const createPayload = JSON.parse(createResponse.body) as {
-      routingTemplate: { routeCode: string; steps: Array<{ jobCardTitle?: string; qcRequired: boolean }> };
+      routingTemplate: {
+        routeCode: string;
+        steps: Array<{ jobCardTitle?: string; qcRequired: boolean; laborCostCents: number }>;
+      };
     };
     assert.equal(createPayload.routingTemplate.routeCode, 'RT-GG4-NEW');
     assert.equal(createPayload.routingTemplate.steps[0]?.jobCardTitle, 'Frame install');
     assert.equal(createPayload.routingTemplate.steps[0]?.qcRequired, true);
+    assert.equal(createPayload.routingTemplate.steps[0]?.laborCostCents, 11250);
 
     const activateResponse = await transitionRoutingTemplateHandler({
       pathParameters: { id: '00000000-0000-4000-8000-000000000601' },

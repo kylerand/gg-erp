@@ -292,13 +292,14 @@
                 links now focus the exact service operation inside the work-order command center.
                 Technician-task transitions now fail cleanly when unassigned work is started, My
                 Queue refreshes from the server after rejected task transitions, and manual New Work
-                Order creation now creates execution-layer work orders with operations and BOM part
-                demand from released planning packages. The live API smoke enforces the `POST
+                Order creation now creates execution-layer work orders with operations, BOM part
+                demand, standard labor cost, source route-step traceability, and pending QC/evidence
+                gates from released planning packages. The live API smoke enforces the `POST
                 /tickets/work-orders` route with no pending-route allowance.
               </td>
               <td>
-                Keep expanding costing, effective dating, engineering change control, and
-                quality-gate depth as master APIs stabilize.
+                Keep expanding engineering change control and approval history as master APIs
+                stabilize.
               </td>
             </tr>
             <tr>
@@ -321,17 +322,17 @@
                 vendor, work-order, active employee, live build-package, and active routing-template
                 selectors with mock fallback disabled. Work-order create now reads released build
                 package options from the dedicated planning catalog and supports manual
-                engineering-approved references when no package is reusable. The submit path now
-                creates executable work orders from those references, and can use an active
-                routing/job-card template for operation rows instead of leaving records stranded in
-                planning-only storage.
+                engineering-approved references when no package is reusable. The submit path filters
+                routing/job-card templates to active currently effective routes, creates executable
+                work orders from those references, and can use the selected template for operation
+                rows instead of leaving records stranded in planning-only storage.
                 Work-order list selectors resolve cart and customer context instead of rendering
                 vehicle/configuration IDs, and Planning exposes the build package catalog as an
                 operator page. The catalog now includes authored build-configuration and
                 approved-BOM packages in addition to reusable history.
               </td>
               <td>
-                Backfill richer costing selectors once those master APIs are stable.
+                Backfill engineering-change selectors once those master APIs are stable.
               </td>
             </tr>
             <tr>
@@ -342,11 +343,12 @@
                 BOMs, routing templates, cart vehicles, and active parts. Operators can create build
                 configurations, lock and release them, author BOM revisions from live parts, approve
                 BOMs, publish approved configuration/BOM pairs into the build-package catalog, create
-                ordered route/job-card templates, and activate or retire route versions.
+                ordered route/job-card templates with effective windows, labor rates, QC gates, and
+                evidence requirements, and activate or retire route versions.
               </td>
               <td>
-                Keep adding costing, effective dating, engineering change control, and quality gates
-                that consume the planning masters.
+                Keep adding engineering change control and approval evidence around released route
+                versions.
               </td>
             </tr>
             <tr>

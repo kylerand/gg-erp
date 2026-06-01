@@ -175,6 +175,8 @@ export interface RoutingTemplateStep {
   operationName: string;
   workstationCode?: string;
   estimatedMinutes: number;
+  laborRateCents?: number;
+  laborCostCents: number;
   requiredSkillCode?: string;
   jobCardTitle?: string;
   qcRequired: boolean;
@@ -214,7 +216,9 @@ export const RoutingTemplateDesign: EntityDesign<RoutingTemplateState> = {
   businessRules: [
     'Only one ACTIVE routing template may exist per routeCode.',
     'sequenceNo and operationCode must be unique within a routing template.',
-    'estimatedMinutes must be greater than zero for every job-card step.'
+    'estimatedMinutes must be greater than zero for every job-card step.',
+    'laborRateCents, when present, must be non-negative and carries standard labor cost into execution operations.',
+    'ACTIVE routing templates must be within their effective window before work orders can use them.'
   ],
   emittedEvents: ['routing.template.created', 'routing.template.activated', 'routing.template.retired'],
   apiOperations: [

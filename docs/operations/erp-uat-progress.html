@@ -232,8 +232,8 @@
       </header>
 
       <div class="summary">
-        <div class="metric"><strong>16</strong><span>Tracked delivery slices</span></div>
-        <div class="metric"><strong>15</strong><span>Done</span></div>
+        <div class="metric"><strong>17</strong><span>Tracked delivery slices</span></div>
+        <div class="metric"><strong>16</strong><span>Done</span></div>
         <div class="metric"><strong>1</strong><span>In progress</span></div>
         <div class="metric"><strong>0</strong><span>Not started</span></div>
       </div>
@@ -241,10 +241,10 @@
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: closing the remaining customer/dealer relationship model and hardening
-          production seed readiness around the now-actionable operator workflows.
+          Current focus: closing the remaining customer/dealer relationship model and validating
+          ShopMonkey cutover readiness around the now-actionable operator workflows.
         </p>
-        <div class="progress" aria-label="98 percent complete"><div style="width: 98%"></div></div>
+        <div class="progress" aria-label="99 percent complete"><div style="width: 99%"></div></div>
       </section>
 
       <section>
@@ -475,6 +475,18 @@
                 and cross-module metric values.
               </td>
               <td>Add persisted report subscriptions and scheduled exports once subscription tables are designed.</td>
+            </tr>
+            <tr>
+              <td>Production reference seed</td>
+              <td><span class="pill done">Done</span></td>
+              <td>
+                Baseline roles, permissions, role-permission grants, stock locations, and
+                `MVP_BASELINE` planning constraints are seeded through an idempotent reference
+                migration. The seed is tracked both as the architecture migration artifact and as a
+                deploy-applied Prisma-compatible migration; stock bins remain tied to inventory
+                scaffold deploy-schema alignment.
+              </td>
+              <td>Run staging seed verification during cutover rehearsal; seed stock bins after deploy-schema alignment.</td>
             </tr>
             <tr>
               <td>Admin configuration catalog</td>

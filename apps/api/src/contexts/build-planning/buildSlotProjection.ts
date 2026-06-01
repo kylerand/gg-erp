@@ -27,6 +27,7 @@ export interface BuildSlotDemandInput {
   estimatedMinutes: number;
   plannedStartAt?: string;
   plannedEndAt?: string;
+  updatedAt?: string;
 }
 
 export interface BuildSlotCapacityInput {
@@ -49,6 +50,34 @@ export interface BuildSlotDemandItem extends BuildSlotDemandInput {
 export interface BuildSlotProjectionWarning {
   code: 'OVER_CAPACITY' | 'MISSING_ESTIMATE' | 'NO_SLOT' | 'UNSCHEDULED' | 'BLOCKED';
   message: string;
+}
+
+export interface BuildSlotProjectionFreshness {
+  state: 'LIVE' | 'NO_SOURCE';
+  generatedAt: string;
+  latestCapacityUpdatedAt?: string;
+  latestDemandUpdatedAt?: string;
+  latestSourceUpdatedAt?: string;
+  sourceLagSeconds: number;
+  staleAfterSeconds: number;
+}
+
+export type BuildSlotProjectionConflictCode =
+  | 'NO_CAPACITY'
+  | 'OVER_CAPACITY'
+  | 'MATERIAL_NOT_READY'
+  | 'OPERATION_BLOCKED'
+  | 'MISSING_ESTIMATE';
+
+export interface BuildSlotProjectionConflict {
+  code: BuildSlotProjectionConflictCode;
+  severity: 'high' | 'medium' | 'low';
+  message: string;
+  workOrderId?: string;
+  workOrderNumber?: string;
+  operationId?: string;
+  capacitySlotId?: string;
+  reason?: BuildSlotDemandReason;
 }
 
 export interface BuildSlotProjectionSlot {
@@ -95,6 +124,8 @@ export interface BuildSlotDemandProjection {
     blockedOperationCount: number;
     missingEstimateCount: number;
   };
+  freshness: BuildSlotProjectionFreshness;
+  conflicts: BuildSlotProjectionConflict[];
   slots: BuildSlotProjectionSlot[];
   unscheduled: BuildSlotDemandItem[];
   warnings: BuildSlotProjectionWarning[];
@@ -267,6 +298,7 @@ export function buildSlotDemandProjection(
       message: `${missingEstimateCount} operation${missingEstimateCount === 1 ? '' : 's'} need labor estimates.`,
     });
   }
+  const sortedUnscheduled = unscheduled.sort(compareDemand);
 
   return {
     startDate: input.startDate,
@@ -294,8 +326,15 @@ export function buildSlotDemandProjection(
         .length,
       missingEstimateCount,
     },
+    freshness: buildFreshness({ generatedAt, slots, demand }),
+    conflicts: buildConflicts({
+      demand,
+      slots,
+      projectedSlots,
+      unscheduled: sortedUnscheduled,
+    }),
     slots: projectedSlots,
-    unscheduled: unscheduled.sort(compareDemand),
+    unscheduled: sortedUnscheduled,
     warnings: topWarnings,
   };
 }
@@ -391,4 +430,111 @@ function toDateKey(value: string): string {
 
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values)].sort();
+}
+
+function buildFreshness({
+  generatedAt,
+  slots,
+  demand,
+}: {
+  generatedAt: string;
+  slots: BuildSlotCapacityInput[];
+  demand: BuildSlotDemandInput[];
+}): BuildSlotProjectionFreshness {
+  const latestCapacityUpdatedAt = latestIso(slots.map((slot) => slot.updatedAt));
+  const latestDemandUpdatedAt = latestIso(demand.map((item) => item.updatedAt));
+  const latestSourceUpdatedAt = latestIso([latestCapacityUpdatedAt, latestDemandUpdatedAt]);
+  const sourceLagSeconds = latestSourceUpdatedAt
+    ? Math.max(0, Math.round((Date.parse(generatedAt) - Date.parse(latestSourceUpdatedAt)) / 1000))
+    : 0;
+
+  return {
+    state: latestSourceUpdatedAt ? 'LIVE' : 'NO_SOURCE',
+    generatedAt,
+    latestCapacityUpdatedAt,
+    latestDemandUpdatedAt,
+    latestSourceUpdatedAt,
+    sourceLagSeconds,
+    staleAfterSeconds: 900,
+  };
+}
+
+function buildConflicts({
+  demand,
+  slots,
+  projectedSlots,
+  unscheduled,
+}: {
+  demand: BuildSlotDemandInput[];
+  slots: BuildSlotCapacityInput[];
+  projectedSlots: BuildSlotProjectionSlot[];
+  unscheduled: BuildSlotDemandItem[];
+}): BuildSlotProjectionConflict[] {
+  const conflicts: BuildSlotProjectionConflict[] = [];
+
+  if (slots.length === 0 && demand.length > 0) {
+    conflicts.push({
+      code: 'NO_CAPACITY',
+      severity: 'high',
+      message: 'No capacity slots exist for this date range.',
+    });
+  }
+
+  for (const slot of projectedSlots) {
+    if (slot.overCapacityMinutes <= 0) continue;
+    conflicts.push({
+      code: 'OVER_CAPACITY',
+      severity: 'high',
+      capacitySlotId: slot.slotId,
+      message: `${slot.overCapacityMinutes} projected minute${slot.overCapacityMinutes === 1 ? '' : 's'} exceed ${slot.bayCode ?? slot.teamCode ?? 'slot'} capacity.`,
+    });
+  }
+
+  for (const item of unscheduled) {
+    if (item.reason === 'PROJECTED_TO_SLOT') continue;
+    conflicts.push({
+      code: conflictCodeForReason(item.reason),
+      severity: conflictSeverityForReason(item.reason),
+      message: conflictMessageForDemand(item),
+      workOrderId: item.workOrderId,
+      workOrderNumber: item.workOrderNumber,
+      operationId: item.operationId,
+      reason: item.reason,
+    });
+  }
+
+  return conflicts;
+}
+
+function conflictCodeForReason(reason: BuildSlotDemandReason): BuildSlotProjectionConflictCode {
+  if (reason === 'NO_CAPACITY') return 'NO_CAPACITY';
+  if (reason === 'OVER_CAPACITY') return 'OVER_CAPACITY';
+  if (reason === 'MATERIAL_NOT_READY') return 'MATERIAL_NOT_READY';
+  if (reason === 'OPERATION_BLOCKED') return 'OPERATION_BLOCKED';
+  return 'MISSING_ESTIMATE';
+}
+
+function conflictSeverityForReason(reason: BuildSlotDemandReason): BuildSlotProjectionConflict['severity'] {
+  if (reason === 'NO_CAPACITY' || reason === 'OVER_CAPACITY') return 'high';
+  if (reason === 'MATERIAL_NOT_READY' || reason === 'OPERATION_BLOCKED') return 'medium';
+  return 'low';
+}
+
+function conflictMessageForDemand(item: BuildSlotDemandItem): string {
+  const label = `${item.workOrderNumber} ${item.operationName}`;
+  if (item.reason === 'NO_CAPACITY') return `${label} needs capacity before it can be scheduled.`;
+  if (item.reason === 'OVER_CAPACITY') return `${label} does not fit in the available capacity.`;
+  if (item.reason === 'MATERIAL_NOT_READY') return `${label} is waiting on material readiness.`;
+  if (item.reason === 'OPERATION_BLOCKED') return `${label} is blocked on the work order.`;
+  return `${label} needs an estimated labor duration.`;
+}
+
+function latestIso(values: Array<string | undefined>): string | undefined {
+  const timestamps = values
+    .filter((value): value is string => Boolean(value))
+    .map((value) => new Date(value).getTime())
+    .filter((value) => Number.isFinite(value));
+
+  if (timestamps.length === 0) return undefined;
+  return new Date(Math.max(...timestamps)).toISOString();
 }

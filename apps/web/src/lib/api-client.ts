@@ -3791,12 +3791,41 @@ export interface BuildSlotDemandItem {
   estimatedMinutes: number;
   plannedStartAt?: string;
   plannedEndAt?: string;
+  updatedAt?: string;
   reason: BuildSlotDemandReason;
 }
 
 export interface BuildSlotProjectionWarning {
   code: 'OVER_CAPACITY' | 'MISSING_ESTIMATE' | 'NO_SLOT' | 'UNSCHEDULED' | 'BLOCKED';
   message: string;
+}
+
+export interface BuildSlotProjectionFreshness {
+  state: 'LIVE' | 'NO_SOURCE';
+  generatedAt: string;
+  latestCapacityUpdatedAt?: string;
+  latestDemandUpdatedAt?: string;
+  latestSourceUpdatedAt?: string;
+  sourceLagSeconds: number;
+  staleAfterSeconds: number;
+}
+
+export type BuildSlotProjectionConflictCode =
+  | 'NO_CAPACITY'
+  | 'OVER_CAPACITY'
+  | 'MATERIAL_NOT_READY'
+  | 'OPERATION_BLOCKED'
+  | 'MISSING_ESTIMATE';
+
+export interface BuildSlotProjectionConflict {
+  code: BuildSlotProjectionConflictCode;
+  severity: 'high' | 'medium' | 'low';
+  message: string;
+  workOrderId?: string;
+  workOrderNumber?: string;
+  operationId?: string;
+  capacitySlotId?: string;
+  reason?: BuildSlotDemandReason;
 }
 
 export interface BuildSlotProjectionSlot {
@@ -3828,6 +3857,8 @@ export interface BuildSlotDemandProjection {
     operationStatuses: string[];
     capacitySource: 'planning.capacity_slots' | 'none';
   };
+  freshness: BuildSlotProjectionFreshness;
+  conflicts: BuildSlotProjectionConflict[];
   totals: {
     demandMinutes: number;
     capacityMinutes: number;

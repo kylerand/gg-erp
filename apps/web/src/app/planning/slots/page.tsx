@@ -304,7 +304,7 @@ export default function BuildSlotPlannerPage() {
         title="Build Slot Planner"
         description={
           projection
-            ? `Week of ${formatDateLabel(week.start)} to ${formatDateLabel(week.end)} · snapshot ${new Date(projection.generatedAt).toLocaleString()}`
+            ? `Week of ${formatDateLabel(week.start)} to ${formatDateLabel(week.end)} · ${formatProjectionFreshness(projection)}`
             : `Week of ${formatDateLabel(week.start)} to ${formatDateLabel(week.end)}`
         }
         action={
@@ -904,9 +904,11 @@ function ProjectionTotals({ projection }: { projection: BuildSlotDemandProjectio
     ['Projected', formatMinutes(projection.totals.projectedDemandMinutes)],
     ['Remaining', formatMinutes(projection.totals.remainingMinutes)],
     ['Unscheduled', formatMinutes(projection.totals.unscheduledDemandMinutes)],
+    ['Conflicts', String(projection.conflicts.length)],
+    ['Freshness', formatFreshnessSummary(projection)],
   ];
   return (
-    <div className="grid grid-cols-2 gap-3 rounded-lg border border-gray-200 bg-white p-4 md:grid-cols-6">
+    <div className="grid grid-cols-2 gap-3 rounded-lg border border-gray-200 bg-white p-4 md:grid-cols-4 xl:grid-cols-8">
       {rows.map(([label, value]) => (
         <div key={label}>
           <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
@@ -1054,16 +1056,22 @@ function summarizeState(
 function buildActionQueue(projection: BuildSlotDemandProjection | null): QueuedAction[] {
   if (!projection) return [];
   const actions: QueuedAction[] = [];
+  const noCapacityConflict = projection.conflicts.find(
+    (conflict) => conflict.code === 'NO_CAPACITY' && !conflict.operationId,
+  );
+  const overCapacityConflict = projection.conflicts.find(
+    (conflict) => conflict.code === 'OVER_CAPACITY',
+  );
 
-  if (projection.source.capacitySource === 'none' && projection.totals.demandCount > 0) {
+  if (noCapacityConflict) {
     actions.push({
       severity: 'high',
       title: 'Capacity slots are not configured for this week',
-      detail: `${formatMinutes(projection.totals.demandMinutes)} of operation demand cannot be placed until planner capacity is loaded.`,
+      detail: `${formatMinutes(projection.totals.demandMinutes)} of operation demand cannot be placed until planner capacity is loaded. ${projection.conflicts.length} conflict${projection.conflicts.length === 1 ? '' : 's'} in the projection payload.`,
       cta: 'Import capacity',
       href: '#capacity-management',
     });
-  } else if (projection.totals.overCapacityMinutes > 0) {
+  } else if (overCapacityConflict) {
     actions.push({
       severity: 'high',
       title: `${formatMinutes(projection.totals.overCapacityMinutes)} over capacity`,
@@ -1104,6 +1112,25 @@ function buildActionQueue(projection: BuildSlotDemandProjection | null): QueuedA
   }
 
   return actions.slice(0, 4);
+}
+
+function formatProjectionFreshness(projection: BuildSlotDemandProjection): string {
+  const generated = new Date(projection.freshness.generatedAt).toLocaleString();
+  const source = projection.freshness.latestSourceUpdatedAt
+    ? `latest source ${new Date(projection.freshness.latestSourceUpdatedAt).toLocaleString()}`
+    : 'no source update timestamp';
+  return `snapshot ${generated} · ${source}`;
+}
+
+function formatFreshnessSummary(projection: BuildSlotDemandProjection): string {
+  if (projection.freshness.state === 'NO_SOURCE') return 'No source timestamp';
+  return `Live · ${formatLag(projection.freshness.sourceLagSeconds)}`;
+}
+
+function formatLag(seconds: number): string {
+  if (seconds < 60) return `${seconds}s lag`;
+  const minutes = Math.round(seconds / 60);
+  return `${minutes}m lag`;
 }
 
 function groupSlotsByDate(slots: BuildSlotProjectionSlot[]): Map<string, BuildSlotProjectionSlot[]> {

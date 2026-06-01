@@ -407,7 +407,10 @@
               <td><span class="pill done">Done</span></td>
               <td>
                 Capacity slots and deterministic demand projection are promoted into persisted
-                planner runs, published slot assignments, and work-order planned times.
+                planner runs, published slot assignments, and work-order planned times. The planner
+                projection now exposes live-query freshness plus explicit no-capacity, overflow,
+                material, blocked-operation, and missing-estimate conflict payloads for actionable
+                planner queues.
               </td>
               <td>Keep planner-to-dispatch links focused on exact published work.</td>
             </tr>

@@ -569,6 +569,7 @@ test('buildSlotDemandProjection schedules ready operations and reports overflow'
         status: 'OPEN',
         capacityMinutes: 480,
         allocatedMinutes: 0,
+        updatedAt: '2026-05-18T11:45:00.000Z',
       },
     ],
     demand: [
@@ -585,6 +586,7 @@ test('buildSlotDemandProjection schedules ready operations and reports overflow'
         sequenceNo: 10,
         operationStatus: 'READY',
         estimatedMinutes: 360,
+        updatedAt: '2026-05-18T11:50:00.000Z',
       },
       {
         workOrderId: 'wo-2',
@@ -599,6 +601,7 @@ test('buildSlotDemandProjection schedules ready operations and reports overflow'
         sequenceNo: 10,
         operationStatus: 'READY',
         estimatedMinutes: 240,
+        updatedAt: '2026-05-18T11:55:00.000Z',
       },
     ],
   });
@@ -610,6 +613,12 @@ test('buildSlotDemandProjection schedules ready operations and reports overflow'
   assert.equal(projection.unscheduled.length, 1);
   assert.equal(projection.unscheduled[0].reason, 'OVER_CAPACITY');
   assert.equal(projection.totals.overCapacityMinutes, 120);
+  assert.equal(projection.freshness.state, 'LIVE');
+  assert.equal(projection.freshness.latestCapacityUpdatedAt, '2026-05-18T11:45:00.000Z');
+  assert.equal(projection.freshness.latestDemandUpdatedAt, '2026-05-18T11:55:00.000Z');
+  assert.equal(projection.conflicts.length, 1);
+  assert.equal(projection.conflicts[0].code, 'OVER_CAPACITY');
+  assert.equal(projection.conflicts[0].operationId, 'op-2');
 });
 
 test('buildSlotDemandProjection keeps blocked and material-short operations out of slots', () => {
@@ -666,6 +675,10 @@ test('buildSlotDemandProjection keeps blocked and material-short operations out 
   );
   assert.equal(projection.totals.blockedByMaterialCount, 1);
   assert.equal(projection.totals.blockedOperationCount, 1);
+  assert.deepEqual(
+    projection.conflicts.map((conflict) => conflict.code).sort(),
+    ['MATERIAL_NOT_READY', 'OPERATION_BLOCKED'],
+  );
 });
 
 test('getBuildSlotDemandProjectionHandler validates date range', async () => {
@@ -689,6 +702,7 @@ test('getBuildSlotDemandProjectionHandler returns projection from live query con
           status: 'OPEN',
           capacityMinutes: 480,
           allocatedMinutes: 60,
+          updatedAt: '2026-05-18T11:30:00.000Z',
         },
       ];
     },
@@ -707,6 +721,7 @@ test('getBuildSlotDemandProjectionHandler returns projection from live query con
           sequenceNo: 10,
           operationStatus: 'READY',
           estimatedMinutes: 180,
+          updatedAt: '2026-05-18T11:45:00.000Z',
         },
       ];
     },
@@ -720,10 +735,15 @@ test('getBuildSlotDemandProjectionHandler returns projection from live query con
     assert.equal(response.statusCode, 200);
     const body = parseResponseBody(response) as unknown as {
       totals: { scheduledCount: number; allocatedMinutes: number };
+      freshness: { latestSourceUpdatedAt?: string; state: string };
+      conflicts: unknown[];
       slots: Array<{ demand: Array<{ workOrderNumber: string }> }>;
     };
     assert.equal(body.totals.scheduledCount, 1);
     assert.equal(body.totals.allocatedMinutes, 60);
+    assert.equal(body.freshness.state, 'LIVE');
+    assert.equal(body.freshness.latestSourceUpdatedAt, '2026-05-18T11:45:00.000Z');
+    assert.deepEqual(body.conflicts, []);
     assert.equal(body.slots[0].demand[0].workOrderNumber, 'WO-001');
   } finally {
     setSchedulingProjectionQueriesForTests(undefined);

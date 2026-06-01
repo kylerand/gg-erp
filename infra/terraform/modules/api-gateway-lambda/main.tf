@@ -4859,6 +4859,63 @@ resource "aws_lambda_function" "accounting_get_trial_balance" {
   }
 }
 
+resource "aws_lambda_function" "accounting_list_period_locks" {
+  function_name    = "${var.name_prefix}-accounting-list-period-locks"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-period-locks.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_accounting_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "accounting_lock_period" {
+  function_name    = "${var.name_prefix}-accounting-lock-period"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "lock-period.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_accounting_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "accounting_reverse_journal" {
+  function_name    = "${var.name_prefix}-accounting-reverse-journal"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "reverse-journal.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/accounting-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.accounting_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.accounting_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_accounting_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
 resource "aws_lambda_function" "accounting_post_operational_ledger_journals" {
   function_name    = "${var.name_prefix}-accounting-post-operational-ledger-journals"
   role             = aws_iam_role.erp_lambda.arn
@@ -5019,6 +5076,51 @@ resource "aws_apigatewayv2_route" "accounting_get_trial_balance" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "GET /accounting/reports/trial-balance"
   target             = "integrations/${aws_apigatewayv2_integration.accounting_get_trial_balance.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "accounting_list_period_locks" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.accounting_list_period_locks.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "accounting_list_period_locks" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /accounting/period-locks"
+  target             = "integrations/${aws_apigatewayv2_integration.accounting_list_period_locks.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "accounting_lock_period" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.accounting_lock_period.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "accounting_lock_period" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /accounting/period-locks"
+  target             = "integrations/${aws_apigatewayv2_integration.accounting_lock_period.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "accounting_reverse_journal" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.accounting_reverse_journal.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "accounting_reverse_journal" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /accounting/journals/{journalId}/reverse"
+  target             = "integrations/${aws_apigatewayv2_integration.accounting_reverse_journal.id}"
   authorizer_id      = local.authorizer_id
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
@@ -6016,6 +6118,9 @@ locals {
     accounting_list_operational_ledger      = aws_lambda_function.accounting_list_operational_ledger
     accounting_list_journals                = aws_lambda_function.accounting_list_journals
     accounting_get_trial_balance            = aws_lambda_function.accounting_get_trial_balance
+    accounting_list_period_locks            = aws_lambda_function.accounting_list_period_locks
+    accounting_lock_period                  = aws_lambda_function.accounting_lock_period
+    accounting_reverse_journal              = aws_lambda_function.accounting_reverse_journal
     accounting_post_operational_ledger_journals = aws_lambda_function.accounting_post_operational_ledger_journals
     accounting_list_accounts                = aws_lambda_function.accounting_list_accounts
     accounting_get_failure_summary          = aws_lambda_function.accounting_get_failure_summary

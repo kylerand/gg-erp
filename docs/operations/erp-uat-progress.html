@@ -232,17 +232,17 @@
       </header>
 
       <div class="summary">
-        <div class="metric"><strong>21</strong><span>Tracked delivery slices</span></div>
+        <div class="metric"><strong>22</strong><span>Tracked delivery slices</span></div>
         <div class="metric"><strong>20</strong><span>Done</span></div>
-        <div class="metric"><strong>0</strong><span>In progress</span></div>
+        <div class="metric"><strong>1</strong><span>In progress</span></div>
         <div class="metric"><strong>1</strong><span>Blocked</span></div>
       </div>
 
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: accounting reversals and period locks can now build on the deployed
-          trial-balance and period-close readiness report from posted internal journals.
+          Current focus: accounting reversals and period locks are being added on top of the
+          deployed trial-balance and period-close readiness report from posted internal journals.
           ShopMonkey cutover readiness remains blocked on missing parts and purchase-order source
           exports.
         </p>
@@ -407,8 +407,8 @@
               </td>
               <td>
                 Operational ledger, immutable journal posting, trial balance, and period-close
-                readiness are live; reversals and period locks are the next accounting maturity
-                slice.
+                readiness are live; period controls are now tracked as their own accounting
+                maturity slice.
               </td>
             </tr>
             <tr>
@@ -425,6 +425,21 @@
               <td>
                 Use the close-readiness blockers as the source for reversal, lock, and close-period
                 workflows.
+              </td>
+            </tr>
+            <tr>
+              <td>Accounting period controls</td>
+              <td><span class="pill doing">In progress</span></td>
+              <td>
+                This branch adds persisted accounting period locks, close-readiness-gated period
+                locking, locked-period enforcement for journal posting, and a live journal reversal
+                action that creates offsetting journal lines while marking the original journal
+                reversed. <code>/accounting/ledger</code> now has period inputs, recent locks, a
+                lock-period action, and row-level reverse actions for eligible posted journals.
+              </td>
+              <td>
+                Pass PR CI/QA, deploy the three new accounting routes, live-smoke them, then remove
+                the pending-deploy QA route exceptions.
               </td>
             </tr>
             <tr>

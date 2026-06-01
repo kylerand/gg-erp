@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { EmptyState, LoadingSkeleton, PageHeader } from '@gg-erp/ui';
 import {
+  getAccountingClosePackage,
   getAccountingTrialBalance,
   listAccountingPeriodLocks,
   listAccountingJournals,
@@ -12,6 +13,11 @@ import {
   postOperationalLedgerJournals,
   reverseAccountingJournal,
   type AccountingCloseCheck,
+  type AccountingClosePackageAction,
+  type AccountingClosePackageEvidence,
+  type AccountingClosePackageInvoice,
+  type AccountingClosePackagePayment,
+  type AccountingClosePackageResponse,
   type AccountingCloseStatus,
   type AccountingJournalEntry,
   type AccountingJournalResponse,
@@ -49,12 +55,13 @@ const DEFAULT_PERIOD = currentMonthRange();
 export default function AccountingLedgerPage() {
   const [sourceType, setSourceType] = useState<'ALL' | OperationalLedgerSourceType>('ALL');
   const [status, setStatus] = useState<'ALL' | OperationalLedgerStatus>('ALL');
-  const [periodFrom, setPeriodFrom] = useState(DEFAULT_PERIOD.from);
-  const [periodTo, setPeriodTo] = useState(DEFAULT_PERIOD.to);
+  const [periodFrom, setPeriodFrom] = useState(() => initialPeriodValue('from', DEFAULT_PERIOD.from));
+  const [periodTo, setPeriodTo] = useState(() => initialPeriodValue('to', DEFAULT_PERIOD.to));
   const [lockReason, setLockReason] = useState('Month-end close reviewed in ERP.');
   const [ledger, setLedger] = useState<OperationalLedgerResponse | null>(null);
   const [journals, setJournals] = useState<AccountingJournalResponse | null>(null);
   const [trialBalance, setTrialBalance] = useState<AccountingTrialBalanceResponse | null>(null);
+  const [closePackage, setClosePackage] = useState<AccountingClosePackageResponse | null>(null);
   const [periodLocks, setPeriodLocks] = useState<AccountingPeriodLock[]>([]);
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
@@ -65,7 +72,8 @@ export default function AccountingLedgerPage() {
 
   const loadData = useCallback(async () => {
     const sourceFilter = sourceType === 'ALL' ? undefined : sourceType;
-    const [ledgerData, journalData, trialBalanceData, periodLockData] = await Promise.all([
+    const [ledgerData, journalData, trialBalanceData, closePackageData, periodLockData] =
+      await Promise.all([
       listOperationalLedger(
         {
           limit: 100,
@@ -82,9 +90,13 @@ export default function AccountingLedgerPage() {
         STRICT_LIVE_DATA,
       ),
       getAccountingTrialBalance({ from: periodFrom, to: periodTo }, STRICT_LIVE_DATA),
+      getAccountingClosePackage(
+        { from: periodFrom, to: periodTo, documentLimit: 50, journalLimit: 50 },
+        STRICT_LIVE_DATA,
+      ),
       listAccountingPeriodLocks({ limit: 12 }, STRICT_LIVE_DATA),
     ]);
-    return { ledgerData, journalData, trialBalanceData, periodLockData };
+    return { ledgerData, journalData, trialBalanceData, closePackageData, periodLockData };
   }, [periodFrom, periodTo, sourceType, status]);
 
   useEffect(() => {
@@ -93,11 +105,13 @@ export default function AccountingLedgerPage() {
       setLoading(true);
       setLoadError(null);
       try {
-        const { ledgerData, journalData, trialBalanceData, periodLockData } = await loadData();
+        const { ledgerData, journalData, trialBalanceData, closePackageData, periodLockData } =
+          await loadData();
         if (!cancelled) {
           setLedger(ledgerData);
           setJournals(journalData);
           setTrialBalance(trialBalanceData);
+          setClosePackage(closePackageData);
           setPeriodLocks(periodLockData.items);
         }
       } catch (error) {
@@ -105,6 +119,7 @@ export default function AccountingLedgerPage() {
           setLedger(null);
           setJournals(null);
           setTrialBalance(null);
+          setClosePackage(null);
           setPeriodLocks([]);
           setLoadError(error instanceof Error ? error.message : 'Ledger data failed to load.');
         }
@@ -133,10 +148,12 @@ export default function AccountingLedgerPage() {
       setPostResult(
         `${result.postedCount} new journals posted · ${result.skipped.existing} already posted · ${result.skipped.lockedPeriod} locked · ${result.skipped.notPostable} held for review`,
       );
-      const { ledgerData, journalData, trialBalanceData, periodLockData } = await loadData();
+      const { ledgerData, journalData, trialBalanceData, closePackageData, periodLockData } =
+        await loadData();
       setLedger(ledgerData);
       setJournals(journalData);
       setTrialBalance(trialBalanceData);
+      setClosePackage(closePackageData);
       setPeriodLocks(periodLockData.items);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'Journal posting failed.');
@@ -164,10 +181,12 @@ export default function AccountingLedgerPage() {
           result.lock.periodEnd,
         )} · ${closeStatusLabel(result.closeStatus)}`,
       );
-      const { ledgerData, journalData, trialBalanceData, periodLockData } = await loadData();
+      const { ledgerData, journalData, trialBalanceData, closePackageData, periodLockData } =
+        await loadData();
       setLedger(ledgerData);
       setJournals(journalData);
       setTrialBalance(trialBalanceData);
+      setClosePackage(closePackageData);
       setPeriodLocks(periodLockData.items);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'Period lock failed.');
@@ -185,16 +204,31 @@ export default function AccountingLedgerPage() {
     try {
       const result = await reverseAccountingJournal(entry.id, { reason: reason.trim() }, STRICT_LIVE_DATA);
       setPostResult(`${result.original.journalNumber} reversed with ${result.reversal.journalNumber}.`);
-      const { ledgerData, journalData, trialBalanceData, periodLockData } = await loadData();
+      const { ledgerData, journalData, trialBalanceData, closePackageData, periodLockData } =
+        await loadData();
       setLedger(ledgerData);
       setJournals(journalData);
       setTrialBalance(trialBalanceData);
+      setClosePackage(closePackageData);
       setPeriodLocks(periodLockData.items);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'Journal reversal failed.');
     } finally {
       setReversingJournalId(null);
     }
+  }
+
+  function handleDownloadClosePackage() {
+    if (!closePackage) return;
+    const blob = new Blob([JSON.stringify(closePackage, null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${closePackage.packageNumber.toLowerCase()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   const summary = ledger?.summary;
@@ -282,6 +316,14 @@ export default function AccountingLedgerPage() {
         onLockPeriod={handleLockPeriod}
       />
 
+      <ClosePackagePanel
+        closePackage={closePackage}
+        loading={loading}
+        periodFrom={periodFrom}
+        periodTo={periodTo}
+        onDownload={handleDownloadClosePackage}
+      />
+
       <div className="mb-6 rounded-lg border border-gray-200 bg-white p-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
@@ -359,7 +401,7 @@ export default function AccountingLedgerPage() {
         <LedgerTable entries={ledger.items} />
       )}
 
-      <div className="mt-8">
+      <div id="posted-journals" className="mt-8">
         <div className="mb-3 flex items-end justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-gray-900">Posted journals</h2>
@@ -467,7 +509,7 @@ function PeriodControlPanel({
   const disabled = loading || locking || !periodFrom || !periodTo || !lockReason.trim();
 
   return (
-    <section className="mb-6 rounded-lg border border-gray-200 bg-white p-4">
+    <section id="accounting-period" className="mb-6 rounded-lg border border-gray-200 bg-white p-4">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -538,6 +580,246 @@ function PeriodControlPanel({
   );
 }
 
+function ClosePackagePanel({
+  closePackage,
+  loading,
+  periodFrom,
+  periodTo,
+  onDownload,
+}: {
+  closePackage: AccountingClosePackageResponse | null;
+  loading: boolean;
+  periodFrom: string;
+  periodTo: string;
+  onDownload: () => void;
+}) {
+  const packageHref = erpRoute('accounting-close-package', { from: periodFrom, to: periodTo });
+
+  return (
+    <section id="close-package" className="mb-6 rounded-lg border border-gray-200 bg-white p-4">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-sm font-semibold text-gray-900">Close package</h2>
+            <span
+              className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                closePackage?.readyForExternalReview
+                  ? 'border-green-200 bg-green-50 text-green-700'
+                  : closeStatusClass(closePackage?.closeStatus ?? 'READY')
+              }`}
+            >
+              {closePackage?.readyForExternalReview
+                ? 'External ready'
+                : closeStatusLabel(closePackage?.closeStatus ?? 'READY')}
+            </span>
+          </div>
+          <p className="mt-1 text-sm text-gray-500">
+            {loading
+              ? 'Loading close evidence.'
+              : `${closePackage?.packageNumber ?? 'CLOSE'} · ${formatDate(periodFrom)} to ${formatDate(periodTo)}`}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={packageHref}
+            className="inline-flex min-h-10 items-center justify-center rounded-md border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:border-[#B1581B] hover:text-[#B1581B]"
+          >
+            Package link
+          </Link>
+          <button
+            type="button"
+            onClick={onDownload}
+            disabled={loading || !closePackage}
+            className="inline-flex min-h-10 items-center justify-center rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+          >
+            Export JSON
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="mt-4">
+          <LoadingSkeleton rows={4} cols={4} />
+        </div>
+      ) : !closePackage ? (
+        <div className="mt-4 rounded-md border border-dashed border-gray-200 px-4 py-6 text-sm text-gray-500">
+          Close package data is not available for this period.
+        </div>
+      ) : (
+        <>
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <CloseMetric
+              label="Blockers"
+              value={closePackage.summary.blockerCount}
+              detail="Checks and documents"
+            />
+            <CloseMetric
+              label="Journals"
+              value={closePackage.summary.journalEvidenceCount}
+              detail={formatUsdCents(closePackage.summary.totalDebitCents)}
+            />
+            <CloseMetric
+              label="Invoices"
+              value={closePackage.summary.invoiceDocumentCount}
+              detail={`${closePackage.documents.invoices.length} shown`}
+            />
+            <CloseMetric
+              label="Payments"
+              value={closePackage.summary.paymentDocumentCount}
+              detail={`${closePackage.documents.payments.length} shown`}
+            />
+            <CloseMetric
+              label="Period lock"
+              value={closePackage.periodLock ? 'Locked' : 'Open'}
+              detail={closePackage.periodLock ? formatDate(closePackage.periodLock.lockedAt) : 'Not locked'}
+            />
+          </div>
+
+          {closePackage.summary.truncated && (
+            <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Package evidence is truncated by the current report limits. Narrow the period or
+              export after increasing server-side limits.
+            </div>
+          )}
+
+          <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)]">
+            <EvidenceList items={closePackage.evidence} />
+            <ClosePackageActions actions={closePackage.actions} />
+          </div>
+
+          <div className="mt-5 grid gap-4 xl:grid-cols-2">
+            <ClosePackageInvoiceList invoices={closePackage.documents.invoices} />
+            <ClosePackagePaymentList payments={closePackage.documents.payments} />
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function EvidenceList({ items }: { items: AccountingClosePackageEvidence[] }) {
+  return (
+    <div>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Evidence</h3>
+      <div className="mt-2 divide-y divide-gray-100 rounded-md border border-gray-200">
+        {items.map((item) => (
+          <Link
+            key={item.key}
+            href={item.href}
+            className="flex items-center justify-between gap-3 px-3 py-2 text-sm transition-colors hover:bg-gray-50"
+          >
+            <span>
+              <span className="font-semibold text-gray-900">{item.label}</span>
+              <span className="ml-2 text-xs text-gray-500">{item.value}</span>
+            </span>
+            <span className={`rounded-full border px-2 py-0.5 text-xs ${actionStatusClass(item.status)}`}>
+              {actionStatusLabel(item.status)}
+            </span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ClosePackageActions({ actions }: { actions: AccountingClosePackageAction[] }) {
+  return (
+    <div>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Next actions</h3>
+      <div className="mt-2 space-y-2">
+        {actions.map((action) => (
+          <Link
+            key={action.key}
+            href={action.href}
+            className="block rounded-md border border-gray-200 px-3 py-2 transition-colors hover:border-[#B1581B]"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-semibold text-gray-900">{action.label}</span>
+              <span className={`rounded-full border px-2 py-0.5 text-xs ${actionStatusClass(action.status)}`}>
+                {actionStatusLabel(action.status)}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-gray-500">{action.detail}</p>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ClosePackageInvoiceList({ invoices }: { invoices: AccountingClosePackageInvoice[] }) {
+  return (
+    <div>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Invoice documents</h3>
+      {invoices.length === 0 ? (
+        <div className="mt-2 rounded-md border border-dashed border-gray-200 px-3 py-4 text-sm text-gray-500">
+          No invoice sync documents are in this package period.
+        </div>
+      ) : (
+        <div className="mt-2 max-h-72 overflow-auto rounded-md border border-gray-200">
+          {invoices.map((invoice) => (
+            <Link
+              key={invoice.id}
+              href={invoice.evidenceHref}
+              className="block border-b border-gray-100 px-3 py-2 last:border-b-0 hover:bg-gray-50"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-semibold text-gray-900">{invoice.documentNumber}</div>
+                  <div className="mt-1 text-xs text-gray-500">
+                    {invoice.workOrder?.workOrderNumber ?? invoice.workOrderId}
+                  </div>
+                </div>
+                <DocumentStatusPill status={invoice.documentStatus} />
+              </div>
+              <div className="mt-1 text-xs text-gray-400">
+                {invoice.exportedAt ? `Exported ${formatDate(invoice.exportedAt)}` : `Created ${formatDate(invoice.createdAt)}`}
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ClosePackagePaymentList({ payments }: { payments: AccountingClosePackagePayment[] }) {
+  return (
+    <div>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Payment documents</h3>
+      {payments.length === 0 ? (
+        <div className="mt-2 rounded-md border border-dashed border-gray-200 px-3 py-4 text-sm text-gray-500">
+          No payment sync documents are in this package period.
+        </div>
+      ) : (
+        <div className="mt-2 max-h-72 overflow-auto rounded-md border border-gray-200">
+          {payments.map((payment) => (
+            <Link
+              key={payment.id}
+              href={payment.evidenceHref}
+              className="block border-b border-gray-100 px-3 py-2 last:border-b-0 hover:bg-gray-50"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-semibold text-gray-900">{payment.documentNumber}</div>
+                  <div className="mt-1 text-xs text-gray-500">
+                    {payment.customer?.displayName ?? payment.customerId}
+                  </div>
+                </div>
+                <DocumentStatusPill status={payment.documentStatus} />
+              </div>
+              <div className="mt-1 flex items-center justify-between gap-3 text-xs text-gray-400">
+                <span>{payment.paymentDate ? formatDate(payment.paymentDate) : formatDate(payment.updatedAt)}</span>
+                <span className="font-semibold text-gray-700">{formatUsdCents(payment.amountCents)}</span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CloseReadinessPanel({
   report,
   loading,
@@ -558,7 +840,7 @@ function CloseReadinessPanel({
   const closeStatus = summary?.closeStatus ?? 'READY';
 
   return (
-    <section className="rounded-lg border border-gray-200 bg-white p-4">
+    <section id="trial-balance" className="rounded-lg border border-gray-200 bg-white p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-gray-900">Period close readiness</h2>
@@ -933,6 +1215,18 @@ function StatusPill({ status }: { status: OperationalLedgerStatus }) {
   );
 }
 
+function DocumentStatusPill({
+  status,
+}: {
+  status: AccountingClosePackageInvoice['documentStatus'] | AccountingClosePackagePayment['documentStatus'];
+}) {
+  return (
+    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs ${documentStatusClass(status)}`}>
+      {documentStatusLabel(status)}
+    </span>
+  );
+}
+
 function relatedHref(entry: OperationalLedgerEntry): string {
   if (entry.relatedRecordType === 'purchase-order') {
     return erpRecordRoute('purchase-order', entry.relatedRecordId);
@@ -949,6 +1243,42 @@ function sourceLabel(sourceType: OperationalLedgerSourceType): string {
     CUSTOMER_PAYMENT: 'Customer payments',
     RECONCILIATION_VARIANCE: 'Reconciliation variance',
   }[sourceType];
+}
+
+function documentStatusLabel(status: AccountingClosePackageInvoice['documentStatus']): string {
+  return {
+    EXPORTED: 'Exported',
+    MATCHED: 'Matched',
+    RECONCILED: 'Reconciled',
+    QUEUED: 'Queued',
+    NEEDS_REVIEW: 'Needs review',
+  }[status];
+}
+
+function documentStatusClass(status: AccountingClosePackageInvoice['documentStatus']): string {
+  return {
+    EXPORTED: 'border-green-200 bg-green-50 text-green-700',
+    MATCHED: 'border-green-200 bg-green-50 text-green-700',
+    RECONCILED: 'border-blue-200 bg-blue-50 text-blue-700',
+    QUEUED: 'border-gray-200 bg-gray-50 text-gray-700',
+    NEEDS_REVIEW: 'border-amber-200 bg-amber-50 text-amber-800',
+  }[status];
+}
+
+function actionStatusLabel(status: AccountingClosePackageAction['status']): string {
+  return {
+    DONE: 'Done',
+    OPEN: 'Open',
+    BLOCKED: 'Blocked',
+  }[status];
+}
+
+function actionStatusClass(status: AccountingClosePackageAction['status']): string {
+  return {
+    DONE: 'border-green-200 bg-green-50 text-green-700',
+    OPEN: 'border-amber-200 bg-amber-50 text-amber-800',
+    BLOCKED: 'border-red-200 bg-red-50 text-red-700',
+  }[status];
 }
 
 function statusLabel(status: OperationalLedgerStatus): string {
@@ -991,6 +1321,11 @@ function currentMonthRange(): { from: string; to: string } {
     from: from.toISOString().slice(0, 10),
     to: to.toISOString().slice(0, 10),
   };
+}
+
+function initialPeriodValue(key: 'from' | 'to', fallback: string): string {
+  if (typeof window === 'undefined') return fallback;
+  return new URLSearchParams(window.location.search).get(key) ?? fallback;
 }
 
 function formatUsdCents(value: number): string {

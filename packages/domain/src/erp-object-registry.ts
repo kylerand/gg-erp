@@ -690,6 +690,22 @@ export const ERP_OBJECTS = [
     keywords: ['journal', 'gl', 'posted', 'debit', 'credit'],
   },
   {
+    key: 'accounting-close-package',
+    label: 'Accounting Close Package',
+    pluralLabel: 'Accounting Close Packages',
+    description:
+      'Period-close review package combining trial balance, journals, locks, and invoice/payment evidence.',
+    module: 'accounting',
+    kind: 'document',
+    ownerContext: 'accounting',
+    route: '/accounting/ledger#close-package',
+    status: 'live',
+    primaryStatusField: 'closeStatus',
+    searchFields: ['packageNumber', 'periodStart', 'periodEnd', 'closeStatus'],
+    listColumns: ['periodStart', 'periodEnd', 'closeStatus', 'blockerCount'],
+    keywords: ['close', 'month end', 'trial balance', 'package', 'external review'],
+  },
+  {
     key: 'accounting-reconciliation',
     label: 'Reconciliation',
     pluralLabel: 'Reconciliations',

@@ -161,6 +161,7 @@ import {
   listOperationalLedgerHandler,
   listAccountingJournalsHandler,
   getAccountingTrialBalanceHandler,
+  getAccountingClosePackageHandler,
   listAccountingPeriodLocksHandler,
   lockAccountingPeriodHandler,
   reverseAccountingJournalHandler,
@@ -821,6 +822,8 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     result = await listOperationalLedgerHandler(event);
   } else if (pathname === '/accounting/journals' && method === 'GET') {
     result = await listAccountingJournalsHandler(event);
+  } else if (pathname === '/accounting/reports/close-package' && method === 'GET') {
+    result = await getAccountingClosePackageHandler(event);
   } else if (pathname === '/accounting/reports/trial-balance' && method === 'GET') {
     result = await getAccountingTrialBalanceHandler(event);
   } else if (pathname === '/accounting/period-locks' && method === 'GET') {
@@ -1118,7 +1121,7 @@ server.listen(PORT, () => {
   console.log(`   Journals    GET /accounting/journals, POST /accounting/journals/:id/reverse`);
   console.log(`   Periods     GET|POST /accounting/period-locks`);
   console.log(`   Posting     POST /accounting/journals/post-operational-ledger`);
-  console.log(`   Reports     GET /accounting/reports/trial-balance`);
+  console.log(`   Reports     GET /accounting/reports/trial-balance|close-package`);
   console.log(`   Accounts    GET /accounting/integration-accounts, PUT /:id/status`);
   console.log(
     `   Scheduling  GET /scheduling/slots, /labor-capacity, /demand-projection, /schedule-preview, /schedule-assignments, /capacity-slots`,

@@ -438,6 +438,15 @@ export const ERP_WORKSPACES = [
         keywords: ['journal', 'gl', 'posted', 'debit', 'credit'],
       },
       {
+        key: 'accounting-close-package',
+        label: 'Close Package',
+        description: 'Review period-close evidence, blockers, documents, and export package JSON.',
+        route: '/accounting/ledger#close-package',
+        status: 'live',
+        objectKey: 'accounting-close-package',
+        keywords: ['close', 'month end', 'trial balance', 'package', 'external review'],
+      },
+      {
         key: 'accounting-reconciliation',
         label: 'Reconciliation',
         description: 'Compare ERP and QuickBooks records.',

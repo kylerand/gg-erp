@@ -3678,6 +3678,124 @@ export interface AccountingTrialBalanceResponse {
   closeChecks: AccountingCloseCheck[];
 }
 
+export type AccountingClosePackageDocumentStatus =
+  | 'EXPORTED'
+  | 'MATCHED'
+  | 'RECONCILED'
+  | 'QUEUED'
+  | 'NEEDS_REVIEW';
+export type AccountingClosePackageActionStatus = 'DONE' | 'OPEN' | 'BLOCKED';
+
+export interface AccountingClosePackageWorkOrder {
+  id: string;
+  workOrderNumber: string;
+  state: string;
+  scheduledStartAt: string | null;
+}
+
+export interface AccountingClosePackageCustomer {
+  id: string;
+  displayName: string;
+  fullName: string;
+  companyName: string | null;
+  email: string;
+  phone: string | null;
+  state: string;
+}
+
+export interface AccountingClosePackageInvoice {
+  id: string;
+  documentType: 'INVOICE';
+  documentNumber: string;
+  provider: string;
+  state: string;
+  documentStatus: AccountingClosePackageDocumentStatus;
+  workOrderId: string;
+  workOrder: AccountingClosePackageWorkOrder | null;
+  externalReference: string | null;
+  attemptCount: number;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  exportedAt: string | null;
+  evidenceHref: string;
+}
+
+export interface AccountingClosePackagePayment {
+  id: string;
+  documentType: 'PAYMENT';
+  documentNumber: string;
+  provider: 'QUICKBOOKS';
+  state: string;
+  documentStatus: AccountingClosePackageDocumentStatus;
+  workOrderId: string;
+  workOrder: AccountingClosePackageWorkOrder | null;
+  customerId: string;
+  customer: AccountingClosePackageCustomer | null;
+  invoiceSyncId: string | null;
+  qbInvoiceId: string | null;
+  amountCents: number;
+  paymentMethod: string | null;
+  paymentDate: string | null;
+  attemptCount: number;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+  evidenceHref: string;
+}
+
+export interface AccountingClosePackageEvidence {
+  key: string;
+  label: string;
+  value: string;
+  href: string;
+  status: AccountingClosePackageActionStatus;
+}
+
+export interface AccountingClosePackageAction {
+  key: string;
+  label: string;
+  detail: string;
+  href: string;
+  status: AccountingClosePackageActionStatus;
+}
+
+export interface AccountingClosePackageResponse {
+  packageId: string;
+  packageNumber: string;
+  generatedAt: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  currencyCode: 'USD';
+  closeStatus: AccountingCloseStatus;
+  readyForExternalReview: boolean;
+  periodLock: AccountingPeriodLock | null;
+  summary: {
+    accountCount: number;
+    postedJournalCount: number;
+    totalDebitCents: number;
+    totalCreditCents: number;
+    outOfBalanceCents: number;
+    unpostedOperationalCount: number;
+    reviewItemCount: number;
+    integrationExceptionCount: number;
+    invoiceDocumentCount: number;
+    paymentDocumentCount: number;
+    journalEvidenceCount: number;
+    blockerCount: number;
+    truncated: boolean;
+  };
+  closeChecks: AccountingCloseCheck[];
+  accountLines: AccountingTrialBalanceLine[];
+  journals: AccountingJournalEntry[];
+  documents: {
+    invoices: AccountingClosePackageInvoice[];
+    payments: AccountingClosePackagePayment[];
+  };
+  evidence: AccountingClosePackageEvidence[];
+  actions: AccountingClosePackageAction[];
+}
+
 export interface PostOperationalLedgerJournalsResponse {
   posted: AccountingJournalEntry[];
   postedCount: number;
@@ -3735,6 +3853,39 @@ const emptyAccountingTrialBalance: AccountingTrialBalanceResponse = {
   closeChecks: [],
 };
 
+const emptyAccountingClosePackage: AccountingClosePackageResponse = {
+  packageId: 'close-open-open',
+  packageNumber: 'CLOSE-OPEN-OPEN',
+  generatedAt: new Date(0).toISOString(),
+  periodStart: null,
+  periodEnd: null,
+  currencyCode: 'USD',
+  closeStatus: 'READY',
+  readyForExternalReview: false,
+  periodLock: null,
+  summary: {
+    accountCount: 0,
+    postedJournalCount: 0,
+    totalDebitCents: 0,
+    totalCreditCents: 0,
+    outOfBalanceCents: 0,
+    unpostedOperationalCount: 0,
+    reviewItemCount: 0,
+    integrationExceptionCount: 0,
+    invoiceDocumentCount: 0,
+    paymentDocumentCount: 0,
+    journalEvidenceCount: 0,
+    blockerCount: 0,
+    truncated: false,
+  },
+  closeChecks: [],
+  accountLines: [],
+  journals: [],
+  documents: { invoices: [], payments: [] },
+  evidence: [],
+  actions: [],
+};
+
 const emptyAccountingPeriodLocks: AccountingPeriodLockResponse = {
   items: [],
   total: 0,
@@ -3784,6 +3935,28 @@ export async function getAccountingTrialBalance(
     `/accounting/reports/trial-balance${qs.size ? `?${qs}` : ''}`,
     undefined,
     emptyAccountingTrialBalance,
+    options,
+  );
+}
+
+export async function getAccountingClosePackage(
+  params?: {
+    from?: string;
+    to?: string;
+    documentLimit?: number;
+    journalLimit?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<AccountingClosePackageResponse> {
+  const qs = new URLSearchParams();
+  if (params?.from) qs.set('from', params.from);
+  if (params?.to) qs.set('to', params.to);
+  if (params?.documentLimit) qs.set('documentLimit', String(params.documentLimit));
+  if (params?.journalLimit) qs.set('journalLimit', String(params.journalLimit));
+  return apiFetch(
+    `/accounting/reports/close-package${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    emptyAccountingClosePackage,
     options,
   );
 }

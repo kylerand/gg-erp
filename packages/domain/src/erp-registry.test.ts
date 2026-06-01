@@ -53,6 +53,7 @@ test('registry route helper resolves module links and filtered routes', () => {
   assert.equal(getRequiredErpRoute('quickbooks-customer'), '/accounting/quickbooks/customers');
   assert.equal(getRequiredErpRoute('accounting-ledger'), '/accounting/ledger');
   assert.equal(getRequiredErpRoute('accounting-journal'), '/accounting/ledger');
+  assert.equal(getRequiredErpRoute('accounting-close-package'), '/accounting/ledger#close-package');
   assert.equal(getRequiredErpRoute('accounting-settings'), '/admin/accounting');
   assert.equal(getRequiredErpRoute('migration-cutover'), '/admin/migration');
   assert.equal(
@@ -115,6 +116,7 @@ test('workspace navigation items include live links and quick actions', () => {
   assert.ok(accountingItems.some((item) => item.key === 'quickbooks-customer'));
   assert.ok(accountingItems.some((item) => item.key === 'vendor-payable'));
   assert.ok(accountingItems.some((item) => item.key === 'accounting-journal'));
+  assert.ok(accountingItems.some((item) => item.key === 'accounting-close-package'));
   assert.ok(accountingItems.some((item) => item.key === 'quickbooks-invoice'));
   assert.ok(accountingItems.some((item) => item.key === 'quickbooks-chart-of-accounts'));
   assert.ok(trainingItems.some((item) => item.key === 'training-admin'));

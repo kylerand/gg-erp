@@ -438,6 +438,209 @@ test('getAccountingTrialBalanceHandler validates date filters', async () => {
   assert.match(String(parseBody(backwards).message), /from must be before to/);
 });
 
+test('getAccountingClosePackageHandler assembles period evidence from live accounting records', async () => {
+  const {
+    getAccountingClosePackageHandler,
+    accountingReportQueries,
+    accountingClosePackageQueries,
+    accountingPeriodLockQueries,
+    accountingSyncContextQueries,
+    operationalLedgerQueries,
+  } = await import('../lambda/accounting/handlers.js');
+
+  const workOrderId = '00000000-0000-4000-8000-000000000601';
+  const customerId = '00000000-0000-4000-8000-000000000602';
+  const journal = {
+    id: '00000000-0000-4000-8000-000000000603',
+    journalNumber: 'GJ-PAY-20260505-PAY1',
+    sourceType: 'CUSTOMER_PAYMENT',
+    sourceId: 'pay-1',
+    sourceLedgerEntryId: 'payment-pay-1',
+    sourceDocumentNumber: 'QB-PAY-1',
+    counterparty: customerId,
+    ledgerDate: new Date('2026-05-05T00:00:00.000Z'),
+    currencyCode: 'USD',
+    status: 'POSTED',
+    totalDebitCents: 50000,
+    totalCreditCents: 50000,
+    memo: 'QuickBooks payment matched.',
+    postedAt: new Date('2026-05-05T12:00:00.000Z'),
+    postedBy: 'accounting-user',
+    reversalOfJournalId: null,
+    reversedAt: null,
+    reversedBy: null,
+    reversalReason: null,
+    correlationId: 'corr-journal',
+    createdAt: new Date('2026-05-05T12:00:00.000Z'),
+    version: 0,
+    lines: [
+      {
+        id: '00000000-0000-4000-8000-000000000604',
+        journalEntryId: '00000000-0000-4000-8000-000000000603',
+        lineNumber: 1,
+        accountName: 'Undeposited funds / bank clearing',
+        accountCode: 'UNDEPOSITED_FUNDS_BANK_CLEARING',
+        debitCents: 50000,
+        creditCents: 0,
+        memo: 'QuickBooks payment matched.',
+        dimensionType: 'payment-sync',
+        dimensionId: 'pay-1',
+        createdAt: new Date('2026-05-05T12:00:00.000Z'),
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000605',
+        journalEntryId: '00000000-0000-4000-8000-000000000603',
+        lineNumber: 2,
+        accountName: 'Accounts receivable',
+        accountCode: 'ACCOUNTS_RECEIVABLE',
+        debitCents: 0,
+        creditCents: 50000,
+        memo: 'QuickBooks payment matched.',
+        dimensionType: 'payment-sync',
+        dimensionId: 'pay-1',
+        createdAt: new Date('2026-05-05T12:00:00.000Z'),
+      },
+    ],
+  };
+
+  const reportJournalsMock = mock.method(
+    accountingReportQueries,
+    'listPostedJournals',
+    async () => [journal] as never,
+  );
+  const reportCountMock = mock.method(accountingReportQueries, 'countPostedJournals', async () => 1);
+  const listPayablesMock = mock.method(operationalLedgerQueries, 'listPayablePurchaseOrders', async () => []);
+  const listPaymentsMock = mock.method(operationalLedgerQueries, 'listPaymentSyncRecords', async () => []);
+  const listReconciliationMock = mock.method(
+    operationalLedgerQueries,
+    'listReconciliationRecords',
+    async () => [],
+  );
+  const invoiceFailuresMock = mock.method(operationalLedgerQueries, 'countInvoiceFailures', async () => 0);
+  const customerFailuresMock = mock.method(operationalLedgerQueries, 'countCustomerFailures', async () => 0);
+  const paymentFailuresMock = mock.method(operationalLedgerQueries, 'countPaymentFailures', async () => 0);
+  const mismatchMock = mock.method(
+    operationalLedgerQueries,
+    'countReconciliationMismatches',
+    async () => 0,
+  );
+  const lockMock = mock.method(accountingPeriodLockQueries, 'listOverlapping', async () => [
+    {
+      id: '00000000-0000-4000-8000-000000000606',
+      periodStart: new Date('2026-05-01T00:00:00.000Z'),
+      periodEnd: new Date('2026-05-31T23:59:59.999Z'),
+      status: 'LOCKED',
+      reason: 'May close reviewed.',
+      lockedAt: new Date('2026-06-01T00:00:00.000Z'),
+      lockedBy: 'accounting-user',
+      correlationId: 'corr-lock',
+      createdAt: new Date('2026-06-01T00:00:00.000Z'),
+      version: 0,
+    },
+  ] as never);
+  const invoiceDocsMock = mock.method(accountingClosePackageQueries, 'listInvoiceDocuments', async () => [
+    {
+      id: '00000000-0000-4000-8000-000000000607',
+      invoiceNumber: 'INV-1001',
+      workOrderId,
+      provider: 'QUICKBOOKS',
+      state: 'SYNCED',
+      attemptCount: 1,
+      lastErrorCode: null,
+      lastErrorMessage: null,
+      externalReference: 'QB-INV-1001',
+      syncedAt: new Date('2026-05-05T12:00:00.000Z'),
+      correlationId: 'corr-inv',
+      createdAt: new Date('2026-05-05T11:00:00.000Z'),
+      updatedAt: new Date('2026-05-05T12:00:00.000Z'),
+      version: 0,
+    },
+  ] as never);
+  const invoiceCountMock = mock.method(accountingClosePackageQueries, 'countInvoiceDocuments', async () => 1);
+  const paymentDocsMock = mock.method(accountingClosePackageQueries, 'listPaymentDocuments', async () => [
+    {
+      id: '00000000-0000-4000-8000-000000000608',
+      invoiceSyncId: '00000000-0000-4000-8000-000000000607',
+      workOrderId,
+      customerId,
+      qbPaymentId: 'QB-PAY-1001',
+      qbInvoiceId: 'QB-INV-1001',
+      amountCents: 50000,
+      paymentMethod: 'Card',
+      paymentDate: new Date('2026-05-06T00:00:00.000Z'),
+      state: 'RECONCILED',
+      direction: 'INBOUND',
+      errorMessage: null,
+      attemptCount: 1,
+      lastAttemptAt: new Date('2026-05-06T12:00:00.000Z'),
+      createdAt: new Date('2026-05-06T12:00:00.000Z'),
+      updatedAt: new Date('2026-05-06T12:00:00.000Z'),
+    },
+  ] as never);
+  const paymentCountMock = mock.method(accountingClosePackageQueries, 'countPaymentDocuments', async () => 1);
+  const workOrderMock = mock.method(accountingSyncContextQueries, 'findWorkOrders', async () => [
+    {
+      id: workOrderId,
+      workOrderNumber: 'WO-1001',
+      state: 'IN_PROGRESS',
+      scheduledStartAt: new Date('2026-05-06T13:00:00.000Z'),
+    },
+  ]);
+  const customerMock = mock.method(accountingSyncContextQueries, 'findCustomers', async () => [
+    {
+      id: customerId,
+      displayName: 'Customer One',
+      fullName: 'Customer One',
+      companyName: null,
+      email: 'customer@example.com',
+      phone: null,
+      state: 'ACTIVE',
+    },
+  ]);
+
+  try {
+    const response = await getAccountingClosePackageHandler(
+      makeEvent({ queryStringParameters: { from: '2026-05-01', to: '2026-05-31' } }),
+    );
+    assert.equal(response.statusCode, 200);
+    const body = parseBody(response);
+    assert.equal(body.packageNumber, 'CLOSE-20260501-20260531');
+    assert.equal(body.closeStatus, 'READY');
+    assert.equal(body.readyForExternalReview, true);
+    assert.equal((body.summary as Record<string, unknown>).blockerCount, 0);
+    assert.equal((body.summary as Record<string, unknown>).invoiceDocumentCount, 1);
+    assert.equal((body.summary as Record<string, unknown>).paymentDocumentCount, 1);
+    assert.equal((body.periodLock as Record<string, unknown>).status, 'LOCKED');
+    assert.equal(
+      ((body.documents as Record<string, unknown>).invoices as Array<Record<string, unknown>>)[0]
+        ?.documentStatus,
+      'EXPORTED',
+    );
+    assert.equal(
+      ((body.documents as Record<string, unknown>).payments as Array<Record<string, unknown>>)[0]
+        ?.documentStatus,
+      'RECONCILED',
+    );
+  } finally {
+    reportJournalsMock.mock.restore();
+    reportCountMock.mock.restore();
+    listPayablesMock.mock.restore();
+    listPaymentsMock.mock.restore();
+    listReconciliationMock.mock.restore();
+    invoiceFailuresMock.mock.restore();
+    customerFailuresMock.mock.restore();
+    paymentFailuresMock.mock.restore();
+    mismatchMock.mock.restore();
+    lockMock.mock.restore();
+    invoiceDocsMock.mock.restore();
+    invoiceCountMock.mock.restore();
+    paymentDocsMock.mock.restore();
+    paymentCountMock.mock.restore();
+    workOrderMock.mock.restore();
+    customerMock.mock.restore();
+  }
+});
+
 test('postOperationalLedgerJournalsHandler requires explicit confirmation', async () => {
   const { postOperationalLedgerJournalsHandler } = await import('../lambda/accounting/handlers.js');
 

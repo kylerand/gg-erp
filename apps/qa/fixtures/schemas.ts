@@ -845,6 +845,125 @@ const accountingTrialBalance = z.object({
   ),
 });
 
+const accountingClosePackageDocumentStatus = z.enum([
+  'EXPORTED',
+  'MATCHED',
+  'RECONCILED',
+  'QUEUED',
+  'NEEDS_REVIEW',
+]);
+const accountingClosePackageActionStatus = z.enum(['DONE', 'OPEN', 'BLOCKED']);
+
+const accountingClosePackageWorkOrder = z.object({
+  id: uuid,
+  workOrderNumber: z.string(),
+  state: z.string(),
+  scheduledStartAt: isoDate.nullable(),
+});
+
+const accountingClosePackageCustomer = z.object({
+  id: uuid,
+  displayName: z.string(),
+  fullName: z.string(),
+  companyName: z.string().nullable(),
+  email: z.string(),
+  phone: z.string().nullable(),
+  state: z.string(),
+});
+
+const accountingClosePackage = z.object({
+  packageId: z.string(),
+  packageNumber: z.string(),
+  generatedAt: isoDate,
+  periodStart: isoDate.nullable(),
+  periodEnd: isoDate.nullable(),
+  currencyCode: z.literal('USD'),
+  closeStatus: z.enum(['READY', 'NEEDS_REVIEW', 'BLOCKED']),
+  readyForExternalReview: z.boolean(),
+  periodLock: accountingPeriodLock.nullable(),
+  summary: z.object({
+    accountCount: positiveInt,
+    postedJournalCount: positiveInt,
+    totalDebitCents: z.number(),
+    totalCreditCents: z.number(),
+    outOfBalanceCents: z.number(),
+    unpostedOperationalCount: positiveInt,
+    reviewItemCount: positiveInt,
+    integrationExceptionCount: positiveInt,
+    invoiceDocumentCount: positiveInt,
+    paymentDocumentCount: positiveInt,
+    journalEvidenceCount: positiveInt,
+    blockerCount: positiveInt,
+    truncated: z.boolean(),
+  }),
+  closeChecks: accountingTrialBalance.shape.closeChecks,
+  accountLines: accountingTrialBalance.shape.accountLines,
+  journals: z.array(accountingJournal),
+  documents: z.object({
+    invoices: z.array(
+      z.object({
+        id: uuid,
+        documentType: z.literal('INVOICE'),
+        documentNumber: z.string(),
+        provider: z.string(),
+        state: z.string(),
+        documentStatus: accountingClosePackageDocumentStatus,
+        workOrderId: uuid,
+        workOrder: accountingClosePackageWorkOrder.nullable(),
+        externalReference: z.string().nullable(),
+        attemptCount: positiveInt,
+        errorCode: z.string().nullable(),
+        errorMessage: z.string().nullable(),
+        createdAt: isoDate,
+        exportedAt: isoDate.nullable(),
+        evidenceHref: z.string(),
+      }),
+    ),
+    payments: z.array(
+      z.object({
+        id: uuid,
+        documentType: z.literal('PAYMENT'),
+        documentNumber: z.string(),
+        provider: z.literal('QUICKBOOKS'),
+        state: z.string(),
+        documentStatus: accountingClosePackageDocumentStatus,
+        workOrderId: uuid,
+        workOrder: accountingClosePackageWorkOrder.nullable(),
+        customerId: uuid,
+        customer: accountingClosePackageCustomer.nullable(),
+        invoiceSyncId: uuid.nullable(),
+        qbInvoiceId: z.string().nullable(),
+        amountCents: z.number(),
+        paymentMethod: z.string().nullable(),
+        paymentDate: z.string().nullable(),
+        attemptCount: positiveInt,
+        errorMessage: z.string().nullable(),
+        createdAt: isoDate,
+        updatedAt: isoDate,
+        evidenceHref: z.string(),
+      }),
+    ),
+  }),
+  evidence: z.array(
+    z.object({
+      key: z.string(),
+      label: z.string(),
+      value: z.string(),
+      href: z.string(),
+      status: accountingClosePackageActionStatus,
+    }),
+  ),
+  actions: z.array(
+    z.object({
+      key: z.string(),
+      label: z.string(),
+      detail: z.string(),
+      href: z.string(),
+      status: accountingClosePackageActionStatus,
+    }),
+  ),
+});
+
 const reportMetric = z.object({
   value: z.string(),
   label: z.string(),
@@ -962,6 +1081,7 @@ const ROUTES: RouteEntry[] = [
   { method: 'GET', template: '/accounting/operational-ledger', schema: operationalLedger },
   { method: 'GET', template: '/accounting/journals', schema: accountingJournals },
   { method: 'GET', template: '/accounting/reports/trial-balance', schema: accountingTrialBalance },
+  { method: 'GET', template: '/accounting/reports/close-package', schema: accountingClosePackage },
   { method: 'GET', template: '/accounting/period-locks', schema: accountingPeriodLocks },
   { method: 'POST', template: '/accounting/period-locks', schema: accountingPeriodLockResult },
   {

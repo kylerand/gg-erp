@@ -170,6 +170,7 @@ const lambdas: LambdaEntry[] = [
   { context: 'accounting', handler: 'list-operational-ledger',   entry: 'apps/api/src/lambda/accounting/list-operational-ledger.handler.ts' },
   { context: 'accounting', handler: 'list-journals',             entry: 'apps/api/src/lambda/accounting/list-journals.handler.ts' },
   { context: 'accounting', handler: 'get-trial-balance',         entry: 'apps/api/src/lambda/accounting/get-trial-balance.handler.ts' },
+  { context: 'accounting', handler: 'get-close-package',         entry: 'apps/api/src/lambda/accounting/get-close-package.handler.ts' },
   { context: 'accounting', handler: 'list-period-locks',         entry: 'apps/api/src/lambda/accounting/list-period-locks.handler.ts' },
   { context: 'accounting', handler: 'lock-period',               entry: 'apps/api/src/lambda/accounting/lock-period.handler.ts' },
   { context: 'accounting', handler: 'reverse-journal',           entry: 'apps/api/src/lambda/accounting/reverse-journal.handler.ts' },

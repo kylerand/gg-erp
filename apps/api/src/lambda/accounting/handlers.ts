@@ -74,6 +74,10 @@ type LedgerPurchaseOrder = Prisma.PurchaseOrderGetPayload<{
 type LedgerPaymentSyncRecord = Awaited<
   ReturnType<typeof prisma.paymentSyncRecord.findMany>
 >[number];
+type ClosePackageInvoiceRow = Awaited<
+  ReturnType<typeof prisma.invoiceSyncRecord.findMany>
+>[number];
+type ClosePackagePaymentRow = LedgerPaymentSyncRecord;
 type LedgerReconciliationRecord = Awaited<
   ReturnType<typeof prisma.reconciliationRecord.findMany>
 >[number];
@@ -227,6 +231,124 @@ interface AccountingTrialBalanceResponse {
   };
   accountLines: AccountingTrialBalanceLineResponse[];
   closeChecks: AccountingCloseCheckResponse[];
+}
+
+type AccountingClosePackageDocumentStatus =
+  | 'EXPORTED'
+  | 'MATCHED'
+  | 'RECONCILED'
+  | 'QUEUED'
+  | 'NEEDS_REVIEW';
+type AccountingClosePackageActionStatus = 'DONE' | 'OPEN' | 'BLOCKED';
+
+interface AccountingClosePackageWorkOrderResponse {
+  id: string;
+  workOrderNumber: string;
+  state: string;
+  scheduledStartAt: string | null;
+}
+
+interface AccountingClosePackageCustomerResponse {
+  id: string;
+  displayName: string;
+  fullName: string;
+  companyName: string | null;
+  email: string;
+  phone: string | null;
+  state: string;
+}
+
+interface AccountingClosePackageInvoiceResponse {
+  id: string;
+  documentType: 'INVOICE';
+  documentNumber: string;
+  provider: string;
+  state: string;
+  documentStatus: AccountingClosePackageDocumentStatus;
+  workOrderId: string;
+  workOrder: AccountingClosePackageWorkOrderResponse | null;
+  externalReference: string | null;
+  attemptCount: number;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  exportedAt: string | null;
+  evidenceHref: string;
+}
+
+interface AccountingClosePackagePaymentResponse {
+  id: string;
+  documentType: 'PAYMENT';
+  documentNumber: string;
+  provider: 'QUICKBOOKS';
+  state: string;
+  documentStatus: AccountingClosePackageDocumentStatus;
+  workOrderId: string;
+  workOrder: AccountingClosePackageWorkOrderResponse | null;
+  customerId: string;
+  customer: AccountingClosePackageCustomerResponse | null;
+  invoiceSyncId: string | null;
+  qbInvoiceId: string | null;
+  amountCents: number;
+  paymentMethod: string | null;
+  paymentDate: string | null;
+  attemptCount: number;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+  evidenceHref: string;
+}
+
+interface AccountingClosePackageEvidenceResponse {
+  key: string;
+  label: string;
+  value: string;
+  href: string;
+  status: AccountingClosePackageActionStatus;
+}
+
+interface AccountingClosePackageActionResponse {
+  key: string;
+  label: string;
+  detail: string;
+  href: string;
+  status: AccountingClosePackageActionStatus;
+}
+
+interface AccountingClosePackageResponse {
+  packageId: string;
+  packageNumber: string;
+  generatedAt: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  currencyCode: 'USD';
+  closeStatus: AccountingCloseStatus;
+  readyForExternalReview: boolean;
+  periodLock: AccountingPeriodLockResponse | null;
+  summary: {
+    accountCount: number;
+    postedJournalCount: number;
+    totalDebitCents: number;
+    totalCreditCents: number;
+    outOfBalanceCents: number;
+    unpostedOperationalCount: number;
+    reviewItemCount: number;
+    integrationExceptionCount: number;
+    invoiceDocumentCount: number;
+    paymentDocumentCount: number;
+    journalEvidenceCount: number;
+    blockerCount: number;
+    truncated: boolean;
+  };
+  closeChecks: AccountingCloseCheckResponse[];
+  accountLines: AccountingTrialBalanceLineResponse[];
+  journals: AccountingJournalResponse[];
+  documents: {
+    invoices: AccountingClosePackageInvoiceResponse[];
+    payments: AccountingClosePackagePaymentResponse[];
+  };
+  evidence: AccountingClosePackageEvidenceResponse[];
+  actions: AccountingClosePackageActionResponse[];
 }
 
 interface JournalPostRequest {
@@ -1167,6 +1289,288 @@ export const accountingPeriodLockQueries = {
     });
   },
 };
+
+function dateRangeFilter(
+  from?: Date,
+  to?: Date,
+): { gte?: Date; lte?: Date } | undefined {
+  if (!from && !to) return undefined;
+  return {
+    ...(from ? { gte: from } : {}),
+    ...(to ? { lte: to } : {}),
+  };
+}
+
+export const accountingClosePackageQueries = {
+  async listInvoiceDocuments(params: {
+    from?: Date;
+    to?: Date;
+    take: number;
+  }): Promise<ClosePackageInvoiceRow[]> {
+    const range = dateRangeFilter(params.from, params.to);
+    const where: Prisma.InvoiceSyncRecordWhereInput = range
+      ? { OR: [{ createdAt: range }, { syncedAt: range }] }
+      : {};
+
+    return prisma.invoiceSyncRecord.findMany({
+      where,
+      orderBy: [{ syncedAt: 'desc' }, { createdAt: 'desc' }],
+      take: params.take,
+    });
+  },
+
+  async countInvoiceDocuments(params: { from?: Date; to?: Date }): Promise<number> {
+    const range = dateRangeFilter(params.from, params.to);
+    const where: Prisma.InvoiceSyncRecordWhereInput = range
+      ? { OR: [{ createdAt: range }, { syncedAt: range }] }
+      : {};
+
+    return prisma.invoiceSyncRecord.count({ where });
+  },
+
+  async listPaymentDocuments(params: {
+    from?: Date;
+    to?: Date;
+    take: number;
+  }): Promise<ClosePackagePaymentRow[]> {
+    const range = dateRangeFilter(params.from, params.to);
+    const where: Prisma.PaymentSyncRecordWhereInput = range
+      ? { OR: [{ paymentDate: range }, { createdAt: range }, { updatedAt: range }] }
+      : {};
+
+    return prisma.paymentSyncRecord.findMany({
+      where,
+      orderBy: [{ paymentDate: 'desc' }, { updatedAt: 'desc' }],
+      take: params.take,
+    });
+  },
+
+  async countPaymentDocuments(params: { from?: Date; to?: Date }): Promise<number> {
+    const range = dateRangeFilter(params.from, params.to);
+    const where: Prisma.PaymentSyncRecordWhereInput = range
+      ? { OR: [{ paymentDate: range }, { createdAt: range }, { updatedAt: range }] }
+      : {};
+
+    return prisma.paymentSyncRecord.count({ where });
+  },
+};
+
+function closePackageDatePart(date: Date | undefined, fallback: string): string {
+  return date ? date.toISOString().slice(0, 10).replace(/-/g, '') : fallback;
+}
+
+function closePackageId(from?: Date, to?: Date): string {
+  return `close-${closePackageDatePart(from, 'open')}-${closePackageDatePart(to, 'open')}`;
+}
+
+function closePackageNumber(from?: Date, to?: Date): string {
+  return `CLOSE-${closePackageDatePart(from, 'OPEN')}-${closePackageDatePart(to, 'OPEN')}`;
+}
+
+function mapWorkOrderSummary(
+  workOrder: InvoiceSyncWorkOrderSummary | undefined,
+): AccountingClosePackageWorkOrderResponse | null {
+  if (!workOrder) return null;
+  return {
+    id: workOrder.id,
+    workOrderNumber: workOrder.workOrderNumber,
+    state: workOrder.state,
+    scheduledStartAt: workOrder.scheduledStartAt?.toISOString() ?? null,
+  };
+}
+
+function mapCustomerSummary(
+  customer: CustomerSyncCustomerSummary | undefined,
+): AccountingClosePackageCustomerResponse | null {
+  if (!customer) return null;
+  return {
+    id: customer.id,
+    displayName: customer.displayName,
+    fullName: customer.fullName,
+    companyName: customer.companyName,
+    email: customer.email,
+    phone: customer.phone,
+    state: customer.state,
+  };
+}
+
+function invoiceDocumentStatus(state: string): AccountingClosePackageDocumentStatus {
+  if (state === InvoiceSyncState.SYNCED) return 'EXPORTED';
+  if (state === InvoiceSyncState.FAILED || state === InvoiceSyncState.CANCELLED) {
+    return 'NEEDS_REVIEW';
+  }
+  return 'QUEUED';
+}
+
+function paymentDocumentStatus(state: string): AccountingClosePackageDocumentStatus {
+  if (state === PaymentSyncState.RECONCILED) return 'RECONCILED';
+  if (state === PaymentSyncState.SYNCED) return 'MATCHED';
+  if (state === PaymentSyncState.FAILED || state === PaymentSyncState.MISMATCH) {
+    return 'NEEDS_REVIEW';
+  }
+  return 'QUEUED';
+}
+
+function mapClosePackageInvoice(
+  record: ClosePackageInvoiceRow,
+  workOrdersById: Map<string, InvoiceSyncWorkOrderSummary>,
+): AccountingClosePackageInvoiceResponse {
+  return {
+    id: record.id,
+    documentType: 'INVOICE',
+    documentNumber: record.invoiceNumber,
+    provider: record.provider,
+    state: String(record.state),
+    documentStatus: invoiceDocumentStatus(String(record.state)),
+    workOrderId: record.workOrderId,
+    workOrder: mapWorkOrderSummary(workOrdersById.get(record.workOrderId)),
+    externalReference: record.externalReference,
+    attemptCount: record.attemptCount,
+    errorCode: record.lastErrorCode,
+    errorMessage: record.lastErrorMessage,
+    createdAt: record.createdAt.toISOString(),
+    exportedAt: record.syncedAt?.toISOString() ?? null,
+    evidenceHref: `/accounting/sync?view=invoices&state=${encodeURIComponent(String(record.state))}`,
+  };
+}
+
+function mapClosePackagePayment(
+  record: ClosePackagePaymentRow,
+  workOrdersById: Map<string, InvoiceSyncWorkOrderSummary>,
+  customersById: Map<string, CustomerSyncCustomerSummary>,
+): AccountingClosePackagePaymentResponse {
+  return {
+    id: record.id,
+    documentType: 'PAYMENT',
+    documentNumber: record.qbPaymentId ?? record.qbInvoiceId ?? record.id,
+    provider: 'QUICKBOOKS',
+    state: String(record.state),
+    documentStatus: paymentDocumentStatus(String(record.state)),
+    workOrderId: record.workOrderId,
+    workOrder: mapWorkOrderSummary(workOrdersById.get(record.workOrderId)),
+    customerId: record.customerId,
+    customer: mapCustomerSummary(customersById.get(record.customerId)),
+    invoiceSyncId: record.invoiceSyncId,
+    qbInvoiceId: record.qbInvoiceId,
+    amountCents: record.amountCents,
+    paymentMethod: record.paymentMethod,
+    paymentDate: record.paymentDate?.toISOString().slice(0, 10) ?? null,
+    attemptCount: record.attemptCount,
+    errorMessage: record.errorMessage,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+    evidenceHref: `/accounting/sync?view=payments&state=${encodeURIComponent(String(record.state))}`,
+  };
+}
+
+function buildClosePackageActions(params: {
+  report: AccountingTrialBalanceResponse;
+  periodLock: AccountingPeriodLockResponse | null;
+  invoiceReviewCount: number;
+  paymentReviewCount: number;
+}): AccountingClosePackageActionResponse[] {
+  const actions: AccountingClosePackageActionResponse[] = params.report.closeChecks
+    .filter((check) => !check.ok)
+    .map((check) => ({
+      key: `close-check:${check.key}`,
+      label: check.actionLabel,
+      detail: check.detail,
+      href: check.actionHref,
+      status: check.severity === 'critical' ? 'BLOCKED' : 'OPEN',
+    }));
+
+  if (params.invoiceReviewCount > 0) {
+    actions.push({
+      key: 'invoice-documents',
+      label: 'Review invoice documents',
+      detail: `${params.invoiceReviewCount} invoice sync document${
+        params.invoiceReviewCount === 1 ? '' : 's'
+      } need accounting review before the package is external-ready.`,
+      href: '/accounting/sync?view=invoices&state=FAILED',
+      status: 'OPEN',
+    });
+  }
+
+  if (params.paymentReviewCount > 0) {
+    actions.push({
+      key: 'payment-documents',
+      label: 'Review payment documents',
+      detail: `${params.paymentReviewCount} payment document${
+        params.paymentReviewCount === 1 ? '' : 's'
+      } need matching or retry before close evidence is complete.`,
+      href: '/accounting/sync?view=payments&state=FAILED',
+      status: 'OPEN',
+    });
+  }
+
+  if (!params.periodLock) {
+    actions.push({
+      key: 'period-lock',
+      label: 'Lock accounting period',
+      detail: 'Create a period lock after readiness checks are resolved and reviewed.',
+      href: '/accounting/ledger#accounting-period',
+      status: params.report.summary.closeStatus === 'READY' ? 'OPEN' : 'BLOCKED',
+    });
+  }
+
+  if (actions.length === 0) {
+    actions.push({
+      key: 'package-ready',
+      label: 'Package ready for review',
+      detail: 'Close checks are clear, documents have no review exceptions, and the period is locked.',
+      href: '/accounting/ledger#close-package',
+      status: 'DONE',
+    });
+  }
+
+  return actions;
+}
+
+function buildClosePackageEvidence(params: {
+  report: AccountingTrialBalanceResponse;
+  periodLock: AccountingPeriodLockResponse | null;
+  invoiceTotal: number;
+  paymentTotal: number;
+  journalTotal: number;
+}): AccountingClosePackageEvidenceResponse[] {
+  return [
+    {
+      key: 'trial-balance',
+      label: 'Trial balance',
+      value: `${params.report.summary.accountCount} accounts`,
+      href: '/accounting/ledger#trial-balance',
+      status: params.report.summary.outOfBalanceCents === 0 ? 'DONE' : 'BLOCKED',
+    },
+    {
+      key: 'posted-journals',
+      label: 'Posted journals',
+      value: String(params.journalTotal),
+      href: '/accounting/ledger#posted-journals',
+      status: params.journalTotal > 0 ? 'DONE' : 'OPEN',
+    },
+    {
+      key: 'invoice-documents',
+      label: 'Invoice documents',
+      value: String(params.invoiceTotal),
+      href: '/accounting/sync?view=invoices',
+      status: params.report.summary.integrationExceptionCount === 0 ? 'DONE' : 'OPEN',
+    },
+    {
+      key: 'payment-documents',
+      label: 'Payment documents',
+      value: String(params.paymentTotal),
+      href: '/accounting/sync?view=payments',
+      status: params.report.summary.integrationExceptionCount === 0 ? 'DONE' : 'OPEN',
+    },
+    {
+      key: 'period-lock',
+      label: 'Period lock',
+      value: params.periodLock ? 'Locked' : 'Not locked',
+      href: '/accounting/ledger#accounting-period',
+      status: params.periodLock ? 'DONE' : 'OPEN',
+    },
+  ];
+}
 
 // ─── OAuth: redirect to QB ────────────────────────────────────────────────────
 
@@ -2465,6 +2869,148 @@ export const getAccountingTrialBalanceHandler = wrapHandler(async (ctx) => {
     periodStart: from,
     periodEnd: to,
   }));
+}, { requireAuth: false });
+
+export const getAccountingClosePackageHandler = wrapHandler(async (ctx) => {
+  const qs = ctx.event.queryStringParameters ?? {};
+  const from = parseOptionalReportDate(qs.from, false);
+  const to = parseOptionalReportDate(qs.to, true);
+
+  if (from === 'invalid') {
+    return jsonResponse(422, { message: 'Invalid from date. Use an ISO date or timestamp.' });
+  }
+  if (to === 'invalid') {
+    return jsonResponse(422, { message: 'Invalid to date. Use an ISO date or timestamp.' });
+  }
+  if (from && to && from > to) {
+    return jsonResponse(422, { message: 'from must be before to.' });
+  }
+
+  const documentLimit = parseJournalLimit(qs.documentLimit, 50);
+  const journalLimit = parseJournalLimit(qs.journalLimit, 100);
+  const [
+    journals,
+    journalTotal,
+    operationalSnapshot,
+    periodLocks,
+    invoiceRows,
+    invoiceTotal,
+    paymentRows,
+    paymentTotal,
+  ] = await Promise.all([
+    accountingReportQueries.listPostedJournals({
+      from,
+      to,
+      take: TRIAL_BALANCE_JOURNAL_LIMIT,
+    }),
+    accountingReportQueries.countPostedJournals({ from, to }),
+    loadOperationalLedgerSnapshot(200),
+    from && to ? accountingPeriodLockQueries.listOverlapping({ from, to }) : Promise.resolve([]),
+    accountingClosePackageQueries.listInvoiceDocuments({
+      from,
+      to,
+      take: documentLimit,
+    }),
+    accountingClosePackageQueries.countInvoiceDocuments({ from, to }),
+    accountingClosePackageQueries.listPaymentDocuments({
+      from,
+      to,
+      take: documentLimit,
+    }),
+    accountingClosePackageQueries.countPaymentDocuments({ from, to }),
+  ]);
+
+  const report = buildTrialBalanceReport({
+    journals,
+    journalTotal,
+    operationalSnapshot,
+    periodStart: from,
+    periodEnd: to,
+  });
+  const periodLock =
+    from && to
+      ? periodLocks.find((lock) => lock.periodStart <= from && lock.periodEnd >= to) ??
+        periodLocks[0] ??
+        null
+      : null;
+
+  const [workOrdersById, paymentWorkOrdersById, customersById] = await Promise.all([
+    loadInvoiceWorkOrderSummaries(invoiceRows.map((row) => row.workOrderId)),
+    loadInvoiceWorkOrderSummaries(paymentRows.map((row) => row.workOrderId)),
+    loadCustomerSyncSummaries(paymentRows.map((row) => row.customerId)),
+  ]);
+  const allWorkOrdersById = new Map([...workOrdersById, ...paymentWorkOrdersById]);
+  const invoices = invoiceRows.map((record) =>
+    mapClosePackageInvoice(record, allWorkOrdersById),
+  );
+  const payments = paymentRows.map((record) =>
+    mapClosePackagePayment(record, allWorkOrdersById, customersById),
+  );
+  const invoiceReviewCount = invoices.filter(
+    (document) => document.documentStatus === 'NEEDS_REVIEW',
+  ).length;
+  const paymentReviewCount = payments.filter(
+    (document) => document.documentStatus === 'NEEDS_REVIEW',
+  ).length;
+  const openCheckCount = report.closeChecks.filter((check) => !check.ok).length;
+  const blockerCount = openCheckCount + invoiceReviewCount + paymentReviewCount;
+  const mappedPeriodLock = periodLock ? mapPeriodLock(periodLock) : null;
+  const evidence = buildClosePackageEvidence({
+    report,
+    periodLock: mappedPeriodLock,
+    invoiceTotal,
+    paymentTotal,
+    journalTotal,
+  });
+  const actions = buildClosePackageActions({
+    report,
+    periodLock: mappedPeriodLock,
+    invoiceReviewCount,
+    paymentReviewCount,
+  });
+
+  const response: AccountingClosePackageResponse = {
+    packageId: closePackageId(from, to),
+    packageNumber: closePackageNumber(from, to),
+    generatedAt: new Date().toISOString(),
+    periodStart: formatReportDate(from),
+    periodEnd: formatReportDate(to),
+    currencyCode: 'USD',
+    closeStatus: report.summary.closeStatus,
+    readyForExternalReview:
+      report.summary.closeStatus === 'READY' &&
+      blockerCount === 0 &&
+      !report.summary.truncated &&
+      Boolean(mappedPeriodLock),
+    periodLock: mappedPeriodLock,
+    summary: {
+      accountCount: report.summary.accountCount,
+      postedJournalCount: report.summary.postedJournalCount,
+      totalDebitCents: report.summary.totalDebitCents,
+      totalCreditCents: report.summary.totalCreditCents,
+      outOfBalanceCents: report.summary.outOfBalanceCents,
+      unpostedOperationalCount: report.summary.unpostedOperationalCount,
+      reviewItemCount: report.summary.reviewItemCount,
+      integrationExceptionCount: report.summary.integrationExceptionCount,
+      invoiceDocumentCount: invoiceTotal,
+      paymentDocumentCount: paymentTotal,
+      journalEvidenceCount: journalTotal,
+      blockerCount,
+      truncated:
+        report.summary.truncated ||
+        invoiceRows.length < invoiceTotal ||
+        paymentRows.length < paymentTotal ||
+        Math.min(journalLimit, journals.length) < journalTotal,
+    },
+    closeChecks: report.closeChecks,
+    accountLines: report.accountLines,
+    journals: journals.slice(0, journalLimit).map(mapJournal),
+    documents: { invoices, payments },
+    evidence,
+    actions,
+  };
+
+  return jsonResponse(200, response);
 }, { requireAuth: false });
 
 export const reverseAccountingJournalHandler = wrapHandler(async (ctx) => {

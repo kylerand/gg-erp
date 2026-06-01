@@ -232,17 +232,17 @@
       </header>
 
       <div class="summary">
-        <div class="metric"><strong>22</strong><span>Tracked delivery slices</span></div>
+        <div class="metric"><strong>23</strong><span>Tracked delivery slices</span></div>
         <div class="metric"><strong>21</strong><span>Done</span></div>
-        <div class="metric"><strong>0</strong><span>In progress</span></div>
+        <div class="metric"><strong>1</strong><span>In progress</span></div>
         <div class="metric"><strong>1</strong><span>Blocked</span></div>
       </div>
 
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: accounting document depth and external close-package delivery can now
-          build on deployed journals, trial balance, reversals, and period locks.
+          Current focus: accounting close-package delivery now builds on deployed journals, trial
+          balance, reversals, and period locks with one new pending-deploy report route.
           ShopMonkey cutover readiness remains blocked on missing parts and purchase-order source
           exports.
         </p>
@@ -441,6 +441,21 @@
               <td>
                 Add richer invoice/payment document lifecycle and close-package export delivery
                 after close policy is chosen.
+              </td>
+            </tr>
+            <tr>
+              <td>Accounting close packages</td>
+              <td><span class="pill doing">In progress</span></td>
+              <td>
+                This branch adds <code>GET /accounting/reports/close-package</code>, assembling the
+                live trial balance, close checks, posted journals, period lock evidence, invoice
+                sync documents, and payment sync documents into one period-close package.
+                <code>/accounting/ledger</code> now has a Close package panel with blocker counts,
+                evidence links, document summaries, a registry-backed package link, and JSON export.
+              </td>
+              <td>
+                Pass PR CI/QA, deploy the close-package route, live-smoke it, then remove the
+                pending-deploy QA route exception.
               </td>
             </tr>
             <tr>

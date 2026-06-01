@@ -2163,15 +2163,22 @@ model AccountingJournalEntry {
   memo                 String?
   postedAt             DateTime                    @default(now()) @map("posted_at") @db.Timestamptz(6)
   postedBy             String?                     @map("posted_by")
+  reversalOfJournalId  String?                     @map("reversal_of_journal_id") @db.Uuid
+  reversedAt           DateTime?                   @map("reversed_at") @db.Timestamptz(6)
+  reversedBy           String?                     @map("reversed_by")
+  reversalReason       String?                     @map("reversal_reason")
   correlationId        String?                     @map("correlation_id")
   createdAt            DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
   version              Int                         @default(0)
 
-  lines AccountingJournalLine[]
+  lines             AccountingJournalLine[]
+  reversalOfJournal AccountingJournalEntry?  @relation("AccountingJournalReversals", fields: [reversalOfJournalId], references: [id])
+  reversalEntries   AccountingJournalEntry[] @relation("AccountingJournalReversals")
 
   @@unique([sourceType, sourceId])
   @@index([ledgerDate], map: "journal_entries_ledger_date_idx")
   @@index([status], map: "journal_entries_status_idx")
+  @@index([reversalOfJournalId], map: "journal_entries_reversal_of_idx")
   @@index([sourceType, ledgerDate], map: "journal_entries_source_date_idx")
   @@map("journal_entries")
   @@schema("accounting")
@@ -2195,6 +2202,25 @@ model AccountingJournalLine {
   @@unique([journalEntryId, lineNumber])
   @@index([accountName], map: "journal_lines_account_name_idx")
   @@map("journal_lines")
+  @@schema("accounting")
+}
+
+model AccountingPeriodLock {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  periodStart   DateTime @map("period_start") @db.Timestamptz(6)
+  periodEnd     DateTime @map("period_end") @db.Timestamptz(6)
+  status        String   @default("LOCKED")
+  reason        String
+  lockedAt      DateTime @default(now()) @map("locked_at") @db.Timestamptz(6)
+  lockedBy      String?  @map("locked_by")
+  correlationId String?  @map("correlation_id")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  version       Int      @default(0)
+
+  @@unique([periodStart, periodEnd], map: "period_locks_range_uk")
+  @@index([periodStart, periodEnd], map: "period_locks_range_idx")
+  @@index([lockedAt], map: "period_locks_locked_at_idx")
+  @@map("period_locks")
   @@schema("accounting")
 }
 

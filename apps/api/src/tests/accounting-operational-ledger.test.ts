@@ -454,6 +454,7 @@ test('postOperationalLedgerJournalsHandler posts eligible operational entries id
     postOperationalLedgerJournalsHandler,
     operationalLedgerQueries,
     accountingJournalQueries,
+    accountingPeriodLockQueries,
   } = await import('../lambda/accounting/handlers.js');
 
   const listPayablesMock = mock.method(
@@ -516,6 +517,7 @@ test('postOperationalLedgerJournalsHandler posts eligible operational entries id
     async () => 0,
   );
   const findMock = mock.method(accountingJournalQueries, 'findBySource', async () => null);
+  const periodLocksMock = mock.method(accountingPeriodLockQueries, 'listOverlapping', async () => []);
   const createMock = mock.method(
     accountingJournalQueries,
     'createFromOperationalEntry',
@@ -581,6 +583,7 @@ test('postOperationalLedgerJournalsHandler posts eligible operational entries id
     assert.equal(body.postedCount, 1);
     assert.equal((body.posted as Array<Record<string, unknown>>)[0]?.sourceLedgerEntryId, 'payable-po-1');
     assert.equal((body.skipped as Record<string, unknown>).existing, 0);
+    assert.equal((body.skipped as Record<string, unknown>).lockedPeriod, 0);
   } finally {
     listPayablesMock.mock.restore();
     listPaymentsMock.mock.restore();
@@ -590,6 +593,257 @@ test('postOperationalLedgerJournalsHandler posts eligible operational entries id
     paymentFailuresMock.mock.restore();
     mismatchMock.mock.restore();
     findMock.mock.restore();
+    periodLocksMock.mock.restore();
     createMock.mock.restore();
+  }
+});
+
+test('lockAccountingPeriodHandler creates a lock when close readiness is clear', async () => {
+  const {
+    lockAccountingPeriodHandler,
+    accountingPeriodLockQueries,
+    accountingReportQueries,
+    operationalLedgerQueries,
+  } = await import('../lambda/accounting/handlers.js');
+
+  const overlapMock = mock.method(accountingPeriodLockQueries, 'listOverlapping', async () => []);
+  const reportJournalsMock = mock.method(accountingReportQueries, 'listPostedJournals', async () => []);
+  const reportCountMock = mock.method(accountingReportQueries, 'countPostedJournals', async () => 0);
+  const listPayablesMock = mock.method(operationalLedgerQueries, 'listPayablePurchaseOrders', async () => []);
+  const listPaymentsMock = mock.method(operationalLedgerQueries, 'listPaymentSyncRecords', async () => []);
+  const listReconciliationMock = mock.method(
+    operationalLedgerQueries,
+    'listReconciliationRecords',
+    async () => [],
+  );
+  const invoiceFailuresMock = mock.method(operationalLedgerQueries, 'countInvoiceFailures', async () => 0);
+  const customerFailuresMock = mock.method(operationalLedgerQueries, 'countCustomerFailures', async () => 0);
+  const paymentFailuresMock = mock.method(operationalLedgerQueries, 'countPaymentFailures', async () => 0);
+  const mismatchMock = mock.method(
+    operationalLedgerQueries,
+    'countReconciliationMismatches',
+    async () => 0,
+  );
+  const createMock = mock.method(
+    accountingPeriodLockQueries,
+    'create',
+    async (params: Parameters<typeof accountingPeriodLockQueries.create>[0]) => ({
+    id: '00000000-0000-4000-8000-000000000401',
+    periodStart: params.from,
+    periodEnd: params.to,
+    status: 'LOCKED',
+    reason: params.reason,
+    lockedAt: new Date('2026-05-31T23:59:59.000Z'),
+    lockedBy: params.actorId,
+    correlationId: params.correlationId,
+    createdAt: new Date('2026-05-31T23:59:59.000Z'),
+    version: 0,
+  }) as never,
+  );
+
+  try {
+    const response = await lockAccountingPeriodHandler(
+      makeEvent({
+        httpMethod: 'POST',
+        body: JSON.stringify({
+          confirm: true,
+          from: '2026-05-01',
+          to: '2026-05-31',
+          reason: 'May close reviewed.',
+        }),
+      }),
+    );
+
+    assert.equal(response.statusCode, 201);
+    const body = parseBody(response);
+    assert.equal(body.closeStatus, 'READY');
+    assert.equal((body.lock as Record<string, unknown>).status, 'LOCKED');
+  } finally {
+    overlapMock.mock.restore();
+    reportJournalsMock.mock.restore();
+    reportCountMock.mock.restore();
+    listPayablesMock.mock.restore();
+    listPaymentsMock.mock.restore();
+    listReconciliationMock.mock.restore();
+    invoiceFailuresMock.mock.restore();
+    customerFailuresMock.mock.restore();
+    paymentFailuresMock.mock.restore();
+    mismatchMock.mock.restore();
+    createMock.mock.restore();
+  }
+});
+
+test('reverseAccountingJournalHandler creates a reversing journal when period is open', async () => {
+  const {
+    reverseAccountingJournalHandler,
+    accountingJournalQueries,
+    accountingPeriodLockQueries,
+  } = await import('../lambda/accounting/handlers.js');
+
+  const original = {
+    id: '00000000-0000-4000-8000-000000000501',
+    journalNumber: 'GJ-PAY-20260505-PAY1',
+    sourceType: 'CUSTOMER_PAYMENT',
+    sourceId: 'pay-1',
+    sourceLedgerEntryId: 'payment-pay-1',
+    sourceDocumentNumber: 'QB-PAY-1',
+    counterparty: 'cust-1',
+    ledgerDate: new Date('2026-05-05T00:00:00.000Z'),
+    currencyCode: 'USD',
+    status: 'POSTED',
+    totalDebitCents: 50000,
+    totalCreditCents: 50000,
+    memo: 'QuickBooks payment matched.',
+    postedAt: new Date('2026-05-05T12:00:00.000Z'),
+    postedBy: 'accounting-user',
+    reversalOfJournalId: null,
+    reversedAt: null,
+    reversedBy: null,
+    reversalReason: null,
+    correlationId: 'corr-journal',
+    createdAt: new Date('2026-05-05T12:00:00.000Z'),
+    version: 0,
+    lines: [
+      {
+        id: '00000000-0000-4000-8000-000000000502',
+        journalEntryId: '00000000-0000-4000-8000-000000000501',
+        lineNumber: 1,
+        accountName: 'Undeposited funds / bank clearing',
+        accountCode: 'UNDEPOSITED_FUNDS_BANK_CLEARING',
+        debitCents: 50000,
+        creditCents: 0,
+        memo: 'QuickBooks payment matched.',
+        dimensionType: 'payment-sync',
+        dimensionId: 'pay-1',
+        createdAt: new Date('2026-05-05T12:00:00.000Z'),
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000503',
+        journalEntryId: '00000000-0000-4000-8000-000000000501',
+        lineNumber: 2,
+        accountName: 'Accounts receivable',
+        accountCode: 'ACCOUNTS_RECEIVABLE',
+        debitCents: 0,
+        creditCents: 50000,
+        memo: 'QuickBooks payment matched.',
+        dimensionType: 'payment-sync',
+        dimensionId: 'pay-1',
+        createdAt: new Date('2026-05-05T12:00:00.000Z'),
+      },
+    ],
+  };
+  const reversedOriginal = {
+    ...original,
+    status: 'REVERSED',
+    reversedAt: new Date('2026-05-10T12:00:00.000Z'),
+    reversedBy: 'system',
+    reversalReason: 'Duplicate payment.',
+  };
+  const reversal = {
+    ...original,
+    id: '00000000-0000-4000-8000-000000000504',
+    journalNumber: 'REV-GJ-PAY-20260505-PAY1',
+    sourceId: `reversal:${original.id}`,
+    sourceLedgerEntryId: `reversal-${original.id}`,
+    sourceDocumentNumber: `REV-${original.journalNumber}`,
+    reversalOfJournalId: original.id,
+    reversalReason: 'Duplicate payment.',
+    lines: original.lines.map((line) => ({
+      ...line,
+      id: `${line.id.slice(0, -1)}9`,
+      debitCents: line.creditCents,
+      creditCents: line.debitCents,
+    })),
+  };
+
+  const findMock = mock.method(accountingJournalQueries, 'findById', async () => original as never);
+  const periodLocksMock = mock.method(accountingPeriodLockQueries, 'listOverlapping', async () => []);
+  const reverseMock = mock.method(accountingJournalQueries, 'reverseJournal', async () => ({
+    original: reversedOriginal,
+    reversal,
+  }) as never);
+
+  try {
+    const response = await reverseAccountingJournalHandler(
+      makeEvent({
+        httpMethod: 'POST',
+        pathParameters: { journalId: original.id },
+        body: JSON.stringify({ confirm: true, reason: 'Duplicate payment.' }),
+      }),
+    );
+
+    assert.equal(response.statusCode, 201);
+    const body = parseBody(response);
+    assert.equal((body.original as Record<string, unknown>).status, 'REVERSED');
+    assert.equal((body.reversal as Record<string, unknown>).reversalOfJournalId, original.id);
+  } finally {
+    findMock.mock.restore();
+    periodLocksMock.mock.restore();
+    reverseMock.mock.restore();
+  }
+});
+
+test('reverseAccountingJournalHandler rejects journals in locked periods', async () => {
+  const {
+    reverseAccountingJournalHandler,
+    accountingJournalQueries,
+    accountingPeriodLockQueries,
+  } = await import('../lambda/accounting/handlers.js');
+
+  const original = {
+    id: '00000000-0000-4000-8000-000000000601',
+    journalNumber: 'GJ-PAY-20260505-PAY1',
+    sourceType: 'CUSTOMER_PAYMENT',
+    sourceId: 'pay-1',
+    sourceLedgerEntryId: 'payment-pay-1',
+    sourceDocumentNumber: 'QB-PAY-1',
+    counterparty: 'cust-1',
+    ledgerDate: new Date('2026-05-05T00:00:00.000Z'),
+    currencyCode: 'USD',
+    status: 'POSTED',
+    totalDebitCents: 50000,
+    totalCreditCents: 50000,
+    memo: 'QuickBooks payment matched.',
+    postedAt: new Date('2026-05-05T12:00:00.000Z'),
+    postedBy: 'accounting-user',
+    reversalOfJournalId: null,
+    reversedAt: null,
+    reversedBy: null,
+    reversalReason: null,
+    correlationId: 'corr-journal',
+    createdAt: new Date('2026-05-05T12:00:00.000Z'),
+    version: 0,
+    lines: [],
+  };
+  const findMock = mock.method(accountingJournalQueries, 'findById', async () => original as never);
+  const periodLocksMock = mock.method(accountingPeriodLockQueries, 'listOverlapping', async () => [
+    {
+      id: '00000000-0000-4000-8000-000000000602',
+      periodStart: new Date('2026-05-01T00:00:00.000Z'),
+      periodEnd: new Date('2026-05-31T23:59:59.999Z'),
+      status: 'LOCKED',
+      reason: 'May close.',
+      lockedAt: new Date('2026-06-01T00:00:00.000Z'),
+      lockedBy: 'system',
+      correlationId: 'corr-lock',
+      createdAt: new Date('2026-06-01T00:00:00.000Z'),
+      version: 0,
+    },
+  ] as never);
+
+  try {
+    const response = await reverseAccountingJournalHandler(
+      makeEvent({
+        httpMethod: 'POST',
+        pathParameters: { journalId: original.id },
+        body: JSON.stringify({ confirm: true, reason: 'Duplicate payment.' }),
+      }),
+    );
+
+    assert.equal(response.statusCode, 409);
+    assert.match(String(parseBody(response).message), /locked period/);
+  } finally {
+    findMock.mock.restore();
+    periodLocksMock.mock.restore();
   }
 });

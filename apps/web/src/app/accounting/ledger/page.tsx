@@ -5,13 +5,17 @@ import Link from 'next/link';
 import { EmptyState, LoadingSkeleton, PageHeader } from '@gg-erp/ui';
 import {
   getAccountingTrialBalance,
+  listAccountingPeriodLocks,
   listAccountingJournals,
   listOperationalLedger,
+  lockAccountingPeriod,
   postOperationalLedgerJournals,
+  reverseAccountingJournal,
   type AccountingCloseCheck,
   type AccountingCloseStatus,
   type AccountingJournalEntry,
   type AccountingJournalResponse,
+  type AccountingPeriodLock,
   type AccountingTrialBalanceLine,
   type AccountingTrialBalanceResponse,
   type OperationalLedgerEntry,
@@ -40,20 +44,28 @@ const STATUS_FILTERS: Array<'ALL' | OperationalLedgerStatus> = [
   'RESOLVED',
 ];
 
+const DEFAULT_PERIOD = currentMonthRange();
+
 export default function AccountingLedgerPage() {
   const [sourceType, setSourceType] = useState<'ALL' | OperationalLedgerSourceType>('ALL');
   const [status, setStatus] = useState<'ALL' | OperationalLedgerStatus>('ALL');
+  const [periodFrom, setPeriodFrom] = useState(DEFAULT_PERIOD.from);
+  const [periodTo, setPeriodTo] = useState(DEFAULT_PERIOD.to);
+  const [lockReason, setLockReason] = useState('Month-end close reviewed in ERP.');
   const [ledger, setLedger] = useState<OperationalLedgerResponse | null>(null);
   const [journals, setJournals] = useState<AccountingJournalResponse | null>(null);
   const [trialBalance, setTrialBalance] = useState<AccountingTrialBalanceResponse | null>(null);
+  const [periodLocks, setPeriodLocks] = useState<AccountingPeriodLock[]>([]);
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
+  const [locking, setLocking] = useState(false);
+  const [reversingJournalId, setReversingJournalId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [postResult, setPostResult] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     const sourceFilter = sourceType === 'ALL' ? undefined : sourceType;
-    const [ledgerData, journalData, trialBalanceData] = await Promise.all([
+    const [ledgerData, journalData, trialBalanceData, periodLockData] = await Promise.all([
       listOperationalLedger(
         {
           limit: 100,
@@ -66,14 +78,14 @@ export default function AccountingLedgerPage() {
         {
           limit: 50,
           sourceType: sourceFilter,
-          status: 'POSTED',
         },
         STRICT_LIVE_DATA,
       ),
-      getAccountingTrialBalance(undefined, STRICT_LIVE_DATA),
+      getAccountingTrialBalance({ from: periodFrom, to: periodTo }, STRICT_LIVE_DATA),
+      listAccountingPeriodLocks({ limit: 12 }, STRICT_LIVE_DATA),
     ]);
-    return { ledgerData, journalData, trialBalanceData };
-  }, [sourceType, status]);
+    return { ledgerData, journalData, trialBalanceData, periodLockData };
+  }, [periodFrom, periodTo, sourceType, status]);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,17 +93,19 @@ export default function AccountingLedgerPage() {
       setLoading(true);
       setLoadError(null);
       try {
-        const { ledgerData, journalData, trialBalanceData } = await loadData();
+        const { ledgerData, journalData, trialBalanceData, periodLockData } = await loadData();
         if (!cancelled) {
           setLedger(ledgerData);
           setJournals(journalData);
           setTrialBalance(trialBalanceData);
+          setPeriodLocks(periodLockData.items);
         }
       } catch (error) {
         if (!cancelled) {
           setLedger(null);
           setJournals(null);
           setTrialBalance(null);
+          setPeriodLocks([]);
           setLoadError(error instanceof Error ? error.message : 'Ledger data failed to load.');
         }
       } finally {
@@ -117,16 +131,69 @@ export default function AccountingLedgerPage() {
         STRICT_LIVE_DATA,
       );
       setPostResult(
-        `${result.postedCount} new journals posted · ${result.skipped.existing} already posted · ${result.skipped.notPostable} held for review`,
+        `${result.postedCount} new journals posted · ${result.skipped.existing} already posted · ${result.skipped.lockedPeriod} locked · ${result.skipped.notPostable} held for review`,
       );
-      const { ledgerData, journalData, trialBalanceData } = await loadData();
+      const { ledgerData, journalData, trialBalanceData, periodLockData } = await loadData();
       setLedger(ledgerData);
       setJournals(journalData);
       setTrialBalance(trialBalanceData);
+      setPeriodLocks(periodLockData.items);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'Journal posting failed.');
     } finally {
       setPosting(false);
+    }
+  }
+
+  async function handleLockPeriod() {
+    setLocking(true);
+    setLoadError(null);
+    setPostResult(null);
+    try {
+      const result = await lockAccountingPeriod(
+        {
+          from: periodFrom,
+          to: periodTo,
+          reason: lockReason,
+          allowWarnings: trialBalance?.summary.closeStatus === 'NEEDS_REVIEW',
+        },
+        STRICT_LIVE_DATA,
+      );
+      setPostResult(
+        `Locked ${formatDate(result.lock.periodStart)} to ${formatDate(
+          result.lock.periodEnd,
+        )} · ${closeStatusLabel(result.closeStatus)}`,
+      );
+      const { ledgerData, journalData, trialBalanceData, periodLockData } = await loadData();
+      setLedger(ledgerData);
+      setJournals(journalData);
+      setTrialBalance(trialBalanceData);
+      setPeriodLocks(periodLockData.items);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Period lock failed.');
+    } finally {
+      setLocking(false);
+    }
+  }
+
+  async function handleReverseJournal(entry: AccountingJournalEntry) {
+    const reason = window.prompt(`Reason for reversing ${entry.journalNumber}?`);
+    if (!reason?.trim()) return;
+    setReversingJournalId(entry.id);
+    setLoadError(null);
+    setPostResult(null);
+    try {
+      const result = await reverseAccountingJournal(entry.id, { reason: reason.trim() }, STRICT_LIVE_DATA);
+      setPostResult(`${result.original.journalNumber} reversed with ${result.reversal.journalNumber}.`);
+      const { ledgerData, journalData, trialBalanceData, periodLockData } = await loadData();
+      setLedger(ledgerData);
+      setJournals(journalData);
+      setTrialBalance(trialBalanceData);
+      setPeriodLocks(periodLockData.items);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Journal reversal failed.');
+    } finally {
+      setReversingJournalId(null);
     }
   }
 
@@ -199,6 +266,20 @@ export default function AccountingLedgerPage() {
         status={status}
         onSourceTypeChange={setSourceType}
         onStatusChange={setStatus}
+      />
+
+      <PeriodControlPanel
+        periodFrom={periodFrom}
+        periodTo={periodTo}
+        lockReason={lockReason}
+        locks={periodLocks}
+        loading={loading}
+        locking={locking}
+        closeStatus={trialBalance?.summary.closeStatus ?? 'READY'}
+        onPeriodFromChange={setPeriodFrom}
+        onPeriodToChange={setPeriodTo}
+        onLockReasonChange={setLockReason}
+        onLockPeriod={handleLockPeriod}
       />
 
       <div className="mb-6 rounded-lg border border-gray-200 bg-white p-4">
@@ -298,7 +379,11 @@ export default function AccountingLedgerPage() {
             description="Use Post ready journals after live payable receipts or posted customer payments are available."
           />
         ) : (
-          <JournalTable entries={journals.items} />
+          <JournalTable
+            entries={journals.items}
+            reversingJournalId={reversingJournalId}
+            onReverse={handleReverseJournal}
+          />
         )}
       </div>
     </div>
@@ -351,6 +436,105 @@ function FilterBar({
         ))}
       </div>
     </div>
+  );
+}
+
+function PeriodControlPanel({
+  periodFrom,
+  periodTo,
+  lockReason,
+  locks,
+  loading,
+  locking,
+  closeStatus,
+  onPeriodFromChange,
+  onPeriodToChange,
+  onLockReasonChange,
+  onLockPeriod,
+}: {
+  periodFrom: string;
+  periodTo: string;
+  lockReason: string;
+  locks: AccountingPeriodLock[];
+  loading: boolean;
+  locking: boolean;
+  closeStatus: AccountingCloseStatus;
+  onPeriodFromChange: (next: string) => void;
+  onPeriodToChange: (next: string) => void;
+  onLockReasonChange: (next: string) => void;
+  onLockPeriod: () => void;
+}) {
+  const disabled = loading || locking || !periodFrom || !periodTo || !lockReason.trim();
+
+  return (
+    <section className="mb-6 rounded-lg border border-gray-200 bg-white p-4">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-sm font-semibold text-gray-900">Accounting period</h2>
+            <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${closeStatusClass(closeStatus)}`}>
+              {closeStatusLabel(closeStatus)}
+            </span>
+          </div>
+          <div className="mt-3 grid gap-3 md:grid-cols-[160px_160px_minmax(220px,1fr)]">
+            <label className="text-xs font-semibold text-gray-600">
+              From
+              <input
+                type="date"
+                value={periodFrom}
+                onChange={(event) => onPeriodFromChange(event.target.value)}
+                className="mt-1 block min-h-10 w-full rounded-md border border-gray-300 px-3 text-sm text-gray-900"
+              />
+            </label>
+            <label className="text-xs font-semibold text-gray-600">
+              To
+              <input
+                type="date"
+                value={periodTo}
+                onChange={(event) => onPeriodToChange(event.target.value)}
+                className="mt-1 block min-h-10 w-full rounded-md border border-gray-300 px-3 text-sm text-gray-900"
+              />
+            </label>
+            <label className="text-xs font-semibold text-gray-600">
+              Close note
+              <input
+                type="text"
+                value={lockReason}
+                onChange={(event) => onLockReasonChange(event.target.value)}
+                className="mt-1 block min-h-10 w-full rounded-md border border-gray-300 px-3 text-sm text-gray-900"
+              />
+            </label>
+          </div>
+        </div>
+        <div className="flex flex-col gap-3 xl:w-80">
+          <button
+            type="button"
+            onClick={onLockPeriod}
+            disabled={disabled}
+            className="inline-flex min-h-10 items-center justify-center rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+          >
+            {locking ? 'Locking period...' : 'Lock period'}
+          </button>
+          <div className="rounded-md bg-gray-50 px-3 py-2">
+            <div className="text-xs font-semibold text-gray-500">Recent locks</div>
+            {locks.length === 0 ? (
+              <div className="mt-1 text-xs text-gray-400">No locked accounting periods.</div>
+            ) : (
+              <div className="mt-2 space-y-1">
+                {locks.slice(0, 3).map((lock) => (
+                  <div key={lock.id} className="text-xs text-gray-700">
+                    <span className="font-semibold">
+                      {formatDate(lock.periodStart)} to {formatDate(lock.periodEnd)}
+                    </span>
+                    <span className="text-gray-400"> · {lock.reason}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -603,7 +787,15 @@ function LedgerTable({ entries }: { entries: OperationalLedgerEntry[] }) {
   );
 }
 
-function JournalTable({ entries }: { entries: AccountingJournalEntry[] }) {
+function JournalTable({
+  entries,
+  reversingJournalId,
+  onReverse,
+}: {
+  entries: AccountingJournalEntry[];
+  reversingJournalId: string | null;
+  onReverse: (entry: AccountingJournalEntry) => void;
+}) {
   return (
     <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
       <table className="min-w-full text-sm">
@@ -615,12 +807,15 @@ function JournalTable({ entries }: { entries: AccountingJournalEntry[] }) {
             <th className="px-4 py-3">Credit line</th>
             <th className="px-4 py-3 text-right">Amount</th>
             <th className="px-4 py-3">Posted</th>
+            <th className="px-4 py-3 text-right">Action</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
           {entries.map((entry) => {
             const debit = entry.lines.find((line) => line.debitCents > 0);
             const credit = entry.lines.find((line) => line.creditCents > 0);
+            const isReversal = Boolean(entry.reversalOfJournalId);
+            const canReverse = entry.status === 'POSTED' && !isReversal;
             return (
               <tr key={entry.id} className="align-top">
                 <td className="px-4 py-3">
@@ -629,6 +824,9 @@ function JournalTable({ entries }: { entries: AccountingJournalEntry[] }) {
                   <div className="mt-1 text-xs text-gray-400">
                     {entry.sourceDocumentNumber} · {entry.counterparty ?? 'No counterparty'}
                   </div>
+                  {entry.reversalReason && (
+                    <div className="mt-1 text-xs text-amber-700">{entry.reversalReason}</div>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-gray-700">{sourceLabel(entry.sourceType)}</td>
                 <td className="px-4 py-3 text-gray-700">
@@ -647,10 +845,35 @@ function JournalTable({ entries }: { entries: AccountingJournalEntry[] }) {
                   {formatUsdCents(entry.totalDebitCents)}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-gray-600">
-                  <span className="inline-flex rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-xs text-green-700">
+                  <span
+                    className={`inline-flex rounded-full border px-2 py-0.5 text-xs ${
+                      entry.status === 'REVERSED'
+                        ? 'border-amber-200 bg-amber-50 text-amber-800'
+                        : 'border-green-200 bg-green-50 text-green-700'
+                    }`}
+                  >
                     {entry.status}
                   </span>
+                  {isReversal && (
+                    <div className="mt-1 text-xs font-semibold text-gray-500">Reversal journal</div>
+                  )}
                   <div className="mt-1 text-xs text-gray-400">{formatDate(entry.postedAt)}</div>
+                </td>
+                <td className="whitespace-nowrap px-4 py-3 text-right">
+                  <button
+                    type="button"
+                    onClick={() => onReverse(entry)}
+                    disabled={!canReverse || reversingJournalId === entry.id}
+                    className="inline-flex min-h-9 items-center justify-center rounded-md border border-gray-300 px-3 py-1 text-xs font-semibold text-gray-700 transition-colors hover:border-[#B1581B] hover:text-[#B1581B] disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-300"
+                  >
+                    {reversingJournalId === entry.id
+                      ? 'Reversing...'
+                      : isReversal
+                        ? 'Reversal'
+                        : entry.status === 'REVERSED'
+                          ? 'Reversed'
+                          : 'Reverse'}
+                  </button>
                 </td>
               </tr>
             );
@@ -758,6 +981,16 @@ function closeStatusClass(status: AccountingCloseStatus): string {
     NEEDS_REVIEW: 'border-amber-200 bg-amber-50 text-amber-800',
     BLOCKED: 'border-red-200 bg-red-50 text-red-700',
   }[status];
+}
+
+function currentMonthRange(): { from: string; to: string } {
+  const now = new Date();
+  const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
+  return {
+    from: from.toISOString().slice(0, 10),
+    to: to.toISOString().slice(0, 10),
+  };
 }
 
 function formatUsdCents(value: number): string {

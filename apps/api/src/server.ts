@@ -161,6 +161,9 @@ import {
   listOperationalLedgerHandler,
   listAccountingJournalsHandler,
   getAccountingTrialBalanceHandler,
+  listAccountingPeriodLocksHandler,
+  lockAccountingPeriodHandler,
+  reverseAccountingJournalHandler,
   postOperationalLedgerJournalsHandler,
   listAccountsHandler,
   updateAccountStatusHandler,
@@ -338,6 +341,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const qbReconciliationRecordMatch = pathname.match(
     /^\/accounting\/reconciliation\/records\/([^/]+)/,
   );
+  const accountingJournalMatch = pathname.match(/^\/accounting\/journals\/([^/]+)/);
   const capacitySlotMatch = pathname.match(/^\/scheduling\/capacity-slots\/([^/]+)(?:\/([^/]+))?$/);
   const buildConfigurationMatch = pathname.match(
     /^\/planning\/build-configurations\/([^/]+)(?:\/state)?$/,
@@ -819,6 +823,15 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     result = await listAccountingJournalsHandler(event);
   } else if (pathname === '/accounting/reports/trial-balance' && method === 'GET') {
     result = await getAccountingTrialBalanceHandler(event);
+  } else if (pathname === '/accounting/period-locks' && method === 'GET') {
+    result = await listAccountingPeriodLocksHandler(event);
+  } else if (pathname === '/accounting/period-locks' && method === 'POST') {
+    result = await lockAccountingPeriodHandler(event);
+  } else if (accountingJournalMatch && pathname.endsWith('/reverse') && method === 'POST') {
+    result = await reverseAccountingJournalHandler({
+      ...event,
+      pathParameters: { journalId: accountingJournalMatch[1] },
+    });
   } else if (pathname === '/accounting/journals/post-operational-ledger' && method === 'POST') {
     result = await postOperationalLedgerJournalsHandler(event);
   } else if (pathname === '/accounting/integration-accounts' && method === 'GET') {
@@ -1102,7 +1115,9 @@ server.listen(PORT, () => {
   console.log(`   Payments    GET /accounting/payment-syncs, POST /:id/retry`);
   console.log(`   Reconcile   GET|POST /accounting/reconciliation/runs, GET /:id, GET /mismatches`);
   console.log(`   Ledger      GET /accounting/operational-ledger`);
-  console.log(`   Journals    GET /accounting/journals, POST /accounting/journals/post-operational-ledger`);
+  console.log(`   Journals    GET /accounting/journals, POST /accounting/journals/:id/reverse`);
+  console.log(`   Periods     GET|POST /accounting/period-locks`);
+  console.log(`   Posting     POST /accounting/journals/post-operational-ledger`);
   console.log(`   Reports     GET /accounting/reports/trial-balance`);
   console.log(`   Accounts    GET /accounting/integration-accounts, PUT /:id/status`);
   console.log(

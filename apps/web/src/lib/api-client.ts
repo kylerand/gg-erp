@@ -3590,6 +3590,10 @@ export interface AccountingJournalEntry {
   memo: string | null;
   postedAt: string;
   postedBy: string | null;
+  reversalOfJournalId: string | null;
+  reversedAt: string | null;
+  reversedBy: string | null;
+  reversalReason: string | null;
   correlationId: string | null;
   lines: AccountingJournalLine[];
 }
@@ -3606,6 +3610,24 @@ export interface AccountingJournalResponse {
     totalCreditCents: number;
     sourceTotals: Record<OperationalLedgerSourceType, { count: number; amountCents: number }>;
   };
+}
+
+export interface AccountingPeriodLock {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  status: 'LOCKED';
+  reason: string;
+  lockedAt: string;
+  lockedBy: string | null;
+  correlationId: string | null;
+}
+
+export interface AccountingPeriodLockResponse {
+  items: AccountingPeriodLock[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 export type AccountingCloseStatus = 'READY' | 'NEEDS_REVIEW' | 'BLOCKED';
@@ -3661,9 +3683,22 @@ export interface PostOperationalLedgerJournalsResponse {
   postedCount: number;
   skipped: {
     notPostable: number;
+    lockedPeriod: number;
     existing: number;
   };
   summary: AccountingJournalResponse['summary'];
+}
+
+export interface ReverseAccountingJournalResponse {
+  original: AccountingJournalEntry;
+  reversal: AccountingJournalEntry;
+  summary: AccountingJournalResponse['summary'];
+}
+
+export interface LockAccountingPeriodResponse {
+  lock: AccountingPeriodLock;
+  closeStatus: AccountingCloseStatus;
+  summary: AccountingTrialBalanceResponse['summary'];
 }
 
 const emptyAccountingJournalSummary: AccountingJournalResponse['summary'] = {
@@ -3698,6 +3733,13 @@ const emptyAccountingTrialBalance: AccountingTrialBalanceResponse = {
   },
   accountLines: [],
   closeChecks: [],
+};
+
+const emptyAccountingPeriodLocks: AccountingPeriodLockResponse = {
+  items: [],
+  total: 0,
+  limit: 50,
+  offset: 0,
 };
 
 export async function listAccountingJournals(
@@ -3746,6 +3788,53 @@ export async function getAccountingTrialBalance(
   );
 }
 
+export async function listAccountingPeriodLocks(
+  params?: { limit?: number; offset?: number },
+  options?: ApiDataOptions,
+): Promise<AccountingPeriodLockResponse> {
+  const qs = new URLSearchParams();
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  return apiFetch(
+    `/accounting/period-locks${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    {
+      ...emptyAccountingPeriodLocks,
+      limit: params?.limit ?? 50,
+      offset: params?.offset ?? 0,
+    },
+    options,
+  );
+}
+
+export async function lockAccountingPeriod(
+  input: { from: string; to: string; reason: string; allowWarnings?: boolean },
+  options?: ApiDataOptions,
+): Promise<LockAccountingPeriodResponse> {
+  return apiFetch(
+    '/accounting/period-locks',
+    {
+      method: 'POST',
+      body: JSON.stringify({ ...input, confirm: true }),
+    },
+    {
+      lock: {
+        id: '',
+        periodStart: input.from,
+        periodEnd: input.to,
+        status: 'LOCKED',
+        reason: input.reason,
+        lockedAt: new Date(0).toISOString(),
+        lockedBy: null,
+        correlationId: null,
+      },
+      closeStatus: 'READY',
+      summary: emptyAccountingTrialBalance.summary,
+    },
+    options,
+  );
+}
+
 export async function postOperationalLedgerJournals(
   input: { sourceType?: OperationalLedgerSourceType; limit?: number } = {},
   options?: ApiDataOptions,
@@ -3759,7 +3848,27 @@ export async function postOperationalLedgerJournals(
     {
       posted: [],
       postedCount: 0,
-      skipped: { notPostable: 0, existing: 0 },
+      skipped: { notPostable: 0, lockedPeriod: 0, existing: 0 },
+      summary: emptyAccountingJournalSummary,
+    },
+    options,
+  );
+}
+
+export async function reverseAccountingJournal(
+  journalId: string,
+  input: { reason: string; reversalDate?: string },
+  options?: ApiDataOptions,
+): Promise<ReverseAccountingJournalResponse> {
+  return apiFetch(
+    `/accounting/journals/${encodeURIComponent(journalId)}/reverse`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ ...input, confirm: true }),
+    },
+    {
+      original: {} as AccountingJournalEntry,
+      reversal: {} as AccountingJournalEntry,
       summary: emptyAccountingJournalSummary,
     },
     options,

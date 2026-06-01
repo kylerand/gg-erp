@@ -80,6 +80,9 @@ type LedgerReconciliationRecord = Awaited<
 type AccountingJournalWithLines = Prisma.AccountingJournalEntryGetPayload<{
   include: { lines: true };
 }>;
+type AccountingPeriodLockRow = Awaited<
+  ReturnType<typeof prisma.accountingPeriodLock.findMany>
+>[number];
 
 type OperationalLedgerSourceType =
   | 'PAYABLE_RECEIPT'
@@ -158,8 +161,23 @@ interface AccountingJournalResponse {
   memo: string | null;
   postedAt: string;
   postedBy: string | null;
+  reversalOfJournalId: string | null;
+  reversedAt: string | null;
+  reversedBy: string | null;
+  reversalReason: string | null;
   correlationId: string | null;
   lines: AccountingJournalLineResponse[];
+}
+
+interface AccountingPeriodLockResponse {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  status: 'LOCKED';
+  reason: string;
+  lockedAt: string;
+  lockedBy: string | null;
+  correlationId: string | null;
 }
 
 type AccountingCloseStatus = 'READY' | 'NEEDS_REVIEW' | 'BLOCKED';
@@ -215,6 +233,20 @@ interface JournalPostRequest {
   confirm?: boolean;
   sourceType?: OperationalLedgerSourceType;
   limit?: number;
+}
+
+interface JournalReversalRequest {
+  confirm?: boolean;
+  reason?: string;
+  reversalDate?: string;
+}
+
+interface PeriodLockRequest {
+  confirm?: boolean;
+  from?: string;
+  to?: string;
+  reason?: string;
+  allowWarnings?: boolean;
 }
 
 const OPERATIONAL_LEDGER_SOURCE_TYPES = new Set<OperationalLedgerSourceType>([
@@ -583,6 +615,10 @@ function mapJournal(entry: AccountingJournalWithLines): AccountingJournalRespons
     memo: entry.memo,
     postedAt: entry.postedAt.toISOString(),
     postedBy: entry.postedBy,
+    reversalOfJournalId: entry.reversalOfJournalId ?? null,
+    reversedAt: entry.reversedAt?.toISOString() ?? null,
+    reversedBy: entry.reversedBy ?? null,
+    reversalReason: entry.reversalReason ?? null,
     correlationId: entry.correlationId,
     lines: entry.lines
       .slice()
@@ -599,6 +635,39 @@ function mapJournal(entry: AccountingJournalWithLines): AccountingJournalRespons
         dimensionId: line.dimensionId,
       })),
   };
+}
+
+function mapPeriodLock(row: AccountingPeriodLockRow): AccountingPeriodLockResponse {
+  return {
+    id: row.id,
+    periodStart: row.periodStart.toISOString(),
+    periodEnd: row.periodEnd.toISOString(),
+    status: 'LOCKED',
+    reason: row.reason,
+    lockedAt: row.lockedAt.toISOString(),
+    lockedBy: row.lockedBy,
+    correlationId: row.correlationId,
+  };
+}
+
+function periodDateLabel(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function dateFallsInPeriod(date: Date, lock: Pick<AccountingPeriodLockRow, 'periodStart' | 'periodEnd'>): boolean {
+  return lock.periodStart <= date && lock.periodEnd >= date;
+}
+
+function findLockForDate(
+  date: Date,
+  locks: Array<Pick<AccountingPeriodLockRow, 'periodStart' | 'periodEnd'>>,
+): Pick<AccountingPeriodLockRow, 'periodStart' | 'periodEnd'> | undefined {
+  return locks.find((lock) => dateFallsInPeriod(date, lock));
+}
+
+function reversalJournalNumber(original: AccountingJournalWithLines): string {
+  const suffix = original.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase();
+  return `REV-${original.journalNumber}-${suffix}`;
 }
 
 function summarizeJournals(entries: AccountingJournalResponse[]) {
@@ -880,6 +949,19 @@ export const accountingJournalQueries = {
       include: { lines: true },
     });
   },
+  async findById(id: string): Promise<AccountingJournalWithLines | null> {
+    return prisma.accountingJournalEntry.findUnique({
+      where: { id },
+      include: { lines: true },
+    });
+  },
+  async findReversalForJournal(id: string): Promise<AccountingJournalWithLines | null> {
+    return prisma.accountingJournalEntry.findFirst({
+      where: { reversalOfJournalId: id },
+      include: { lines: true },
+      orderBy: { postedAt: 'desc' },
+    });
+  },
   async createFromOperationalEntry(
     entry: OperationalLedgerEntry,
     context: { actorId: string; correlationId: string },
@@ -931,6 +1013,76 @@ export const accountingJournalQueries = {
       include: { lines: true },
     });
   },
+  async reverseJournal(
+    original: AccountingJournalWithLines,
+    input: { reason: string; reversalDate: Date },
+    context: { actorId: string; correlationId: string },
+  ): Promise<{ original: AccountingJournalWithLines; reversal: AccountingJournalWithLines }> {
+    return prisma.$transaction(async (tx) => {
+      const existingReversal = await tx.accountingJournalEntry.findFirst({
+        where: { reversalOfJournalId: original.id },
+        include: { lines: true },
+      });
+      if (existingReversal) {
+        const latestOriginal = await tx.accountingJournalEntry.findUniqueOrThrow({
+          where: { id: original.id },
+          include: { lines: true },
+        });
+        return { original: latestOriginal, reversal: existingReversal };
+      }
+
+      const reversalMemo = `Reversal of ${original.journalNumber}: ${input.reason}`;
+      const reversal = await tx.accountingJournalEntry.create({
+        data: {
+          journalNumber: reversalJournalNumber(original),
+          sourceType: original.sourceType,
+          sourceId: `reversal:${original.id}`,
+          sourceLedgerEntryId: `reversal-${original.id}`,
+          sourceDocumentNumber: `REV-${original.journalNumber}`,
+          counterparty: original.counterparty,
+          ledgerDate: input.reversalDate,
+          currencyCode: original.currencyCode,
+          status: 'POSTED',
+          totalDebitCents: original.totalDebitCents,
+          totalCreditCents: original.totalCreditCents,
+          memo: reversalMemo,
+          postedBy: context.actorId,
+          correlationId: context.correlationId,
+          reversalOfJournalId: original.id,
+          reversalReason: input.reason,
+          lines: {
+            create: original.lines
+              .slice()
+              .sort((a, b) => a.lineNumber - b.lineNumber)
+              .map((line) => ({
+                lineNumber: line.lineNumber,
+                accountName: line.accountName,
+                accountCode: line.accountCode,
+                debitCents: line.creditCents,
+                creditCents: line.debitCents,
+                memo: reversalMemo,
+                dimensionType: line.dimensionType,
+                dimensionId: line.dimensionId,
+              })),
+          },
+        },
+        include: { lines: true },
+      });
+
+      const updatedOriginal = await tx.accountingJournalEntry.update({
+        where: { id: original.id },
+        data: {
+          status: 'REVERSED',
+          reversedAt: new Date(),
+          reversedBy: context.actorId,
+          reversalReason: input.reason,
+        },
+        include: { lines: true },
+      });
+
+      return { original: updatedOriginal, reversal };
+    });
+  },
 };
 
 export const accountingReportQueries = {
@@ -941,7 +1093,7 @@ export const accountingReportQueries = {
   }): Promise<AccountingJournalWithLines[]> {
     return prisma.accountingJournalEntry.findMany({
       where: {
-        status: 'POSTED',
+        status: { in: ['POSTED', 'REVERSED'] },
         ...(params.from || params.to
           ? {
               ledgerDate: {
@@ -959,7 +1111,7 @@ export const accountingReportQueries = {
   async countPostedJournals(params: { from?: Date; to?: Date }): Promise<number> {
     return prisma.accountingJournalEntry.count({
       where: {
-        status: 'POSTED',
+        status: { in: ['POSTED', 'REVERSED'] },
         ...(params.from || params.to
           ? {
               ledgerDate: {
@@ -968,6 +1120,49 @@ export const accountingReportQueries = {
               },
             }
           : {}),
+      },
+    });
+  },
+};
+
+export const accountingPeriodLockQueries = {
+  async list(params: { take: number; skip: number }): Promise<AccountingPeriodLockRow[]> {
+    return prisma.accountingPeriodLock.findMany({
+      orderBy: [{ periodEnd: 'desc' }, { lockedAt: 'desc' }],
+      take: params.take,
+      skip: params.skip,
+    });
+  },
+  async count(): Promise<number> {
+    return prisma.accountingPeriodLock.count();
+  },
+  async listOverlapping(params: {
+    from: Date;
+    to: Date;
+  }): Promise<AccountingPeriodLockRow[]> {
+    return prisma.accountingPeriodLock.findMany({
+      where: {
+        periodStart: { lte: params.to },
+        periodEnd: { gte: params.from },
+      },
+      orderBy: [{ periodEnd: 'desc' }, { lockedAt: 'desc' }],
+    });
+  },
+  async create(params: {
+    from: Date;
+    to: Date;
+    reason: string;
+    actorId: string;
+    correlationId: string;
+  }): Promise<AccountingPeriodLockRow> {
+    return prisma.accountingPeriodLock.create({
+      data: {
+        periodStart: params.from,
+        periodEnd: params.to,
+        status: 'LOCKED',
+        reason: params.reason,
+        lockedBy: params.actorId,
+        correlationId: params.correlationId,
       },
     });
   },
@@ -2093,6 +2288,118 @@ export const listOperationalLedgerHandler = wrapHandler(async (ctx) => {
 
 // ─── Accounting journals ────────────────────────────────────────────────────
 
+export const listAccountingPeriodLocksHandler = wrapHandler(async (ctx) => {
+  const qs = ctx.event.queryStringParameters ?? {};
+  const limit = parseJournalLimit(qs.limit);
+  const offset = parseJournalOffset(qs.offset);
+
+  const [rows, total] = await Promise.all([
+    accountingPeriodLockQueries.list({ take: limit, skip: offset }),
+    accountingPeriodLockQueries.count(),
+  ]);
+
+  return jsonResponse(200, {
+    items: rows.map(mapPeriodLock),
+    total,
+    limit,
+    offset,
+  });
+}, { requireAuth: false });
+
+export const lockAccountingPeriodHandler = wrapHandler(async (ctx) => {
+  const body = parseBody<PeriodLockRequest>(ctx.event);
+  if (!body.ok) {
+    return jsonResponse(400, { message: body.error });
+  }
+  if (body.value.confirm !== true) {
+    return jsonResponse(400, {
+      message: 'Set confirm=true to lock an accounting period.',
+    });
+  }
+
+  const from = parseOptionalReportDate(body.value.from, false);
+  const to = parseOptionalReportDate(body.value.to, true);
+  if (!body.value.from || from === 'invalid') {
+    return jsonResponse(422, { message: 'A valid from date is required.' });
+  }
+  if (!body.value.to || to === 'invalid') {
+    return jsonResponse(422, { message: 'A valid to date is required.' });
+  }
+  if (!from || !to) {
+    return jsonResponse(422, { message: 'Both from and to dates are required.' });
+  }
+  const periodStart = from;
+  const periodEnd = to;
+  if (periodStart > periodEnd) {
+    return jsonResponse(422, { message: 'from must be before to.' });
+  }
+
+  const reason = body.value.reason?.trim();
+  if (!reason) {
+    return jsonResponse(422, { message: 'A close reason is required to lock a period.' });
+  }
+
+  const overlapping = await accountingPeriodLockQueries.listOverlapping({
+    from: periodStart,
+    to: periodEnd,
+  });
+  if (overlapping.length > 0) {
+    const lock = overlapping[0]!;
+    return jsonResponse(409, {
+      message: `This period overlaps a locked period from ${periodDateLabel(
+        lock.periodStart,
+      )} to ${periodDateLabel(lock.periodEnd)}.`,
+      lock: mapPeriodLock(lock),
+    });
+  }
+
+  const [journals, journalTotal, operationalSnapshot] = await Promise.all([
+    accountingReportQueries.listPostedJournals({
+      from: periodStart,
+      to: periodEnd,
+      take: TRIAL_BALANCE_JOURNAL_LIMIT,
+    }),
+    accountingReportQueries.countPostedJournals({ from: periodStart, to: periodEnd }),
+    loadOperationalLedgerSnapshot(200),
+  ]);
+  const report = buildTrialBalanceReport({
+    journals,
+    journalTotal,
+    operationalSnapshot,
+    periodStart,
+    periodEnd,
+  });
+
+  if (report.summary.closeStatus === 'BLOCKED') {
+    return jsonResponse(409, {
+      message: 'Close readiness is blocked. Resolve critical checks before locking this period.',
+      closeStatus: report.summary.closeStatus,
+      closeChecks: report.closeChecks,
+    });
+  }
+  if (report.summary.closeStatus === 'NEEDS_REVIEW' && body.value.allowWarnings !== true) {
+    return jsonResponse(409, {
+      message: 'Close readiness has warnings. Set allowWarnings=true after accounting review.',
+      closeStatus: report.summary.closeStatus,
+      closeChecks: report.closeChecks,
+    });
+  }
+
+  const lock = await accountingPeriodLockQueries.create({
+    from: periodStart,
+    to: periodEnd,
+    reason,
+    actorId: ctx.actorUserId ?? 'system',
+    correlationId: ctx.correlationId,
+  });
+
+  return jsonResponse(201, {
+    lock: mapPeriodLock(lock),
+    closeStatus: report.summary.closeStatus,
+    summary: report.summary,
+  });
+}, { requireAuth: false });
+
 export const listAccountingJournalsHandler = wrapHandler(async (ctx) => {
   const qs = ctx.event.queryStringParameters ?? {};
   const limit = parseJournalLimit(qs.limit);
@@ -2160,6 +2467,84 @@ export const getAccountingTrialBalanceHandler = wrapHandler(async (ctx) => {
   }));
 }, { requireAuth: false });
 
+export const reverseAccountingJournalHandler = wrapHandler(async (ctx) => {
+  const journalId = ctx.event.pathParameters?.journalId ?? ctx.event.pathParameters?.id;
+  if (!journalId) {
+    return jsonResponse(400, { message: 'journalId path parameter is required.' });
+  }
+
+  const body = parseBody<JournalReversalRequest>(ctx.event);
+  if (!body.ok) {
+    return jsonResponse(400, { message: body.error });
+  }
+  if (body.value.confirm !== true) {
+    return jsonResponse(400, { message: 'Set confirm=true to reverse a journal.' });
+  }
+
+  const reason = body.value.reason?.trim();
+  if (!reason) {
+    return jsonResponse(422, { message: 'A reversal reason is required.' });
+  }
+
+  const reversalDate = parseOptionalReportDate(body.value.reversalDate, false);
+  if (reversalDate === 'invalid') {
+    return jsonResponse(422, { message: 'Invalid reversalDate. Use an ISO date or timestamp.' });
+  }
+  const effectiveReversalDate = reversalDate ?? new Date();
+
+  const original = await accountingJournalQueries.findById(journalId);
+  if (!original) {
+    return jsonResponse(404, { message: 'Journal not found.' });
+  }
+  if (original.reversalOfJournalId) {
+    return jsonResponse(409, { message: 'Reversal journals cannot be reversed from this action.' });
+  }
+  if (original.status === 'REVERSED') {
+    const reversal = await accountingJournalQueries.findReversalForJournal(original.id);
+    return jsonResponse(409, {
+      message: 'Journal is already reversed.',
+      original: mapJournal(original),
+      reversal: reversal ? mapJournal(reversal) : null,
+    });
+  }
+
+  const locks = await accountingPeriodLockQueries.listOverlapping({
+    from: original.ledgerDate < effectiveReversalDate ? original.ledgerDate : effectiveReversalDate,
+    to: original.ledgerDate > effectiveReversalDate ? original.ledgerDate : effectiveReversalDate,
+  });
+  const originalLock = findLockForDate(original.ledgerDate, locks);
+  if (originalLock) {
+    return jsonResponse(409, {
+      message: `Journal ${original.journalNumber} is in locked period ${periodDateLabel(
+        originalLock.periodStart,
+      )} to ${periodDateLabel(originalLock.periodEnd)}.`,
+    });
+  }
+  const reversalLock = findLockForDate(effectiveReversalDate, locks);
+  if (reversalLock) {
+    return jsonResponse(409, {
+      message: `Reversal date is in locked period ${periodDateLabel(
+        reversalLock.periodStart,
+      )} to ${periodDateLabel(reversalLock.periodEnd)}.`,
+    });
+  }
+
+  const result = await accountingJournalQueries.reverseJournal(
+    original,
+    { reason, reversalDate: effectiveReversalDate },
+    {
+      actorId: ctx.actorUserId ?? 'system',
+      correlationId: ctx.correlationId,
+    },
+  );
+
+  return jsonResponse(201, {
+    original: mapJournal(result.original),
+    reversal: mapJournal(result.reversal),
+    summary: summarizeJournals([mapJournal(result.original), mapJournal(result.reversal)]),
+  });
+}, { requireAuth: false });
+
 export const postOperationalLedgerJournalsHandler = wrapHandler(async (ctx) => {
   const body = parseBody<JournalPostRequest>(ctx.event);
   if (!body.ok) {
@@ -2187,14 +2572,37 @@ export const postOperationalLedgerJournalsHandler = wrapHandler(async (ctx) => {
   const candidates = sourceEntries
     .filter(isPostableOperationalEntry)
     .slice(0, limit);
+  const lockWindow =
+    candidates.length > 0
+      ? candidates.reduce(
+          (window, entry) => {
+            const ledgerDate = new Date(entry.ledgerDate);
+            return {
+              from: ledgerDate < window.from ? ledgerDate : window.from,
+              to: ledgerDate > window.to ? ledgerDate : window.to,
+            };
+          },
+          {
+            from: new Date(candidates[0]!.ledgerDate),
+            to: new Date(candidates[0]!.ledgerDate),
+          },
+        )
+      : null;
+  const periodLocks = lockWindow
+    ? await accountingPeriodLockQueries.listOverlapping(lockWindow)
+    : [];
+  const unlockedCandidates = candidates.filter(
+    (entry) => !findLockForDate(new Date(entry.ledgerDate), periodLocks),
+  );
 
   const posted: AccountingJournalResponse[] = [];
   const skipped = {
     notPostable: sourceEntries.length - candidates.length,
+    lockedPeriod: candidates.length - unlockedCandidates.length,
     existing: 0,
   };
 
-  for (const entry of candidates) {
+  for (const entry of unlockedCandidates) {
     const existing = await accountingJournalQueries.findBySource(entry);
     if (existing) {
       skipped.existing += 1;

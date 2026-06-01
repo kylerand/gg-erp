@@ -346,13 +346,14 @@
         <h1>Golfin Garage ERP Project Overview</h1>
         <p class="lede">
           High-level status after the planning review-pack, accounting operational-ledger,
-          journal-posting, trial-balance close-readiness, and QA allowlist cleanup slices. The app has moved past polished static screens into a usable
+          journal-posting, trial-balance close-readiness, QA allowlist cleanup, and in-progress
+          accounting period-control slices. The app has moved past polished static screens into a usable
           shop-ops ERP foundation, but ShopMonkey cutover remains blocked until complete parts and
           purchase-order source exports are captured.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 1, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 169</span>
+          <span class="chip">Baseline: origin/main through PR 170</span>
           <span class="chip">Active slice: Accounting reversals and period locks</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
@@ -448,13 +449,13 @@
               <li>
                 Accounting is still integration-first, but ready operational ledger entries now
                 promote into first-party immutable journals and those journals now feed a deployed
-                trial balance with close-readiness blockers. Reversals, period locks, and
-                invoice/payment document depth remain future maturity work.
+                trial balance with close-readiness blockers. This branch adds reversal and period
+                lock workflows; invoice/payment document depth remains future maturity work.
               </li>
               <li>
-                API smoke route exceptions are back to zero on deployed main after the
-                trial-balance report route reached the live authorizer path and the QA allowlist was
-                cleaned up.
+                API smoke route exceptions are back to zero on deployed main after PR 170. This
+                branch temporarily adds three pending-deploy accounting route exceptions for period
+                locks and journal reversals.
               </li>
             </ul>
           </div>
@@ -494,8 +495,8 @@
                 route misses.
               </td>
               <td>
-                Keep status docs current, add accounting reversals and period locks, and run live
-                UAT scripts by role.
+                Deploy accounting period controls, remove pending route exceptions after CD, and
+                run live UAT scripts by role.
               </td>
             </tr>
             <tr>
@@ -529,8 +530,8 @@
               </td>
               <td>The app behaves like one ERP, not a collection of good module pages.</td>
               <td>
-                Extend trial-balance close-readiness into reversal and period-lock workflows,
-                harden read models and freshness signals, and complete setup/configuration domains.
+                Deploy reversal and period-lock workflows, harden read models and freshness
+                signals, and complete setup/configuration domains.
               </td>
             </tr>
             <tr>
@@ -642,14 +643,15 @@
           <div class="module-card">
             <header>
               <h3>Accounting And QuickBooks</h3>
-              <span class="pill doing">66%</span>
+              <span class="pill doing">69%</span>
             </header>
-            <div class="bar warn"><span style="width: 66%"></span></div>
+            <div class="bar warn"><span style="width: 69%"></span></div>
             <p>
               QuickBooks integration, sync status, reconciliation, payable review, mapping admin,
               reference views, an operational ledger, guarded journal posting, and a trial-balance
-              close-readiness report now exist. Full ERP accounting still needs period locks,
-              richer invoices/payments, reversal flows, and a clean webhook error path.
+              close-readiness report now exist. This branch adds persisted period locks, locked
+              posting enforcement, and journal reversals. Full ERP accounting still needs richer
+              invoices/payments, external close packages, and a clean webhook error path.
             </p>
           </div>
 
@@ -736,9 +738,9 @@
               <td>Latest production baseline</td>
               <td><span class="pill done">Merged</span></td>
               <td>
-                <code>origin/main</code> is through PR 169 after the accounting trial-balance
-                deploy. This cleanup branch removes the temporary QA route allowance so deployed
-                API smoke returns to zero known route exceptions.
+                <code>origin/main</code> is through PR 170 after the accounting trial-balance
+                deploy and route-allowlist cleanup. This branch adds accounting period locks and
+                journal reversals.
               </td>
             </tr>
             <tr>
@@ -746,9 +748,10 @@
               <td><span class="pill done">Green</span></td>
               <td>
                 Latest main CI, QA smoke, QA coverage, Pages, and CD runs completed successfully
-                after PR 169 merged. The latest CD path proved the accounting trial-balance route
-                live at the protected API authorizer path; this branch verifies API smoke with no
-                temporary route allowance.
+                after PR 170 merged; CD was not needed for the docs/QA-only cleanup branch. The
+                latest CD path proved the accounting trial-balance route live at the protected API
+                authorizer path; this branch will require backend CD for the new period-control
+                routes.
               </td>
             </tr>
             <tr>
@@ -756,7 +759,8 @@
               <td><span class="pill info">Broad</span></td>
               <td>
                 Current smoke discovery covers 189 deployed API routes after the accounting
-                trial-balance deploy and cleanup.
+                trial-balance deploy and cleanup. This branch discovers 192 routes after adding
+                three accounting period-control routes.
               </td>
             </tr>
             <tr>
@@ -770,16 +774,18 @@
               <td>
                 The registry defines live accounting-ledger and accounting-journal objects and
                 Accounting workspace links in addition to the existing planning, inventory,
-                reporting, and integration destinations. The trial-balance report now lives inside
-                the accounting ledger workspace.
+                reporting, and integration destinations. The accounting ledger workspace now owns
+                trial balance, period locks, and journal reversal actions.
               </td>
             </tr>
             <tr>
               <td>Known route exceptions</td>
-              <td><span class="pill done">0 Exceptions</span></td>
+              <td><span class="pill watch">3 Pending Deploy</span></td>
               <td>
-                <code>known-broken.json</code> is empty. API smoke should fail if any deployed route
-                regresses or if a fixed route remains incorrectly allowlisted.
+                <code>known-broken.json</code> contains short-lived pending-deploy entries for
+                <code>GET|POST /accounting/period-locks</code> and
+                <code>POST /accounting/journals/{journalId}/reverse</code>. Remove them after CD
+                deploys the Terraform routes and live smoke confirms requests reach Lambda.
               </td>
             </tr>
           </tbody>
@@ -805,8 +811,13 @@
             work-order provenance, and version diff workflows need a heavier change-control gate.
           </li>
           <li>
-            <strong>Add accounting reversals and period locks:</strong> use posted journals and the
-            close-readiness checks as the source for reversal/close workflows.
+            <strong>Deploy and clean accounting period controls:</strong> land the period-lock and
+            journal-reversal routes, prove CD/live smoke, then remove the pending-deploy QA route
+            exceptions.
+          </li>
+          <li>
+            <strong>Deepen accounting documents:</strong> add richer invoice/payment document
+            lifecycle and external close-package delivery after close policy is chosen.
           </li>
         </ol>
       </section>

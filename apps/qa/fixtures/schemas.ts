@@ -723,6 +723,10 @@ const accountingJournal = z.object({
   memo: z.string().nullable(),
   postedAt: isoDate,
   postedBy: z.string().nullable(),
+  reversalOfJournalId: uuid.nullable(),
+  reversedAt: isoDate.nullable(),
+  reversedBy: z.string().nullable(),
+  reversalReason: z.string().nullable(),
   correlationId: z.string().nullable(),
   lines: z.array(accountingJournalLine),
 });
@@ -748,9 +752,52 @@ const accountingJournalPostResult = z.object({
   postedCount: positiveInt,
   skipped: z.object({
     notPostable: positiveInt,
+    lockedPeriod: positiveInt,
     existing: positiveInt,
   }),
   summary: accountingJournalSummary,
+});
+
+const accountingJournalReverseResult = z.object({
+  original: accountingJournal,
+  reversal: accountingJournal,
+  summary: accountingJournalSummary,
+});
+
+const accountingPeriodLock = z.object({
+  id: uuid,
+  periodStart: isoDate,
+  periodEnd: isoDate,
+  status: z.literal('LOCKED'),
+  reason: z.string(),
+  lockedAt: isoDate,
+  lockedBy: z.string().nullable(),
+  correlationId: z.string().nullable(),
+});
+
+const accountingPeriodLocks = z.object({
+  items: z.array(accountingPeriodLock),
+  total: positiveInt,
+  limit: positiveInt,
+  offset: positiveInt,
+});
+
+const accountingPeriodLockResult = z.object({
+  lock: accountingPeriodLock,
+  closeStatus: z.enum(['READY', 'NEEDS_REVIEW', 'BLOCKED']),
+  summary: z.object({
+    accountCount: positiveInt,
+    postedJournalCount: positiveInt,
+    totalDebitCents: z.number(),
+    totalCreditCents: z.number(),
+    outOfBalanceCents: z.number(),
+    unpostedOperationalCount: positiveInt,
+    unpostedOperationalAmountCents: z.number(),
+    reviewItemCount: positiveInt,
+    integrationExceptionCount: positiveInt,
+    truncated: z.boolean(),
+    closeStatus: z.enum(['READY', 'NEEDS_REVIEW', 'BLOCKED']),
+  }),
 });
 
 const accountingTrialBalance = z.object({
@@ -915,6 +962,13 @@ const ROUTES: RouteEntry[] = [
   { method: 'GET', template: '/accounting/operational-ledger', schema: operationalLedger },
   { method: 'GET', template: '/accounting/journals', schema: accountingJournals },
   { method: 'GET', template: '/accounting/reports/trial-balance', schema: accountingTrialBalance },
+  { method: 'GET', template: '/accounting/period-locks', schema: accountingPeriodLocks },
+  { method: 'POST', template: '/accounting/period-locks', schema: accountingPeriodLockResult },
+  {
+    method: 'POST',
+    template: '/accounting/journals/{journalId}/reverse',
+    schema: accountingJournalReverseResult,
+  },
   {
     method: 'POST',
     template: '/accounting/journals/post-operational-ledger',

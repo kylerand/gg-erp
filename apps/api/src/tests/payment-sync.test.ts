@@ -27,7 +27,9 @@ test('accounting webhook Lambda entry exports the handler name Terraform invokes
   assert.equal(webhookLambdaHandler, webhookHandler);
 });
 
-function createMockPaymentSyncQueries(): PaymentSyncQueries {
+function createMockPaymentSyncQueries(
+  captures?: Array<{ record: PaymentSyncRecord; correlationId: string }>,
+): PaymentSyncQueries {
   const records = new Map<string, PaymentSyncRecord>();
   return {
     async findById(id: string) {
@@ -47,6 +49,9 @@ function createMockPaymentSyncQueries(): PaymentSyncQueries {
     },
     async save(record: PaymentSyncRecord) {
       records.set(record.id, { ...record });
+    },
+    async captureDocumentSnapshot(record: PaymentSyncRecord, correlationId: string) {
+      captures?.push({ record: { ...record }, correlationId });
     },
   };
 }
@@ -200,6 +205,32 @@ test('processPayment lifecycle PENDING → IN_PROGRESS → SYNCED', async () => 
     (e) => e.name === 'payment_sync.completed',
   );
   assert.ok(completedEvent, 'Expected payment_sync.completed event');
+});
+
+test('payment sync captures document snapshots for webhook and processing states', async () => {
+  const captures: Array<{ record: PaymentSyncRecord; correlationId: string }> = [];
+  const { service } = createService({
+    queries: createMockPaymentSyncQueries(captures),
+  });
+
+  const record = await service.createFromWebhook(
+    {
+      qbPaymentId: 'qb-pay-snapshot',
+      qbInvoiceId: 'qb-inv-snapshot',
+      amountCents: 42000,
+      paymentMethod: 'Card',
+      paymentDate: '2026-05-31',
+    },
+    context,
+  );
+  await service.processPayment(record.id, context);
+
+  assert.deepEqual(
+    captures.map((capture) => capture.record.state),
+    [PaymentSyncState.PENDING, PaymentSyncState.IN_PROGRESS, PaymentSyncState.SYNCED],
+  );
+  assert.ok(captures.every((capture) => capture.correlationId === context.correlationId));
+  assert.equal(captures[2]?.record.amountCents, 42000);
 });
 
 test('processPayment failure transitions to FAILED with error message and increments attemptCount', async () => {

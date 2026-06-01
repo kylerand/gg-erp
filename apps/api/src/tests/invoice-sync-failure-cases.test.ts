@@ -14,7 +14,9 @@ import {
 import { InvoiceSyncProcessor } from '../contexts/accounting/invoiceSyncProcessor.service.js';
 import type { MappingService } from '../contexts/accounting/mapping.service.js';
 
-function createMockInvoiceSyncQueries(): InvoiceSyncQueries {
+function createMockInvoiceSyncQueries(
+  captures?: Array<{ record: InvoiceSyncRecord; correlationId: string }>,
+): InvoiceSyncQueries {
   const records = new Map<string, InvoiceSyncRecord>();
   return {
     async findById(id: string) {
@@ -27,6 +29,9 @@ function createMockInvoiceSyncQueries(): InvoiceSyncQueries {
     },
     async save(record: InvoiceSyncRecord, _correlationId: string) {
       records.set(record.id, { ...record });
+    },
+    async captureDocumentSnapshot(record: InvoiceSyncRecord, correlationId: string) {
+      captures?.push({ record: { ...record }, correlationId });
     },
   };
 }
@@ -127,6 +132,40 @@ test('invoice sync marks outbox record as FAILED when publish throws', async () 
   assert.equal(failedRecord.state, 'FAILED');
   assert.equal(failedRecord.failureReason, 'event publish failed');
   assert.ok(failedRecord.failedAt, 'Failed outbox record should track failedAt timestamp');
+});
+
+test('invoice sync captures document snapshots for lifecycle transitions', async () => {
+  const captures: Array<{ record: InvoiceSyncRecord; correlationId: string }> = [];
+  const service = new InvoiceSyncService({
+    audit: new InMemoryAuditSink(),
+    publisher: new InMemoryEventPublisher(),
+    outbox: new InMemoryOutbox(),
+    observability: ConsoleObservabilityHooks,
+    queries: createMockInvoiceSyncQueries(captures),
+  });
+  const context = {
+    correlationId: 'inv-snapshot-1',
+    actorId: 'accounting-user',
+    module: 'test',
+  };
+
+  const record = await service.createRecord(
+    {
+      invoiceNumber: 'INV-SNAP-1',
+      workOrderId: 'wo-snap-1',
+      provider: 'QUICKBOOKS',
+    },
+    context,
+  );
+  await service.startSync(record.id, context);
+  await service.markSuccess(record.id, 'QB-INV-SNAP-1', context);
+
+  assert.deepEqual(
+    captures.map((capture) => capture.record.state),
+    [InvoiceSyncState.PENDING, InvoiceSyncState.IN_PROGRESS, InvoiceSyncState.SYNCED],
+  );
+  assert.ok(captures.every((capture) => capture.correlationId === context.correlationId));
+  assert.equal(captures[2]?.record.externalReference, 'QB-INV-SNAP-1');
 });
 
 // ─── InvoiceSyncProcessor preflight tests ────────────────────────────────────

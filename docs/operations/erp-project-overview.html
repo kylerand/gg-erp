@@ -435,8 +435,9 @@
               <li>
                 Planning now has routing/job-card, build-configuration, and BOM masters with
                 effective windows, costing metadata, QC/evidence seeding, and approval history.
-                It still needs formal ECO approval packages and deeper work-order back-links before
-                it matches ERPNext-style manufacturing depth.
+                Work-order execution now links back to the source configuration, BOM, route template,
+                and ECO history, leaving formal ECO approval packages as the next manufacturing-depth
+                gap.
               </li>
               <li>
                 Accounting is still integration-first; internal GL, financial reports, and ledger
@@ -611,9 +612,9 @@
           <div class="module-card">
             <header>
               <h3>Planning Masters</h3>
-              <span class="pill doing">84%</span>
+              <span class="pill doing">86%</span>
             </header>
-            <div class="bar good"><span style="width: 84%"></span></div>
+            <div class="bar good"><span style="width: 86%"></span></div>
             <p>
               Build package selection no longer depends only on historical work orders. Operators
               can author build configurations, lock/release them, create BOM revisions from active
@@ -622,8 +623,9 @@
               Route activation/retirement, configuration lock/release, and BOM approval now require
               approval notes, expose the latest change event inline, compare live versions, roll
               events into an ECO report, prefill new revision drafts from existing masters, and
-              expose full engineering-change history through a dedicated route. Remaining depth is
-              formal ECO approval packages and deeper work-order back-links.
+              expose full engineering-change history through a dedicated route. Work orders now
+              surface their source configuration, BOM, route template, and ECO history. Remaining
+              depth is formal ECO approval packages and report-pack review.
             </p>
           </div>
 
@@ -788,8 +790,8 @@
           </li>
           <li>
             <strong>Deepen planning execution:</strong> add formal ECO approval packages and
-            work-order back-links on top of the route/configuration/BOM approval history and version
-            diff workflows.
+            report-pack review on top of the route/configuration/BOM approval history, work-order
+            provenance, and version diff workflows.
           </li>
           <li>
             <strong>Move toward ERP ledgers:</strong> start internal accounting ledger design and

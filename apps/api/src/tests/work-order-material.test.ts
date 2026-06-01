@@ -142,6 +142,129 @@ test('getWoDetailHandler returns material quantities and inline reservations', a
   assert.equal(payload.workOrder.reservations[0].workOrderPartId, WORK_ORDER_PART_ID);
 });
 
+test('getWoDetailHandler returns build provenance from planning masters', async () => {
+  let rawCall = 0;
+  setTicketHandlerPrismaForTests({
+    woOrder: {
+      async findUnique() {
+        return {
+          id: WORK_ORDER_ID,
+          workOrderNumber: 'WO-1001',
+          title: 'Final assembly',
+          customerReference: 'CUST-1',
+          assetReference: 'Club Car DS',
+          stockLocation: { locationName: 'Main Shop' },
+          status: 'READY',
+          dueAt: null,
+          statusHistory: [],
+          operations: [],
+          parts: [],
+        };
+      },
+    },
+    customer: {
+      async findFirst() {
+        return null;
+      },
+    },
+    cartVehicle: {
+      async findFirst() {
+        return null;
+      },
+    },
+    quote: {
+      async findMany() {
+        return [];
+      },
+    },
+    salesOpportunity: {
+      async findMany() {
+        return [];
+      },
+    },
+    salesActivity: {
+      async findMany() {
+        return [];
+      },
+    },
+    async $queryRaw() {
+      rawCall += 1;
+      if (rawCall === 1) {
+        return [
+          {
+            buildConfigurationId: '00000000-0000-4000-8000-000000000101',
+            configurationCode: 'CFG-GG4-LIFT',
+            configurationVersion: 3,
+            configurationStatus: 'RELEASED',
+            configurationReleasedAt: new Date('2026-05-01T12:00:00.000Z'),
+            configurationUpdatedAt: new Date('2026-05-01T12:00:00.000Z'),
+            bomId: '00000000-0000-4000-8000-000000000201',
+            bomCode: 'BOM-GG4-LIFT',
+            bomRevision: 2,
+            bomStatus: 'APPROVED',
+            bomApprovedAt: new Date('2026-05-02T12:00:00.000Z'),
+            bomLineCount: 12,
+            routingTemplateId: '00000000-0000-4000-8000-000000000301',
+            routeCode: 'RT-GG4-LIFT',
+            routeName: 'Lift build route',
+            routeVersion: 4,
+            routeStatus: 'ACTIVE',
+            routeStepCount: 8,
+          },
+        ];
+      }
+      if (rawCall === 2) {
+        return [
+          {
+            id: '00000000-0000-4000-8000-000000000401',
+            entityType: 'BOM',
+            entityId: '00000000-0000-4000-8000-000000000201',
+            recordCode: 'BOM-GG4-LIFT',
+            versionLabel: 'rev 2',
+            changeKind: 'APPROVED',
+            changeSummary: 'Approved ECO-101 parts revision.',
+            approvalNote: 'Ready for production',
+            approvedBy: 'shop.manager@example.com',
+            approvedAt: new Date('2026-05-02T12:00:00.000Z'),
+            createdAt: new Date('2026-05-02T12:00:00.000Z'),
+          },
+        ];
+      }
+      return [];
+    },
+  } as unknown as Partial<PrismaClient>);
+
+  const response = await getWoDetailHandler({
+    pathParameters: { id: WORK_ORDER_ID },
+  });
+
+  assert.equal(response.statusCode, 200);
+  const payload = JSON.parse(response.body) as {
+    workOrder: {
+      buildProvenance?: {
+        configuration?: { code: string; version: number; status: string };
+        bom?: { code: string; revision: number; lineCount: number };
+        routingTemplate?: { code: string; version: number; stepCount: number };
+        latestChanges: Array<{ recordCode: string; approvalNote?: string }>;
+      };
+    };
+  };
+
+  assert.equal(payload.workOrder.buildProvenance?.configuration?.code, 'CFG-GG4-LIFT');
+  assert.equal(payload.workOrder.buildProvenance?.configuration?.version, 3);
+  assert.equal(payload.workOrder.buildProvenance?.configuration?.status, 'RELEASED');
+  assert.equal(payload.workOrder.buildProvenance?.bom?.code, 'BOM-GG4-LIFT');
+  assert.equal(payload.workOrder.buildProvenance?.bom?.revision, 2);
+  assert.equal(payload.workOrder.buildProvenance?.bom?.lineCount, 12);
+  assert.equal(payload.workOrder.buildProvenance?.routingTemplate?.code, 'RT-GG4-LIFT');
+  assert.equal(payload.workOrder.buildProvenance?.routingTemplate?.stepCount, 8);
+  assert.equal(payload.workOrder.buildProvenance?.latestChanges[0]?.recordCode, 'BOM-GG4-LIFT');
+  assert.equal(
+    payload.workOrder.buildProvenance?.latestChanges[0]?.approvalNote,
+    'Ready for production',
+  );
+});
+
 test('getWoDetailHandler returns resolved customer, cart, sales, and status context', async () => {
   const CUSTOMER_ID = '00000000-0000-4000-8000-000000000010';
   const CART_ID = '00000000-0000-4000-8000-000000000011';

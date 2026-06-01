@@ -1382,11 +1382,85 @@ interface WorkOrderCommercialContext {
   }>;
 }
 
+interface WorkOrderBuildProvenance {
+  configuration?: {
+    id: string;
+    code: string;
+    version: number;
+    status: string;
+    releasedAt?: string;
+    updatedAt?: string;
+  };
+  bom?: {
+    id: string;
+    code: string;
+    revision: number;
+    status: string;
+    approvedAt?: string;
+    lineCount: number;
+  };
+  routingTemplate?: {
+    id: string;
+    code: string;
+    name: string;
+    version: number;
+    status: string;
+    stepCount: number;
+  };
+  latestChanges: Array<{
+    id: string;
+    entityType: 'CONFIGURATION' | 'BOM' | 'ROUTE';
+    recordCode: string;
+    versionLabel: string;
+    changeKind: string;
+    changeSummary: string;
+    approvalNote?: string;
+    approvedBy?: string;
+    approvedAt?: string;
+    createdAt: string;
+  }>;
+}
+
 const EMPTY_COMMERCIAL_CONTEXT: WorkOrderCommercialContext = {
   quotes: [],
   opportunities: [],
   activities: [],
 };
+
+interface WorkOrderBuildProvenanceHeaderRow {
+  buildConfigurationId: string | null;
+  configurationCode: string | null;
+  configurationVersion: number | null;
+  configurationStatus: string | null;
+  configurationReleasedAt: Date | string | null;
+  configurationUpdatedAt: Date | string | null;
+  bomId: string | null;
+  bomCode: string | null;
+  bomRevision: number | null;
+  bomStatus: string | null;
+  bomApprovedAt: Date | string | null;
+  bomLineCount: number | bigint | null;
+  routingTemplateId: string | null;
+  routeCode: string | null;
+  routeName: string | null;
+  routeVersion: number | null;
+  routeStatus: string | null;
+  routeStepCount: number | bigint | null;
+}
+
+interface WorkOrderBuildProvenanceChangeRow {
+  id: string;
+  entityType: 'CONFIGURATION' | 'BOM' | 'ROUTE';
+  entityId: string;
+  recordCode: string;
+  versionLabel: string;
+  changeKind: string;
+  changeSummary: string;
+  approvalNote: string | null;
+  approvedBy: string | null;
+  approvedAt: Date | string | null;
+  createdAt: Date | string;
+}
 
 interface WorkOrderReservationRow {
   id: string;
@@ -1471,8 +1545,30 @@ function optionalIso(value?: Date | null): string | undefined {
   return value ? value.toISOString() : undefined;
 }
 
+function isoFromDb(value?: Date | string | null): string | undefined {
+  if (!value) return undefined;
+  return value instanceof Date ? value.toISOString() : value;
+}
+
 function isUuid(value?: string | null): value is string {
   return Boolean(value && UUID_RE.test(value));
+}
+
+function toBuildProvenanceChange(
+  row: WorkOrderBuildProvenanceChangeRow,
+): WorkOrderBuildProvenance['latestChanges'][number] {
+  return {
+    id: row.id,
+    entityType: row.entityType,
+    recordCode: row.recordCode,
+    versionLabel: row.versionLabel,
+    changeKind: row.changeKind,
+    changeSummary: row.changeSummary,
+    approvalNote: row.approvalNote ?? undefined,
+    approvedBy: row.approvedBy ?? undefined,
+    approvedAt: isoFromDb(row.approvedAt),
+    createdAt: isoFromDb(row.createdAt) ?? new Date(0).toISOString(),
+  };
 }
 
 function toCustomerProfileResponse(r: {
@@ -1710,6 +1806,173 @@ async function buildCommercialContext(order: {
   };
 }
 
+async function loadWorkOrderBuildProvenance(
+  workOrderId: string,
+): Promise<WorkOrderBuildProvenance | undefined> {
+  const [header] = await getPrisma().$queryRaw<WorkOrderBuildProvenanceHeaderRow[]>`
+    SELECT
+      pwo.build_configuration_id AS "buildConfigurationId",
+      bc.configuration_code AS "configurationCode",
+      bc.configuration_version AS "configurationVersion",
+      bc.configuration_status::text AS "configurationStatus",
+      bc.released_at AS "configurationReleasedAt",
+      bc.updated_at AS "configurationUpdatedAt",
+      pwo.bom_id AS "bomId",
+      b.bom_code AS "bomCode",
+      b.revision AS "bomRevision",
+      b.bom_status::text AS "bomStatus",
+      b.approved_at AS "bomApprovedAt",
+      coalesce(bom_lines.line_count, 0)::int AS "bomLineCount",
+      route.routing_template_id AS "routingTemplateId",
+      route.route_code AS "routeCode",
+      route.route_name AS "routeName",
+      route.route_version AS "routeVersion",
+      route.template_status AS "routeStatus",
+      coalesce(route.step_count, 0)::int AS "routeStepCount"
+    FROM work_orders.work_orders wo
+    LEFT JOIN planning.work_orders pwo
+      ON pwo.id = wo.id OR pwo.work_order_number = wo.work_order_number
+    LEFT JOIN planning.build_configurations bc
+      ON bc.id::text = pwo.build_configuration_id
+    LEFT JOIN planning.build_boms b
+      ON b.id::text = pwo.bom_id
+    LEFT JOIN LATERAL (
+      SELECT count(*)::int AS line_count
+      FROM planning.build_bom_lines bl
+      WHERE bl.bom_id = b.id
+    ) bom_lines ON true
+    LEFT JOIN LATERAL (
+      SELECT
+        rt.id::text AS routing_template_id,
+        rt.route_code,
+        rt.route_name,
+        rt.route_version,
+        rt.template_status::text AS template_status,
+        count(distinct rts_all.id)::int AS step_count,
+        min(op.sequence_no) AS first_sequence
+      FROM work_orders.work_order_operations op
+      JOIN planning.routing_template_steps rts
+        ON rts.id = op.routing_template_step_id
+      JOIN planning.routing_templates rt
+        ON rt.id = rts.routing_template_id
+      LEFT JOIN planning.routing_template_steps rts_all
+        ON rts_all.routing_template_id = rt.id
+      WHERE op.work_order_id = wo.id
+      GROUP BY rt.id, rt.route_code, rt.route_name, rt.route_version, rt.template_status
+      ORDER BY first_sequence ASC
+      LIMIT 1
+    ) route ON true
+    WHERE wo.id = ${workOrderId}::uuid
+    LIMIT 1
+  `;
+
+  if (!header?.buildConfigurationId && !header?.bomId && !header?.routingTemplateId) {
+    return undefined;
+  }
+
+  const latestChanges = await getPrisma().$queryRaw<WorkOrderBuildProvenanceChangeRow[]>`
+    WITH events AS (
+      SELECT
+        id::text AS id,
+        'CONFIGURATION'::text AS entity_type,
+        build_configuration_id::text AS entity_id,
+        configuration_code AS record_code,
+        concat('v', configuration_version::text) AS version_label,
+        change_kind::text AS change_kind,
+        change_summary,
+        approval_note,
+        coalesce(approved_by_ref, approved_by_user_id::text) AS approved_by,
+        approved_at,
+        created_at
+      FROM planning.build_configuration_change_events
+      UNION ALL
+      SELECT
+        id::text AS id,
+        'BOM'::text AS entity_type,
+        bom_id::text AS entity_id,
+        bom_code AS record_code,
+        concat('rev ', revision::text) AS version_label,
+        change_kind::text AS change_kind,
+        change_summary,
+        approval_note,
+        coalesce(approved_by_ref, approved_by_user_id::text) AS approved_by,
+        approved_at,
+        created_at
+      FROM planning.build_bom_change_events
+      UNION ALL
+      SELECT
+        id::text AS id,
+        'ROUTE'::text AS entity_type,
+        routing_template_id::text AS entity_id,
+        route_code AS record_code,
+        concat('v', route_version::text) AS version_label,
+        change_kind::text AS change_kind,
+        change_summary,
+        approval_note,
+        coalesce(approved_by_ref, approved_by_user_id::text) AS approved_by,
+        approved_at,
+        created_at
+      FROM planning.routing_template_change_events
+    )
+    SELECT
+      id,
+      entity_type AS "entityType",
+      entity_id AS "entityId",
+      record_code AS "recordCode",
+      version_label AS "versionLabel",
+      change_kind AS "changeKind",
+      change_summary AS "changeSummary",
+      approval_note AS "approvalNote",
+      approved_by AS "approvedBy",
+      approved_at AS "approvedAt",
+      created_at AS "createdAt"
+    FROM events
+    WHERE
+      (entity_type = 'CONFIGURATION' AND entity_id = ${header.buildConfigurationId ?? ''})
+      OR (entity_type = 'BOM' AND entity_id = ${header.bomId ?? ''})
+      OR (entity_type = 'ROUTE' AND entity_id = ${header.routingTemplateId ?? ''})
+    ORDER BY created_at DESC, id DESC
+    LIMIT 6
+  `;
+
+  return {
+    configuration:
+      header.buildConfigurationId && header.configurationCode
+        ? {
+            id: header.buildConfigurationId,
+            code: header.configurationCode,
+            version: Number(header.configurationVersion ?? 0),
+            status: header.configurationStatus ?? 'UNKNOWN',
+            releasedAt: isoFromDb(header.configurationReleasedAt),
+            updatedAt: isoFromDb(header.configurationUpdatedAt),
+          }
+        : undefined,
+    bom:
+      header.bomId && header.bomCode
+        ? {
+            id: header.bomId,
+            code: header.bomCode,
+            revision: Number(header.bomRevision ?? 0),
+            status: header.bomStatus ?? 'UNKNOWN',
+            approvedAt: isoFromDb(header.bomApprovedAt),
+            lineCount: Number(header.bomLineCount ?? 0),
+          }
+        : undefined,
+    routingTemplate:
+      header.routingTemplateId && header.routeCode
+        ? {
+            id: header.routingTemplateId,
+            code: header.routeCode,
+            name: header.routeName ?? header.routeCode,
+            version: Number(header.routeVersion ?? 0),
+            status: header.routeStatus ?? 'UNKNOWN',
+            stepCount: Number(header.routeStepCount ?? 0),
+          }
+        : undefined,
+    latestChanges: latestChanges.map(toBuildProvenanceChange),
+  };
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toQueueItem(order: any) {
   const ops: WoOperation[] = order.operations ?? [];
@@ -1752,6 +2015,7 @@ function toDetailItem(
   order: WoDetailOrder,
   reservations: WorkOrderReservationRow[] = [],
   commercialContext: WorkOrderCommercialContext = EMPTY_COMMERCIAL_CONTEXT,
+  buildProvenance?: WorkOrderBuildProvenance,
 ) {
   const ops: WoOperation[] = order.operations ?? [];
   const partLines: WoPart[] = order.parts ?? [];
@@ -1783,6 +2047,7 @@ function toDetailItem(
     cart: order.assetReference ?? '—',
     customerProfile: commercialContext.customerProfile,
     cartProfile: commercialContext.cartProfile,
+    buildProvenance,
     commercialContext: {
       quotes: commercialContext.quotes,
       opportunities: commercialContext.opportunities,
@@ -2008,7 +2273,10 @@ export const getWoDetailHandler = wrapHandler(
     });
 
     if (!order) return jsonResponse(404, { message: `Work order not found: ${id}` });
-    const commercialContext = await buildCommercialContext(order);
+    const [commercialContext, buildProvenance] = await Promise.all([
+      buildCommercialContext(order),
+      loadWorkOrderBuildProvenance(id),
+    ]);
 
     const reservations = await getPrisma().$queryRaw<WorkOrderReservationRow[]>`
     SELECT
@@ -2046,7 +2314,9 @@ export const getWoDetailHandler = wrapHandler(
       r.created_at DESC
   `;
 
-    return jsonResponse(200, { workOrder: toDetailItem(order, reservations, commercialContext) });
+    return jsonResponse(200, {
+      workOrder: toDetailItem(order, reservations, commercialContext, buildProvenance),
+    });
   },
   { requireAuth: false },
 );

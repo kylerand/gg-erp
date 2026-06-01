@@ -67,6 +67,90 @@ const executionWorkOrder = z.object({
   updatedAt: isoDate,
 });
 
+const executionWorkOrderQueueItem = z.object({
+  id: uuid,
+  number: z.string(),
+  title: z.string(),
+  customer: z.string(),
+  cart: z.string(),
+  bay: z.string(),
+  age: z.string(),
+  status: z.enum(['DRAFT', 'READY', 'SCHEDULED', 'IN_PROGRESS', 'BLOCKED', 'COMPLETED', 'CANCELLED']),
+  materialReadiness: z.enum(['READY', 'PARTIAL', 'NOT_READY']),
+  shortageCount: z.number().int().nonnegative().optional(),
+  reworkLoop: z.number().int().nonnegative(),
+  syncStatus: z.enum(['SYNCED', 'PENDING', 'FAILED']),
+  checklistCompletion: z.string(),
+  nextAction: z.string(),
+});
+
+const executionWorkOrderBuildProvenance = z.object({
+  configuration: z.object({
+    id: z.string(),
+    code: z.string(),
+    version: z.number().int().nonnegative(),
+    status: z.string(),
+    releasedAt: isoDate.optional(),
+    updatedAt: isoDate.optional(),
+  }).optional(),
+  bom: z.object({
+    id: z.string(),
+    code: z.string(),
+    revision: z.number().int().nonnegative(),
+    status: z.string(),
+    approvedAt: isoDate.optional(),
+    lineCount: z.number().int().nonnegative(),
+  }).optional(),
+  routingTemplate: z.object({
+    id: z.string(),
+    code: z.string(),
+    name: z.string(),
+    version: z.number().int().nonnegative(),
+    status: z.string(),
+    stepCount: z.number().int().nonnegative(),
+  }).optional(),
+  latestChanges: z.array(
+    z.object({
+      id: z.string(),
+      entityType: z.enum(['CONFIGURATION', 'BOM', 'ROUTE']),
+      recordCode: z.string(),
+      versionLabel: z.string(),
+      changeKind: z.string(),
+      changeSummary: z.string(),
+      approvalNote: z.string().optional(),
+      approvedBy: z.string().optional(),
+      approvedAt: isoDate.optional(),
+      createdAt: isoDate,
+    }),
+  ),
+});
+
+const executionWorkOrderDetail = z.object({
+  id: uuid,
+  number: z.string(),
+  title: z.string(),
+  customerReference: z.string().optional(),
+  assetReference: z.string().optional(),
+  customer: z.string(),
+  cart: z.string(),
+  customerProfile: z.unknown().optional(),
+  cartProfile: z.unknown().optional(),
+  buildProvenance: executionWorkOrderBuildProvenance.optional(),
+  commercialContext: z.unknown().optional(),
+  bay: z.string(),
+  status: z.enum(['DRAFT', 'READY', 'SCHEDULED', 'IN_PROGRESS', 'BLOCKED', 'COMPLETED', 'CANCELLED']),
+  eta: z.string(),
+  syncStatus: z.enum(['SYNCED', 'PENDING', 'FAILED']),
+  materialReadiness: z.enum(['READY', 'PARTIAL', 'NOT_READY']),
+  shortageCount: z.number().int().nonnegative().optional(),
+  reworkLoop: z.number().int().nonnegative(),
+  checklist: z.array(z.unknown()),
+  parts: z.array(z.unknown()),
+  reservations: z.array(z.unknown()),
+  notes: z.array(z.unknown()),
+  statusHistory: z.array(z.unknown()).optional(),
+});
+
 const cartVehicle = z.object({
   id: uuid,
   vin: z.string(),
@@ -577,6 +661,8 @@ const ROUTES: RouteEntry[] = [
   // Tickets / tasks
   { method: 'GET', template: '/tickets/work-orders', schema: paginated(executionWorkOrder) },
   { method: 'POST', template: '/tickets/work-orders', schema: z.object({ workOrder: executionWorkOrder }) },
+  { method: 'GET', template: '/tickets/wo-queue', schema: z.object({ items: z.array(executionWorkOrderQueueItem) }) },
+  { method: 'GET', template: '/tickets/wo-queue/{id}', schema: z.object({ workOrder: executionWorkOrderDetail }) },
   { method: 'GET', template: '/tickets/technician-tasks', schema: paginated(technicianTask) },
   { method: 'GET', template: '/tickets/tasks', schema: paginated(technicianTask) },
 

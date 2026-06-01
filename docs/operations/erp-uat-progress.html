@@ -295,11 +295,14 @@
                 Order creation now creates execution-layer work orders with operations, BOM part
                 demand, standard labor cost, source route-step traceability, and pending QC/evidence
                 gates from released planning packages. The live API smoke enforces the `POST
-                /tickets/work-orders` route with no pending-route allowance.
+                /tickets/work-orders` route with no pending-route allowance. Work-order detail now
+                reads build provenance through `GET /tickets/wo-queue/{id}` and links execution work
+                back to the released configuration, approved BOM, active route template, and latest
+                engineering-change history.
               </td>
               <td>
-                Add ECO/report drill-ins from released work orders back to the approved planning
-                masters that generated their operations and part demand.
+                Add formal ECO approval packages and report-pack actions once engineering-change
+                review workflows need sign-off bundles.
               </td>
             </tr>
             <tr>
@@ -350,11 +353,11 @@
                 page now also compares live configuration/BOM/route versions, rolls those events into
                 an ECO report, and preloads new revisions from existing master records. Engineering
                 changes also have a dedicated live history route backed by
-                <code>GET /planning/change-events</code>.
+                <code>GET /planning/change-events</code>, and execution work orders now link back to
+                their source configuration, BOM, route template, and filtered ECO history.
               </td>
               <td>
-                Add formal ECO approval packages and deeper work-order back-links as change volume
-                grows.
+                Add formal ECO approval packages and report-pack review flows as change volume grows.
               </td>
             </tr>
             <tr>

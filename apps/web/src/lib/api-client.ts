@@ -1116,6 +1116,47 @@ export interface WoOrderStatusHistory {
   createdAt: string;
 }
 
+export interface WoOrderBuildProvenanceChange {
+  id: string;
+  entityType: 'CONFIGURATION' | 'BOM' | 'ROUTE';
+  recordCode: string;
+  versionLabel: string;
+  changeKind: string;
+  changeSummary: string;
+  approvalNote?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  createdAt: string;
+}
+
+export interface WoOrderBuildProvenance {
+  configuration?: {
+    id: string;
+    code: string;
+    version: number;
+    status: string;
+    releasedAt?: string;
+    updatedAt?: string;
+  };
+  bom?: {
+    id: string;
+    code: string;
+    revision: number;
+    status: string;
+    approvedAt?: string;
+    lineCount: number;
+  };
+  routingTemplate?: {
+    id: string;
+    code: string;
+    name: string;
+    version: number;
+    status: string;
+    stepCount: number;
+  };
+  latestChanges: WoOrderBuildProvenanceChange[];
+}
+
 export interface WoOrderDetail {
   id: string;
   number: string;
@@ -1126,6 +1167,7 @@ export interface WoOrderDetail {
   cart: string;
   customerProfile?: WoOrderCustomerProfile;
   cartProfile?: WoOrderCartProfile;
+  buildProvenance?: WoOrderBuildProvenance;
   commercialContext?: {
     quotes: WoOrderQuoteSummary[];
     opportunities: WoOrderOpportunitySummary[];

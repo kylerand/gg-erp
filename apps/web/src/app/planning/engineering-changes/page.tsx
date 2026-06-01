@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { ClipboardList, FileText, RefreshCw, Search } from 'lucide-react';
 import { PageHeader } from '@gg-erp/ui';
 import {
@@ -49,12 +50,18 @@ function actorLabel(row: PlanningChangeEvent): string {
 }
 
 export default function EngineeringChangesPage() {
+  const searchParams = useSearchParams();
+  const routeSearch = searchParams.get('search') ?? '';
   const [rows, setRows] = useState<PlanningChangeEvent[]>([]);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(routeSearch);
   const [entityType, setEntityType] = useState<PlanningChangeEntityType | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
   const [reloadToken, setReloadToken] = useState(0);
+
+  useEffect(() => {
+    setSearch(routeSearch);
+  }, [routeSearch]);
 
   useEffect(() => {
     let active = true;

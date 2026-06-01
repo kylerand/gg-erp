@@ -155,6 +155,22 @@ const routingTemplateStep = z.object({
   evidenceRequired: z.boolean(),
 });
 
+const routingTemplateChangeEvent = z.object({
+  id: uuid,
+  routingTemplateId: uuid,
+  routeCode: z.string(),
+  routeVersion: z.number().int().positive(),
+  changeKind: z.enum(['CREATED', 'ACTIVATED', 'RETIRED', 'AUTO_RETIRED']),
+  previousStatus: z.enum(['DRAFT', 'ACTIVE', 'RETIRED']).optional(),
+  newStatus: z.enum(['DRAFT', 'ACTIVE', 'RETIRED']),
+  changeSummary: z.string(),
+  approvalNote: z.string().optional(),
+  approvedBy: z.string().optional(),
+  approvedAt: isoDate.optional(),
+  appliedBy: z.string().optional(),
+  createdAt: isoDate,
+});
+
 const routingTemplate = z.object({
   id: uuid,
   routeCode: z.string(),
@@ -175,6 +191,7 @@ const routingTemplate = z.object({
   estimatedMinutes: z.number().int().nonnegative(),
   estimatedLaborCostCents: z.number().int().nonnegative(),
   steps: z.array(routingTemplateStep),
+  changeEvents: z.array(routingTemplateChangeEvent),
 });
 
 // ─── Inventory ────────────────────────────────────────────────────────────

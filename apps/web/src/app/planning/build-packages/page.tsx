@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import {
   CheckCircle2,
   ClipboardList,
+  History,
   PackageCheck,
   Plus,
   RefreshCw,
@@ -169,6 +170,7 @@ export default function BuildPackagesPage() {
   const [routeEffectiveTo, setRouteEffectiveTo] = useState('');
   const [routeNotes, setRouteNotes] = useState('');
   const [routingSteps, setRoutingSteps] = useState<DraftRoutingStep[]>([defaultRoutingStep()]);
+  const [routeApprovalNotes, setRouteApprovalNotes] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let active = true;
@@ -407,10 +409,22 @@ export default function BuildPackagesPage() {
   }
 
   async function transitionRoute(template: RoutingTemplate, status: 'ACTIVE' | 'RETIRED'): Promise<void> {
+    const approvalNote = routeApprovalNotes[template.id]?.trim();
+    if (!approvalNote) {
+      toast.error('Add an approval note before changing route status.');
+      return;
+    }
     setSaving(true);
     try {
-      await transitionRoutingTemplate(template.id, status);
+      await transitionRoutingTemplate(template.id, status, {
+        approvalNote,
+        changeSummary:
+          status === 'ACTIVE'
+            ? `Approved activation of ${template.routeCode} v${template.routeVersion}.`
+            : `Approved retirement of ${template.routeCode} v${template.routeVersion}.`,
+      });
       toast.success(status === 'ACTIVE' ? 'Routing template activated' : 'Routing template retired');
+      setRouteApprovalNotes((current) => ({ ...current, [template.id]: '' }));
       reload();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to update routing template.');
@@ -1143,22 +1157,62 @@ export default function BuildPackagesPage() {
                         {template.configurationCode}
                       </div>
                     )}
+                    {template.changeEvents[0] && (
+                      <div className="mt-2 flex items-start gap-2 rounded-md bg-[#F7F1EA] px-3 py-2 text-xs text-[#4A4039]">
+                        <History className="mt-0.5 h-3.5 w-3.5 text-[#A85D18]" />
+                        <div>
+                          <div className="font-semibold text-[#211F1E]">
+                            {statusText(template.changeEvents[0].changeKind)} ·{' '}
+                            {formatDate(template.changeEvents[0].createdAt)}
+                          </div>
+                          <div>{template.changeEvents[0].changeSummary}</div>
+                          {template.changeEvents[0].approvalNote && (
+                            <div className="mt-1 text-[#6E625A]">
+                              {template.changeEvents[0].approvalNote}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={saving}
-                    onClick={() =>
-                      transitionRoute(
-                        template,
-                        template.templateStatus === 'ACTIVE' ? 'RETIRED' : 'ACTIVE',
-                      )
-                    }
-                  >
-                    <CheckCircle2 className="mr-2 h-4 w-4" />
-                    {template.templateStatus === 'ACTIVE' ? 'Retire' : 'Activate'}
-                  </Button>
+                  <div className="w-full space-y-2 sm:w-60">
+                    <Input
+                      aria-label="Route approval note"
+                      disabled={template.templateStatus === 'RETIRED'}
+                      value={routeApprovalNotes[template.id] ?? ''}
+                      onChange={(event) =>
+                        setRouteApprovalNotes((current) => ({
+                          ...current,
+                          [template.id]: event.target.value,
+                        }))
+                      }
+                      placeholder="Approval note / ECO"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      disabled={
+                        saving ||
+                        template.templateStatus === 'RETIRED' ||
+                        !(routeApprovalNotes[template.id] ?? '').trim()
+                      }
+                      onClick={() =>
+                        transitionRoute(
+                          template,
+                          template.templateStatus === 'ACTIVE' ? 'RETIRED' : 'ACTIVE',
+                        )
+                      }
+                    >
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
+                      {template.templateStatus === 'RETIRED'
+                        ? 'Retired'
+                        : template.templateStatus === 'ACTIVE'
+                          ? 'Retire'
+                          : 'Activate'}
+                    </Button>
+                  </div>
                 </div>
                 {template.steps.slice(0, 4).map((step) => (
                   <div

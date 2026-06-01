@@ -183,6 +183,19 @@ export interface RoutingTemplateStep {
   evidenceRequired: boolean;
 }
 
+export interface RoutingTemplateChangeEvent {
+  id: string;
+  routingTemplateId: string;
+  changeKind: 'CREATED' | 'ACTIVATED' | 'RETIRED' | 'AUTO_RETIRED';
+  previousStatus?: RoutingTemplateState;
+  newStatus: RoutingTemplateState;
+  changeSummary: string;
+  approvalNote?: string;
+  approvedAt?: string;
+  appliedBy?: string;
+  createdAt: string;
+}
+
 export interface RoutingTemplate {
   id: string;
   routeCode: string;
@@ -193,17 +206,19 @@ export interface RoutingTemplate {
   effectiveFrom: string;
   effectiveTo?: string;
   steps: RoutingTemplateStep[];
+  changeEvents: RoutingTemplateChangeEvent[];
   updatedAt: string;
 }
 
 export const RoutingTemplateDesign: EntityDesign<RoutingTemplateState> = {
   entity: 'RoutingTemplate',
   purpose: 'Versioned production routing and job-card template master data for released builds.',
-  keyFields: ['id', 'routeCode', 'routeVersion', 'state', 'steps', 'updatedAt'],
+  keyFields: ['id', 'routeCode', 'routeVersion', 'state', 'steps', 'changeEvents', 'updatedAt'],
   requiredIndexes: [
     { name: 'routing_templates_code_version_key', fields: ['routeCode', 'routeVersion'], unique: true },
     { name: 'routing_templates_status_idx', fields: ['state'] },
-    { name: 'routing_template_steps_sequence_key', fields: ['routingTemplateId', 'sequenceNo'], unique: true }
+    { name: 'routing_template_steps_sequence_key', fields: ['routingTemplateId', 'sequenceNo'], unique: true },
+    { name: 'routing_template_change_events_template_time_idx', fields: ['routingTemplateId', 'createdAt'] }
   ],
   lifecycle: {
     initial: RoutingTemplateState.DRAFT,
@@ -218,9 +233,15 @@ export const RoutingTemplateDesign: EntityDesign<RoutingTemplateState> = {
     'sequenceNo and operationCode must be unique within a routing template.',
     'estimatedMinutes must be greater than zero for every job-card step.',
     'laborRateCents, when present, must be non-negative and carries standard labor cost into execution operations.',
-    'ACTIVE routing templates must be within their effective window before work orders can use them.'
+    'ACTIVE routing templates must be within their effective window before work orders can use them.',
+    'Route activation and retirement require an approval note and append immutable change history.'
   ],
-  emittedEvents: ['routing.template.created', 'routing.template.activated', 'routing.template.retired'],
+  emittedEvents: [
+    'routing.template.created',
+    'routing.template.activated',
+    'routing.template.retired',
+    'routing.template.change_recorded'
+  ],
   apiOperations: [
     { method: 'GET', path: '/planning/routing-templates', summary: 'List routing templates' },
     { method: 'POST', path: '/planning/routing-templates', summary: 'Create routing template' },

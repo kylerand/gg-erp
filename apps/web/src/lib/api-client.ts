@@ -481,6 +481,22 @@ export interface RoutingTemplateStep {
   evidenceRequired: boolean;
 }
 
+export interface RoutingTemplateChangeEvent {
+  id: string;
+  routingTemplateId: string;
+  routeCode: string;
+  routeVersion: number;
+  changeKind: 'CREATED' | 'ACTIVATED' | 'RETIRED' | 'AUTO_RETIRED';
+  previousStatus?: RoutingTemplateStatus;
+  newStatus: RoutingTemplateStatus;
+  changeSummary: string;
+  approvalNote?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  appliedBy?: string;
+  createdAt: string;
+}
+
 export interface RoutingTemplate {
   id: string;
   routeCode: string;
@@ -501,6 +517,7 @@ export interface RoutingTemplate {
   estimatedMinutes: number;
   estimatedLaborCostCents: number;
   steps: RoutingTemplateStep[];
+  changeEvents: RoutingTemplateChangeEvent[];
 }
 
 export interface CreateBuildConfigurationInput {
@@ -804,13 +821,14 @@ export async function createRoutingTemplate(
 export async function transitionRoutingTemplate(
   id: string,
   status: RoutingTemplateStatus,
+  input?: { approvalNote?: string; changeSummary?: string },
 ): Promise<RoutingTemplate> {
   const data = await apiFetch<{ routingTemplate: RoutingTemplate }>(
     `/planning/routing-templates/${encodeURIComponent(id)}/state`,
     {
       method: 'PATCH',
       headers: mutationHeaders(),
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, ...input }),
     },
   );
   return data.routingTemplate;

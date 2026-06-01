@@ -46,6 +46,15 @@ enum RoutingTemplateStatus {
   @@schema("planning")
 }
 
+enum RoutingTemplateChangeKind {
+  CREATED
+  ACTIVATED
+  RETIRED
+  AUTO_RETIRED
+
+  @@schema("planning")
+}
+
 enum CartVehicleStatus {
   REGISTERED
   IN_BUILD
@@ -206,14 +215,42 @@ model RoutingTemplate {
   updatedAt            DateTime              @default(now()) @map("updated_at") @db.Timestamptz(6)
   version              Int                   @default(0)
 
-  buildConfiguration BuildConfiguration?   @relation(fields: [buildConfigurationId], references: [id], onDelete: SetNull)
+  buildConfiguration BuildConfiguration?          @relation(fields: [buildConfigurationId], references: [id], onDelete: SetNull)
   steps              RoutingTemplateStep[]
+  changeEvents       RoutingTemplateChangeEvent[]
 
   @@unique([routeCode, routeVersion], map: "routing_templates_code_version_key")
   @@index([templateStatus], map: "routing_templates_status_idx")
   @@index([buildConfigurationId], map: "routing_templates_build_configuration_idx")
   @@index([routeCode, templateStatus], map: "routing_templates_code_status_idx")
   @@map("routing_templates")
+  @@schema("planning")
+}
+
+model RoutingTemplateChangeEvent {
+  id                String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  routingTemplateId String                    @map("routing_template_id") @db.Uuid
+  routeCode         String                    @map("route_code")
+  routeVersion      Int                       @map("route_version")
+  changeKind        RoutingTemplateChangeKind @map("change_kind")
+  previousStatus    RoutingTemplateStatus?    @map("previous_status")
+  newStatus         RoutingTemplateStatus     @map("new_status")
+  changeSummary     String                    @map("change_summary")
+  approvalNote      String?                   @map("approval_note")
+  approvedByUserId  String?                   @map("approved_by_user_id") @db.Uuid
+  approvedByRef     String?                   @map("approved_by_ref")
+  approvedAt        DateTime?                 @map("approved_at") @db.Timestamptz(6)
+  appliedByUserId   String?                   @map("applied_by_user_id") @db.Uuid
+  appliedByRef      String?                   @map("applied_by_ref")
+  lastCorrelationId String?                   @map("last_correlation_id")
+  lastRequestId     String?                   @map("last_request_id")
+  createdAt         DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  routingTemplate RoutingTemplate @relation(fields: [routingTemplateId], references: [id], onDelete: Cascade)
+
+  @@index([routingTemplateId, createdAt], map: "routing_template_change_events_template_time_idx")
+  @@index([changeKind], map: "routing_template_change_events_kind_idx")
+  @@map("routing_template_change_events")
   @@schema("planning")
 }
 

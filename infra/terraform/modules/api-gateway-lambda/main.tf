@@ -309,6 +309,33 @@ resource "aws_lambda_function" "planning_list_build_packages" {
   }
 }
 
+resource "aws_lambda_function" "planning_list_change_events" {
+  function_name    = "${var.name_prefix}-planning-list-change-events"
+  role             = aws_iam_role.work_orders_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-planning-change-events.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/work-orders-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.work_orders_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.work_orders_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+
+  environment {
+    variables = {
+      NODE_ENV                    = "production"
+      PRISMA_QUERY_ENGINE_LIBRARY = "/var/task/libquery_engine-rhel-openssl-3.0.x.so.node"
+      DATABASE_URL                = var.database_url
+      DB_DATABASE_URL             = var.database_url
+    }
+  }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
 resource "aws_lambda_function" "planning_list_build_configurations" {
   function_name    = "${var.name_prefix}-planning-list-build-configurations"
   role             = aws_iam_role.work_orders_lambda.arn
@@ -712,6 +739,20 @@ resource "aws_apigatewayv2_route" "planning_list_build_packages" {
   api_id    = aws_apigatewayv2_api.erp.id
   route_key = "GET /planning/build-packages"
   target    = "integrations/${aws_apigatewayv2_integration.planning_list_build_packages.id}"
+}
+
+resource "aws_apigatewayv2_integration" "planning_list_change_events" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.planning_list_change_events.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "planning_list_change_events" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /planning/change-events"
+  target    = "integrations/${aws_apigatewayv2_integration.planning_list_change_events.id}"
 }
 
 resource "aws_apigatewayv2_integration" "planning_list_build_configurations" {
@@ -5621,6 +5662,7 @@ locals {
     identity_list_employees                 = aws_lambda_function.identity_list_employees
     work_orders_get                         = aws_lambda_function.work_orders_get
     planning_list_build_packages            = aws_lambda_function.planning_list_build_packages
+    planning_list_change_events             = aws_lambda_function.planning_list_change_events
     planning_list_build_configurations      = aws_lambda_function.planning_list_build_configurations
     planning_create_build_configuration     = aws_lambda_function.planning_create_build_configuration
     planning_transition_build_configuration = aws_lambda_function.planning_transition_build_configuration

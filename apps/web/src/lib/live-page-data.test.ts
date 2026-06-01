@@ -22,6 +22,7 @@ const truthCriticalPages = [
   'app/inventory/transfers/page.tsx',
   'app/inventory/cycle-counts/page.tsx',
   'app/planning/build-packages/page.tsx',
+  'app/planning/engineering-changes/page.tsx',
   'app/planning/slots/page.tsx',
   'app/reporting/page.tsx',
   'app/reporting/blocked-alerts/page.tsx',
@@ -190,6 +191,7 @@ test('work-order detail page wires live execution panels', () => {
 test('create forms use live selectors instead of raw ID entry fields', () => {
   const workOrderSource = readSource('app/work-orders/new/page.tsx');
   const buildPackagesSource = readSource('app/planning/build-packages/page.tsx');
+  const engineeringChangesSource = readSource('app/planning/engineering-changes/page.tsx');
   const apiClientSource = readSource('lib/api-client.ts');
   const timeLoggingSource = readSource('app/work-orders/time-logging/page.tsx');
   const opportunitySource = readSource('app/sales/opportunities/new/page.tsx');
@@ -233,9 +235,16 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
     [],
   );
   assert.ok(apiClientSource.includes('/planning/build-packages'));
+  assert.ok(apiClientSource.includes('/planning/change-events'));
   assert.ok(apiClientSource.includes('/planning/build-configurations'));
   assert.ok(apiClientSource.includes('/planning/boms'));
   assert.ok(apiClientSource.includes('/planning/routing-templates'));
+  assert.deepEqual(
+    ['listPlanningChangeEvents', 'allowMockFallback: false', "erpRoute('build-package'"].filter(
+      (call) => !engineeringChangesSource.includes(call),
+    ),
+    [],
+  );
   assert.ok(apiClientSource.includes('/tickets/work-orders'));
   assert.equal(workOrderSource.includes('createWorkOrder'), false);
   assert.equal(workOrderSource.includes('listWorkOrderBuildPackages'), false);

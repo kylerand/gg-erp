@@ -18,6 +18,7 @@ type RoutingTemplateStatus = 'DRAFT' | 'ACTIVE' | 'RETIRED';
 type BuildConfigurationChangeKind = 'CREATED' | 'LOCKED' | 'RELEASED' | 'SUPERSEDED';
 type BomChangeKind = 'CREATED' | 'APPROVED' | 'OBSOLETED';
 type RoutingTemplateChangeKind = 'CREATED' | 'ACTIVATED' | 'RETIRED' | 'AUTO_RETIRED';
+type PlanningChangeEntityType = 'CONFIGURATION' | 'BOM' | 'ROUTE';
 
 const BUILD_CONFIGURATION_STATUSES: BuildConfigurationStatus[] = [
   'DRAFT',
@@ -27,6 +28,7 @@ const BUILD_CONFIGURATION_STATUSES: BuildConfigurationStatus[] = [
 ];
 const BOM_STATUSES: BomStatus[] = ['DRAFT', 'APPROVED', 'OBSOLETE'];
 const ROUTING_TEMPLATE_STATUSES: RoutingTemplateStatus[] = ['DRAFT', 'ACTIVE', 'RETIRED'];
+const PLANNING_CHANGE_ENTITY_TYPES: PlanningChangeEntityType[] = ['CONFIGURATION', 'BOM', 'ROUTE'];
 
 interface RequestContext {
   actorId?: string;
@@ -189,6 +191,24 @@ export interface RoutingTemplateResponse {
   changeEvents: RoutingTemplateChangeEventResponse[];
 }
 
+export interface PlanningChangeEventResponse {
+  id: string;
+  entityType: PlanningChangeEntityType;
+  entityId: string;
+  recordCode: string;
+  versionNumber: number;
+  versionLabel: string;
+  changeKind: string;
+  previousStatus?: string;
+  newStatus: string;
+  changeSummary: string;
+  approvalNote?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  appliedBy?: string;
+  createdAt: string;
+}
+
 export interface CreateBuildConfigurationInput {
   configurationCode: string;
   vehicleId: string;
@@ -277,6 +297,12 @@ export interface PlanningMasterStore {
     context: RequestContext,
   ): Promise<RoutingTemplateResponse>;
   listBuildPackages(input: ListBuildPackagesQuery): Promise<ListBuildPackagesResponse>;
+  listPlanningChangeEvents(input: {
+    entityType?: PlanningChangeEntityType;
+    search?: string;
+    limit: number;
+    offset: number;
+  }): Promise<{ items: PlanningChangeEventResponse[]; total: number; limit: number; offset: number }>;
 }
 
 class PlanningMasterCommandError extends Error {
@@ -495,6 +521,24 @@ interface RoutingTemplateChangeEventRow {
   createdAt: Date | string;
 }
 
+interface PlanningChangeEventRow {
+  id: string;
+  entityType: PlanningChangeEntityType;
+  entityId: string;
+  recordCode: string;
+  versionNumber: number;
+  versionLabel: string;
+  changeKind: string;
+  previousStatus: string | null;
+  newStatus: string;
+  changeSummary: string;
+  approvalNote: string | null;
+  approvedBy: string | null;
+  approvedAt: Date | string | null;
+  appliedBy: string | null;
+  createdAt: Date | string;
+}
+
 function mapConfiguration(
   row: BuildConfigurationRow,
   changeEvents: BuildConfigurationChangeEventResponse[],
@@ -619,6 +663,26 @@ function mapRoutingTemplateChangeEvent(
     routingTemplateId: row.routingTemplateId,
     routeCode: row.routeCode,
     routeVersion: Number(row.routeVersion),
+    changeKind: row.changeKind,
+    previousStatus: row.previousStatus ?? undefined,
+    newStatus: row.newStatus,
+    changeSummary: row.changeSummary,
+    approvalNote: row.approvalNote ?? undefined,
+    approvedBy: row.approvedBy ?? undefined,
+    approvedAt: optionalIso(row.approvedAt),
+    appliedBy: row.appliedBy ?? undefined,
+    createdAt: iso(row.createdAt),
+  };
+}
+
+function mapPlanningChangeEvent(row: PlanningChangeEventRow): PlanningChangeEventResponse {
+  return {
+    id: row.id,
+    entityType: row.entityType,
+    entityId: row.entityId,
+    recordCode: row.recordCode,
+    versionNumber: Number(row.versionNumber),
+    versionLabel: row.versionLabel,
     changeKind: row.changeKind,
     previousStatus: row.previousStatus ?? undefined,
     newStatus: row.newStatus,
@@ -934,6 +998,66 @@ async function loadRoutingTemplateChangeEvents(
     ]);
   }
   return byTemplate;
+}
+
+function planningChangeEventsCte(): Prisma.Sql {
+  return Prisma.sql`
+    WITH events AS (
+      SELECT
+        id::text AS id,
+        'CONFIGURATION'::text AS entity_type,
+        build_configuration_id::text AS entity_id,
+        configuration_code AS record_code,
+        configuration_version AS version_number,
+        concat('v', configuration_version::text) AS version_label,
+        change_kind::text AS change_kind,
+        previous_status::text AS previous_status,
+        new_status::text AS new_status,
+        change_summary,
+        approval_note,
+        coalesce(approved_by_ref, approved_by_user_id::text) AS approved_by,
+        approved_at,
+        coalesce(applied_by_ref, applied_by_user_id::text) AS applied_by,
+        created_at
+      FROM planning.build_configuration_change_events
+      UNION ALL
+      SELECT
+        id::text AS id,
+        'BOM'::text AS entity_type,
+        bom_id::text AS entity_id,
+        bom_code AS record_code,
+        revision AS version_number,
+        concat('rev ', revision::text) AS version_label,
+        change_kind::text AS change_kind,
+        previous_status::text AS previous_status,
+        new_status::text AS new_status,
+        change_summary,
+        approval_note,
+        coalesce(approved_by_ref, approved_by_user_id::text) AS approved_by,
+        approved_at,
+        coalesce(applied_by_ref, applied_by_user_id::text) AS applied_by,
+        created_at
+      FROM planning.build_bom_change_events
+      UNION ALL
+      SELECT
+        id::text AS id,
+        'ROUTE'::text AS entity_type,
+        routing_template_id::text AS entity_id,
+        route_code AS record_code,
+        route_version AS version_number,
+        concat('v', route_version::text) AS version_label,
+        change_kind::text AS change_kind,
+        previous_status::text AS previous_status,
+        new_status::text AS new_status,
+        change_summary,
+        approval_note,
+        coalesce(approved_by_ref, approved_by_user_id::text) AS approved_by,
+        approved_at,
+        coalesce(applied_by_ref, applied_by_user_id::text) AS applied_by,
+        created_at
+      FROM planning.routing_template_change_events
+    )
+  `;
 }
 
 async function getConfigurationById(
@@ -1959,6 +2083,69 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
     };
   }
 
+  async listPlanningChangeEvents(input: {
+    entityType?: PlanningChangeEntityType;
+    search?: string;
+    limit: number;
+    offset: number;
+  }): Promise<{ items: PlanningChangeEventResponse[]; total: number; limit: number; offset: number }> {
+    const predicates: Prisma.Sql[] = [];
+    if (input.entityType) predicates.push(Prisma.sql`entity_type = ${input.entityType}`);
+    if (input.search) {
+      const pattern = `%${input.search}%`;
+      predicates.push(Prisma.sql`(
+        record_code ILIKE ${pattern}
+        OR change_kind ILIKE ${pattern}
+        OR new_status ILIKE ${pattern}
+        OR change_summary ILIKE ${pattern}
+        OR approval_note ILIKE ${pattern}
+        OR approved_by ILIKE ${pattern}
+        OR applied_by ILIKE ${pattern}
+      )`);
+    }
+    const where =
+      predicates.length > 0
+        ? Prisma.sql`WHERE ${Prisma.join(predicates, ' AND ')}`
+        : Prisma.empty;
+
+    const rows = await prisma.$queryRaw<PlanningChangeEventRow[]>`
+      ${planningChangeEventsCte()}
+      SELECT
+        id,
+        entity_type AS "entityType",
+        entity_id AS "entityId",
+        record_code AS "recordCode",
+        version_number AS "versionNumber",
+        version_label AS "versionLabel",
+        change_kind AS "changeKind",
+        previous_status AS "previousStatus",
+        new_status AS "newStatus",
+        change_summary AS "changeSummary",
+        approval_note AS "approvalNote",
+        approved_by AS "approvedBy",
+        approved_at AS "approvedAt",
+        applied_by AS "appliedBy",
+        created_at AS "createdAt"
+      FROM events
+      ${where}
+      ORDER BY created_at DESC, id DESC
+      LIMIT ${input.limit} OFFSET ${input.offset}
+    `;
+    const totalRows = await prisma.$queryRaw<Array<{ count: bigint }>>`
+      ${planningChangeEventsCte()}
+      SELECT count(*)::bigint AS count
+      FROM events
+      ${where}
+    `;
+
+    return {
+      items: rows.map(mapPlanningChangeEvent),
+      total: Number(totalRows[0]?.count ?? 0),
+      limit: input.limit,
+      offset: input.offset,
+    };
+  }
+
   async createRoutingTemplate(
     input: CreateRoutingTemplateInput,
     context: RequestContext,
@@ -2393,6 +2580,28 @@ export async function listBuildConfigurationsHandler(
     search: query.search?.trim() || undefined,
     status,
     vehicleId,
+    limit,
+    offset,
+  });
+  return json(200, result);
+}
+
+export async function listPlanningChangeEventsHandler(
+  event: ApiGatewayProxyEventLike,
+): Promise<ApiGatewayProxyResultLike> {
+  const query = event.queryStringParameters ?? {};
+  const limit = toLimit(query.limit);
+  const offset = toOffset(query.offset);
+  const entityType = query.entityType?.trim() as PlanningChangeEntityType | undefined;
+  if (Number.isNaN(limit)) return json(422, { message: 'limit must be a positive integer.' });
+  if (Number.isNaN(offset)) return json(422, { message: 'offset must be a non-negative integer.' });
+  if (entityType && !PLANNING_CHANGE_ENTITY_TYPES.includes(entityType)) {
+    return json(422, { message: `Invalid planning change entity type: ${entityType}` });
+  }
+
+  const result = await planningMasterStore.listPlanningChangeEvents({
+    entityType,
+    search: query.search?.trim() || undefined,
     limit,
     offset,
   });

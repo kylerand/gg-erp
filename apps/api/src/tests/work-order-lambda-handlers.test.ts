@@ -13,6 +13,7 @@ import {
   createBuildConfigurationHandler,
   createRoutingTemplateHandler,
   listBuildConfigurationsHandler,
+  listPlanningChangeEventsHandler,
   listRoutingTemplatesHandler,
   resetPlanningMasterStoreForTests,
   setPlanningMasterStoreForTests,
@@ -298,6 +299,51 @@ function createPlanningMasterStoreForTests(): PlanningMasterStore {
     async listRoutingTemplates(input) {
       return { items: [routingTemplate], total: 1, limit: input.limit, offset: input.offset };
     },
+    async listPlanningChangeEvents(input) {
+      return {
+        items: [
+          {
+            id: config.changeEvents[0].id,
+            entityType: 'CONFIGURATION' as const,
+            entityId: config.id,
+            recordCode: config.configurationCode,
+            versionNumber: config.configurationVersion,
+            versionLabel: `v${config.configurationVersion}`,
+            changeKind: config.changeEvents[0].changeKind,
+            newStatus: config.changeEvents[0].newStatus,
+            changeSummary: config.changeEvents[0].changeSummary,
+            createdAt: config.changeEvents[0].createdAt,
+          },
+          {
+            id: bom.changeEvents[0].id,
+            entityType: 'BOM' as const,
+            entityId: bom.id,
+            recordCode: bom.bomCode,
+            versionNumber: bom.revision,
+            versionLabel: `rev ${bom.revision}`,
+            changeKind: bom.changeEvents[0].changeKind,
+            newStatus: bom.changeEvents[0].newStatus,
+            changeSummary: bom.changeEvents[0].changeSummary,
+            createdAt: bom.changeEvents[0].createdAt,
+          },
+          {
+            id: routingTemplate.changeEvents[0].id,
+            entityType: 'ROUTE' as const,
+            entityId: routingTemplate.id,
+            recordCode: routingTemplate.routeCode,
+            versionNumber: routingTemplate.routeVersion,
+            versionLabel: `v${routingTemplate.routeVersion}`,
+            changeKind: routingTemplate.changeEvents[0].changeKind,
+            newStatus: routingTemplate.changeEvents[0].newStatus,
+            changeSummary: routingTemplate.changeEvents[0].changeSummary,
+            createdAt: routingTemplate.changeEvents[0].createdAt,
+          },
+        ].filter((event) => !input.entityType || event.entityType === input.entityType),
+        total: input.entityType ? 1 : 3,
+        limit: input.limit,
+        offset: input.offset,
+      };
+    },
     async createRoutingTemplate(input) {
       return {
         ...routingTemplate,
@@ -420,6 +466,31 @@ test('planning master handlers list and create build configurations', async () =
     };
     assert.equal(lockPayload.buildConfiguration.configurationStatus, 'LOCKED');
     assert.equal(lockPayload.buildConfiguration.changeEvents[0]?.approvalNote, 'Approved ECO-17');
+  } finally {
+    resetPlanningMasterStoreForTests();
+  }
+});
+
+test('planning change event handler returns full engineering change history', async () => {
+  setPlanningMasterStoreForTests(createPlanningMasterStoreForTests());
+  try {
+    const response = await listPlanningChangeEventsHandler({
+      queryStringParameters: { entityType: 'ROUTE', limit: '10' },
+    });
+    assert.equal(response.statusCode, 200);
+    const payload = JSON.parse(response.body) as {
+      items: Array<{ entityType: string; recordCode: string; versionLabel: string }>;
+      total: number;
+    };
+    assert.equal(payload.total, 1);
+    assert.equal(payload.items[0]?.entityType, 'ROUTE');
+    assert.equal(payload.items[0]?.recordCode, 'RT-GG4-STREET');
+    assert.equal(payload.items[0]?.versionLabel, 'v1');
+
+    const invalidResponse = await listPlanningChangeEventsHandler({
+      queryStringParameters: { entityType: 'PART' },
+    });
+    assert.equal(invalidResponse.statusCode, 422);
   } finally {
     resetPlanningMasterStoreForTests();
   }

@@ -127,6 +127,11 @@ test('triggerInvoiceSyncHandler creates a sync record via the service', async ()
     async () => undefined,
   );
   const saveMock = mock.method(invoiceSyncQueries, 'save', async () => undefined);
+  const snapshotMock = mock.method(
+    invoiceSyncQueries,
+    'captureDocumentSnapshot',
+    async () => undefined,
+  );
 
   try {
     const event = makeEvent({
@@ -144,9 +149,11 @@ test('triggerInvoiceSyncHandler creates a sync record via the service', async ()
 
     assert.equal(findByInvoiceNumberMock.mock.calls.length, 1);
     assert.equal(saveMock.mock.calls.length, 1);
+    assert.equal(snapshotMock.mock.calls.length, 1);
   } finally {
     findByInvoiceNumberMock.mock.restore();
     saveMock.mock.restore();
+    snapshotMock.mock.restore();
   }
 });
 
@@ -317,6 +324,11 @@ test('retryInvoiceSyncHandler retries a FAILED record successfully', async () =>
     ...failedRecord,
   }));
   const saveMock = mock.method(invoiceSyncQueries, 'save', async () => undefined);
+  const snapshotMock = mock.method(
+    invoiceSyncQueries,
+    'captureDocumentSnapshot',
+    async () => undefined,
+  );
 
   try {
     const event = makeEvent({
@@ -334,6 +346,7 @@ test('retryInvoiceSyncHandler retries a FAILED record successfully', async () =>
   } finally {
     findByIdMock.mock.restore();
     saveMock.mock.restore();
+    snapshotMock.mock.restore();
   }
 });
 
@@ -720,6 +733,11 @@ test('retryPaymentSyncHandler transitions failed payments back into progress', a
 
   const findByIdMock = mock.method(paymentSyncQueries, 'findById', async () => failedRecord);
   const saveMock = mock.method(paymentSyncQueries, 'save', async () => undefined);
+  const snapshotMock = mock.method(
+    paymentSyncQueries,
+    'captureDocumentSnapshot',
+    async () => undefined,
+  );
 
   try {
     const response = await retryPaymentSyncHandler(
@@ -736,9 +754,11 @@ test('retryPaymentSyncHandler transitions failed payments back into progress', a
     assert.equal(saved.state, 'IN_PROGRESS');
     assert.equal(saved.attemptCount, 2);
     assert.equal(saved.errorMessage, undefined);
+    assert.equal(snapshotMock.mock.calls.length, 1);
   } finally {
     findByIdMock.mock.restore();
     saveMock.mock.restore();
+    snapshotMock.mock.restore();
   }
 });
 

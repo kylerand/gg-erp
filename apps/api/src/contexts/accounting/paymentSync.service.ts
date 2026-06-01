@@ -11,6 +11,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import {
+  Prisma,
   PrismaClient,
   PaymentSyncState as PrismaPaymentSyncState,
   SyncDirection as PrismaSyncDirection,
@@ -61,6 +62,14 @@ export interface CreateFromWebhookInput {
   amountCents: number;
   paymentMethod?: string;
   paymentDate?: string;
+}
+
+export interface PaymentSyncQueries {
+  findById(id: string): Promise<PaymentSyncRecord | undefined>;
+  findByQbPaymentId(qbPaymentId: string): Promise<PaymentSyncRecord | undefined>;
+  listByState(state: PaymentSyncState, limit?: number): Promise<PaymentSyncRecord[]>;
+  save(record: PaymentSyncRecord): Promise<void>;
+  captureDocumentSnapshot?(record: PaymentSyncRecord, correlationId: string): Promise<void>;
 }
 
 // ─── Prisma singleton ──────────────────────────────────────────────────────────
@@ -151,9 +160,81 @@ export const paymentSyncQueries = {
       update: data,
     });
   },
-};
 
-export type PaymentSyncQueries = typeof paymentSyncQueries;
+  async captureDocumentSnapshot(
+    record: PaymentSyncRecord,
+    correlationId: string,
+  ): Promise<void> {
+    const prisma = getPaymentSyncPrisma();
+    const [workOrder, customer] = await Promise.all([
+      prisma.workOrder.findUnique({
+        where: { id: record.workOrderId },
+        select: { workOrderNumber: true },
+      }),
+      prisma.customer.findUnique({
+        where: { id: record.customerId },
+        select: { fullName: true, companyName: true },
+      }),
+    ]);
+    const documentStatus = paymentDocumentStatusFromState(record.state);
+    const documentNumber = record.qbPaymentId ?? record.qbInvoiceId ?? record.id;
+    const customerName = customer?.companyName?.trim() || customer?.fullName || null;
+
+    await prisma.accountingPaymentDocumentSnapshot.create({
+      data: {
+        paymentSyncId: record.id,
+        invoiceSyncId: record.invoiceSyncId ?? null,
+        workOrderId: record.workOrderId,
+        customerId: record.customerId,
+        provider: 'QUICKBOOKS',
+        documentNumber,
+        externalReference: record.qbPaymentId ?? null,
+        qbInvoiceId: record.qbInvoiceId ?? null,
+        documentStatus,
+        documentDate: paymentDocumentDate(record),
+        currencyCode: 'USD',
+        amountCents: record.amountCents,
+        paymentMethod: record.paymentMethod ?? null,
+        workOrderNumber: workOrder?.workOrderNumber ?? null,
+        customerName,
+        syncState: record.state,
+        attemptCount: record.attemptCount,
+        errorMessage: record.errorMessage ?? null,
+        documentSummary: {
+          documentNumber,
+          qbInvoiceId: record.qbInvoiceId ?? null,
+          amountCents: record.amountCents,
+          customerName,
+          status: documentStatus,
+        } satisfies Prisma.InputJsonValue,
+        documentPayload: {
+          syncRecordId: record.id,
+          invoiceSyncId: record.invoiceSyncId ?? null,
+          qbPaymentId: record.qbPaymentId ?? null,
+          qbInvoiceId: record.qbInvoiceId ?? null,
+          state: record.state,
+          errorMessage: record.errorMessage ?? null,
+        } satisfies Prisma.InputJsonValue,
+        capturedAt: new Date(record.updatedAt ?? record.createdAt),
+        correlationId,
+      },
+    });
+  },
+} satisfies PaymentSyncQueries;
+
+function paymentDocumentDate(record: PaymentSyncRecord): Date {
+  if (record.paymentDate) return new Date(`${record.paymentDate}T00:00:00.000Z`);
+  return new Date(record.updatedAt ?? record.createdAt);
+}
+
+function paymentDocumentStatusFromState(state: PaymentSyncState): string {
+  if (state === PaymentSyncState.RECONCILED) return 'RECONCILED';
+  if (state === PaymentSyncState.SYNCED) return 'MATCHED';
+  if (state === PaymentSyncState.FAILED || state === PaymentSyncState.MISMATCH) {
+    return 'NEEDS_REVIEW';
+  }
+  return 'QUEUED';
+}
 
 // ─── Prisma-backed resolvers ────────────────────────────────────────────────────
 
@@ -239,6 +320,7 @@ export class PaymentSyncService {
     };
 
     await this.deps.queries.save(record);
+    await this.deps.queries.captureDocumentSnapshot?.(record, context.correlationId);
     await this.emitEvent(record.id, record, 'payment_sync.started', context);
     return record;
   }
@@ -274,6 +356,7 @@ export class PaymentSyncService {
       errorMessage: undefined,
     };
     await this.deps.queries.save(inProgress);
+    await this.deps.queries.captureDocumentSnapshot?.(inProgress, context.correlationId);
 
     try {
       // Verify the linked invoice sync record exists
@@ -312,6 +395,7 @@ export class PaymentSyncService {
         updatedAt: new Date().toISOString(),
       };
       await this.deps.queries.save(synced);
+      await this.deps.queries.captureDocumentSnapshot?.(synced, context.correlationId);
       await this.emitEvent(
         recordId,
         { workOrderId: synced.workOrderId, amountCents: synced.amountCents },
@@ -336,6 +420,7 @@ export class PaymentSyncService {
         updatedAt: new Date().toISOString(),
       };
       await this.deps.queries.save(failed);
+      await this.deps.queries.captureDocumentSnapshot?.(failed, context.correlationId);
       await this.emitEvent(
         recordId,
         { errorMessage, attemptCount: failed.attemptCount },
@@ -377,6 +462,7 @@ export class PaymentSyncService {
       updatedAt: new Date().toISOString(),
     };
     await this.deps.queries.save(updated);
+    await this.deps.queries.captureDocumentSnapshot?.(updated, context.correlationId);
     await this.emitEvent(
       recordId,
       { before: record.state, after: updated.state },

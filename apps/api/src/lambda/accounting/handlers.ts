@@ -75,9 +75,11 @@ type LedgerPaymentSyncRecord = Awaited<
   ReturnType<typeof prisma.paymentSyncRecord.findMany>
 >[number];
 type ClosePackageInvoiceRow = Awaited<
-  ReturnType<typeof prisma.invoiceSyncRecord.findMany>
+  ReturnType<typeof prisma.accountingInvoiceDocumentSnapshot.findMany>
 >[number];
-type ClosePackagePaymentRow = LedgerPaymentSyncRecord;
+type ClosePackagePaymentRow = Awaited<
+  ReturnType<typeof prisma.accountingPaymentDocumentSnapshot.findMany>
+>[number];
 type LedgerReconciliationRecord = Awaited<
   ReturnType<typeof prisma.reconciliationRecord.findMany>
 >[number];
@@ -1308,24 +1310,29 @@ export const accountingClosePackageQueries = {
     take: number;
   }): Promise<ClosePackageInvoiceRow[]> {
     const range = dateRangeFilter(params.from, params.to);
-    const where: Prisma.InvoiceSyncRecordWhereInput = range
-      ? { OR: [{ createdAt: range }, { syncedAt: range }] }
+    const where: Prisma.AccountingInvoiceDocumentSnapshotWhereInput = range
+      ? { documentDate: range }
       : {};
 
-    return prisma.invoiceSyncRecord.findMany({
+    const snapshots = await prisma.accountingInvoiceDocumentSnapshot.findMany({
       where,
-      orderBy: [{ syncedAt: 'desc' }, { createdAt: 'desc' }],
-      take: params.take,
+      orderBy: [{ capturedAt: 'desc' }, { documentDate: 'desc' }],
+      take: Math.max(params.take * 5, params.take),
     });
+    return latestInvoiceSnapshots(snapshots).slice(0, params.take);
   },
 
   async countInvoiceDocuments(params: { from?: Date; to?: Date }): Promise<number> {
     const range = dateRangeFilter(params.from, params.to);
-    const where: Prisma.InvoiceSyncRecordWhereInput = range
-      ? { OR: [{ createdAt: range }, { syncedAt: range }] }
+    const where: Prisma.AccountingInvoiceDocumentSnapshotWhereInput = range
+      ? { documentDate: range }
       : {};
 
-    return prisma.invoiceSyncRecord.count({ where });
+    const rows = await prisma.accountingInvoiceDocumentSnapshot.groupBy({
+      by: ['invoiceSyncId'],
+      where,
+    });
+    return rows.length;
   },
 
   async listPaymentDocuments(params: {
@@ -1334,26 +1341,57 @@ export const accountingClosePackageQueries = {
     take: number;
   }): Promise<ClosePackagePaymentRow[]> {
     const range = dateRangeFilter(params.from, params.to);
-    const where: Prisma.PaymentSyncRecordWhereInput = range
-      ? { OR: [{ paymentDate: range }, { createdAt: range }, { updatedAt: range }] }
+    const where: Prisma.AccountingPaymentDocumentSnapshotWhereInput = range
+      ? { documentDate: range }
       : {};
 
-    return prisma.paymentSyncRecord.findMany({
+    const snapshots = await prisma.accountingPaymentDocumentSnapshot.findMany({
       where,
-      orderBy: [{ paymentDate: 'desc' }, { updatedAt: 'desc' }],
-      take: params.take,
+      orderBy: [{ capturedAt: 'desc' }, { documentDate: 'desc' }],
+      take: Math.max(params.take * 5, params.take),
     });
+    return latestPaymentSnapshots(snapshots).slice(0, params.take);
   },
 
   async countPaymentDocuments(params: { from?: Date; to?: Date }): Promise<number> {
     const range = dateRangeFilter(params.from, params.to);
-    const where: Prisma.PaymentSyncRecordWhereInput = range
-      ? { OR: [{ paymentDate: range }, { createdAt: range }, { updatedAt: range }] }
+    const where: Prisma.AccountingPaymentDocumentSnapshotWhereInput = range
+      ? { documentDate: range }
       : {};
 
-    return prisma.paymentSyncRecord.count({ where });
+    const rows = await prisma.accountingPaymentDocumentSnapshot.groupBy({
+      by: ['paymentSyncId'],
+      where,
+    });
+    return rows.length;
   },
 };
+
+function latestInvoiceSnapshots(
+  snapshots: ClosePackageInvoiceRow[],
+): ClosePackageInvoiceRow[] {
+  const seen = new Set<string>();
+  const latest: ClosePackageInvoiceRow[] = [];
+  for (const snapshot of snapshots) {
+    if (seen.has(snapshot.invoiceSyncId)) continue;
+    seen.add(snapshot.invoiceSyncId);
+    latest.push(snapshot);
+  }
+  return latest;
+}
+
+function latestPaymentSnapshots(
+  snapshots: ClosePackagePaymentRow[],
+): ClosePackagePaymentRow[] {
+  const seen = new Set<string>();
+  const latest: ClosePackagePaymentRow[] = [];
+  for (const snapshot of snapshots) {
+    if (seen.has(snapshot.paymentSyncId)) continue;
+    seen.add(snapshot.paymentSyncId);
+    latest.push(snapshot);
+  }
+  return latest;
+}
 
 function closePackageDatePart(date: Date | undefined, fallback: string): string {
   return date ? date.toISOString().slice(0, 10).replace(/-/g, '') : fallback;
@@ -1411,6 +1449,22 @@ function paymentDocumentStatus(state: string): AccountingClosePackageDocumentSta
   return 'QUEUED';
 }
 
+function closePackageDocumentStatus(
+  status: string,
+  fallback: AccountingClosePackageDocumentStatus,
+): AccountingClosePackageDocumentStatus {
+  if (
+    status === 'QUEUED' ||
+    status === 'EXPORTED' ||
+    status === 'MATCHED' ||
+    status === 'RECONCILED' ||
+    status === 'NEEDS_REVIEW'
+  ) {
+    return status;
+  }
+  return fallback;
+}
+
 function mapClosePackageInvoice(
   record: ClosePackageInvoiceRow,
   workOrdersById: Map<string, InvoiceSyncWorkOrderSummary>,
@@ -1418,19 +1472,22 @@ function mapClosePackageInvoice(
   return {
     id: record.id,
     documentType: 'INVOICE',
-    documentNumber: record.invoiceNumber,
+    documentNumber: record.documentNumber,
     provider: record.provider,
-    state: String(record.state),
-    documentStatus: invoiceDocumentStatus(String(record.state)),
+    state: record.syncState,
+    documentStatus: closePackageDocumentStatus(
+      record.documentStatus,
+      invoiceDocumentStatus(record.syncState),
+    ),
     workOrderId: record.workOrderId,
     workOrder: mapWorkOrderSummary(workOrdersById.get(record.workOrderId)),
     externalReference: record.externalReference,
     attemptCount: record.attemptCount,
-    errorCode: record.lastErrorCode,
-    errorMessage: record.lastErrorMessage,
+    errorCode: record.errorCode,
+    errorMessage: record.errorMessage,
     createdAt: record.createdAt.toISOString(),
-    exportedAt: record.syncedAt?.toISOString() ?? null,
-    evidenceHref: `/accounting/sync?view=invoices&state=${encodeURIComponent(String(record.state))}`,
+    exportedAt: record.documentStatus === 'EXPORTED' ? record.documentDate.toISOString() : null,
+    evidenceHref: `/accounting/sync?view=invoices&state=${encodeURIComponent(record.syncState)}`,
   };
 }
 
@@ -1442,10 +1499,13 @@ function mapClosePackagePayment(
   return {
     id: record.id,
     documentType: 'PAYMENT',
-    documentNumber: record.qbPaymentId ?? record.qbInvoiceId ?? record.id,
+    documentNumber: record.documentNumber,
     provider: 'QUICKBOOKS',
-    state: String(record.state),
-    documentStatus: paymentDocumentStatus(String(record.state)),
+    state: record.syncState,
+    documentStatus: closePackageDocumentStatus(
+      record.documentStatus,
+      paymentDocumentStatus(record.syncState),
+    ),
     workOrderId: record.workOrderId,
     workOrder: mapWorkOrderSummary(workOrdersById.get(record.workOrderId)),
     customerId: record.customerId,
@@ -1454,12 +1514,12 @@ function mapClosePackagePayment(
     qbInvoiceId: record.qbInvoiceId,
     amountCents: record.amountCents,
     paymentMethod: record.paymentMethod,
-    paymentDate: record.paymentDate?.toISOString().slice(0, 10) ?? null,
+    paymentDate: record.documentDate.toISOString().slice(0, 10),
     attemptCount: record.attemptCount,
     errorMessage: record.errorMessage,
     createdAt: record.createdAt.toISOString(),
-    updatedAt: record.updatedAt.toISOString(),
-    evidenceHref: `/accounting/sync?view=payments&state=${encodeURIComponent(String(record.state))}`,
+    updatedAt: record.capturedAt.toISOString(),
+    evidenceHref: `/accounting/sync?view=payments&state=${encodeURIComponent(record.syncState)}`,
   };
 }
 

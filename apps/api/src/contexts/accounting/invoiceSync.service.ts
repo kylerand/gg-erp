@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  Prisma,
   PrismaClient,
   InvoiceSyncState as PrismaInvoiceSyncState,
 } from '@prisma/client';
@@ -30,6 +31,13 @@ export interface InvoiceSyncServiceDeps {
   outbox: OutboxWriter;
   observability: ObservabilityHooks;
   queries: InvoiceSyncQueries;
+}
+
+export interface InvoiceSyncQueries {
+  findById(id: string): Promise<InvoiceSyncRecord | undefined>;
+  findByInvoiceNumber(invoiceNumber: string): Promise<InvoiceSyncRecord | undefined>;
+  save(record: InvoiceSyncRecord, correlationId: string): Promise<void>;
+  captureDocumentSnapshot?(record: InvoiceSyncRecord, correlationId: string): Promise<void>;
 }
 
 export interface CreateInvoiceSyncInput {
@@ -103,9 +111,65 @@ export const invoiceSyncQueries = {
       update: data,
     });
   },
-};
 
-export type InvoiceSyncQueries = typeof invoiceSyncQueries;
+  async captureDocumentSnapshot(
+    record: InvoiceSyncRecord,
+    correlationId: string,
+  ): Promise<void> {
+    const prisma = getInvoiceSyncPrisma();
+    const workOrder = await prisma.workOrder.findUnique({
+      where: { id: record.workOrderId },
+      select: { workOrderNumber: true },
+    });
+    const documentDate = record.syncedAt
+      ? new Date(record.syncedAt)
+      : new Date(record.updatedAt ?? record.createdAt);
+    const documentStatus = invoiceDocumentStatusFromState(record.state);
+
+    await prisma.accountingInvoiceDocumentSnapshot.create({
+      data: {
+        invoiceSyncId: record.id,
+        workOrderId: record.workOrderId,
+        customerId: null,
+        provider: record.provider,
+        documentNumber: record.invoiceNumber,
+        externalReference: record.externalReference ?? null,
+        documentStatus,
+        documentDate,
+        currencyCode: 'USD',
+        amountCents: null,
+        workOrderNumber: workOrder?.workOrderNumber ?? null,
+        customerName: null,
+        syncState: record.state,
+        attemptCount: record.attemptCount,
+        errorCode: record.lastErrorCode ?? null,
+        errorMessage: record.lastErrorMessage ?? null,
+        documentSummary: {
+          invoiceNumber: record.invoiceNumber,
+          workOrderNumber: workOrder?.workOrderNumber ?? null,
+          status: documentStatus,
+        } satisfies Prisma.InputJsonValue,
+        documentPayload: {
+          syncRecordId: record.id,
+          state: record.state,
+          externalReference: record.externalReference ?? null,
+          errorCode: record.lastErrorCode ?? null,
+          errorMessage: record.lastErrorMessage ?? null,
+        } satisfies Prisma.InputJsonValue,
+        capturedAt: new Date(record.updatedAt ?? record.createdAt),
+        correlationId,
+      },
+    });
+  },
+} satisfies InvoiceSyncQueries;
+
+function invoiceDocumentStatusFromState(state: InvoiceSyncState): string {
+  if (state === InvoiceSyncState.SYNCED) return 'EXPORTED';
+  if (state === InvoiceSyncState.FAILED || state === InvoiceSyncState.CANCELLED) {
+    return 'NEEDS_REVIEW';
+  }
+  return 'QUEUED';
+}
 
 // ─── Service ────────────────────────────────────────────────────────────────────
 
@@ -135,6 +199,7 @@ export class InvoiceSyncService {
       updatedAt: now,
     };
     await this.deps.queries.save(record, context.correlationId);
+    await this.deps.queries.captureDocumentSnapshot?.(record, context.correlationId);
     await this.emitEvent(record.id, record, 'invoice_sync.started', context);
     return record;
   }
@@ -161,6 +226,7 @@ export class InvoiceSyncService {
       lastErrorMessage: undefined,
     };
     await this.deps.queries.save(updated, context.correlationId);
+    await this.deps.queries.captureDocumentSnapshot?.(updated, context.correlationId);
     const eventName =
       existing.state === InvoiceSyncState.FAILED
         ? 'invoice_sync.retried'
@@ -193,6 +259,7 @@ export class InvoiceSyncService {
       updatedAt: new Date().toISOString(),
     };
     await this.deps.queries.save(updated, context.correlationId);
+    await this.deps.queries.captureDocumentSnapshot?.(updated, context.correlationId);
     await this.emitEvent(recordId, { externalReference }, 'invoice_sync.succeeded', context);
     return updated;
   }
@@ -217,6 +284,7 @@ export class InvoiceSyncService {
       updatedAt: new Date().toISOString(),
     };
     await this.deps.queries.save(updated, context.correlationId);
+    await this.deps.queries.captureDocumentSnapshot?.(updated, context.correlationId);
     await this.emitEvent(
       recordId,
       { errorCode, errorMessage, attemptCount: updated.attemptCount },

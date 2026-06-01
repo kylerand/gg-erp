@@ -2224,6 +2224,75 @@ model AccountingPeriodLock {
   @@schema("accounting")
 }
 
+model AccountingInvoiceDocumentSnapshot {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoiceSyncId     String   @map("invoice_sync_id") @db.Uuid
+  workOrderId       String   @map("work_order_id") @db.Uuid
+  customerId        String?  @map("customer_id") @db.Uuid
+  provider          String   @default("QUICKBOOKS")
+  documentNumber    String   @map("document_number")
+  externalReference String?  @map("external_reference")
+  documentStatus    String   @map("document_status")
+  documentDate      DateTime @map("document_date") @db.Timestamptz(6)
+  currencyCode      String   @default("USD") @map("currency_code")
+  amountCents       Int?     @map("amount_cents")
+  workOrderNumber   String?  @map("work_order_number")
+  customerName      String?  @map("customer_name")
+  syncState         String   @map("sync_state")
+  attemptCount      Int      @default(0) @map("attempt_count")
+  errorCode         String?  @map("error_code")
+  errorMessage      String?  @map("error_message")
+  documentSummary   Json     @default("{}") @map("document_summary") @db.JsonB
+  documentPayload   Json     @default("{}") @map("document_payload") @db.JsonB
+  capturedAt        DateTime @default(now()) @map("captured_at") @db.Timestamptz(6)
+  correlationId     String?  @map("correlation_id")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([invoiceSyncId, capturedAt], map: "invoice_document_snapshots_sync_captured_idx")
+  @@index([workOrderId], map: "invoice_document_snapshots_work_order_idx")
+  @@index([customerId], map: "invoice_document_snapshots_customer_idx")
+  @@index([documentDate], map: "invoice_document_snapshots_document_date_idx")
+  @@index([documentStatus], map: "invoice_document_snapshots_status_idx")
+  @@map("invoice_document_snapshots")
+  @@schema("accounting")
+}
+
+model AccountingPaymentDocumentSnapshot {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  paymentSyncId     String   @map("payment_sync_id") @db.Uuid
+  invoiceSyncId     String?  @map("invoice_sync_id") @db.Uuid
+  workOrderId       String   @map("work_order_id") @db.Uuid
+  customerId        String   @map("customer_id") @db.Uuid
+  provider          String   @default("QUICKBOOKS")
+  documentNumber    String   @map("document_number")
+  externalReference String?  @map("external_reference")
+  qbInvoiceId       String?  @map("qb_invoice_id")
+  documentStatus    String   @map("document_status")
+  documentDate      DateTime @map("document_date") @db.Timestamptz(6)
+  currencyCode      String   @default("USD") @map("currency_code")
+  amountCents       Int      @map("amount_cents")
+  paymentMethod     String?  @map("payment_method")
+  workOrderNumber   String?  @map("work_order_number")
+  customerName      String?  @map("customer_name")
+  syncState         String   @map("sync_state")
+  attemptCount      Int      @default(0) @map("attempt_count")
+  errorMessage      String?  @map("error_message")
+  documentSummary   Json     @default("{}") @map("document_summary") @db.JsonB
+  documentPayload   Json     @default("{}") @map("document_payload") @db.JsonB
+  capturedAt        DateTime @default(now()) @map("captured_at") @db.Timestamptz(6)
+  correlationId     String?  @map("correlation_id")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([paymentSyncId, capturedAt], map: "payment_document_snapshots_sync_captured_idx")
+  @@index([invoiceSyncId], map: "payment_document_snapshots_invoice_sync_idx")
+  @@index([workOrderId], map: "payment_document_snapshots_work_order_idx")
+  @@index([customerId], map: "payment_document_snapshots_customer_idx")
+  @@index([documentDate], map: "payment_document_snapshots_document_date_idx")
+  @@index([documentStatus], map: "payment_document_snapshots_status_idx")
+  @@map("payment_document_snapshots")
+  @@schema("accounting")
+}
+
 // ============================================================
 // integrations schema — payment sync & reconciliation
 // ============================================================

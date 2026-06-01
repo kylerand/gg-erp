@@ -471,6 +471,87 @@ resource "aws_lambda_function" "planning_approve_bom" {
   }
 }
 
+resource "aws_lambda_function" "planning_list_routing_templates" {
+  function_name    = "${var.name_prefix}-planning-list-routing-templates"
+  role             = aws_iam_role.work_orders_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "list-routing-templates.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/work-orders-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.work_orders_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.work_orders_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+
+  environment {
+    variables = {
+      NODE_ENV                    = "production"
+      PRISMA_QUERY_ENGINE_LIBRARY = "/var/task/libquery_engine-rhel-openssl-3.0.x.so.node"
+      DATABASE_URL                = var.database_url
+      DB_DATABASE_URL             = var.database_url
+    }
+  }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "planning_create_routing_template" {
+  function_name    = "${var.name_prefix}-planning-create-routing-template"
+  role             = aws_iam_role.work_orders_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "create-routing-template.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/work-orders-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.work_orders_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.work_orders_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+
+  environment {
+    variables = {
+      NODE_ENV                    = "production"
+      PRISMA_QUERY_ENGINE_LIBRARY = "/var/task/libquery_engine-rhel-openssl-3.0.x.so.node"
+      DATABASE_URL                = var.database_url
+      DB_DATABASE_URL             = var.database_url
+    }
+  }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "planning_transition_routing_template" {
+  function_name    = "${var.name_prefix}-planning-transition-routing-template"
+  role             = aws_iam_role.work_orders_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "transition-routing-template.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/work-orders-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.work_orders_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.work_orders_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+
+  environment {
+    variables = {
+      NODE_ENV                    = "production"
+      PRISMA_QUERY_ENGINE_LIBRARY = "/var/task/libquery_engine-rhel-openssl-3.0.x.so.node"
+      DATABASE_URL                = var.database_url
+      DB_DATABASE_URL             = var.database_url
+    }
+  }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
 resource "aws_lambda_function" "planning_list_vehicles" {
   function_name    = "${var.name_prefix}-planning-list-vehicles"
   role             = aws_iam_role.work_orders_lambda.arn
@@ -721,6 +802,52 @@ resource "aws_apigatewayv2_route" "planning_approve_bom" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "PATCH /planning/boms/{id}/approve"
   target             = "integrations/${aws_apigatewayv2_integration.planning_approve_bom.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "planning_list_routing_templates" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.planning_list_routing_templates.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "planning_list_routing_templates" {
+  api_id    = aws_apigatewayv2_api.erp.id
+  route_key = "GET /planning/routing-templates"
+  target    = "integrations/${aws_apigatewayv2_integration.planning_list_routing_templates.id}"
+}
+
+resource "aws_apigatewayv2_integration" "planning_create_routing_template" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.planning_create_routing_template.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "planning_create_routing_template" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /planning/routing-templates"
+  target             = "integrations/${aws_apigatewayv2_integration.planning_create_routing_template.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "planning_transition_routing_template" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.planning_transition_routing_template.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "planning_transition_routing_template" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /planning/routing-templates/{id}/state"
+  target             = "integrations/${aws_apigatewayv2_integration.planning_transition_routing_template.id}"
   authorizer_id      = local.authorizer_id
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
@@ -5486,139 +5613,142 @@ resource "aws_apigatewayv2_route" "migration_cancel_batch" {
 
 locals {
   erp_lambdas = {
-    workspace_today                       = aws_lambda_function.workspace_today
-    reporting_snapshot                    = aws_lambda_function.reporting_snapshot
-    identity_me                           = aws_lambda_function.identity_me
-    identity_list_dealers                 = aws_lambda_function.identity_list_dealers
-    identity_list_dealer_relationships    = aws_lambda_function.identity_list_dealer_relationships
-    identity_list_employees               = aws_lambda_function.identity_list_employees
-    work_orders_get                       = aws_lambda_function.work_orders_get
-    planning_list_build_packages          = aws_lambda_function.planning_list_build_packages
-    planning_list_build_configurations    = aws_lambda_function.planning_list_build_configurations
-    planning_create_build_configuration   = aws_lambda_function.planning_create_build_configuration
+    workspace_today                         = aws_lambda_function.workspace_today
+    reporting_snapshot                      = aws_lambda_function.reporting_snapshot
+    identity_me                             = aws_lambda_function.identity_me
+    identity_list_dealers                   = aws_lambda_function.identity_list_dealers
+    identity_list_dealer_relationships      = aws_lambda_function.identity_list_dealer_relationships
+    identity_list_employees                 = aws_lambda_function.identity_list_employees
+    work_orders_get                         = aws_lambda_function.work_orders_get
+    planning_list_build_packages            = aws_lambda_function.planning_list_build_packages
+    planning_list_build_configurations      = aws_lambda_function.planning_list_build_configurations
+    planning_create_build_configuration     = aws_lambda_function.planning_create_build_configuration
     planning_transition_build_configuration = aws_lambda_function.planning_transition_build_configuration
-    planning_list_boms                    = aws_lambda_function.planning_list_boms
-    planning_create_bom                   = aws_lambda_function.planning_create_bom
-    planning_approve_bom                  = aws_lambda_function.planning_approve_bom
-    planning_list_vehicles                = aws_lambda_function.planning_list_vehicles
-    planning_update_vehicle               = aws_lambda_function.planning_update_vehicle
-    customers_list                        = aws_lambda_function.customers_list
-    customers_create                      = aws_lambda_function.customers_create
-    customers_get                         = aws_lambda_function.customers_get
-    customers_update                      = aws_lambda_function.customers_update
-    customers_transition                  = aws_lambda_function.customers_transition
-    inventory_list_parts                  = aws_lambda_function.inventory_list_parts
-    inventory_create_part                 = aws_lambda_function.inventory_create_part
-    inventory_get_part                    = aws_lambda_function.inventory_get_part
-    inventory_update_part                 = aws_lambda_function.inventory_update_part
-    inventory_get_part_chain              = aws_lambda_function.inventory_get_part_chain
-    inventory_list_vendors                = aws_lambda_function.inventory_list_vendors
-    inventory_get_vendor                  = aws_lambda_function.inventory_get_vendor
-    inventory_list_purchase_orders        = aws_lambda_function.inventory_list_purchase_orders
-    inventory_get_purchase_order          = aws_lambda_function.inventory_get_purchase_order
-    inventory_purchase_order_command      = aws_lambda_function.inventory_purchase_order_command
-    inventory_list_lots                   = aws_lambda_function.inventory_list_lots
-    inventory_list_locations              = aws_lambda_function.inventory_list_locations
-    inventory_receive_lot                 = aws_lambda_function.inventory_receive_lot
-    inventory_list_reservations           = aws_lambda_function.inventory_list_reservations
-    inventory_create_reservation          = aws_lambda_function.inventory_create_reservation
-    inventory_release_reservation         = aws_lambda_function.inventory_release_reservation
-    inventory_consume_reservation         = aws_lambda_function.inventory_consume_reservation
-    inventory_list_ledger                 = aws_lambda_function.inventory_list_ledger
-    inventory_create_adjustment           = aws_lambda_function.inventory_create_adjustment
-    inventory_create_transfer             = aws_lambda_function.inventory_create_transfer
-    inventory_create_cycle_count          = aws_lambda_function.inventory_create_cycle_count
-    inventory_list_manufacturers          = aws_lambda_function.inventory_list_manufacturers
-    inventory_create_manufacturer         = aws_lambda_function.inventory_create_manufacturer
-    inventory_plan_material_by_stage      = aws_lambda_function.inventory_plan_material_by_stage
-    tickets_list_tasks                    = aws_lambda_function.tickets_list_tasks
-    tickets_create_task                   = aws_lambda_function.tickets_create_task
-    tickets_transition                    = aws_lambda_function.tickets_transition_task
-    tickets_get_qc_gates                  = aws_lambda_function.tickets_get_qc_gates
-    tickets_batch_submit_qc_gates         = aws_lambda_function.tickets_batch_submit_qc_gates
-    tickets_list_time_entries             = aws_lambda_function.tickets_list_time_entries
-    tickets_create_time_entry             = aws_lambda_function.tickets_create_time_entry
-    tickets_update_time_entry             = aws_lambda_function.tickets_update_time_entry
-    tickets_delete_time_entry             = aws_lambda_function.tickets_delete_time_entry
-    tickets_list_all_time_entries         = aws_lambda_function.tickets_list_all_time_entries
-    tickets_list_routing_steps            = aws_lambda_function.tickets_list_routing_steps
-    tickets_transition_routing_step       = aws_lambda_function.tickets_transition_routing_step
-    tickets_list_rework                   = aws_lambda_function.tickets_list_rework
-    tickets_create_rework                 = aws_lambda_function.tickets_create_rework
-    tickets_list_sync                     = aws_lambda_function.tickets_list_sync
-    tickets_list_all_work_orders          = aws_lambda_function.tickets_list_all_work_orders
-    tickets_create_wo                     = aws_lambda_function.tickets_create_wo
-    tickets_list_technician_tasks         = aws_lambda_function.tickets_list_technician_tasks
-    tickets_transition_technician_task    = aws_lambda_function.tickets_transition_technician_task
-    tickets_transition_wo_operation       = aws_lambda_function.tickets_transition_wo_operation
-    scheduling_list_slots                 = aws_lambda_function.scheduling_list_slots
-    scheduling_list_labor_capacity        = aws_lambda_function.scheduling_list_labor_capacity
-    scheduling_demand_projection          = aws_lambda_function.scheduling_demand_projection
-    scheduling_schedule_preview           = aws_lambda_function.scheduling_schedule_preview
-    scheduling_publish_schedule           = aws_lambda_function.scheduling_publish_schedule
-    scheduling_list_schedule_assignments  = aws_lambda_function.scheduling_list_schedule_assignments
-    scheduling_list_capacity_slots        = aws_lambda_function.scheduling_list_capacity_slots
-    scheduling_create_capacity_slot       = aws_lambda_function.scheduling_create_capacity_slot
-    scheduling_update_capacity_slot       = aws_lambda_function.scheduling_update_capacity_slot
-    scheduling_cancel_capacity_slot       = aws_lambda_function.scheduling_cancel_capacity_slot
-    scheduling_import_capacity_slots      = aws_lambda_function.scheduling_import_capacity_slots
-    attachments_presign_upload            = aws_lambda_function.attachments_presign_upload
-    attachments_confirm_upload            = aws_lambda_function.attachments_confirm_upload
-    attachments_list                      = aws_lambda_function.attachments_list
-    attachments_presign_download          = aws_lambda_function.attachments_presign_download
-    sop_list                              = aws_lambda_function.sop_list
-    sop_get                               = aws_lambda_function.sop_get
-    sop_create                            = aws_lambda_function.sop_create
-    sop_publish_version                   = aws_lambda_function.sop_publish_version
-    sop_list_modules                      = aws_lambda_function.sop_list_modules
-    sop_list_assignments                  = aws_lambda_function.sop_list_assignments
-    sop_create_assignments                = aws_lambda_function.sop_create_assignments
-    sop_complete_assignment               = aws_lambda_function.sop_complete_assignment
-    sop_get_module                        = aws_lambda_function.sop_get_module
-    sop_get_module_progress               = aws_lambda_function.sop_get_module_progress
-    sop_update_step_progress              = aws_lambda_function.sop_update_step_progress
-    sop_submit_quiz                       = aws_lambda_function.sop_submit_quiz
-    sop_list_notes                        = aws_lambda_function.sop_list_notes
-    sop_upsert_note                       = aws_lambda_function.sop_upsert_note
-    sop_list_bookmarks                    = aws_lambda_function.sop_list_bookmarks
-    sop_toggle_bookmark                   = aws_lambda_function.sop_toggle_bookmark
-    sop_list_inspection_templates         = aws_lambda_function.sop_list_inspection_templates
-    sop_get_inspection_template           = aws_lambda_function.sop_get_inspection_template
-    accounting_oauth_connect              = aws_lambda_function.accounting_oauth_connect
-    accounting_oauth_callback             = aws_lambda_function.accounting_oauth_callback
-    accounting_status                     = aws_lambda_function.accounting_status
-    accounting_list_sync                  = aws_lambda_function.accounting_list_sync
-    accounting_retry_sync                 = aws_lambda_function.accounting_retry_sync
-    accounting_trigger_sync               = aws_lambda_function.accounting_trigger_sync
-    accounting_webhook                    = aws_lambda_function.accounting_webhook
-    accounting_list_customer_syncs        = aws_lambda_function.accounting_list_customer_syncs
-    accounting_list_payment_syncs         = aws_lambda_function.accounting_list_payment_syncs
-    accounting_retry_payment_sync         = aws_lambda_function.accounting_retry_payment_sync
-    accounting_list_reconciliation_runs   = aws_lambda_function.accounting_list_reconciliation_runs
-    accounting_list_accounts              = aws_lambda_function.accounting_list_accounts
-    accounting_get_failure_summary        = aws_lambda_function.accounting_get_failure_summary
-    workers_outbox_publisher              = aws_lambda_function.workers_outbox_publisher
-    workers_payment_sync                  = aws_lambda_function.workers_payment_sync
-    workers_reconciliation                = aws_lambda_function.workers_reconciliation
-    seed_inventory_master                 = aws_lambda_function.seed_inventory_master
-    migration_trigger_batch               = aws_lambda_function.migration_trigger_batch
-    migration_list_batches                = aws_lambda_function.migration_list_batches
-    migration_get_batch                   = aws_lambda_function.migration_get_batch
-    migration_cancel_batch                = aws_lambda_function.migration_cancel_batch
-    communication_list_channels           = aws_lambda_function.communication_list_channels
-    communication_create_channel          = aws_lambda_function.communication_create_channel
-    communication_list_messages           = aws_lambda_function.communication_list_messages
-    communication_list_replies            = aws_lambda_function.communication_list_replies
-    communication_send_message            = aws_lambda_function.communication_send_message
-    communication_edit_message            = aws_lambda_function.communication_edit_message
-    communication_delete_message          = aws_lambda_function.communication_delete_message
-    communication_add_reaction            = aws_lambda_function.communication_add_reaction
-    communication_remove_reaction         = aws_lambda_function.communication_remove_reaction
-    communication_list_todos              = aws_lambda_function.communication_list_todos
-    communication_create_todo             = aws_lambda_function.communication_create_todo
-    communication_update_todo             = aws_lambda_function.communication_update_todo
-    communication_list_notifications      = aws_lambda_function.communication_list_notifications
-    communication_mark_notifications_read = aws_lambda_function.communication_mark_notifications_read
+    planning_list_boms                      = aws_lambda_function.planning_list_boms
+    planning_create_bom                     = aws_lambda_function.planning_create_bom
+    planning_approve_bom                    = aws_lambda_function.planning_approve_bom
+    planning_list_routing_templates         = aws_lambda_function.planning_list_routing_templates
+    planning_create_routing_template        = aws_lambda_function.planning_create_routing_template
+    planning_transition_routing_template    = aws_lambda_function.planning_transition_routing_template
+    planning_list_vehicles                  = aws_lambda_function.planning_list_vehicles
+    planning_update_vehicle                 = aws_lambda_function.planning_update_vehicle
+    customers_list                          = aws_lambda_function.customers_list
+    customers_create                        = aws_lambda_function.customers_create
+    customers_get                           = aws_lambda_function.customers_get
+    customers_update                        = aws_lambda_function.customers_update
+    customers_transition                    = aws_lambda_function.customers_transition
+    inventory_list_parts                    = aws_lambda_function.inventory_list_parts
+    inventory_create_part                   = aws_lambda_function.inventory_create_part
+    inventory_get_part                      = aws_lambda_function.inventory_get_part
+    inventory_update_part                   = aws_lambda_function.inventory_update_part
+    inventory_get_part_chain                = aws_lambda_function.inventory_get_part_chain
+    inventory_list_vendors                  = aws_lambda_function.inventory_list_vendors
+    inventory_get_vendor                    = aws_lambda_function.inventory_get_vendor
+    inventory_list_purchase_orders          = aws_lambda_function.inventory_list_purchase_orders
+    inventory_get_purchase_order            = aws_lambda_function.inventory_get_purchase_order
+    inventory_purchase_order_command        = aws_lambda_function.inventory_purchase_order_command
+    inventory_list_lots                     = aws_lambda_function.inventory_list_lots
+    inventory_list_locations                = aws_lambda_function.inventory_list_locations
+    inventory_receive_lot                   = aws_lambda_function.inventory_receive_lot
+    inventory_list_reservations             = aws_lambda_function.inventory_list_reservations
+    inventory_create_reservation            = aws_lambda_function.inventory_create_reservation
+    inventory_release_reservation           = aws_lambda_function.inventory_release_reservation
+    inventory_consume_reservation           = aws_lambda_function.inventory_consume_reservation
+    inventory_list_ledger                   = aws_lambda_function.inventory_list_ledger
+    inventory_create_adjustment             = aws_lambda_function.inventory_create_adjustment
+    inventory_create_transfer               = aws_lambda_function.inventory_create_transfer
+    inventory_create_cycle_count            = aws_lambda_function.inventory_create_cycle_count
+    inventory_list_manufacturers            = aws_lambda_function.inventory_list_manufacturers
+    inventory_create_manufacturer           = aws_lambda_function.inventory_create_manufacturer
+    inventory_plan_material_by_stage        = aws_lambda_function.inventory_plan_material_by_stage
+    tickets_list_tasks                      = aws_lambda_function.tickets_list_tasks
+    tickets_create_task                     = aws_lambda_function.tickets_create_task
+    tickets_transition                      = aws_lambda_function.tickets_transition_task
+    tickets_get_qc_gates                    = aws_lambda_function.tickets_get_qc_gates
+    tickets_batch_submit_qc_gates           = aws_lambda_function.tickets_batch_submit_qc_gates
+    tickets_list_time_entries               = aws_lambda_function.tickets_list_time_entries
+    tickets_create_time_entry               = aws_lambda_function.tickets_create_time_entry
+    tickets_update_time_entry               = aws_lambda_function.tickets_update_time_entry
+    tickets_delete_time_entry               = aws_lambda_function.tickets_delete_time_entry
+    tickets_list_all_time_entries           = aws_lambda_function.tickets_list_all_time_entries
+    tickets_list_routing_steps              = aws_lambda_function.tickets_list_routing_steps
+    tickets_transition_routing_step         = aws_lambda_function.tickets_transition_routing_step
+    tickets_list_rework                     = aws_lambda_function.tickets_list_rework
+    tickets_create_rework                   = aws_lambda_function.tickets_create_rework
+    tickets_list_sync                       = aws_lambda_function.tickets_list_sync
+    tickets_list_all_work_orders            = aws_lambda_function.tickets_list_all_work_orders
+    tickets_create_wo                       = aws_lambda_function.tickets_create_wo
+    tickets_list_technician_tasks           = aws_lambda_function.tickets_list_technician_tasks
+    tickets_transition_technician_task      = aws_lambda_function.tickets_transition_technician_task
+    tickets_transition_wo_operation         = aws_lambda_function.tickets_transition_wo_operation
+    scheduling_list_slots                   = aws_lambda_function.scheduling_list_slots
+    scheduling_list_labor_capacity          = aws_lambda_function.scheduling_list_labor_capacity
+    scheduling_demand_projection            = aws_lambda_function.scheduling_demand_projection
+    scheduling_schedule_preview             = aws_lambda_function.scheduling_schedule_preview
+    scheduling_publish_schedule             = aws_lambda_function.scheduling_publish_schedule
+    scheduling_list_schedule_assignments    = aws_lambda_function.scheduling_list_schedule_assignments
+    scheduling_list_capacity_slots          = aws_lambda_function.scheduling_list_capacity_slots
+    scheduling_create_capacity_slot         = aws_lambda_function.scheduling_create_capacity_slot
+    scheduling_update_capacity_slot         = aws_lambda_function.scheduling_update_capacity_slot
+    scheduling_cancel_capacity_slot         = aws_lambda_function.scheduling_cancel_capacity_slot
+    scheduling_import_capacity_slots        = aws_lambda_function.scheduling_import_capacity_slots
+    attachments_presign_upload              = aws_lambda_function.attachments_presign_upload
+    attachments_confirm_upload              = aws_lambda_function.attachments_confirm_upload
+    attachments_list                        = aws_lambda_function.attachments_list
+    attachments_presign_download            = aws_lambda_function.attachments_presign_download
+    sop_list                                = aws_lambda_function.sop_list
+    sop_get                                 = aws_lambda_function.sop_get
+    sop_create                              = aws_lambda_function.sop_create
+    sop_publish_version                     = aws_lambda_function.sop_publish_version
+    sop_list_modules                        = aws_lambda_function.sop_list_modules
+    sop_list_assignments                    = aws_lambda_function.sop_list_assignments
+    sop_create_assignments                  = aws_lambda_function.sop_create_assignments
+    sop_complete_assignment                 = aws_lambda_function.sop_complete_assignment
+    sop_get_module                          = aws_lambda_function.sop_get_module
+    sop_get_module_progress                 = aws_lambda_function.sop_get_module_progress
+    sop_update_step_progress                = aws_lambda_function.sop_update_step_progress
+    sop_submit_quiz                         = aws_lambda_function.sop_submit_quiz
+    sop_list_notes                          = aws_lambda_function.sop_list_notes
+    sop_upsert_note                         = aws_lambda_function.sop_upsert_note
+    sop_list_bookmarks                      = aws_lambda_function.sop_list_bookmarks
+    sop_toggle_bookmark                     = aws_lambda_function.sop_toggle_bookmark
+    sop_list_inspection_templates           = aws_lambda_function.sop_list_inspection_templates
+    sop_get_inspection_template             = aws_lambda_function.sop_get_inspection_template
+    accounting_oauth_connect                = aws_lambda_function.accounting_oauth_connect
+    accounting_oauth_callback               = aws_lambda_function.accounting_oauth_callback
+    accounting_status                       = aws_lambda_function.accounting_status
+    accounting_list_sync                    = aws_lambda_function.accounting_list_sync
+    accounting_retry_sync                   = aws_lambda_function.accounting_retry_sync
+    accounting_trigger_sync                 = aws_lambda_function.accounting_trigger_sync
+    accounting_webhook                      = aws_lambda_function.accounting_webhook
+    accounting_list_customer_syncs          = aws_lambda_function.accounting_list_customer_syncs
+    accounting_list_payment_syncs           = aws_lambda_function.accounting_list_payment_syncs
+    accounting_retry_payment_sync           = aws_lambda_function.accounting_retry_payment_sync
+    accounting_list_reconciliation_runs     = aws_lambda_function.accounting_list_reconciliation_runs
+    accounting_list_accounts                = aws_lambda_function.accounting_list_accounts
+    accounting_get_failure_summary          = aws_lambda_function.accounting_get_failure_summary
+    workers_outbox_publisher                = aws_lambda_function.workers_outbox_publisher
+    workers_payment_sync                    = aws_lambda_function.workers_payment_sync
+    workers_reconciliation                  = aws_lambda_function.workers_reconciliation
+    seed_inventory_master                   = aws_lambda_function.seed_inventory_master
+    migration_trigger_batch                 = aws_lambda_function.migration_trigger_batch
+    migration_list_batches                  = aws_lambda_function.migration_list_batches
+    migration_get_batch                     = aws_lambda_function.migration_get_batch
+    migration_cancel_batch                  = aws_lambda_function.migration_cancel_batch
+    communication_list_channels             = aws_lambda_function.communication_list_channels
+    communication_create_channel            = aws_lambda_function.communication_create_channel
+    communication_list_messages             = aws_lambda_function.communication_list_messages
+    communication_list_replies              = aws_lambda_function.communication_list_replies
+    communication_send_message              = aws_lambda_function.communication_send_message
+    communication_edit_message              = aws_lambda_function.communication_edit_message
+    communication_delete_message            = aws_lambda_function.communication_delete_message
+    communication_add_reaction              = aws_lambda_function.communication_add_reaction
+    communication_remove_reaction           = aws_lambda_function.communication_remove_reaction
+    communication_list_todos                = aws_lambda_function.communication_list_todos
+    communication_create_todo               = aws_lambda_function.communication_create_todo
+    communication_update_todo               = aws_lambda_function.communication_update_todo
+    communication_list_notifications        = aws_lambda_function.communication_list_notifications
+    communication_mark_notifications_read   = aws_lambda_function.communication_mark_notifications_read
   }
 }
 

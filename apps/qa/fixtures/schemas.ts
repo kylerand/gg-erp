@@ -138,6 +138,42 @@ const buildBom = z.object({
   lines: z.array(bomLine),
 });
 
+const routingTemplateStep = z.object({
+  id: uuid,
+  routingTemplateId: uuid,
+  sequenceNo: z.number().int().positive(),
+  operationCode: z.string(),
+  operationName: z.string(),
+  workstationCode: z.string().optional(),
+  estimatedMinutes: z.number().int().positive(),
+  requiredSkillCode: z.string().optional(),
+  jobCardTitle: z.string().optional(),
+  jobCardInstructions: z.string().optional(),
+  qcRequired: z.boolean(),
+  evidenceRequired: z.boolean(),
+});
+
+const routingTemplate = z.object({
+  id: uuid,
+  routeCode: z.string(),
+  routeName: z.string(),
+  routeVersion: z.number().int().positive(),
+  buildConfigurationId: uuid.optional(),
+  configurationCode: z.string().optional(),
+  templateStatus: z.enum(['DRAFT', 'ACTIVE', 'RETIRED']),
+  effectiveFrom: isoDate,
+  effectiveTo: isoDate.optional(),
+  notes: z.string().optional(),
+  activatedAt: isoDate.optional(),
+  retiredAt: isoDate.optional(),
+  createdAt: isoDate,
+  updatedAt: isoDate,
+  version: z.number().int().nonnegative(),
+  stepCount: z.number().int().nonnegative(),
+  estimatedMinutes: z.number().int().nonnegative(),
+  steps: z.array(routingTemplateStep),
+});
+
 // ─── Inventory ────────────────────────────────────────────────────────────
 
 const partLifecycleLevel = z.enum(['RAW_COMPONENT', 'PREPARED_COMPONENT', 'ASSEMBLED_COMPONENT']);
@@ -458,6 +494,9 @@ const ROUTES: RouteEntry[] = [
   { method: 'GET', template: '/planning/boms', schema: paginated(buildBom) },
   { method: 'POST', template: '/planning/boms', schema: z.object({ bom: buildBom }) },
   { method: 'PATCH', template: '/planning/boms/{id}/approve', schema: z.object({ bom: buildBom }) },
+  { method: 'GET', template: '/planning/routing-templates', schema: paginated(routingTemplate) },
+  { method: 'POST', template: '/planning/routing-templates', schema: z.object({ routingTemplate }) },
+  { method: 'PATCH', template: '/planning/routing-templates/{id}/state', schema: z.object({ routingTemplate }) },
   { method: 'GET', template: '/planning/vehicles', schema: paginated(cartVehicle) },
   { method: 'GET', template: '/work-orders/{id}', schema: z.object({ workOrder }) },
 

@@ -161,6 +161,73 @@ export const BomDesign: EntityDesign<BomState> = {
   ]
 };
 
+export enum RoutingTemplateState {
+  DRAFT = 'DRAFT',
+  ACTIVE = 'ACTIVE',
+  RETIRED = 'RETIRED'
+}
+
+export interface RoutingTemplateStep {
+  id: string;
+  routingTemplateId: string;
+  sequenceNo: number;
+  operationCode: string;
+  operationName: string;
+  workstationCode?: string;
+  estimatedMinutes: number;
+  requiredSkillCode?: string;
+  jobCardTitle?: string;
+  qcRequired: boolean;
+  evidenceRequired: boolean;
+}
+
+export interface RoutingTemplate {
+  id: string;
+  routeCode: string;
+  routeName: string;
+  routeVersion: number;
+  state: RoutingTemplateState;
+  buildConfigurationId?: string;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  steps: RoutingTemplateStep[];
+  updatedAt: string;
+}
+
+export const RoutingTemplateDesign: EntityDesign<RoutingTemplateState> = {
+  entity: 'RoutingTemplate',
+  purpose: 'Versioned production routing and job-card template master data for released builds.',
+  keyFields: ['id', 'routeCode', 'routeVersion', 'state', 'steps', 'updatedAt'],
+  requiredIndexes: [
+    { name: 'routing_templates_code_version_key', fields: ['routeCode', 'routeVersion'], unique: true },
+    { name: 'routing_templates_status_idx', fields: ['state'] },
+    { name: 'routing_template_steps_sequence_key', fields: ['routingTemplateId', 'sequenceNo'], unique: true }
+  ],
+  lifecycle: {
+    initial: RoutingTemplateState.DRAFT,
+    terminal: [RoutingTemplateState.RETIRED],
+    transitions: [
+      { from: RoutingTemplateState.DRAFT, to: RoutingTemplateState.ACTIVE, rule: 'Engineering releases route' },
+      { from: RoutingTemplateState.ACTIVE, to: RoutingTemplateState.RETIRED, rule: 'Superseded by newer route' }
+    ]
+  },
+  businessRules: [
+    'Only one ACTIVE routing template may exist per routeCode.',
+    'sequenceNo and operationCode must be unique within a routing template.',
+    'estimatedMinutes must be greater than zero for every job-card step.'
+  ],
+  emittedEvents: ['routing.template.created', 'routing.template.activated', 'routing.template.retired'],
+  apiOperations: [
+    { method: 'GET', path: '/planning/routing-templates', summary: 'List routing templates' },
+    { method: 'POST', path: '/planning/routing-templates', summary: 'Create routing template' },
+    {
+      method: 'PATCH',
+      path: '/planning/routing-templates/:id/state',
+      summary: 'Transition routing template state'
+    }
+  ]
+};
+
 export enum RoutingSopStepState {
   ACTIVE = 'ACTIVE',
   DEPRECATED = 'DEPRECATED'

@@ -16,6 +16,7 @@ const requiredEntities = [
   'Vendor',
   'PurchaseOrder',
   'BOM',
+  'RoutingTemplate',
   'RoutingSopStep',
   'WorkOrder',
   'TechnicianTask',

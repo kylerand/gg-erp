@@ -94,6 +94,7 @@ interface CreateExecutionWorkOrderInput {
   customerId?: string;
   buildConfigurationId: string;
   bomId: string;
+  routingTemplateId?: string;
   title?: string;
   description?: string;
   scheduledDate?: string;
@@ -123,6 +124,24 @@ interface ReleasedBuildPackageLineRow {
   quantityPerUnit: unknown;
   scrapFactor: unknown;
   installStage: string | null;
+}
+
+interface ReleasedRoutingTemplateHeaderRow {
+  routingTemplateId: string;
+  routeCode: string;
+  routeName: string;
+  routeVersion: number;
+  templateStatus: string;
+}
+
+interface ReleasedRoutingTemplateStepRow {
+  id: string;
+  sequenceNo: number;
+  operationCode: string;
+  operationName: string;
+  workstationCode: string | null;
+  estimatedMinutes: number;
+  requiredSkillCode: string | null;
 }
 
 interface ExecutionWorkOrderRecord {
@@ -216,6 +235,13 @@ export const createWoOrderHandler = wrapHandler(
     if (!buildConfiguration.ok) return jsonResponse(422, { message: buildConfiguration.message });
     const bom = parseUuidField(body.value.bomId, 'bomId');
     if (!bom.ok) return jsonResponse(422, { message: bom.message });
+    const routingTemplate =
+      body.value.routingTemplateId == null || body.value.routingTemplateId === ''
+        ? undefined
+        : parseUuidField(body.value.routingTemplateId, 'routingTemplateId');
+    if (routingTemplate && !routingTemplate.ok) {
+      return jsonResponse(422, { message: routingTemplate.message });
+    }
     const customer =
       body.value.customerId == null || body.value.customerId === ''
         ? undefined
@@ -307,6 +333,55 @@ export const createWoOrderHandler = wrapHandler(
       });
     }
 
+    let routingHeader: ReleasedRoutingTemplateHeaderRow | undefined;
+    let routingSteps: ReleasedRoutingTemplateStepRow[] = [];
+    if (routingTemplate && routingTemplate.ok) {
+      [routingHeader] = await db.$queryRaw<ReleasedRoutingTemplateHeaderRow[]>`
+        SELECT
+          rt.id::text AS "routingTemplateId",
+          rt.route_code AS "routeCode",
+          rt.route_name AS "routeName",
+          rt.route_version AS "routeVersion",
+          rt.template_status::text AS "templateStatus"
+        FROM planning.routing_templates rt
+        WHERE rt.id = ${routingTemplate.value}::uuid
+          AND (
+            rt.build_configuration_id IS NULL
+            OR rt.build_configuration_id = ${buildConfiguration.value}::uuid
+          )
+        LIMIT 1
+      `;
+      if (!routingHeader) {
+        return jsonResponse(404, {
+          message: 'Routing template was not found for the selected build configuration.',
+        });
+      }
+      if (routingHeader.templateStatus !== 'ACTIVE') {
+        return jsonResponse(409, {
+          message: 'Routing template must be active before creating a work order.',
+          templateStatus: routingHeader.templateStatus,
+        });
+      }
+      routingSteps = await db.$queryRaw<ReleasedRoutingTemplateStepRow[]>`
+        SELECT
+          id::text AS "id",
+          sequence_no AS "sequenceNo",
+          operation_code AS "operationCode",
+          operation_name AS "operationName",
+          workstation_code AS "workstationCode",
+          estimated_minutes AS "estimatedMinutes",
+          required_skill_code AS "requiredSkillCode"
+        FROM planning.routing_template_steps
+        WHERE routing_template_id = ${routingTemplate.value}::uuid
+        ORDER BY sequence_no ASC
+      `;
+      if (routingSteps.length === 0) {
+        return jsonResponse(422, {
+          message: 'Active routing template must contain at least one operation.',
+        });
+      }
+    }
+
     const lines = await db.$queryRaw<ReleasedBuildPackageLineRow[]>`
       SELECT
         p.id::text AS "partId",
@@ -349,42 +424,80 @@ export const createWoOrderHandler = wrapHandler(
       [
         `Created from released configuration ${header.configurationCode} v${header.configurationVersion}.`,
         `Approved BOM ${header.bomCode} rev ${header.revision}.`,
-      ].join('\n');
+        routingHeader
+          ? `Routing template ${routingHeader.routeCode} v${routingHeader.routeVersion}.`
+          : undefined,
+      ]
+        .filter(Boolean)
+        .join('\n');
 
-    const linesByStage = new Map<string, ReleasedBuildPackageLineRow[]>();
-    for (const line of lines) {
-      const stage = line.installStage ?? 'GENERAL';
-      const stageLines = linesByStage.get(stage) ?? [];
-      stageLines.push(line);
-      linesByStage.set(stage, stageLines);
-    }
-    const stageEntries = Array.from(linesByStage.entries()).sort(
-      ([a], [b]) => stageSortKey(a) - stageSortKey(b),
-    );
     const operationIdByStage = new Map<string, string>();
-    const operationRows = stageEntries.map(([stage, stageLines], idx) => {
-      const id = randomUUID();
-      operationIdByStage.set(stage, id);
-      return {
-        id,
-        workOrderId,
-        operationCode: `BUILD-${stage.replace(/_/g, '-')}`,
-        sequenceNo: (idx + 1) * 10,
-        operationName: `${stageLabel(stage)} build`,
-        requiredSkillCode: BUILD_STAGE_SKILL[stage] ?? BUILD_STAGE_SKILL.GENERAL,
-        estimatedMinutes: Math.max(30, stageLines.length * 30),
-        operationStatus: 'READY' as const,
-        correlationId: ctx.correlationId,
-        createdAt: now,
-        updatedAt: now,
-      };
-    });
+    const operationIdByCode = new Map<string, string>();
+    const operationIdBySkill = new Map<string, string>();
+    const operationRows =
+      routingSteps.length > 0
+        ? routingSteps.map((step) => {
+            const id = randomUUID();
+            operationIdByCode.set(step.operationCode, id);
+            if (step.requiredSkillCode) operationIdBySkill.set(step.requiredSkillCode, id);
+            return {
+              id,
+              workOrderId,
+              operationCode: step.operationCode,
+              sequenceNo: step.sequenceNo,
+              operationName: step.operationName,
+              requiredSkillCode: step.requiredSkillCode ?? 'BUILD',
+              estimatedMinutes: step.estimatedMinutes,
+              operationStatus: 'READY' as const,
+              correlationId: ctx.correlationId,
+              createdAt: now,
+              updatedAt: now,
+            };
+          })
+        : (() => {
+            const linesByStage = new Map<string, ReleasedBuildPackageLineRow[]>();
+            for (const line of lines) {
+              const stage = line.installStage ?? 'GENERAL';
+              const stageLines = linesByStage.get(stage) ?? [];
+              stageLines.push(line);
+              linesByStage.set(stage, stageLines);
+            }
+            const stageEntries = Array.from(linesByStage.entries()).sort(
+              ([a], [b]) => stageSortKey(a) - stageSortKey(b),
+            );
+            return stageEntries.map(([stage, stageLines], idx) => {
+              const id = randomUUID();
+              operationIdByStage.set(stage, id);
+              return {
+                id,
+                workOrderId,
+                operationCode: `BUILD-${stage.replace(/_/g, '-')}`,
+                sequenceNo: (idx + 1) * 10,
+                operationName: `${stageLabel(stage)} build`,
+                requiredSkillCode: BUILD_STAGE_SKILL[stage] ?? BUILD_STAGE_SKILL.GENERAL,
+                estimatedMinutes: Math.max(30, stageLines.length * 30),
+                operationStatus: 'READY' as const,
+                correlationId: ctx.correlationId,
+                createdAt: now,
+                updatedAt: now,
+              };
+            });
+          })();
+
+    const firstOperationId = operationRows[0]?.id ?? null;
     const partRows = lines.map((line) => {
       const stage = line.installStage ?? 'GENERAL';
+      const stageOperationCode = `BUILD-${stage.replace(/_/g, '-')}`;
+      const operationId =
+        operationIdByStage.get(stage) ??
+        operationIdByCode.get(stage) ??
+        operationIdByCode.get(stageOperationCode) ??
+        operationIdBySkill.get(BUILD_STAGE_SKILL[stage] ?? '') ??
+        firstOperationId;
       return {
         id: randomUUID(),
         workOrderId,
-        workOrderOperationId: operationIdByStage.get(stage) ?? null,
+        workOrderOperationId: operationId,
         partId: line.partId,
         requestedQuantity: requestedBuildQuantity(line),
         reservedQuantity: 0,

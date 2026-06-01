@@ -201,7 +201,9 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
       'listCustomers',
       'listCartVehicles',
       'listBuildPackages',
+      'listRoutingTemplates',
       'createExecutionWorkOrder',
+      'routingTemplateId',
       "erpRecordRoute('work-order'",
       'manualBuildConfigurationId',
       'manualBomId',
@@ -215,8 +217,11 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
       'listBuildPackages',
       'listBuildConfigurations',
       'listBoms',
+      'listRoutingTemplates',
       'createBuildConfiguration',
       'createBom',
+      'createRoutingTemplate',
+      'transitionRoutingTemplate',
       'allowMockFallback: false',
       "erpRoute('create-work-order'",
     ].filter((call) => !buildPackagesSource.includes(call)),
@@ -225,6 +230,7 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
   assert.ok(apiClientSource.includes('/planning/build-packages'));
   assert.ok(apiClientSource.includes('/planning/build-configurations'));
   assert.ok(apiClientSource.includes('/planning/boms'));
+  assert.ok(apiClientSource.includes('/planning/routing-templates'));
   assert.ok(apiClientSource.includes('/tickets/work-orders'));
   assert.equal(workOrderSource.includes('createWorkOrder'), false);
   assert.equal(workOrderSource.includes('listWorkOrderBuildPackages'), false);

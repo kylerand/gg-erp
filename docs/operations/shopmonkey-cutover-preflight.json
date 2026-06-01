@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-06-01T05:27:40.114Z",
+  "generatedAt": "2026-06-01T08:35:53.257Z",
   "sourceFile": "shopmonkey-sanitized-1773274402708.json",
   "sourceChecksum": "74b65ace228ddec8c98c5d0d7b869db4e296261037d3c22d8415d0ce44d518cc",
-  "overallStatus": "WARN",
+  "overallStatus": "FAIL",
   "totals": {
     "entitiesPresent": 5,
     "totalRows": 1021,
@@ -69,24 +69,24 @@
     {
       "key": "parts",
       "label": "Parts",
-      "status": "WARN",
+      "status": "FAIL",
       "total": 0,
       "valid": 0,
       "warned": 0,
       "skipped": 0,
       "validRatio": 0,
-      "detail": "Parts data is not present in this export."
+      "detail": "Parts data is missing from the export."
     },
     {
       "key": "purchaseOrders",
       "label": "Purchase Orders",
-      "status": "WARN",
+      "status": "FAIL",
       "total": 0,
       "valid": 0,
       "warned": 0,
       "skipped": 0,
       "validRatio": 0,
-      "detail": "Purchase Orders data is not present in this export."
+      "detail": "Purchase Orders data is missing from the export."
     },
     {
       "key": "lineItemAssignments",
@@ -101,7 +101,9 @@
     }
   ],
   "nextActions": [
-    "Review warning gates: Customers, Work Orders, Parts, Purchase Orders, Line Item Assignments.",
+    "Repair failed gates: Parts, Purchase Orders.",
+    "Capture ShopMonkey source rows for Parts, Purchase Orders before any shared staging or production cutover.",
+    "Review warning gates: Customers, Work Orders, Line Item Assignments.",
     "Run the loader against an isolated staging database and capture row-count reconciliation.",
     "Compare imported customers, carts, work orders, parts, vendors, and accounting sync queues in the ERP UI."
   ]

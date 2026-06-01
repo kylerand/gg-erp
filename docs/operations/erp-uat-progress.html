@@ -234,15 +234,15 @@
       <div class="summary">
         <div class="metric"><strong>20</strong><span>Tracked delivery slices</span></div>
         <div class="metric"><strong>19</strong><span>Done</span></div>
-        <div class="metric"><strong>1</strong><span>In progress</span></div>
-        <div class="metric"><strong>0</strong><span>Not started</span></div>
+        <div class="metric"><strong>0</strong><span>In progress</span></div>
+        <div class="metric"><strong>1</strong><span>Blocked</span></div>
       </div>
 
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: validating ShopMonkey cutover readiness around the now-actionable
-          operator workflows and keeping new mutation slices on the same live-data standard.
+          Current focus: ShopMonkey cutover readiness is blocked on missing parts and purchase-order
+          source exports. Preflight and isolated rehearsal evidence now fail that gate explicitly.
         </p>
         <div class="progress" aria-label="95 percent complete"><div style="width: 95%"></div></div>
       </section>
@@ -488,23 +488,24 @@
             </tr>
             <tr>
               <td>ShopMonkey cutover readiness</td>
-              <td><span class="pill doing">In progress</span></td>
+              <td><span class="pill todo">Blocked</span></td>
               <td>
                 `/admin/migration` is registered in the admin catalog and reads live
                 `GET /migration/batches` data with mock fallback disabled. The page summarizes
                 rehearsal batches, record coverage, migration errors, and cutover gate status, then
                 links into customers, parts, work orders, and accounting sync for imported-domain
                 inspection. `validate:shopmonkey-cutover` now produces sanitized JSON/HTML
-                preflight evidence; the latest report is
-                `docs/operations/shopmonkey-cutover-preflight.html`. `rehearse:shopmonkey-cutover`
-                now runs the loader against a disposable PostgreSQL database and writes counts-only
-                evidence to `docs/operations/shopmonkey-isolated-rehearsal.html`; the current
-                rehearsal loads 28 employees, 447 customers, 56 vehicles, 465 work orders, and 25
-                vendors with zero migration errors.
+                preflight evidence; the latest report fails because the current export contains
+                zero parts and zero purchase orders. `rehearse:shopmonkey-cutover` runs the loader
+                against a disposable PostgreSQL database and writes counts-only evidence to
+                `docs/operations/shopmonkey-isolated-rehearsal.html`; the current rehearsal proves
+                migrations and the loader can load 28 employees, 447 customers, 56 vehicles, 465
+                work orders, and 25 vendors with zero migration errors, then fails the production
+                gate for the missing parts and purchase-order source domains.
               </td>
               <td>
-                Capture or confirm the missing ShopMonkey parts and purchase-order source rows, then
-                run shared staging cutover UAT from the isolated rehearsal baseline.
+                Export ShopMonkey inventory parts and purchase orders, rerun preflight and isolated
+                rehearsal to PASS, then run shared staging cutover UAT from that complete baseline.
               </td>
             </tr>
             <tr>

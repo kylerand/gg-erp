@@ -22,7 +22,7 @@ describe('ShopMonkey cutover preflight', () => {
     expect(report.gates.find((gate) => gate.key === 'vendors')?.status).toBe('FAIL');
   });
 
-  it('warns but does not fail when optional entities are absent', () => {
+  it('fails when production-critical parts and purchase orders are absent', () => {
     const report = buildCutoverPreflightReport(
       {
         counts: {
@@ -36,13 +36,42 @@ describe('ShopMonkey cutover preflight', () => {
       { sourceFile: 'sample.json', generatedAt: '2026-06-01T00:00:00.000Z' },
     );
 
-    expect(report.overallStatus).toBe('WARN');
+    expect(report.overallStatus).toBe('FAIL');
     expect(report.totals.totalRows).toBe(953);
-    expect(report.gates.find((gate) => gate.key === 'parts')?.status).toBe('WARN');
+    expect(report.gates.find((gate) => gate.key === 'parts')?.status).toBe('FAIL');
+    expect(report.gates.find((gate) => gate.key === 'purchaseOrders')?.status).toBe('FAIL');
+    expect(report.nextActions).toContain(
+      'Capture ShopMonkey source rows for Parts, Purchase Orders before any shared staging or production cutover.',
+    );
 
     const html = renderCutoverPreflightHtml(report);
     expect(html).toContain('ShopMonkey Cutover Preflight');
     expect(html).toContain('Entity Gates');
     expect(html).not.toContain('<script');
+  });
+
+  it('recognizes raw export inventoryParts counts as the parts gate', () => {
+    const report = buildCutoverPreflightReport(
+      {
+        counts: {
+          customers: 447,
+          vehicles: 56,
+          orders: 397,
+          users: 28,
+          vendors: 25,
+          inventoryParts: 12,
+          purchaseOrders: 4,
+        },
+        parts: [],
+        inventoryParts: [{ id: 'part-1' }],
+      },
+      { sourceFile: 'raw-export.json', generatedAt: '2026-06-01T00:00:00.000Z' },
+    );
+
+    expect(report.overallStatus).toBe('WARN');
+    expect(report.gates.find((gate) => gate.key === 'parts')?.total).toBe(12);
+    expect(report.gates.find((gate) => gate.key === 'parts')?.status).toBe('PASS');
+    expect(report.gates.find((gate) => gate.key === 'purchaseOrders')?.status).toBe('PASS');
+    expect(report.gates.find((gate) => gate.key === 'lineItemAssignments')?.status).toBe('WARN');
   });
 });

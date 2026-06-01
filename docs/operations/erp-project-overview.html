@@ -345,14 +345,14 @@
       <header>
         <h1>Golfin Garage ERP Project Overview</h1>
         <p class="lede">
-          High-level status after the planning build-master authoring slice. The app has moved
-          past polished static screens into a usable shop-ops ERP foundation, but it is not yet a
-          complete ERPNext-grade operating system.
+          High-level status after the blocked-alert triage and QA cleanup slices. The app has moved
+          past polished static screens into a usable shop-ops ERP foundation, but ShopMonkey cutover
+          remains blocked until complete parts and purchase-order source exports are captured.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 1, 2026</span>
-          <span class="chip">Baseline: origin/main plus planning-master branch</span>
-          <span class="chip">Active slice: build configuration and BOM authoring</span>
+          <span class="chip">Baseline: origin/main through PR 150</span>
+          <span class="chip">Active slice: ShopMonkey cutover source gates</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
@@ -421,16 +421,9 @@
             <h3>What still keeps this from full production confidence</h3>
             <ul>
               <li>
-                Some core contract tracking is stale and needs reconciliation with the work that
-                shipped after March 20, 2026.
-              </li>
-              <li>
-                Identity/auth session bootstrap is deployed; this slice closes the one-click
-                floor-tech SSO handoff from the ERP shell.
-              </li>
-              <li>
-                Build package selection now has live planning-history and planning-master catalogs,
-                while technician selectors still need broader catalog-backed coverage.
+                ShopMonkey cutover evidence now fails honestly because the current export has zero
+                inventory parts and zero purchase orders. Those source domains must be exported
+                before shared staging or production cutover.
               </li>
               <li>
                 Planning still needs routing masters, job-card parity, effective dating, costing,
@@ -441,12 +434,8 @@
                 consequences are not mature yet.
               </li>
               <li>
-                ShopMonkey migration validation, reference data seeding, and cutover proving remain
-                open.
-              </li>
-              <li>
-                Known API smoke route exceptions are normally kept at zero; this active slice uses
-                one temporary pending-deploy allowance for the new blocked-alert triage action route.
+                Known API smoke route exceptions are back to zero after the blocked-alert triage
+                route deployed and the temporary allowance was removed.
               </li>
             </ul>
           </div>
@@ -684,9 +673,9 @@
             </header>
             <div class="bar risk"><span style="width: 45%"></span></div>
             <p>
-              ShopMonkey migration framework exists, but cutover validation, historical backfill
-              proof, reference seed migration, and production data quality checks are not yet
-              complete.
+              ShopMonkey migration framework and reference seed gates exist. Current cutover
+              evidence is intentionally blocked because the export has zero parts and zero purchase
+              orders; complete source coverage and shared staging UAT are still required.
             </p>
           </div>
 
@@ -720,8 +709,8 @@
               <td>Latest production baseline</td>
               <td><span class="pill done">Merged</span></td>
               <td>
-                <code>origin/main</code> is at <code>2c87d6e</code>, from PR 148: blocked-alert
-                route allowance cleanup after PR 147 deployed.
+                <code>origin/main</code> is at <code>0f74391</code>, from PR 150: blocked-alert
+                action route allowance cleanup after PR 149 deployed.
               </td>
             </tr>
             <tr>
@@ -770,9 +759,9 @@
         <h2>Recommended Next Slice</h2>
         <ol>
           <li>
-            <strong>Deploy and clear planning smoke allowances:</strong> merge this planning-master
-            branch, let migrations and Lambdas deploy, then remove the six temporary pending-deploy
-            QA smoke exceptions for the new planning routes.
+            <strong>Capture missing ShopMonkey source domains:</strong> export inventory parts and
+            purchase orders, rerun preflight and isolated rehearsal to PASS, then run shared staging
+            cutover UAT from that complete source baseline.
           </li>
           <li>
             <strong>Keep production blockers closed:</strong> continue verifying
@@ -799,12 +788,9 @@
             production baseline.
           </li>
           <li>
-            The local checkout currently has unrelated in-progress registry/repo-agent changes.
-            Those are noted as active work but excluded from completion percentages until merged.
-          </li>
-          <li>
-            The older MVP status tracker is useful but stale. The actionability tracker is more
-            current after PR 78.
+            The MVP implementation tracker and the actionability tracker now both mark ShopMonkey
+            cutover as blocked on missing source coverage rather than treating the partial rehearsal
+            as cutover-ready.
           </li>
           <li>
             The product direction remains "Shop Ops ERP": ERPNext-informed architecture, current

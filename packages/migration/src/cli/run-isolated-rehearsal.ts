@@ -378,11 +378,11 @@ async function collectCounts(dbUrl: string) {
         { key: 'vehicles', label: 'Vehicles', required: true, importedRows: vehicles, mappedRows: vehicleMappings },
         { key: 'orders', label: 'Work Orders', required: true, importedRows: workOrders, mappedRows: workOrderMappings },
         { key: 'vendors', label: 'Vendors', required: true, importedRows: vendors, mappedRows: vendorMappings },
-        { key: 'parts', label: 'Parts', required: false, importedRows: parts, mappedRows: partMappings },
+        { key: 'parts', label: 'Parts', required: true, importedRows: parts, mappedRows: partMappings },
         {
           key: 'purchaseOrders',
           label: 'Purchase Orders',
-          required: false,
+          required: true,
           importedRows: purchaseOrders,
           mappedRows: purchaseOrderMappings,
         },
@@ -508,8 +508,8 @@ async function main(): Promise<void> {
       { key: 'vehicles', label: 'Vehicles', required: true },
       { key: 'orders', label: 'Work Orders', required: true },
       { key: 'vendors', label: 'Vendors', required: true },
-      { key: 'parts', label: 'Parts', required: false },
-      { key: 'purchaseOrders', label: 'Purchase Orders', required: false },
+      { key: 'parts', label: 'Parts', required: true },
+      { key: 'purchaseOrders', label: 'Purchase Orders', required: true },
     ].map((entity) => {
       const counts = sourceCounts[entity.key as keyof typeof sourceCounts];
       const dbEntity = dbEntities.get(entity.key);

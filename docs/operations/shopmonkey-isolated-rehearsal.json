@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-01T06:33:33.691Z",
+  "generatedAt": "2026-06-01T08:36:11.857Z",
   "sourceFile": "packages/migration/shopmonkey-sanitized-1773274402708.json",
   "sourceKind": "sanitized-report",
   "database": {
@@ -7,28 +7,28 @@
     "image": "postgres:16-alpine",
     "keptContainer": false
   },
-  "overallStatus": "WARN",
+  "overallStatus": "FAIL",
   "commands": [
     {
       "name": "Start disposable PostgreSQL",
-      "command": "docker run -d --name gg-erp-shopmonkey-rehearsal-1780295604838-3fdfa962 -p 127.0.0.1::5432 postgres:16-alpine",
+      "command": "docker run -d --name gg-erp-shopmonkey-rehearsal-1780302962977-d0c31be8 -p 127.0.0.1::5432 postgres:16-alpine",
       "status": "PASS",
       "exitCode": 0,
-      "durationMs": 125
+      "durationMs": 142
     },
     {
       "name": "Apply Prisma migrations",
       "command": "npm run db:deploy --workspace=packages/db",
       "status": "PASS",
       "exitCode": 0,
-      "durationMs": 916
+      "durationMs": 894
     },
     {
       "name": "Run ShopMonkey loader",
       "command": "npx tsx packages/migration/src/cli/load-shopmonkey.ts packages/migration/shopmonkey-sanitized-1773274402708.json",
       "status": "PASS",
       "exitCode": 0,
-      "durationMs": 6332
+      "durationMs": 6422
     }
   ],
   "entities": [
@@ -95,26 +95,26 @@
     {
       "key": "parts",
       "label": "Parts",
-      "required": false,
+      "required": true,
       "sourceRows": 0,
       "sourceSkipped": 0,
       "importedRows": 0,
       "mappedRows": 0,
       "expectedRows": 0,
-      "status": "WARN",
-      "detail": "Parts is absent from this export; confirm this is intentional."
+      "status": "FAIL",
+      "detail": "Parts has no loadable source rows."
     },
     {
       "key": "purchaseOrders",
       "label": "Purchase Orders",
-      "required": false,
+      "required": true,
       "sourceRows": 0,
       "sourceSkipped": 0,
       "importedRows": 0,
       "mappedRows": 0,
       "expectedRows": 0,
-      "status": "WARN",
-      "detail": "Purchase Orders is absent from this export; confirm this is intentional."
+      "status": "FAIL",
+      "detail": "Purchase Orders has no loadable source rows."
     }
   ],
   "referenceSeeds": [
@@ -190,7 +190,7 @@
     "Migration errors": 0
   },
   "nextActions": [
-    "Review warning coverage: Parts, Purchase Orders.",
+    "Repair failed import coverage: Parts, Purchase Orders.",
     "Rerun the isolated rehearsal before loading any shared staging or production database."
   ]
 }

@@ -154,11 +154,11 @@
           <h1>ShopMonkey Cutover Preflight</h1>
           <p class="muted">Source: shopmonkey-sanitized-1773274402708.json</p>
         </div>
-        <div class="stamp">Generated: 2026-06-01T05:27:40.114Z</div>
+        <div class="stamp">Generated: 2026-06-01T08:35:53.257Z</div>
       </header>
 
       <div class="summary">
-        <div class="metric"><strong class="warn">WARN</strong><span>Overall status</span></div>
+        <div class="metric"><strong class="fail">FAIL</strong><span>Overall status</span></div>
         <div class="metric"><strong>5</strong><span>Entity groups present</span></div>
         <div class="metric"><strong>1,021</strong><span>Total rows</span></div>
         <div class="metric"><strong>69</strong><span>Warned rows</span></div>
@@ -233,23 +233,23 @@
         </tr>
         <tr>
           <td>Parts</td>
-          <td><span class="pill warn">WARN</span></td>
+          <td><span class="pill fail">FAIL</span></td>
           <td>0</td>
           <td>0</td>
           <td>0</td>
           <td>0</td>
           <td>0.0%</td>
-          <td>Parts data is not present in this export.</td>
+          <td>Parts data is missing from the export.</td>
         </tr>
         <tr>
           <td>Purchase Orders</td>
-          <td><span class="pill warn">WARN</span></td>
+          <td><span class="pill fail">FAIL</span></td>
           <td>0</td>
           <td>0</td>
           <td>0</td>
           <td>0</td>
           <td>0.0%</td>
-          <td>Purchase Orders data is not present in this export.</td>
+          <td>Purchase Orders data is missing from the export.</td>
         </tr>
         <tr>
           <td>Line Item Assignments</td>
@@ -266,7 +266,7 @@
 
       <section>
         <h2>Next Actions</h2>
-        <ul><li>Review warning gates: Customers, Work Orders, Parts, Purchase Orders, Line Item Assignments.</li><li>Run the loader against an isolated staging database and capture row-count reconciliation.</li><li>Compare imported customers, carts, work orders, parts, vendors, and accounting sync queues in the ERP UI.</li></ul>
+        <ul><li>Repair failed gates: Parts, Purchase Orders.</li><li>Capture ShopMonkey source rows for Parts, Purchase Orders before any shared staging or production cutover.</li><li>Review warning gates: Customers, Work Orders, Line Item Assignments.</li><li>Run the loader against an isolated staging database and capture row-count reconciliation.</li><li>Compare imported customers, carts, work orders, parts, vendors, and accounting sync queues in the ERP UI.</li></ul>
       </section>
     </main>
   </body>

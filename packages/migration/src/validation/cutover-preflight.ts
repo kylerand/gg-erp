@@ -46,17 +46,21 @@ interface EntityRule {
   minValidRatio?: number;
 }
 
+const SOURCE_KEY_ALIASES: Record<string, readonly string[]> = {
+  parts: ['parts', 'inventoryParts'],
+};
+
 const ENTITY_RULES: readonly EntityRule[] = [
   { key: 'customers', label: 'Customers', required: true, minTotal: 400, minValidRatio: 0.95 },
   { key: 'vehicles', label: 'Vehicles', required: true, minTotal: 50, minValidRatio: 0.9 },
   { key: 'orders', label: 'Work Orders', required: true, minTotal: 350, minValidRatio: 0.85 },
   { key: 'users', label: 'Employees', required: true, minTotal: 1, minValidRatio: 0.9 },
   { key: 'vendors', label: 'Vendors', required: true, minTotal: 1, minValidRatio: 0.9 },
-  { key: 'parts', label: 'Parts', required: false, minTotal: 1, minValidRatio: 0.9 },
+  { key: 'parts', label: 'Parts', required: true, minTotal: 1, minValidRatio: 0.9 },
   {
     key: 'purchaseOrders',
     label: 'Purchase Orders',
-    required: false,
+    required: true,
     minTotal: 1,
     minValidRatio: 0.9,
   },
@@ -95,6 +99,16 @@ function countFromArray(value: unknown): EntityCount | undefined {
 }
 
 function countFromSummary(value: unknown): EntityCount | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const total = Math.max(0, Math.trunc(value));
+    return {
+      total,
+      valid: total,
+      warned: 0,
+      skipped: 0,
+    };
+  }
+
   if (!isRecord(value)) return undefined;
   const total = toNumber(value.total);
   const skipped = toNumber(value.skipped);
@@ -108,7 +122,22 @@ function countFromSummary(value: unknown): EntityCount | undefined {
 
 function getEntityCount(source: Record<string, unknown>, key: string): EntityCount | undefined {
   const counts = isRecord(source.counts) ? source.counts : {};
-  return countFromSummary(counts[key]) ?? countFromArray(source[key]);
+  const aliases = SOURCE_KEY_ALIASES[key] ?? [key];
+  const candidates: EntityCount[] = [];
+
+  for (const alias of aliases) {
+    const candidate = countFromSummary(counts[alias]);
+    if (candidate && candidate.total > 0) return candidate;
+    if (candidate) candidates.push(candidate);
+  }
+
+  for (const alias of aliases) {
+    const candidate = countFromArray(source[alias]);
+    if (candidate && candidate.total > 0) return candidate;
+    if (candidate) candidates.push(candidate);
+  }
+
+  return candidates[0];
 }
 
 function evaluateGate(rule: EntityRule, count: EntityCount | undefined): EntityGate {
@@ -185,9 +214,17 @@ function buildNextActions(gates: readonly EntityGate[]): string[] {
   const actions: string[] = [];
   const failed = gates.filter((gate) => gate.status === 'FAIL');
   const warned = gates.filter((gate) => gate.status === 'WARN');
+  const missingSource = failed.filter(
+    (gate) => ['parts', 'purchaseOrders'].includes(gate.key) && gate.total === 0,
+  );
 
   if (failed.length > 0) {
     actions.push(`Repair failed gates: ${failed.map((gate) => gate.label).join(', ')}.`);
+  }
+  if (missingSource.length > 0) {
+    actions.push(
+      `Capture ShopMonkey source rows for ${missingSource.map((gate) => gate.label).join(', ')} before any shared staging or production cutover.`,
+    );
   }
   if (warned.length > 0) {
     actions.push(`Review warning gates: ${warned.map((gate) => gate.label).join(', ')}.`);

@@ -26,6 +26,7 @@ import {
 } from '../../contexts/build-planning/workOrder.validation.js';
 import { InMemoryEventPublisher, InMemoryOutbox } from '../../events/index.js';
 import { ConsoleObservabilityHooks } from '../../observability/index.js';
+import { listPlanningMasterBuildPackages } from './planning-masters.js';
 
 export interface ApiGatewayProxyEventLike {
   body?: string | null;
@@ -280,12 +281,24 @@ export async function listBuildPackagesHandler(
   const filteredPackages = summarizeBuildPackages(enrichedItems).filter((pkg) =>
     matchesBuildPackageSearch(pkg, query.search ?? ''),
   );
+  const masterPackages = await listPlanningMasterBuildPackages({
+    search: query.search,
+    limit: 500,
+    offset: 0,
+  });
+  const masterKeys = new Set(
+    masterPackages.items.map((pkg) => `${pkg.buildConfigurationId}:${pkg.bomId}`),
+  );
+  const combinedPackages = [
+    ...masterPackages.items,
+    ...filteredPackages.filter((pkg) => !masterKeys.has(`${pkg.buildConfigurationId}:${pkg.bomId}`)),
+  ].sort((left, right) => right.lastUsedAt.localeCompare(left.lastUsedAt));
   const response: ListBuildPackagesResponse = {
-    items: filteredPackages.slice(offset, offset + limit),
-    total: filteredPackages.length,
+    items: combinedPackages.slice(offset, offset + limit),
+    total: combinedPackages.length,
     limit,
     offset,
-    source: 'WORK_ORDER_HISTORY',
+    source: masterPackages.items.length > 0 ? 'COMBINED' : 'WORK_ORDER_HISTORY',
   };
 
   return json(200, response);

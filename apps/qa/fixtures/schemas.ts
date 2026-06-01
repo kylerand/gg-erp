@@ -62,6 +62,65 @@ const cartVehicle = z.object({
   updatedAt: isoDate,
 });
 
+const buildPackage = z.object({
+  id: z.string(),
+  buildConfigurationId: z.string(),
+  bomId: z.string(),
+  label: z.string(),
+  description: z.string(),
+  source: z.enum(['WORK_ORDER_HISTORY', 'PLANNING_MASTER']),
+  workOrderCount: z.number().int().nonnegative(),
+  lastUsedAt: isoDate,
+  lastWorkOrderId: z.string().optional(),
+  lastWorkOrderNumber: z.string().optional(),
+  lastVehicleDisplayName: z.string().optional(),
+  lastCustomerDisplayName: z.string().optional(),
+  stateCounts: z.record(z.string(), z.number().int().nonnegative()),
+});
+
+const buildConfiguration = z.object({
+  id: uuid,
+  configurationCode: z.string(),
+  vehicleId: uuid,
+  vehicleDisplayName: z.string().optional(),
+  customerDisplayName: z.string().optional(),
+  configurationVersion: z.number().int().positive(),
+  configurationStatus: z.enum(['DRAFT', 'LOCKED', 'RELEASED', 'SUPERSEDED']),
+  selectedOptions: z.array(z.string()),
+  notes: z.string().optional(),
+  releasedAt: isoDate.optional(),
+  createdAt: isoDate,
+  updatedAt: isoDate,
+  version: z.number().int().nonnegative(),
+});
+
+const bomLine = z.object({
+  id: uuid,
+  bomId: uuid,
+  partId: uuid,
+  sku: z.string(),
+  partName: z.string(),
+  unitOfMeasure: z.string(),
+  quantityPerUnit: z.number().positive(),
+  scrapFactor: z.number().nonnegative(),
+  lineNote: z.string().optional(),
+});
+
+const buildBom = z.object({
+  id: uuid,
+  bomCode: z.string(),
+  buildConfigurationId: uuid,
+  configurationCode: z.string().optional(),
+  revision: z.number().int().positive(),
+  bomStatus: z.enum(['DRAFT', 'APPROVED', 'OBSOLETE']),
+  notes: z.string().optional(),
+  approvedAt: isoDate.optional(),
+  createdAt: isoDate,
+  updatedAt: isoDate,
+  version: z.number().int().nonnegative(),
+  lines: z.array(bomLine),
+});
+
 // ─── Inventory ────────────────────────────────────────────────────────────
 
 const partLifecycleLevel = z.enum(['RAW_COMPONENT', 'PREPARED_COMPONENT', 'ASSEMBLED_COMPONENT']);
@@ -323,6 +382,13 @@ interface RouteEntry {
 const ROUTES: RouteEntry[] = [
   // Work Orders
   { method: 'GET', template: '/planning/work-orders', schema: paginated(workOrder) },
+  { method: 'GET', template: '/planning/build-packages', schema: paginated(buildPackage) },
+  { method: 'GET', template: '/planning/build-configurations', schema: paginated(buildConfiguration) },
+  { method: 'POST', template: '/planning/build-configurations', schema: z.object({ buildConfiguration }) },
+  { method: 'PATCH', template: '/planning/build-configurations/{id}/state', schema: z.object({ buildConfiguration }) },
+  { method: 'GET', template: '/planning/boms', schema: paginated(buildBom) },
+  { method: 'POST', template: '/planning/boms', schema: z.object({ bom: buildBom }) },
+  { method: 'PATCH', template: '/planning/boms/{id}/approve', schema: z.object({ bom: buildBom }) },
   { method: 'GET', template: '/planning/vehicles', schema: paginated(cartVehicle) },
   { method: 'GET', template: '/work-orders/{id}', schema: z.object({ workOrder }) },
 

@@ -374,14 +374,83 @@ export interface WorkOrderBuildPackage {
   bomId: string;
   label: string;
   description: string;
-  source: 'WORK_ORDER_HISTORY';
+  source: 'WORK_ORDER_HISTORY' | 'PLANNING_MASTER';
   workOrderCount: number;
   lastUsedAt: string;
-  lastWorkOrderId: string;
-  lastWorkOrderNumber: string;
+  lastWorkOrderId?: string;
+  lastWorkOrderNumber?: string;
   lastVehicleDisplayName?: string;
   lastCustomerDisplayName?: string;
   stateCounts: Record<string, number>;
+}
+
+export type BuildConfigurationStatus = 'DRAFT' | 'LOCKED' | 'RELEASED' | 'SUPERSEDED';
+export type BomStatus = 'DRAFT' | 'APPROVED' | 'OBSOLETE';
+
+export interface BuildConfiguration {
+  id: string;
+  configurationCode: string;
+  vehicleId: string;
+  vehicleDisplayName?: string;
+  customerDisplayName?: string;
+  configurationVersion: number;
+  configurationStatus: BuildConfigurationStatus;
+  selectedOptions: string[];
+  notes?: string;
+  releasedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+}
+
+export interface BomLineInput {
+  partId: string;
+  quantityPerUnit: number;
+  scrapFactor?: number;
+  lineNote?: string;
+}
+
+export interface BomLine {
+  id: string;
+  bomId: string;
+  partId: string;
+  sku: string;
+  partName: string;
+  unitOfMeasure: string;
+  quantityPerUnit: number;
+  scrapFactor: number;
+  lineNote?: string;
+}
+
+export interface BuildBom {
+  id: string;
+  bomCode: string;
+  buildConfigurationId: string;
+  configurationCode?: string;
+  revision: number;
+  bomStatus: BomStatus;
+  notes?: string;
+  approvedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+  lines: BomLine[];
+}
+
+export interface CreateBuildConfigurationInput {
+  configurationCode: string;
+  vehicleId: string;
+  configurationVersion?: number;
+  selectedOptions?: string[];
+  notes?: string;
+}
+
+export interface CreateBomInput {
+  bomCode: string;
+  buildConfigurationId: string;
+  revision?: number;
+  notes?: string;
+  lines: BomLineInput[];
 }
 
 export interface CreateWorkOrderInput {
@@ -511,6 +580,104 @@ export async function listWorkOrderBuildPackages(
   options?: ApiDataOptions,
 ): Promise<{ items: WorkOrderBuildPackage[]; total: number }> {
   return listBuildPackages(params, options);
+}
+
+export async function listBuildConfigurations(
+  params?: {
+    search?: string;
+    status?: BuildConfigurationStatus;
+    vehicleId?: string;
+    limit?: number;
+    offset?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<{ items: BuildConfiguration[]; total: number; limit: number; offset: number }> {
+  const qs = new URLSearchParams();
+  if (params?.search) qs.set('search', params.search);
+  if (params?.status) qs.set('status', params.status);
+  if (params?.vehicleId) qs.set('vehicleId', params.vehicleId);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  return apiFetch(
+    `/planning/build-configurations${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    { items: [], total: 0, limit: params?.limit ?? 50, offset: params?.offset ?? 0 },
+    options,
+  );
+}
+
+export async function createBuildConfiguration(
+  input: CreateBuildConfigurationInput,
+): Promise<BuildConfiguration> {
+  const data = await apiFetch<{ buildConfiguration: BuildConfiguration }>(
+    '/planning/build-configurations',
+    {
+      method: 'POST',
+      headers: mutationHeaders(),
+      body: JSON.stringify(input),
+    },
+  );
+  return data.buildConfiguration;
+}
+
+export async function transitionBuildConfiguration(
+  id: string,
+  state: BuildConfigurationStatus,
+): Promise<BuildConfiguration> {
+  const data = await apiFetch<{ buildConfiguration: BuildConfiguration }>(
+    `/planning/build-configurations/${encodeURIComponent(id)}/state`,
+    {
+      method: 'PATCH',
+      headers: mutationHeaders(),
+      body: JSON.stringify({ state }),
+    },
+  );
+  return data.buildConfiguration;
+}
+
+export async function listBoms(
+  params?: {
+    search?: string;
+    status?: BomStatus;
+    buildConfigurationId?: string;
+    limit?: number;
+    offset?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<{ items: BuildBom[]; total: number; limit: number; offset: number }> {
+  const qs = new URLSearchParams();
+  if (params?.search) qs.set('search', params.search);
+  if (params?.status) qs.set('status', params.status);
+  if (params?.buildConfigurationId) qs.set('buildConfigurationId', params.buildConfigurationId);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  return apiFetch(
+    `/planning/boms${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    { items: [], total: 0, limit: params?.limit ?? 50, offset: params?.offset ?? 0 },
+    options,
+  );
+}
+
+export async function createBom(input: CreateBomInput): Promise<BuildBom> {
+  const data = await apiFetch<{ bom: BuildBom }>('/planning/boms', {
+    method: 'POST',
+    headers: mutationHeaders(),
+    body: JSON.stringify(input),
+  });
+  return data.bom;
+}
+
+export async function approveBom(id: string): Promise<BuildBom> {
+  const data = await apiFetch<{ bom: BuildBom }>(
+    `/planning/boms/${encodeURIComponent(id)}/approve`,
+    {
+      method: 'PATCH',
+      headers: mutationHeaders(),
+      body: JSON.stringify({}),
+    },
+  );
+  return data.bom;
 }
 
 export async function createWorkOrder(input: CreateWorkOrderInput): Promise<WorkOrder> {

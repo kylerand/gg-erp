@@ -21,6 +21,23 @@ enum WorkOrderStatus {
   @@schema("planning")
 }
 
+enum BuildConfigurationStatus {
+  DRAFT
+  LOCKED
+  RELEASED
+  SUPERSEDED
+
+  @@schema("planning")
+}
+
+enum BomStatus {
+  DRAFT
+  APPROVED
+  OBSOLETE
+
+  @@schema("planning")
+}
+
 enum CartVehicleStatus {
   REGISTERED
   IN_BUILD
@@ -41,6 +58,8 @@ model CartVehicle {
   state        CartVehicleStatus @default(REGISTERED)
   createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime          @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  buildConfigurations BuildConfiguration[]
 
   @@index([customerId, state], map: "cart_vehicles_customer_state_idx")
   @@map("cart_vehicles")
@@ -78,6 +97,82 @@ model WorkOrder {
   @@index([vehicleId], map: "work_orders_vehicle_idx")
   @@index([createdAt], map: "work_orders_created_idx")
   @@map("work_orders")
+  @@schema("planning")
+}
+
+model BuildConfiguration {
+  id                   String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  configurationCode    String                   @unique @map("configuration_code")
+  vehicleId            String                   @map("vehicle_id") @db.Uuid
+  configurationVersion Int                      @default(1) @map("configuration_version")
+  configurationStatus  BuildConfigurationStatus @default(DRAFT) @map("configuration_status")
+  selectedOptions      Json                     @default("[]") @map("selected_options") @db.JsonB
+  notes                String?
+  releasedAt           DateTime?                @map("released_at") @db.Timestamptz(6)
+  supersededById       String?                  @map("superseded_by_id") @db.Uuid
+  createdByUserId      String?                  @map("created_by_user_id") @db.Uuid
+  updatedByUserId      String?                  @map("updated_by_user_id") @db.Uuid
+  lastCorrelationId    String?                  @map("last_correlation_id")
+  lastRequestId        String?                  @map("last_request_id")
+  createdAt            DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime                 @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version              Int                      @default(0)
+
+  vehicle      CartVehicle          @relation(fields: [vehicleId], references: [id])
+  supersededBy BuildConfiguration?  @relation("BuildConfigurationSupersede", fields: [supersededById], references: [id])
+  supersedes   BuildConfiguration[] @relation("BuildConfigurationSupersede")
+  boms         BuildBom[]
+
+  @@unique([vehicleId, configurationVersion], map: "build_configurations_vehicle_version_key")
+  @@index([configurationStatus], map: "build_configurations_status_idx")
+  @@index([vehicleId], map: "build_configurations_vehicle_idx")
+  @@map("build_configurations")
+  @@schema("planning")
+}
+
+model BuildBom {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bomCode              String    @unique @map("bom_code")
+  buildConfigurationId String    @map("build_configuration_id") @db.Uuid
+  revision             Int       @default(1)
+  bomStatus            BomStatus @default(DRAFT) @map("bom_status")
+  notes                String?
+  approvedAt           DateTime? @map("approved_at") @db.Timestamptz(6)
+  approvedByUserId     String?   @map("approved_by_user_id") @db.Uuid
+  createdByUserId      String?   @map("created_by_user_id") @db.Uuid
+  updatedByUserId      String?   @map("updated_by_user_id") @db.Uuid
+  lastCorrelationId    String?   @map("last_correlation_id")
+  lastRequestId        String?   @map("last_request_id")
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version              Int       @default(0)
+
+  buildConfiguration BuildConfiguration @relation(fields: [buildConfigurationId], references: [id])
+  lines              BuildBomLine[]
+
+  @@unique([buildConfigurationId, revision], map: "build_boms_configuration_revision_key")
+  @@index([bomStatus], map: "build_boms_status_idx")
+  @@index([buildConfigurationId], map: "build_boms_configuration_idx")
+  @@map("build_boms")
+  @@schema("planning")
+}
+
+model BuildBomLine {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bomId           String   @map("bom_id") @db.Uuid
+  partId          String   @map("part_id") @db.Uuid
+  quantityPerUnit Decimal  @map("quantity_per_unit") @db.Decimal(14, 4)
+  scrapFactor     Decimal  @default(0) @map("scrap_factor") @db.Decimal(8, 4)
+  lineNote        String?  @map("line_note")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  bom  BuildBom @relation(fields: [bomId], references: [id], onDelete: Cascade)
+  part Part     @relation(fields: [partId], references: [id])
+
+  @@unique([bomId, partId], map: "build_bom_lines_bom_part_key")
+  @@index([partId], map: "build_bom_lines_part_idx")
+  @@map("build_bom_lines")
   @@schema("planning")
 }
 
@@ -668,6 +763,7 @@ model Part {
   stockLots          StockLot[]
   workOrderParts     WoPartLine[]
   purchaseOrderLines PurchaseOrderLine[]
+  buildBomLines      BuildBomLine[]
 
   @@unique([sku])
   @@index([partState])

@@ -345,38 +345,38 @@
       <header>
         <h1>Golfin Garage ERP Project Overview</h1>
         <p class="lede">
-          High-level status after the cycle-count batch execution slice. The app has moved past
-          polished static screens into a usable shop-ops ERP foundation, but it is not yet a
+          High-level status after the planning build-master authoring slice. The app has moved
+          past polished static screens into a usable shop-ops ERP foundation, but it is not yet a
           complete ERPNext-grade operating system.
         </p>
         <div class="meta-row">
-          <span class="chip">Reviewed: May 31, 2026</span>
-          <span class="chip">Baseline: origin/main plus cycle-count branch</span>
-          <span class="chip">Active slice: cycle-count batch posting</span>
+          <span class="chip">Reviewed: June 1, 2026</span>
+          <span class="chip">Baseline: origin/main plus planning-master branch</span>
+          <span class="chip">Active slice: build configuration and BOM authoring</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
 
       <div class="summary">
         <div class="metric">
-          <strong>73%</strong>
+          <strong>75%</strong>
           <span>Estimated production readiness for an internal ERP rollout.</span>
-          <div class="bar warn"><span style="width: 73%"></span></div>
+          <div class="bar warn"><span style="width: 75%"></span></div>
         </div>
         <div class="metric">
-          <strong>86%</strong>
+          <strong>88%</strong>
           <span>Actionability remediation from the UAT plan.</span>
-          <div class="bar good"><span style="width: 86%"></span></div>
+          <div class="bar good"><span style="width: 88%"></span></div>
         </div>
         <div class="metric">
-          <strong>69%</strong>
+          <strong>72%</strong>
           <span>Live workflow/API contract completeness.</span>
-          <div class="bar warn"><span style="width: 69%"></span></div>
+          <div class="bar warn"><span style="width: 72%"></span></div>
         </div>
         <div class="metric">
-          <strong>55%</strong>
+          <strong>58%</strong>
           <span>ERPNext-style breadth: ledgers, lifecycle, setup, reports.</span>
-          <div class="bar risk"><span style="width: 55%"></span></div>
+          <div class="bar risk"><span style="width: 58%"></span></div>
         </div>
       </div>
 
@@ -397,6 +397,11 @@
                 variance, payable review, import/export, stock movement history, manual stock
                 adjustment posting, stock transfer posting, cycle-count batch posting, and bulk row
                 actions.
+              </li>
+              <li>
+                Planning masters now let operators create, lock, and release build configurations,
+                author BOM revisions from live active parts, approve BOMs, and reuse released
+                configuration/BOM pairs as build packages.
               </li>
               <li>
                 Dashboards, KPI cards, reporting cards, and many workspace links now deep-link to
@@ -424,13 +429,12 @@
                 floor-tech SSO handoff from the ERP shell.
               </li>
               <li>
-                Build package selection now has a live planning-history catalog and manual
-                released-reference fallback; material planning can assign default vendors, while
-                technician selectors still need broader catalog-backed coverage.
+                Build package selection now has live planning-history and planning-master catalogs,
+                while technician selectors still need broader catalog-backed coverage.
               </li>
               <li>
-                Cycle-count batches and BOM authoring are the next inventory depth gaps after
-                manual stock adjustment and transfer posting.
+                Planning still needs routing masters, job-card parity, effective dating, costing,
+                and change-control guardrails before it matches ERPNext-style manufacturing depth.
               </li>
               <li>
                 Accounting is still integration-first; internal GL, financial reports, and ledger
@@ -442,7 +446,7 @@
               </li>
               <li>
                 Known API smoke route exceptions are normally kept at zero; this active slice uses
-                one temporary pending-deploy allowance for the new stock-adjustment route.
+                six temporary pending-deploy allowances for the new planning-master routes.
               </li>
             </ul>
           </div>
@@ -565,13 +569,14 @@
           <div class="module-card">
             <header>
               <h3>Work Orders And Shop Execution</h3>
-              <span class="pill doing">82%</span>
+              <span class="pill doing">83%</span>
             </header>
-            <div class="bar good"><span style="width: 82%"></span></div>
+            <div class="bar good"><span style="width: 83%"></span></div>
             <p>
               Strongest operator surface. The command center now covers commercial context, service
               transitions, materials, labor, QC, SOP, activity, customer/cart editing, accepted
-              quote conversion, and build-package selection from the dedicated planning catalog.
+              quote conversion, and build-package selection from dedicated planning history and
+              planning-master catalogs.
             </p>
           </div>
 
@@ -591,16 +596,31 @@
           <div class="module-card">
             <header>
               <h3>Inventory And Purchasing</h3>
-              <span class="pill done">91%</span>
+              <span class="pill done">92%</span>
             </header>
-            <div class="bar good"><span style="width: 91%"></span></div>
+            <div class="bar good"><span style="width: 92%"></span></div>
             <p>
               Receiving, PO lifecycle, reservations, replenishment, default-vendor assignment from
               material planning, variance, payable handoff, import/export, stock movement history,
               manual stock adjustments, stock transfer posting, cycle-count batch posting, and
               drill-through are live. Reservation, release, issue, adjustment, transfer, and
-              cycle-count variance writes now append immutable ledger consequences. Broader item
-              editing and BOM authoring are the next practical gaps.
+              cycle-count variance writes now append immutable ledger consequences. Build BOM
+              authoring now lives in Planning; broader item editing, routing, and cost rollups are
+              the next practical gaps.
+            </p>
+          </div>
+
+          <div class="module-card">
+            <header>
+              <h3>Planning Masters</h3>
+              <span class="pill doing">64%</span>
+            </header>
+            <div class="bar warn"><span style="width: 64%"></span></div>
+            <p>
+              Build package selection no longer depends only on historical work orders. Operators
+              can author build configurations, lock/release them, create BOM revisions from active
+              parts, approve BOMs, and publish approved pairs into the package catalog. Remaining
+              depth is routing masters, costing, engineering change control, and effective dates.
             </p>
           </div>
 
@@ -748,14 +768,9 @@
         <h2>Recommended Next Slice</h2>
         <ol>
           <li>
-            <strong>Reconcile status truth:</strong> update
-            <code>docs/architecture/IMPLEMENTATION_STATUS.md</code> to reflect the PR 59-78 work so
-            project reporting stops undercounting shipped functionality.
-          </li>
-          <li>
-            <strong>Finish registry-backed route coverage:</strong> land the active registry route
-            coverage branch through CI so navigation, command palette, and QA share one source of
-            truth.
+            <strong>Deploy and clear planning smoke allowances:</strong> merge this planning-master
+            branch, let migrations and Lambdas deploy, then remove the six temporary pending-deploy
+            QA smoke exceptions for the new planning routes.
           </li>
           <li>
             <strong>Keep production blockers closed:</strong> continue verifying
@@ -763,12 +778,13 @@
             in live UAT runs.
           </li>
           <li>
-            <strong>Extend planning masters:</strong> add write-side build configuration and BOM
-            authoring/versioning now that selectors read from the dedicated planning catalog.
+            <strong>Deepen planning execution:</strong> add routing masters, job-card templates,
+            effective dating, and engineering change control around released configurations and
+            approved BOMs.
           </li>
           <li>
             <strong>Move toward ERP ledgers:</strong> start internal accounting ledger design and
-            BOM versioning before adding more financial-report UI.
+            posting rules before adding more financial-report UI.
           </li>
         </ol>
       </section>

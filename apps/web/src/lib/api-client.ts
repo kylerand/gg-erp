@@ -399,6 +399,7 @@ export interface WorkOrderBuildPackage {
 export type BuildConfigurationStatus = 'DRAFT' | 'LOCKED' | 'RELEASED' | 'SUPERSEDED';
 export type BomStatus = 'DRAFT' | 'APPROVED' | 'OBSOLETE';
 export type RoutingTemplateStatus = 'DRAFT' | 'ACTIVE' | 'RETIRED';
+export type PlanningChangeEntityType = 'CONFIGURATION' | 'BOM' | 'ROUTE';
 
 export interface BuildConfiguration {
   id: string;
@@ -553,6 +554,24 @@ export interface RoutingTemplate {
   estimatedLaborCostCents: number;
   steps: RoutingTemplateStep[];
   changeEvents: RoutingTemplateChangeEvent[];
+}
+
+export interface PlanningChangeEvent {
+  id: string;
+  entityType: PlanningChangeEntityType;
+  entityId: string;
+  recordCode: string;
+  versionNumber: number;
+  versionLabel: string;
+  changeKind: string;
+  previousStatus?: string;
+  newStatus: string;
+  changeSummary: string;
+  approvalNote?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  appliedBy?: string;
+  createdAt: string;
 }
 
 export interface CreateBuildConfigurationInput {
@@ -736,6 +755,28 @@ export async function listBuildConfigurations(
   if (params?.offset) qs.set('offset', String(params.offset));
   return apiFetch(
     `/planning/build-configurations${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    { items: [], total: 0, limit: params?.limit ?? 50, offset: params?.offset ?? 0 },
+    options,
+  );
+}
+
+export async function listPlanningChangeEvents(
+  params?: {
+    search?: string;
+    entityType?: PlanningChangeEntityType;
+    limit?: number;
+    offset?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<{ items: PlanningChangeEvent[]; total: number; limit: number; offset: number }> {
+  const qs = new URLSearchParams();
+  if (params?.search) qs.set('search', params.search);
+  if (params?.entityType) qs.set('entityType', params.entityType);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  return apiFetch(
+    `/planning/change-events${qs.size ? `?${qs}` : ''}`,
     undefined,
     { items: [], total: 0, limit: params?.limit ?? 50, offset: params?.offset ?? 0 },
     options,

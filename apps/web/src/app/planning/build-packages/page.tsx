@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import {
@@ -304,6 +305,8 @@ function routeDiff(current: RoutingTemplate, previous?: RoutingTemplate): string
 }
 
 export default function BuildPackagesPage() {
+  const searchParams = useSearchParams();
+  const routeSearch = searchParams.get('search') ?? '';
   const [packages, setPackages] = useState<WorkOrderBuildPackage[]>([]);
   const [configs, setConfigs] = useState<BuildConfiguration[]>([]);
   const [boms, setBoms] = useState<BuildBom[]>([]);
@@ -339,6 +342,10 @@ export default function BuildPackagesPage() {
   const [configurationApprovalNotes, setConfigurationApprovalNotes] = useState<Record<string, string>>({});
   const [bomApprovalNotes, setBomApprovalNotes] = useState<Record<string, string>>({});
   const [routeApprovalNotes, setRouteApprovalNotes] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setSearch(routeSearch);
+  }, [routeSearch]);
 
   useEffect(() => {
     let active = true;

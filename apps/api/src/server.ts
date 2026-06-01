@@ -21,6 +21,7 @@ import {
   createRoutingTemplateHandler,
   listBomsHandler,
   listBuildConfigurationsHandler,
+  listPlanningChangeEventsHandler,
   listRoutingTemplatesHandler,
   transitionBuildConfigurationHandler,
   transitionRoutingTemplateHandler,
@@ -389,6 +390,8 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     result = await listWorkOrdersHandler(event);
   } else if (pathname === '/planning/build-packages' && method === 'GET') {
     result = await listBuildPackagesHandler(event);
+  } else if (pathname === '/planning/change-events' && method === 'GET') {
+    result = await listPlanningChangeEventsHandler(event);
   } else if (pathname === '/planning/build-configurations' && method === 'GET') {
     result = await listBuildConfigurationsHandler(event);
   } else if (pathname === '/planning/build-configurations' && method === 'POST') {
@@ -1073,7 +1076,7 @@ server.listen(PORT, () => {
   console.log(`   Time        GET /tickets/time-entries`);
   console.log(`   Routing     GET|PATCH /tickets/routing-steps/:id`);
   console.log(
-    `   Planning    GET|POST /planning/work-orders, GET /planning/build-packages, GET|POST /planning/build-configurations|boms|routing-templates`,
+    `   Planning    GET|POST /planning/work-orders, GET /planning/build-packages|change-events, GET|POST /planning/build-configurations|boms|routing-templates`,
   );
   console.log(`   SOP         GET|POST /sop, /sop/modules, /sop/modules/:id`);
   console.log(`   Training    PUT /sop/modules/:id/step-progress, POST /sop/modules/:id/quiz`);

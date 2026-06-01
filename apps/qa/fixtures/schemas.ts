@@ -229,6 +229,24 @@ const routingTemplate = z.object({
   changeEvents: z.array(routingTemplateChangeEvent),
 });
 
+const planningChangeEvent = z.object({
+  id: uuid,
+  entityType: z.enum(['CONFIGURATION', 'BOM', 'ROUTE']),
+  entityId: uuid,
+  recordCode: z.string(),
+  versionNumber: z.number().int().positive(),
+  versionLabel: z.string(),
+  changeKind: z.string(),
+  previousStatus: z.string().optional(),
+  newStatus: z.string(),
+  changeSummary: z.string(),
+  approvalNote: z.string().optional(),
+  approvedBy: z.string().optional(),
+  approvedAt: isoDate.optional(),
+  appliedBy: z.string().optional(),
+  createdAt: isoDate,
+});
+
 // ─── Inventory ────────────────────────────────────────────────────────────
 
 const partLifecycleLevel = z.enum(['RAW_COMPONENT', 'PREPARED_COMPONENT', 'ASSEMBLED_COMPONENT']);
@@ -543,6 +561,7 @@ const ROUTES: RouteEntry[] = [
   // Work Orders
   { method: 'GET', template: '/planning/work-orders', schema: paginated(workOrder) },
   { method: 'GET', template: '/planning/build-packages', schema: paginated(buildPackage) },
+  { method: 'GET', template: '/planning/change-events', schema: paginated(planningChangeEvent) },
   { method: 'GET', template: '/planning/build-configurations', schema: paginated(buildConfiguration) },
   { method: 'POST', template: '/planning/build-configurations', schema: z.object({ buildConfiguration }) },
   { method: 'PATCH', template: '/planning/build-configurations/{id}/state', schema: z.object({ buildConfiguration }) },

@@ -31,11 +31,11 @@ export interface WorkOrderBuildPackageResponse {
   bomId: string;
   label: string;
   description: string;
-  source: 'WORK_ORDER_HISTORY';
+  source: 'WORK_ORDER_HISTORY' | 'PLANNING_MASTER';
   workOrderCount: number;
   lastUsedAt: string;
-  lastWorkOrderId: string;
-  lastWorkOrderNumber: string;
+  lastWorkOrderId?: string;
+  lastWorkOrderNumber?: string;
   lastVehicleDisplayName?: string;
   lastCustomerDisplayName?: string;
   stateCounts: Record<string, number>;
@@ -102,7 +102,7 @@ export interface ListBuildPackagesResponse {
   total: number;
   limit: number;
   offset: number;
-  source: 'WORK_ORDER_HISTORY';
+  source: 'WORK_ORDER_HISTORY' | 'PLANNING_MASTER' | 'COMBINED';
 }
 
 export function toWorkOrderResponse(workOrder: WorkOrder): WorkOrderResponse {

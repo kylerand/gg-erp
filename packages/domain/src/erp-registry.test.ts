@@ -41,6 +41,8 @@ test('registry route helper resolves module links and filtered routes', () => {
   assert.equal(getRequiredErpRoute('work-order'), '/work-orders');
   assert.equal(getRequiredErpRoute('create-work-order'), '/work-orders/new');
   assert.equal(getRequiredErpRoute('build-package'), '/planning/build-packages');
+  assert.equal(getRequiredErpRoute('build-configuration'), '/planning/build-packages');
+  assert.equal(getRequiredErpRoute('build-bom'), '/planning/build-packages');
   assert.equal(getRequiredErpRoute('inventory-ledger'), '/inventory/ledger');
   assert.equal(getRequiredErpRoute('inventory-adjustment'), '/inventory/adjustments');
   assert.equal(getRequiredErpRoute('inventory-transfer'), '/inventory/transfers');
@@ -112,6 +114,12 @@ test('workspace navigation items include live links and quick actions', () => {
   assert.ok(trainingItems.some((item) => item.key === 'training-admin'));
   assert.ok(
     getErpWorkspaceNavigationItems('planning').some((item) => item.key === 'build-package'),
+  );
+  assert.ok(
+    getErpWorkspaceNavigationItems('planning').some((item) => item.key === 'build-configuration'),
+  );
+  assert.ok(
+    getErpWorkspaceNavigationItems('planning').some((item) => item.key === 'build-bom'),
   );
   assert.ok(
     getErpWorkspaceNavigationItems('admin').some((item) => item.key === 'accounting-settings'),

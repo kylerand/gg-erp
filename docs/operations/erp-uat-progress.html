@@ -228,23 +228,23 @@
           <p class="muted">Production readiness tracker</p>
           <h1>ERP Actionability UAT Progress</h1>
         </div>
-        <div class="stamp">Last updated: 2026-05-31</div>
+        <div class="stamp">Last updated: 2026-06-01</div>
       </header>
 
       <div class="summary">
-        <div class="metric"><strong>15</strong><span>Tracked delivery slices</span></div>
+        <div class="metric"><strong>16</strong><span>Tracked delivery slices</span></div>
         <div class="metric"><strong>11</strong><span>Done</span></div>
-        <div class="metric"><strong>4</strong><span>In progress</span></div>
+        <div class="metric"><strong>5</strong><span>In progress</span></div>
         <div class="metric"><strong>0</strong><span>Not started</span></div>
       </div>
 
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: remaining accounting sync actionability, stable selectors, and ERP
-          execution behind polished secondary actions.
+          Current focus: deploying planning-master authoring, clearing temporary QA smoke
+          allowances, and moving the next depth work toward accounting ledgers and routing masters.
         </p>
-        <div class="progress" aria-label="94 percent complete"><div style="width: 94%"></div></div>
+        <div class="progress" aria-label="95 percent complete"><div style="width: 95%"></div></div>
       </section>
 
       <section>
@@ -316,11 +316,26 @@
                 the dedicated planning catalog and supports manual engineering-approved references
                 when no package is reusable. Work-order list selectors resolve cart and customer
                 context instead of rendering vehicle/configuration IDs, and Planning exposes the
-                build package catalog as an operator page.
+                build package catalog as an operator page. The catalog now includes authored
+                build-configuration and approved-BOM packages in addition to reusable history.
               </td>
               <td>
-                Add write-side build configuration and BOM authoring/versioning once dedicated
-                tables land.
+                Backfill richer routing, job-card, and costing selectors once those master APIs are
+                stable.
+              </td>
+            </tr>
+            <tr>
+              <td>Planning masters and build packages</td>
+              <td><span class="pill doing">In progress</span></td>
+              <td>
+                `/planning/build-packages` now reads strict live packages, build configurations,
+                BOMs, cart vehicles, and active parts. Operators can create build configurations,
+                lock and release them, author BOM revisions from live parts, approve BOMs, and
+                publish approved configuration/BOM pairs into the build-package catalog.
+              </td>
+              <td>
+                Merge, deploy migrations and planning Lambdas, then clear the six temporary
+                pending-deploy QA smoke allowances for the new planning endpoints.
               </td>
             </tr>
             <tr>
@@ -434,7 +449,8 @@
                 transfers, and cycle-count variance postings.
               </td>
               <td>
-                Expand broader item editing and BOM selectors when those mutation APIs are stable.
+                Expand broader item editing, routing integration, and cost rollups when those
+                mutation APIs are stable.
               </td>
             </tr>
             <tr>

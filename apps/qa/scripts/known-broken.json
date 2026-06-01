@@ -1,4 +1,47 @@
 {
   "_doc": "Routes with an expected non-healthy API smoke status in the currently deployed QA API. Smoke fails when this list drifts in EITHER direction — a new bug joins, OR an existing bug gets fixed/deployed (so we know to remove the entry). File a Linear ticket when adding long-lived handler bugs; remove pending-deploy entries after the route is live. Use expectRouteMiss for pending Terraform routes that are not deployed yet.",
-  "broken": []
+  "broken": [
+    {
+      "method": "GET",
+      "path": "/planning/build-configurations",
+      "expectStatus": 404,
+      "expectRouteMiss": true,
+      "note": "Pending deploy for planning build configuration routes added in the current PR."
+    },
+    {
+      "method": "POST",
+      "path": "/planning/build-configurations",
+      "expectStatus": 404,
+      "expectRouteMiss": true,
+      "note": "Pending deploy for planning build configuration routes added in the current PR."
+    },
+    {
+      "method": "PATCH",
+      "path": "/planning/build-configurations/{id}/state",
+      "expectStatus": 404,
+      "expectRouteMiss": true,
+      "note": "Pending deploy for planning build configuration routes added in the current PR."
+    },
+    {
+      "method": "GET",
+      "path": "/planning/boms",
+      "expectStatus": 404,
+      "expectRouteMiss": true,
+      "note": "Pending deploy for planning BOM routes added in the current PR."
+    },
+    {
+      "method": "POST",
+      "path": "/planning/boms",
+      "expectStatus": 404,
+      "expectRouteMiss": true,
+      "note": "Pending deploy for planning BOM routes added in the current PR."
+    },
+    {
+      "method": "PATCH",
+      "path": "/planning/boms/{id}/approve",
+      "expectStatus": 404,
+      "expectRouteMiss": true,
+      "note": "Pending deploy for planning BOM routes added in the current PR."
+    }
+  ]
 }

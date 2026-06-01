@@ -208,12 +208,20 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
     [],
   );
   assert.deepEqual(
-    ['listBuildPackages', 'allowMockFallback: false', "erpRoute('create-work-order'"].filter(
-      (call) => !buildPackagesSource.includes(call),
-    ),
+    [
+      'listBuildPackages',
+      'listBuildConfigurations',
+      'listBoms',
+      'createBuildConfiguration',
+      'createBom',
+      'allowMockFallback: false',
+      "erpRoute('create-work-order'",
+    ].filter((call) => !buildPackagesSource.includes(call)),
     [],
   );
   assert.ok(apiClientSource.includes('/planning/build-packages'));
+  assert.ok(apiClientSource.includes('/planning/build-configurations'));
+  assert.ok(apiClientSource.includes('/planning/boms'));
   assert.equal(workOrderSource.includes('listWorkOrderBuildPackages'), false);
   assert.deepEqual(
     ['listCustomers', 'getCustomer', 'listOpportunities', 'listParts', 'SearchableSelect'].filter(

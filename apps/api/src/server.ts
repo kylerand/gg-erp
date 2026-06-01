@@ -15,6 +15,14 @@ import {
   type ApiGatewayProxyEventLike,
 } from './lambda/work-orders/handlers.js';
 import {
+  approveBomHandler,
+  createBomHandler,
+  createBuildConfigurationHandler,
+  listBomsHandler,
+  listBuildConfigurationsHandler,
+  transitionBuildConfigurationHandler,
+} from './lambda/work-orders/planning-masters.js';
+import {
   triggerBatchHandler,
   listBatchesHandler,
   getBatchHandler,
@@ -301,6 +309,8 @@ async function route(
   const qbReconciliationRunMatch = pathname.match(/^\/accounting\/reconciliation\/runs\/([^/]+)/);
   const qbReconciliationRecordMatch = pathname.match(/^\/accounting\/reconciliation\/records\/([^/]+)/);
   const capacitySlotMatch = pathname.match(/^\/scheduling\/capacity-slots\/([^/]+)(?:\/([^/]+))?$/);
+  const buildConfigurationMatch = pathname.match(/^\/planning\/build-configurations\/([^/]+)(?:\/state)?$/);
+  const bomApproveMatch = pathname.match(/^\/planning\/boms\/([^/]+)\/approve$/);
 
   // ── Auth ───────────────────────────────────────────────────────────────────
   if (pathname === '/auth/me' && method === 'GET') {
@@ -319,6 +329,21 @@ async function route(
     result = await listWorkOrdersHandler(event);
   } else if (pathname === '/planning/build-packages' && method === 'GET') {
     result = await listBuildPackagesHandler(event);
+  } else if (pathname === '/planning/build-configurations' && method === 'GET') {
+    result = await listBuildConfigurationsHandler(event);
+  } else if (pathname === '/planning/build-configurations' && method === 'POST') {
+    result = await createBuildConfigurationHandler(event);
+  } else if (buildConfigurationMatch && method === 'PATCH') {
+    result = await transitionBuildConfigurationHandler({
+      ...event,
+      pathParameters: { id: buildConfigurationMatch[1] },
+    });
+  } else if (pathname === '/planning/boms' && method === 'GET') {
+    result = await listBomsHandler(event);
+  } else if (pathname === '/planning/boms' && method === 'POST') {
+    result = await createBomHandler(event);
+  } else if (bomApproveMatch && method === 'PATCH') {
+    result = await approveBomHandler({ ...event, pathParameters: { id: bomApproveMatch[1] } });
   } else if (pathname === '/planning/vehicles' && method === 'GET') {
     result = await listVehiclesHandler(event);
   } else if (vehicleMatch && method === 'PATCH') {
@@ -753,7 +778,7 @@ server.listen(PORT, () => {
   console.log(`   Queue       GET /tickets/wo-queue, GET /tickets/wo-queue/:id`);
   console.log(`   Time        GET /tickets/time-entries`);
   console.log(`   Routing     GET|PATCH /tickets/routing-steps/:id`);
-  console.log(`   Planning    GET|POST /planning/work-orders, GET /planning/build-packages, GET /planning/vehicles`);
+  console.log(`   Planning    GET|POST /planning/work-orders, GET /planning/build-packages, GET|POST /planning/build-configurations, GET|POST /planning/boms`);
   console.log(`   SOP         GET|POST /sop, /sop/modules, /sop/modules/:id`);
   console.log(`   Training    PUT /sop/modules/:id/step-progress, POST /sop/modules/:id/quiz`);
   console.log(`   Migration   GET|POST /migration/batches, /:id, /:id/cancel`);

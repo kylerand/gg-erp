@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import {
-  createWorkOrder,
+  createExecutionWorkOrder,
   listBuildPackages,
   listCartVehicles,
   listCustomers,
@@ -12,7 +12,7 @@ import {
   type Customer,
   type WorkOrderBuildPackage,
 } from '@/lib/api-client';
-import { erpRoute } from '@/lib/erp-routes';
+import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 import { PageHeader } from '@gg-erp/ui';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -164,7 +164,7 @@ export default function NewWorkOrderPage() {
 
     setLoading(true);
     try {
-      await createWorkOrder({
+      const created = await createExecutionWorkOrder({
         workOrderNumber: workOrderNumber.trim(),
         vehicleId,
         customerId: customerId || undefined,
@@ -174,7 +174,7 @@ export default function NewWorkOrderPage() {
         scheduledDate: scheduledDate ? new Date(scheduledDate).toISOString() : undefined,
       });
       toast.success('Work order created');
-      router.push(erpRoute('work-order'));
+      router.push(erpRecordRoute('work-order', created.id));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to create work order');
     } finally {

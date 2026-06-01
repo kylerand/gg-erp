@@ -50,6 +50,23 @@ const workOrder = z.object({
   updatedAt: isoDate,
 });
 
+const executionWorkOrder = z.object({
+  id: uuid,
+  workOrderNumber: z.string(),
+  title: z.string(),
+  description: z.string().optional(),
+  customerReference: z.string().optional(),
+  assetReference: z.string().optional(),
+  status: z.enum(['DRAFT', 'READY', 'SCHEDULED', 'IN_PROGRESS', 'BLOCKED', 'COMPLETED', 'CANCELLED']),
+  priority: z.number().int(),
+  stockLocationId: z.string().optional(),
+  openedAt: isoDate,
+  dueAt: isoDate.optional(),
+  completedAt: isoDate.optional(),
+  createdAt: isoDate,
+  updatedAt: isoDate,
+});
+
 const cartVehicle = z.object({
   id: uuid,
   vin: z.string(),
@@ -393,7 +410,8 @@ const ROUTES: RouteEntry[] = [
   { method: 'GET', template: '/work-orders/{id}', schema: z.object({ workOrder }) },
 
   // Tickets / tasks
-  { method: 'GET', template: '/tickets/work-orders', schema: paginated(workOrder) },
+  { method: 'GET', template: '/tickets/work-orders', schema: paginated(executionWorkOrder) },
+  { method: 'POST', template: '/tickets/work-orders', schema: z.object({ workOrder: executionWorkOrder }) },
   { method: 'GET', template: '/tickets/technician-tasks', schema: paginated(technicianTask) },
   { method: 'GET', template: '/tickets/tasks', schema: paginated(technicianTask) },
 

@@ -79,6 +79,7 @@ import {
   createTimeEntryHandler,
   updateTimeEntryHandler,
   deleteTimeEntryHandler,
+  createWoOrderHandler,
   listWoQueueHandler,
   listAllWorkOrdersHandler,
   getWoDetailHandler,
@@ -466,6 +467,8 @@ async function route(
   // ── Work Orders — full list (all statuses, paginated) ────────────────────
   } else if (pathname === '/tickets/work-orders' && method === 'GET') {
     result = await listAllWorkOrdersHandler(event);
+  } else if (pathname === '/tickets/work-orders' && method === 'POST') {
+    result = await createWoOrderHandler(event);
 
   // ── Work Order Queue (floor-tech) ─────────────────────────────────────────
   } else if (pathname === '/tickets/wo-queue' && method === 'GET') {
@@ -774,7 +777,7 @@ server.listen(PORT, () => {
   console.log(`   Workspace   GET /workspace/today`);
   console.log(`   Customers   GET|POST /identity/customers, GET|POST /:id/transition`);
   console.log(`   Inventory   GET|POST /inventory/parts, PATCH /inventory/parts/:id, GET /inventory/vendors, GET /inventory/ledger, POST /inventory/adjustments, POST /inventory/transfers, POST /inventory/cycle-counts`);
-  console.log(`   Tickets     /tickets/work-orders/:id/tasks|operations|rework|qc-gates|time-entries`);
+  console.log(`   Tickets     GET|POST /tickets/work-orders, /tickets/work-orders/:id/tasks|operations|rework|qc-gates|time-entries`);
   console.log(`   Queue       GET /tickets/wo-queue, GET /tickets/wo-queue/:id`);
   console.log(`   Time        GET /tickets/time-entries`);
   console.log(`   Routing     GET|PATCH /tickets/routing-steps/:id`);

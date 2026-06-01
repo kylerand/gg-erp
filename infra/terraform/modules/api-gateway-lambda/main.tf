@@ -1839,6 +1839,25 @@ resource "aws_lambda_function" "tickets_list_all_work_orders" {
   }
 }
 
+resource "aws_lambda_function" "tickets_create_wo" {
+  function_name    = "${var.name_prefix}-tickets-create-wo"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "create-wo.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/tickets-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.tickets_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.tickets_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
 resource "aws_lambda_function" "tickets_list_technician_tasks" {
   function_name    = "${var.name_prefix}-tickets-list-technician-tasks"
   role             = aws_iam_role.erp_lambda.arn
@@ -3019,6 +3038,21 @@ resource "aws_apigatewayv2_route" "tickets_list_all_work_orders" {
   route_key          = "GET /tickets/work-orders"
   target             = "integrations/${aws_apigatewayv2_integration.tickets_list_all_work_orders.id}"
   authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "tickets_create_wo" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.tickets_create_wo.invoke_arn
+  payload_format_version = "2.0"
+}
+resource "aws_apigatewayv2_route" "tickets_create_wo" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /tickets/work-orders"
+  target             = "integrations/${aws_apigatewayv2_integration.tickets_create_wo.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "tickets_list_technician_tasks" {
@@ -5385,6 +5419,7 @@ locals {
     tickets_create_rework                 = aws_lambda_function.tickets_create_rework
     tickets_list_sync                     = aws_lambda_function.tickets_list_sync
     tickets_list_all_work_orders          = aws_lambda_function.tickets_list_all_work_orders
+    tickets_create_wo                     = aws_lambda_function.tickets_create_wo
     tickets_list_technician_tasks         = aws_lambda_function.tickets_list_technician_tasks
     tickets_transition_technician_task    = aws_lambda_function.tickets_transition_technician_task
     tickets_transition_wo_operation       = aws_lambda_function.tickets_transition_wo_operation

@@ -233,16 +233,16 @@
 
       <div class="summary">
         <div class="metric"><strong>21</strong><span>Tracked delivery slices</span></div>
-        <div class="metric"><strong>19</strong><span>Done</span></div>
-        <div class="metric"><strong>1</strong><span>In progress</span></div>
+        <div class="metric"><strong>20</strong><span>Done</span></div>
+        <div class="metric"><strong>0</strong><span>In progress</span></div>
         <div class="metric"><strong>1</strong><span>Blocked</span></div>
       </div>
 
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: accounting trial balance and period-close readiness are being made live
-          from posted internal journals.
+          Current focus: accounting reversals and period locks can now build on the deployed
+          trial-balance and period-close readiness report from posted internal journals.
           ShopMonkey cutover readiness remains blocked on missing parts and purchase-order source
           exports.
         </p>
@@ -406,22 +406,25 @@
                 received POs into bill-review or receiving actions.
               </td>
               <td>
-                Operational ledger and immutable journal posting are live; trial balance and
-                period-close readiness are now the active internal-ledger report follow-on slice.
+                Operational ledger, immutable journal posting, trial balance, and period-close
+                readiness are live; reversals and period locks are the next accounting maturity
+                slice.
               </td>
             </tr>
             <tr>
               <td>Accounting reports and close readiness</td>
-              <td><span class="pill doing">In progress</span></td>
+              <td><span class="pill done">Done</span></td>
               <td>
-                This branch adds <code>GET /accounting/reports/trial-balance</code>, groups posted
+                <code>GET /accounting/reports/trial-balance</code> is deployed, groups posted
                 journal lines by account, surfaces close-readiness checks for unposted operational
                 entries, sync exceptions, reconciliation mismatches, and renders the report on
-                <code>/accounting/ledger</code> with strict live-data reads.
+                <code>/accounting/ledger</code> with strict live-data reads. Live smoke confirms the
+                protected route reaches the API authorizer, and API smoke has no deployed-route
+                exception for it.
               </td>
               <td>
-                Pass PR CI/QA, merge, prove CD/live smoke for the new report route, then remove the
-                pending-deploy QA route exception.
+                Use the close-readiness blockers as the source for reversal, lock, and close-period
+                workflows.
               </td>
             </tr>
             <tr>

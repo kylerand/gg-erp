@@ -30,10 +30,27 @@ enum BuildConfigurationStatus {
   @@schema("planning")
 }
 
+enum BuildConfigurationChangeKind {
+  CREATED
+  LOCKED
+  RELEASED
+  SUPERSEDED
+
+  @@schema("planning")
+}
+
 enum BomStatus {
   DRAFT
   APPROVED
   OBSOLETE
+
+  @@schema("planning")
+}
+
+enum BomChangeKind {
+  CREATED
+  APPROVED
+  OBSOLETED
 
   @@schema("planning")
 }
@@ -136,16 +153,44 @@ model BuildConfiguration {
   updatedAt            DateTime                 @default(now()) @map("updated_at") @db.Timestamptz(6)
   version              Int                      @default(0)
 
-  vehicle          CartVehicle          @relation(fields: [vehicleId], references: [id])
-  supersededBy     BuildConfiguration?  @relation("BuildConfigurationSupersede", fields: [supersededById], references: [id])
-  supersedes       BuildConfiguration[] @relation("BuildConfigurationSupersede")
+  vehicle          CartVehicle                     @relation(fields: [vehicleId], references: [id])
+  supersededBy     BuildConfiguration?             @relation("BuildConfigurationSupersede", fields: [supersededById], references: [id])
+  supersedes       BuildConfiguration[]            @relation("BuildConfigurationSupersede")
   boms             BuildBom[]
   routingTemplates RoutingTemplate[]
+  changeEvents     BuildConfigurationChangeEvent[]
 
   @@unique([vehicleId, configurationVersion], map: "build_configurations_vehicle_version_key")
   @@index([configurationStatus], map: "build_configurations_status_idx")
   @@index([vehicleId], map: "build_configurations_vehicle_idx")
   @@map("build_configurations")
+  @@schema("planning")
+}
+
+model BuildConfigurationChangeEvent {
+  id                   String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  buildConfigurationId String                       @map("build_configuration_id") @db.Uuid
+  configurationCode    String                       @map("configuration_code")
+  configurationVersion Int                          @map("configuration_version")
+  changeKind           BuildConfigurationChangeKind @map("change_kind")
+  previousStatus       BuildConfigurationStatus?    @map("previous_status")
+  newStatus            BuildConfigurationStatus     @map("new_status")
+  changeSummary        String                       @map("change_summary")
+  approvalNote         String?                      @map("approval_note")
+  approvedByUserId     String?                      @map("approved_by_user_id") @db.Uuid
+  approvedByRef        String?                      @map("approved_by_ref")
+  approvedAt           DateTime?                    @map("approved_at") @db.Timestamptz(6)
+  appliedByUserId      String?                      @map("applied_by_user_id") @db.Uuid
+  appliedByRef         String?                      @map("applied_by_ref")
+  lastCorrelationId    String?                      @map("last_correlation_id")
+  lastRequestId        String?                      @map("last_request_id")
+  createdAt            DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  buildConfiguration BuildConfiguration @relation(fields: [buildConfigurationId], references: [id], onDelete: Cascade)
+
+  @@index([buildConfigurationId, createdAt], map: "build_config_change_events_config_time_idx")
+  @@index([changeKind], map: "build_config_change_events_kind_idx")
+  @@map("build_configuration_change_events")
   @@schema("planning")
 }
 
@@ -166,13 +211,43 @@ model BuildBom {
   updatedAt            DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
   version              Int       @default(0)
 
-  buildConfiguration BuildConfiguration @relation(fields: [buildConfigurationId], references: [id])
+  buildConfiguration BuildConfiguration    @relation(fields: [buildConfigurationId], references: [id])
   lines              BuildBomLine[]
+  changeEvents       BuildBomChangeEvent[]
 
   @@unique([buildConfigurationId, revision], map: "build_boms_configuration_revision_key")
   @@index([bomStatus], map: "build_boms_status_idx")
   @@index([buildConfigurationId], map: "build_boms_configuration_idx")
   @@map("build_boms")
+  @@schema("planning")
+}
+
+model BuildBomChangeEvent {
+  id                   String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bomId                String        @map("bom_id") @db.Uuid
+  bomCode              String        @map("bom_code")
+  buildConfigurationId String        @map("build_configuration_id") @db.Uuid
+  revision             Int
+  changeKind           BomChangeKind @map("change_kind")
+  previousStatus       BomStatus?    @map("previous_status")
+  newStatus            BomStatus     @map("new_status")
+  changeSummary        String        @map("change_summary")
+  approvalNote         String?       @map("approval_note")
+  approvedByUserId     String?       @map("approved_by_user_id") @db.Uuid
+  approvedByRef        String?       @map("approved_by_ref")
+  approvedAt           DateTime?     @map("approved_at") @db.Timestamptz(6)
+  appliedByUserId      String?       @map("applied_by_user_id") @db.Uuid
+  appliedByRef         String?       @map("applied_by_ref")
+  lastCorrelationId    String?       @map("last_correlation_id")
+  lastRequestId        String?       @map("last_request_id")
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  bom BuildBom @relation(fields: [bomId], references: [id], onDelete: Cascade)
+
+  @@index([bomId, createdAt], map: "build_bom_change_events_bom_time_idx")
+  @@index([buildConfigurationId], map: "build_bom_change_events_configuration_idx")
+  @@index([changeKind], map: "build_bom_change_events_kind_idx")
+  @@map("build_bom_change_events")
   @@schema("planning")
 }
 

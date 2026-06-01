@@ -170,6 +170,8 @@ export default function BuildPackagesPage() {
   const [routeEffectiveTo, setRouteEffectiveTo] = useState('');
   const [routeNotes, setRouteNotes] = useState('');
   const [routingSteps, setRoutingSteps] = useState<DraftRoutingStep[]>([defaultRoutingStep()]);
+  const [configurationApprovalNotes, setConfigurationApprovalNotes] = useState<Record<string, string>>({});
+  const [bomApprovalNotes, setBomApprovalNotes] = useState<Record<string, string>>({});
   const [routeApprovalNotes, setRouteApprovalNotes] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -282,11 +284,23 @@ export default function BuildPackagesPage() {
   }
 
   async function releaseConfiguration(config: BuildConfiguration): Promise<void> {
+    const approvalNote = configurationApprovalNotes[config.id]?.trim();
+    if (!approvalNote) {
+      toast.error('Add an approval note before changing configuration status.');
+      return;
+    }
     setSaving(true);
     try {
       const nextState = config.configurationStatus === 'DRAFT' ? 'LOCKED' : 'RELEASED';
-      await transitionBuildConfiguration(config.id, nextState);
+      await transitionBuildConfiguration(config.id, nextState, {
+        approvalNote,
+        changeSummary:
+          nextState === 'LOCKED'
+            ? `Approved engineering lock for ${config.configurationCode} v${config.configurationVersion}.`
+            : `Approved production release for ${config.configurationCode} v${config.configurationVersion}.`,
+      });
       toast.success(nextState === 'LOCKED' ? 'Configuration locked' : 'Configuration released');
+      setConfigurationApprovalNotes((current) => ({ ...current, [config.id]: '' }));
       reload();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to update configuration.');
@@ -335,10 +349,19 @@ export default function BuildPackagesPage() {
   }
 
   async function approveRevision(bom: BuildBom): Promise<void> {
+    const approvalNote = bomApprovalNotes[bom.id]?.trim();
+    if (!approvalNote) {
+      toast.error('Add an approval note before approving the BOM.');
+      return;
+    }
     setSaving(true);
     try {
-      await approveBom(bom.id);
+      await approveBom(bom.id, {
+        approvalNote,
+        changeSummary: `Approved ${bom.bomCode} rev ${bom.revision} for production.`,
+      });
       toast.success('BOM approved');
+      setBomApprovalNotes((current) => ({ ...current, [bom.id]: '' }));
       reload();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to approve BOM.');
@@ -1069,30 +1092,74 @@ export default function BuildPackagesPage() {
             <CardTitle className="text-lg">Configurations</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {configs.slice(0, 8).map((config) => (
-              <div
-                key={config.id}
-                className="flex flex-col gap-2 border-b border-[#EFE6DC] pb-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div>
-                  <div className="font-semibold text-[#211F1E]">{config.configurationCode}</div>
-                  <div className="text-xs text-[#6E625A]">
-                    {config.vehicleDisplayName ?? config.vehicleId} · v{config.configurationVersion} ·{' '}
-                    {statusText(config.configurationStatus)}
+            {configs.slice(0, 8).map((config) => {
+              const latestChange = config.changeEvents[0];
+              const transitionAllowed =
+                config.configurationStatus === 'DRAFT' || config.configurationStatus === 'LOCKED';
+              return (
+                <div
+                  key={config.id}
+                  className="flex flex-col gap-2 border-b border-[#EFE6DC] pb-3 last:border-b-0"
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <div className="font-semibold text-[#211F1E]">{config.configurationCode}</div>
+                      <div className="text-xs text-[#6E625A]">
+                        {config.vehicleDisplayName ?? config.vehicleId} · v{config.configurationVersion} ·{' '}
+                        {statusText(config.configurationStatus)}
+                      </div>
+                      {latestChange && (
+                        <div className="mt-2 flex items-start gap-2 rounded-md bg-[#F7F1EA] px-3 py-2 text-xs text-[#4A4039]">
+                          <History className="mt-0.5 h-3.5 w-3.5 text-[#A85D18]" />
+                          <div>
+                            <div className="font-semibold text-[#211F1E]">
+                              {statusText(latestChange.changeKind)} · {formatDate(latestChange.createdAt)}
+                            </div>
+                            <div>{latestChange.changeSummary}</div>
+                            {latestChange.approvalNote && (
+                              <div className="mt-1 text-[#6E625A]">{latestChange.approvalNote}</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="w-full space-y-2 sm:w-56">
+                      <Input
+                        aria-label="Configuration approval note"
+                        disabled={!transitionAllowed}
+                        value={configurationApprovalNotes[config.id] ?? ''}
+                        onChange={(event) =>
+                          setConfigurationApprovalNotes((current) => ({
+                            ...current,
+                            [config.id]: event.target.value,
+                          }))
+                        }
+                        placeholder="Approval note / ECO"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        disabled={
+                          saving ||
+                          !transitionAllowed ||
+                          !(configurationApprovalNotes[config.id] ?? '').trim()
+                        }
+                        onClick={() => releaseConfiguration(config)}
+                      >
+                        <CheckCircle2 className="mr-2 h-4 w-4" />
+                        {config.configurationStatus === 'DRAFT'
+                          ? 'Lock'
+                          : config.configurationStatus === 'LOCKED'
+                            ? 'Release'
+                            : statusText(config.configurationStatus)}
+                      </Button>
+                    </div>
                   </div>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={saving || config.configurationStatus === 'RELEASED'}
-                  onClick={() => releaseConfiguration(config)}
-                >
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
-                  {config.configurationStatus === 'DRAFT' ? 'Lock' : 'Release'}
-                </Button>
-              </div>
-            ))}
+              );
+            })}
           </CardContent>
         </Card>
 
@@ -1101,30 +1168,65 @@ export default function BuildPackagesPage() {
             <CardTitle className="text-lg">BOM Revisions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {boms.slice(0, 8).map((bom) => (
-              <div
-                key={bom.id}
-                className="flex flex-col gap-2 border-b border-[#EFE6DC] pb-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div>
-                  <div className="font-semibold text-[#211F1E]">{bom.bomCode}</div>
-                  <div className="text-xs text-[#6E625A]">
-                    {bom.configurationCode ?? bom.buildConfigurationId} · rev {bom.revision} ·{' '}
-                    {statusText(bom.bomStatus)} · {bom.lines.length} lines
+            {boms.slice(0, 8).map((bom) => {
+              const latestChange = bom.changeEvents[0];
+              const canApprove = bom.bomStatus === 'DRAFT';
+              return (
+                <div
+                  key={bom.id}
+                  className="flex flex-col gap-2 border-b border-[#EFE6DC] pb-3 last:border-b-0"
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <div className="font-semibold text-[#211F1E]">{bom.bomCode}</div>
+                      <div className="text-xs text-[#6E625A]">
+                        {bom.configurationCode ?? bom.buildConfigurationId} · rev {bom.revision} ·{' '}
+                        {statusText(bom.bomStatus)} · {bom.lines.length} lines
+                      </div>
+                      {latestChange && (
+                        <div className="mt-2 flex items-start gap-2 rounded-md bg-[#F7F1EA] px-3 py-2 text-xs text-[#4A4039]">
+                          <History className="mt-0.5 h-3.5 w-3.5 text-[#A85D18]" />
+                          <div>
+                            <div className="font-semibold text-[#211F1E]">
+                              {statusText(latestChange.changeKind)} · {formatDate(latestChange.createdAt)}
+                            </div>
+                            <div>{latestChange.changeSummary}</div>
+                            {latestChange.approvalNote && (
+                              <div className="mt-1 text-[#6E625A]">{latestChange.approvalNote}</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="w-full space-y-2 sm:w-56">
+                      <Input
+                        aria-label="BOM approval note"
+                        disabled={!canApprove}
+                        value={bomApprovalNotes[bom.id] ?? ''}
+                        onChange={(event) =>
+                          setBomApprovalNotes((current) => ({
+                            ...current,
+                            [bom.id]: event.target.value,
+                          }))
+                        }
+                        placeholder="Approval note / ECO"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        disabled={saving || !canApprove || !(bomApprovalNotes[bom.id] ?? '').trim()}
+                        onClick={() => approveRevision(bom)}
+                      >
+                        <CheckCircle2 className="mr-2 h-4 w-4" />
+                        {canApprove ? 'Approve' : statusText(bom.bomStatus)}
+                      </Button>
+                    </div>
                   </div>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={saving || bom.bomStatus === 'APPROVED'}
-                  onClick={() => approveRevision(bom)}
-                >
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
-                  Approve
-                </Button>
-              </div>
-            ))}
+              );
+            })}
           </CardContent>
         </Card>
 

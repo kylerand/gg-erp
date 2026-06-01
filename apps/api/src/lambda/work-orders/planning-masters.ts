@@ -15,6 +15,8 @@ const prisma = new PrismaClient();
 type BuildConfigurationStatus = 'DRAFT' | 'LOCKED' | 'RELEASED' | 'SUPERSEDED';
 type BomStatus = 'DRAFT' | 'APPROVED' | 'OBSOLETE';
 type RoutingTemplateStatus = 'DRAFT' | 'ACTIVE' | 'RETIRED';
+type BuildConfigurationChangeKind = 'CREATED' | 'LOCKED' | 'RELEASED' | 'SUPERSEDED';
+type BomChangeKind = 'CREATED' | 'APPROVED' | 'OBSOLETED';
 type RoutingTemplateChangeKind = 'CREATED' | 'ACTIVATED' | 'RETIRED' | 'AUTO_RETIRED';
 
 const BUILD_CONFIGURATION_STATUSES: BuildConfigurationStatus[] = [
@@ -46,6 +48,23 @@ export interface BuildConfigurationResponse {
   createdAt: string;
   updatedAt: string;
   version: number;
+  changeEvents: BuildConfigurationChangeEventResponse[];
+}
+
+export interface BuildConfigurationChangeEventResponse {
+  id: string;
+  buildConfigurationId: string;
+  configurationCode: string;
+  configurationVersion: number;
+  changeKind: BuildConfigurationChangeKind;
+  previousStatus?: BuildConfigurationStatus;
+  newStatus: BuildConfigurationStatus;
+  changeSummary: string;
+  approvalNote?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  appliedBy?: string;
+  createdAt: string;
 }
 
 export interface BomLineInput {
@@ -80,6 +99,24 @@ export interface BomResponse {
   updatedAt: string;
   version: number;
   lines: BomLineResponse[];
+  changeEvents: BomChangeEventResponse[];
+}
+
+export interface BomChangeEventResponse {
+  id: string;
+  bomId: string;
+  bomCode: string;
+  buildConfigurationId: string;
+  revision: number;
+  changeKind: BomChangeKind;
+  previousStatus?: BomStatus;
+  newStatus: BomStatus;
+  changeSummary: string;
+  approvalNote?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  appliedBy?: string;
+  createdAt: string;
 }
 
 export interface RoutingTemplateStepInput {
@@ -162,6 +199,13 @@ export interface CreateBuildConfigurationInput {
 
 export interface TransitionBuildConfigurationInput {
   state: BuildConfigurationStatus;
+  approvalNote?: string;
+  changeSummary?: string;
+}
+
+export interface ApproveBomInput {
+  approvalNote?: string;
+  changeSummary?: string;
 }
 
 export interface CreateBomInput {
@@ -214,7 +258,7 @@ export interface PlanningMasterStore {
     offset: number;
   }): Promise<{ items: BomResponse[]; total: number; limit: number; offset: number }>;
   createBom(input: CreateBomInput, context: RequestContext): Promise<BomResponse>;
-  approveBom(id: string, context: RequestContext): Promise<BomResponse>;
+  approveBom(id: string, input: ApproveBomInput, context: RequestContext): Promise<BomResponse>;
   listRoutingTemplates(input: {
     search?: string;
     status?: RoutingTemplateStatus;
@@ -339,6 +383,22 @@ interface BuildConfigurationRow {
   version: number;
 }
 
+interface BuildConfigurationChangeEventRow {
+  id: string;
+  buildConfigurationId: string;
+  configurationCode: string;
+  configurationVersion: number;
+  changeKind: BuildConfigurationChangeKind;
+  previousStatus: BuildConfigurationStatus | null;
+  newStatus: BuildConfigurationStatus;
+  changeSummary: string;
+  approvalNote: string | null;
+  approvedBy: string | null;
+  approvedAt: Date | string | null;
+  appliedBy: string | null;
+  createdAt: Date | string;
+}
+
 interface BomRow {
   id: string;
   bomCode: string;
@@ -351,6 +411,23 @@ interface BomRow {
   createdAt: Date | string;
   updatedAt: Date | string;
   version: number;
+}
+
+interface BomChangeEventRow {
+  id: string;
+  bomId: string;
+  bomCode: string;
+  buildConfigurationId: string;
+  revision: number;
+  changeKind: BomChangeKind;
+  previousStatus: BomStatus | null;
+  newStatus: BomStatus;
+  changeSummary: string;
+  approvalNote: string | null;
+  approvedBy: string | null;
+  approvedAt: Date | string | null;
+  appliedBy: string | null;
+  createdAt: Date | string;
 }
 
 interface BomLineRow {
@@ -418,7 +495,10 @@ interface RoutingTemplateChangeEventRow {
   createdAt: Date | string;
 }
 
-function mapConfiguration(row: BuildConfigurationRow): BuildConfigurationResponse {
+function mapConfiguration(
+  row: BuildConfigurationRow,
+  changeEvents: BuildConfigurationChangeEventResponse[],
+): BuildConfigurationResponse {
   return {
     id: row.id,
     configurationCode: row.configurationCode,
@@ -433,10 +513,35 @@ function mapConfiguration(row: BuildConfigurationRow): BuildConfigurationRespons
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
     version: Number(row.version),
+    changeEvents,
   };
 }
 
-function mapBom(row: BomRow, lines: BomLineResponse[]): BomResponse {
+function mapBuildConfigurationChangeEvent(
+  row: BuildConfigurationChangeEventRow,
+): BuildConfigurationChangeEventResponse {
+  return {
+    id: row.id,
+    buildConfigurationId: row.buildConfigurationId,
+    configurationCode: row.configurationCode,
+    configurationVersion: Number(row.configurationVersion),
+    changeKind: row.changeKind,
+    previousStatus: row.previousStatus ?? undefined,
+    newStatus: row.newStatus,
+    changeSummary: row.changeSummary,
+    approvalNote: row.approvalNote ?? undefined,
+    approvedBy: row.approvedBy ?? undefined,
+    approvedAt: optionalIso(row.approvedAt),
+    appliedBy: row.appliedBy ?? undefined,
+    createdAt: iso(row.createdAt),
+  };
+}
+
+function mapBom(
+  row: BomRow,
+  lines: BomLineResponse[],
+  changeEvents: BomChangeEventResponse[],
+): BomResponse {
   return {
     id: row.id,
     bomCode: row.bomCode,
@@ -450,6 +555,26 @@ function mapBom(row: BomRow, lines: BomLineResponse[]): BomResponse {
     updatedAt: iso(row.updatedAt),
     version: Number(row.version),
     lines,
+    changeEvents,
+  };
+}
+
+function mapBomChangeEvent(row: BomChangeEventRow): BomChangeEventResponse {
+  return {
+    id: row.id,
+    bomId: row.bomId,
+    bomCode: row.bomCode,
+    buildConfigurationId: row.buildConfigurationId,
+    revision: Number(row.revision),
+    changeKind: row.changeKind,
+    previousStatus: row.previousStatus ?? undefined,
+    newStatus: row.newStatus,
+    changeSummary: row.changeSummary,
+    approvalNote: row.approvalNote ?? undefined,
+    approvedBy: row.approvedBy ?? undefined,
+    approvedAt: optionalIso(row.approvedAt),
+    appliedBy: row.appliedBy ?? undefined,
+    createdAt: iso(row.createdAt),
   };
 }
 
@@ -645,6 +770,94 @@ async function loadBomLines(db: DbClient, bomIds: string[]): Promise<Map<string,
   return byBom;
 }
 
+async function loadBuildConfigurationChangeEvents(
+  db: DbClient,
+  buildConfigurationIds: string[],
+): Promise<Map<string, BuildConfigurationChangeEventResponse[]>> {
+  if (buildConfigurationIds.length === 0) return new Map();
+  const rows = await db.$queryRaw<BuildConfigurationChangeEventRow[]>`
+    SELECT
+      id::text AS "id",
+      build_configuration_id::text AS "buildConfigurationId",
+      configuration_code AS "configurationCode",
+      configuration_version AS "configurationVersion",
+      change_kind::text AS "changeKind",
+      previous_status::text AS "previousStatus",
+      new_status::text AS "newStatus",
+      change_summary AS "changeSummary",
+      approval_note AS "approvalNote",
+      coalesce(approved_by_ref, approved_by_user_id::text) AS "approvedBy",
+      approved_at AS "approvedAt",
+      coalesce(applied_by_ref, applied_by_user_id::text) AS "appliedBy",
+      created_at AS "createdAt"
+    FROM (
+      SELECT
+        bcce.*,
+        row_number() OVER (
+          PARTITION BY bcce.build_configuration_id
+          ORDER BY bcce.created_at DESC, bcce.id DESC
+        ) AS row_number
+      FROM planning.build_configuration_change_events bcce
+      WHERE bcce.build_configuration_id::text IN (${Prisma.join(buildConfigurationIds)})
+    ) ranked
+    WHERE row_number <= 5
+    ORDER BY build_configuration_id, created_at DESC
+  `;
+
+  const byConfiguration = new Map<string, BuildConfigurationChangeEventResponse[]>();
+  for (const row of rows) {
+    const item = mapBuildConfigurationChangeEvent(row);
+    byConfiguration.set(item.buildConfigurationId, [
+      ...(byConfiguration.get(item.buildConfigurationId) ?? []),
+      item,
+    ]);
+  }
+  return byConfiguration;
+}
+
+async function loadBomChangeEvents(
+  db: DbClient,
+  bomIds: string[],
+): Promise<Map<string, BomChangeEventResponse[]>> {
+  if (bomIds.length === 0) return new Map();
+  const rows = await db.$queryRaw<BomChangeEventRow[]>`
+    SELECT
+      id::text AS "id",
+      bom_id::text AS "bomId",
+      bom_code AS "bomCode",
+      build_configuration_id::text AS "buildConfigurationId",
+      revision AS "revision",
+      change_kind::text AS "changeKind",
+      previous_status::text AS "previousStatus",
+      new_status::text AS "newStatus",
+      change_summary AS "changeSummary",
+      approval_note AS "approvalNote",
+      coalesce(approved_by_ref, approved_by_user_id::text) AS "approvedBy",
+      approved_at AS "approvedAt",
+      coalesce(applied_by_ref, applied_by_user_id::text) AS "appliedBy",
+      created_at AS "createdAt"
+    FROM (
+      SELECT
+        bbce.*,
+        row_number() OVER (
+          PARTITION BY bbce.bom_id
+          ORDER BY bbce.created_at DESC, bbce.id DESC
+        ) AS row_number
+      FROM planning.build_bom_change_events bbce
+      WHERE bbce.bom_id::text IN (${Prisma.join(bomIds)})
+    ) ranked
+    WHERE row_number <= 5
+    ORDER BY bom_id, created_at DESC
+  `;
+
+  const byBom = new Map<string, BomChangeEventResponse[]>();
+  for (const row of rows) {
+    const item = mapBomChangeEvent(row);
+    byBom.set(item.bomId, [...(byBom.get(item.bomId) ?? []), item]);
+  }
+  return byBom;
+}
+
 async function loadRoutingTemplateSteps(
   db: DbClient,
   routingTemplateIds: string[],
@@ -733,7 +946,10 @@ async function getConfigurationById(
       Prisma.sql`LIMIT 1`,
     ),
   );
-  return rows[0] ? mapConfiguration(rows[0]) : undefined;
+  const row = rows[0];
+  if (!row) return undefined;
+  const changesByConfiguration = await loadBuildConfigurationChangeEvents(db, [row.id]);
+  return mapConfiguration(row, changesByConfiguration.get(row.id) ?? []);
 }
 
 async function getBomById(db: DbClient, id: string): Promise<BomResponse | undefined> {
@@ -743,7 +959,8 @@ async function getBomById(db: DbClient, id: string): Promise<BomResponse | undef
   const row = rows[0];
   if (!row) return undefined;
   const linesByBom = await loadBomLines(db, [row.id]);
-  return mapBom(row, linesByBom.get(row.id) ?? []);
+  const changesByBom = await loadBomChangeEvents(db, [row.id]);
+  return mapBom(row, linesByBom.get(row.id) ?? [], changesByBom.get(row.id) ?? []);
 }
 
 async function getRoutingTemplateById(
@@ -762,6 +979,120 @@ async function getRoutingTemplateById(
     stepsByTemplate.get(row.id) ?? [],
     changesByTemplate.get(row.id) ?? [],
   );
+}
+
+async function recordBuildConfigurationChangeEvent(
+  db: DbClient,
+  config: Pick<
+    BuildConfigurationResponse,
+    'id' | 'configurationCode' | 'configurationVersion' | 'configurationStatus'
+  >,
+  input: {
+    changeKind: BuildConfigurationChangeKind;
+    previousStatus?: BuildConfigurationStatus;
+    newStatus: BuildConfigurationStatus;
+    changeSummary: string;
+    approvalNote?: string;
+  },
+  context: RequestContext,
+): Promise<void> {
+  const approvalRequired =
+    input.changeKind === 'LOCKED' ||
+    input.changeKind === 'RELEASED' ||
+    input.changeKind === 'SUPERSEDED';
+  const actorUserId = actorUuid(context.actorId);
+  const actorReference = actorRef(context.actorId);
+  await db.$executeRaw`
+    INSERT INTO planning.build_configuration_change_events (
+      build_configuration_id,
+      configuration_code,
+      configuration_version,
+      change_kind,
+      previous_status,
+      new_status,
+      change_summary,
+      approval_note,
+      approved_by_user_id,
+      approved_by_ref,
+      approved_at,
+      applied_by_user_id,
+      applied_by_ref,
+      last_correlation_id,
+      last_request_id
+    )
+    VALUES (
+      ${config.id}::uuid,
+      ${config.configurationCode},
+      ${config.configurationVersion},
+      ${input.changeKind}::planning."BuildConfigurationChangeKind",
+      ${input.previousStatus ?? null}::planning."BuildConfigurationStatus",
+      ${input.newStatus}::planning."BuildConfigurationStatus",
+      ${input.changeSummary},
+      ${input.approvalNote ?? null},
+      ${approvalRequired ? actorUserId : null}::uuid,
+      ${approvalRequired ? actorReference : null},
+      ${approvalRequired ? new Date().toISOString() : null}::timestamptz,
+      ${actorUserId}::uuid,
+      ${actorReference},
+      ${context.correlationId},
+      ${context.requestId ?? null}
+    )
+  `;
+}
+
+async function recordBomChangeEvent(
+  db: DbClient,
+  bom: Pick<BomResponse, 'id' | 'bomCode' | 'buildConfigurationId' | 'revision' | 'bomStatus'>,
+  input: {
+    changeKind: BomChangeKind;
+    previousStatus?: BomStatus;
+    newStatus: BomStatus;
+    changeSummary: string;
+    approvalNote?: string;
+  },
+  context: RequestContext,
+): Promise<void> {
+  const approvalRequired = input.changeKind === 'APPROVED' || input.changeKind === 'OBSOLETED';
+  const actorUserId = actorUuid(context.actorId);
+  const actorReference = actorRef(context.actorId);
+  await db.$executeRaw`
+    INSERT INTO planning.build_bom_change_events (
+      bom_id,
+      bom_code,
+      build_configuration_id,
+      revision,
+      change_kind,
+      previous_status,
+      new_status,
+      change_summary,
+      approval_note,
+      approved_by_user_id,
+      approved_by_ref,
+      approved_at,
+      applied_by_user_id,
+      applied_by_ref,
+      last_correlation_id,
+      last_request_id
+    )
+    VALUES (
+      ${bom.id}::uuid,
+      ${bom.bomCode},
+      ${bom.buildConfigurationId}::uuid,
+      ${bom.revision},
+      ${input.changeKind}::planning."BomChangeKind",
+      ${input.previousStatus ?? null}::planning."BomStatus",
+      ${input.newStatus}::planning."BomStatus",
+      ${input.changeSummary},
+      ${input.approvalNote ?? null},
+      ${approvalRequired ? actorUserId : null}::uuid,
+      ${approvalRequired ? actorReference : null},
+      ${approvalRequired ? new Date().toISOString() : null}::timestamptz,
+      ${actorUserId}::uuid,
+      ${actorReference},
+      ${context.correlationId},
+      ${context.requestId ?? null}
+    )
+  `;
 }
 
 async function recordRoutingTemplateChangeEvent(
@@ -1082,9 +1413,13 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
       LEFT JOIN customers.customers c ON c.id = cv.customer_id
       ${where}
     `;
+    const changesByConfiguration = await loadBuildConfigurationChangeEvents(
+      prisma,
+      rows.map((row) => row.id),
+    );
 
     return {
-      items: rows.map(mapConfiguration),
+      items: rows.map((row) => mapConfiguration(row, changesByConfiguration.get(row.id) ?? [])),
       total: Number(totalRows[0]?.count ?? 0),
       limit: input.limit,
       offset: input.offset,
@@ -1140,7 +1475,24 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
         )
         RETURNING id::text
       `;
-      const created = await getConfigurationById(tx, inserted[0]!.id);
+      const configurationId = inserted[0]!.id;
+      await recordBuildConfigurationChangeEvent(
+        tx,
+        {
+          id: configurationId,
+          configurationCode: input.configurationCode,
+          configurationVersion: version,
+          configurationStatus: 'DRAFT',
+        },
+        {
+          changeKind: 'CREATED',
+          newStatus: 'DRAFT',
+          changeSummary: 'Build configuration draft created for engineering review.',
+        },
+        context,
+      );
+
+      const created = await getConfigurationById(tx, configurationId);
       if (!created) throw new PlanningMasterCommandError('Build configuration was not created.', 500);
       return created;
     });
@@ -1159,14 +1511,66 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
     return prisma.$transaction(async (tx) => {
       const current = await getConfigurationById(tx, id);
       if (!current) throw new PlanningMasterCommandError('Build configuration was not found.', 404);
+      const approvalNote = normalizeText(input.approvalNote);
+      if (!approvalNote) {
+        throw new PlanningMasterCommandError(
+          'Build configuration lock and release require an approval note.',
+          422,
+        );
+      }
+      if (input.state === 'DRAFT' || input.state === 'SUPERSEDED') {
+        throw new PlanningMasterCommandError(
+          'Build configurations can only be locked or released through this endpoint.',
+          422,
+        );
+      }
+      if (current.configurationStatus === input.state) {
+        throw new PlanningMasterCommandError(
+          `Build configuration is already ${input.state}.`,
+          409,
+        );
+      }
       if (current.configurationStatus === 'SUPERSEDED') {
         throw new PlanningMasterCommandError('Superseded build configurations cannot transition.', 409);
       }
+      if (current.configurationStatus === 'RELEASED') {
+        throw new PlanningMasterCommandError(
+          'Released build configurations can only be superseded by releasing a newer version.',
+          409,
+        );
+      }
+      if (current.configurationStatus === 'DRAFT' && input.state !== 'LOCKED') {
+        throw new PlanningMasterCommandError('Build configurations must be locked before release.', 409);
+      }
+      if (current.configurationStatus === 'LOCKED' && input.state !== 'RELEASED') {
+        throw new PlanningMasterCommandError('Locked build configurations can only be released.', 409);
+      }
+
+      const supersededRows =
+        input.state === 'RELEASED'
+          ? await tx.$queryRaw<Array<{
+              id: string;
+              configurationCode: string;
+              configurationVersion: number;
+              configurationStatus: BuildConfigurationStatus;
+            }>>`
+              SELECT
+                id::text AS "id",
+                configuration_code AS "configurationCode",
+                configuration_version AS "configurationVersion",
+                configuration_status::text AS "configurationStatus"
+              FROM planning.build_configurations
+              WHERE vehicle_id = ${current.vehicleId}::uuid
+                AND configuration_status = 'RELEASED'
+                AND id <> ${id}::uuid
+            `
+          : [];
 
       if (input.state === 'RELEASED') {
         await tx.$executeRaw`
           UPDATE planning.build_configurations
           SET configuration_status = 'SUPERSEDED',
+              superseded_by_id = ${id}::uuid,
               updated_at = now(),
               updated_by_user_id = ${actorUuid(context.actorId)}::uuid,
               last_correlation_id = ${context.correlationId},
@@ -1176,6 +1580,20 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
             AND configuration_status = 'RELEASED'
             AND id <> ${id}::uuid
         `;
+      }
+      for (const superseded of supersededRows) {
+        await recordBuildConfigurationChangeEvent(
+          tx,
+          superseded,
+          {
+            changeKind: 'SUPERSEDED',
+            previousStatus: 'RELEASED',
+            newStatus: 'SUPERSEDED',
+            changeSummary: `Build configuration superseded by ${current.configurationCode} v${current.configurationVersion}.`,
+            approvalNote,
+          },
+          context,
+        );
       }
 
       const rows = await tx.$queryRaw<Array<{ id: string }>>`
@@ -1194,6 +1612,20 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
         RETURNING id::text
       `;
       if (!rows[0]) throw new PlanningMasterCommandError('Build configuration was not found.', 404);
+      await recordBuildConfigurationChangeEvent(
+        tx,
+        current,
+        {
+          changeKind: input.state === 'LOCKED' ? 'LOCKED' : 'RELEASED',
+          previousStatus: current.configurationStatus,
+          newStatus: input.state,
+          changeSummary:
+            normalizeText(input.changeSummary) ??
+            `Build configuration moved from ${current.configurationStatus} to ${input.state}.`,
+          approvalNote,
+        },
+        context,
+      );
       const updated = await getConfigurationById(tx, id);
       if (!updated) throw new PlanningMasterCommandError('Build configuration was not found.', 404);
       return updated;
@@ -1241,9 +1673,15 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
       prisma,
       rows.map((row) => row.id),
     );
+    const changesByBom = await loadBomChangeEvents(
+      prisma,
+      rows.map((row) => row.id),
+    );
 
     return {
-      items: rows.map((row) => mapBom(row, linesByBom.get(row.id) ?? [])),
+      items: rows.map((row) =>
+        mapBom(row, linesByBom.get(row.id) ?? [], changesByBom.get(row.id) ?? []),
+      ),
       total: Number(totalRows[0]?.count ?? 0),
       limit: input.limit,
       offset: input.offset,
@@ -1329,21 +1767,67 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
         )}
       `;
 
+      await recordBomChangeEvent(
+        tx,
+        {
+          id: bomId,
+          bomCode: input.bomCode,
+          buildConfigurationId: input.buildConfigurationId,
+          revision,
+          bomStatus: 'DRAFT',
+        },
+        {
+          changeKind: 'CREATED',
+          newStatus: 'DRAFT',
+          changeSummary: 'BOM revision created for engineering review.',
+        },
+        context,
+      );
+
       const created = await getBomById(tx, bomId);
       if (!created) throw new PlanningMasterCommandError('BOM was not created.', 500);
       return created;
     });
   }
 
-  async approveBom(id: string, context: RequestContext): Promise<BomResponse> {
+  async approveBom(id: string, input: ApproveBomInput, context: RequestContext): Promise<BomResponse> {
     if (!isUuid(id)) throw new PlanningMasterCommandError('BOM ID must be a UUID.', 400);
 
     return prisma.$transaction(async (tx) => {
       const current = await getBomById(tx, id);
       if (!current) throw new PlanningMasterCommandError('BOM was not found.', 404);
+      const approvalNote = normalizeText(input.approvalNote);
+      if (!approvalNote) {
+        throw new PlanningMasterCommandError('BOM approval requires an approval note.', 422);
+      }
       if (current.lines.length === 0) {
         throw new PlanningMasterCommandError('BOM requires at least one line before approval.', 409);
       }
+      if (current.bomStatus === 'APPROVED') {
+        throw new PlanningMasterCommandError('BOM revision is already approved.', 409);
+      }
+      if (current.bomStatus === 'OBSOLETE') {
+        throw new PlanningMasterCommandError('Obsolete BOM revisions cannot be approved.', 409);
+      }
+
+      const obsoleteRows = await tx.$queryRaw<Array<{
+        id: string;
+        bomCode: string;
+        buildConfigurationId: string;
+        revision: number;
+        bomStatus: BomStatus;
+      }>>`
+        SELECT
+          id::text AS "id",
+          bom_code AS "bomCode",
+          build_configuration_id::text AS "buildConfigurationId",
+          revision AS "revision",
+          bom_status::text AS "bomStatus"
+        FROM planning.build_boms
+        WHERE build_configuration_id = ${current.buildConfigurationId}::uuid
+          AND bom_status = 'APPROVED'
+          AND id <> ${id}::uuid
+      `;
 
       await tx.$executeRaw`
         UPDATE planning.build_boms
@@ -1357,6 +1841,20 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
           AND bom_status = 'APPROVED'
           AND id <> ${id}::uuid
       `;
+      for (const obsolete of obsoleteRows) {
+        await recordBomChangeEvent(
+          tx,
+          obsolete,
+          {
+            changeKind: 'OBSOLETED',
+            previousStatus: 'APPROVED',
+            newStatus: 'OBSOLETE',
+            changeSummary: `BOM revision obsoleted by ${current.bomCode} rev ${current.revision}.`,
+            approvalNote,
+          },
+          context,
+        );
+      }
 
       await tx.$executeRaw`
         UPDATE planning.build_boms
@@ -1370,6 +1868,20 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
             version = version + 1
         WHERE id = ${id}::uuid
       `;
+      await recordBomChangeEvent(
+        tx,
+        current,
+        {
+          changeKind: 'APPROVED',
+          previousStatus: current.bomStatus,
+          newStatus: 'APPROVED',
+          changeSummary:
+            normalizeText(input.changeSummary) ??
+            `BOM revision ${current.revision} approved for production.`,
+          approvalNote,
+        },
+        context,
+      );
 
       const approved = await getBomById(tx, id);
       if (!approved) throw new PlanningMasterCommandError('BOM was not found.', 404);
@@ -1908,9 +2420,14 @@ export async function transitionBuildConfigurationHandler(
     const body = parseJsonBody(event.body) as Partial<TransitionBuildConfigurationInput> | undefined;
     const state = body?.state;
     if (!state) return json(400, { message: 'Body must include { state }.' });
+    const approvalNote = normalizeText(body?.approvalNote);
+    const changeSummary = normalizeText(body?.changeSummary);
+    if ((state === 'LOCKED' || state === 'RELEASED') && !approvalNote) {
+      return json(422, { message: 'Build configuration lock and release require an approval note.' });
+    }
     const item = await planningMasterStore.transitionBuildConfiguration(
       id,
-      { state },
+      { state, approvalNote, changeSummary },
       requestContext(event),
     );
     return json(200, { buildConfiguration: item });
@@ -1962,7 +2479,17 @@ export async function approveBomHandler(
   try {
     const id = event.pathParameters?.id;
     if (!id) return json(400, { message: 'BOM ID is required.' });
-    const item = await planningMasterStore.approveBom(id, requestContext(event));
+    const body = parseJsonBody(event.body) as Partial<ApproveBomInput> | undefined;
+    const approvalNote = normalizeText(body?.approvalNote);
+    if (!approvalNote) return json(422, { message: 'BOM approval requires an approval note.' });
+    const item = await planningMasterStore.approveBom(
+      id,
+      {
+        approvalNote,
+        changeSummary: normalizeText(body?.changeSummary),
+      },
+      requestContext(event),
+    );
     return json(200, { bom: item });
   } catch (error) {
     return errorJson(error);

@@ -298,8 +298,8 @@
                 /tickets/work-orders` route with no pending-route allowance.
               </td>
               <td>
-                Keep expanding engineering change control for build configuration and BOM masters
-                as those release APIs stabilize.
+                Add ECO/report drill-ins from released work orders back to the approved planning
+                masters that generated their operations and part demand.
               </td>
             </tr>
             <tr>
@@ -342,15 +342,15 @@
               <td>
                 `/planning/build-packages` now reads strict live packages, build configurations,
                 BOMs, routing templates, cart vehicles, and active parts. Operators can create build
-                configurations, lock and release them, author BOM revisions from live parts, approve
-                BOMs, publish approved configuration/BOM pairs into the build-package catalog, create
+                configurations, lock and release them with approval notes, author BOM revisions from
+                live parts, approve BOMs with approval notes, publish approved configuration/BOM pairs into the build-package catalog, create
                 ordered route/job-card templates with effective windows, labor rates, QC gates, and
                 evidence requirements, activate or retire route versions with an approval note, and
-                view the latest route approval/change event inline.
+                view the latest route, configuration, and BOM approval/change events inline.
               </td>
               <td>
-                Extend engineering change control and approval evidence to released configurations
-                and approved BOM revisions.
+                Add version diff views, ECO reporting, and edit/new-revision workflows once the
+                master-data mutation rules deepen.
               </td>
             </tr>
             <tr>

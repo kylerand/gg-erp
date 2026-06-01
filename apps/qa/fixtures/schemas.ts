@@ -95,6 +95,22 @@ const buildPackage = z.object({
   stateCounts: z.record(z.string(), z.number().int().nonnegative()),
 });
 
+const buildConfigurationChangeEvent = z.object({
+  id: uuid,
+  buildConfigurationId: uuid,
+  configurationCode: z.string(),
+  configurationVersion: z.number().int().positive(),
+  changeKind: z.enum(['CREATED', 'LOCKED', 'RELEASED', 'SUPERSEDED']),
+  previousStatus: z.enum(['DRAFT', 'LOCKED', 'RELEASED', 'SUPERSEDED']).optional(),
+  newStatus: z.enum(['DRAFT', 'LOCKED', 'RELEASED', 'SUPERSEDED']),
+  changeSummary: z.string(),
+  approvalNote: z.string().optional(),
+  approvedBy: z.string().optional(),
+  approvedAt: isoDate.optional(),
+  appliedBy: z.string().optional(),
+  createdAt: isoDate,
+});
+
 const buildConfiguration = z.object({
   id: uuid,
   configurationCode: z.string(),
@@ -109,6 +125,7 @@ const buildConfiguration = z.object({
   createdAt: isoDate,
   updatedAt: isoDate,
   version: z.number().int().nonnegative(),
+  changeEvents: z.array(buildConfigurationChangeEvent),
 });
 
 const bomLine = z.object({
@@ -121,6 +138,23 @@ const bomLine = z.object({
   quantityPerUnit: z.number().positive(),
   scrapFactor: z.number().nonnegative(),
   lineNote: z.string().optional(),
+});
+
+const bomChangeEvent = z.object({
+  id: uuid,
+  bomId: uuid,
+  bomCode: z.string(),
+  buildConfigurationId: uuid,
+  revision: z.number().int().positive(),
+  changeKind: z.enum(['CREATED', 'APPROVED', 'OBSOLETED']),
+  previousStatus: z.enum(['DRAFT', 'APPROVED', 'OBSOLETE']).optional(),
+  newStatus: z.enum(['DRAFT', 'APPROVED', 'OBSOLETE']),
+  changeSummary: z.string(),
+  approvalNote: z.string().optional(),
+  approvedBy: z.string().optional(),
+  approvedAt: isoDate.optional(),
+  appliedBy: z.string().optional(),
+  createdAt: isoDate,
 });
 
 const buildBom = z.object({
@@ -136,6 +170,7 @@ const buildBom = z.object({
   updatedAt: isoDate,
   version: z.number().int().nonnegative(),
   lines: z.array(bomLine),
+  changeEvents: z.array(bomChangeEvent),
 });
 
 const routingTemplateStep = z.object({

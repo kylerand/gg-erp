@@ -16,6 +16,7 @@ import {
   listRoutingTemplatesHandler,
   resetPlanningMasterStoreForTests,
   setPlanningMasterStoreForTests,
+  transitionBuildConfigurationHandler,
   transitionRoutingTemplateHandler,
   type PlanningMasterStore,
 } from '../lambda/work-orders/planning-masters.js';
@@ -127,6 +128,18 @@ function createPlanningMasterStoreForTests(): PlanningMasterStore {
     createdAt: '2026-06-01T00:00:00.000Z',
     updatedAt: '2026-06-01T00:00:00.000Z',
     version: 0,
+    changeEvents: [
+      {
+        id: '00000000-0000-4000-8000-000000000811',
+        buildConfigurationId: '00000000-0000-4000-8000-000000000101',
+        configurationCode: 'CFG-GG4-STREET',
+        configurationVersion: 1,
+        changeKind: 'CREATED' as const,
+        newStatus: 'DRAFT' as const,
+        changeSummary: 'Build configuration draft created for engineering review.',
+        createdAt: '2026-06-01T00:00:00.000Z',
+      },
+    ],
   };
   const bom = {
     id: '00000000-0000-4000-8000-000000000301',
@@ -138,6 +151,19 @@ function createPlanningMasterStoreForTests(): PlanningMasterStore {
     createdAt: '2026-06-01T00:00:00.000Z',
     updatedAt: '2026-06-01T00:00:00.000Z',
     version: 0,
+    changeEvents: [
+      {
+        id: '00000000-0000-4000-8000-000000000821',
+        bomId: '00000000-0000-4000-8000-000000000301',
+        bomCode: 'BOM-GG4-STREET-R01',
+        buildConfigurationId: config.id,
+        revision: 1,
+        changeKind: 'CREATED' as const,
+        newStatus: 'DRAFT' as const,
+        changeSummary: 'BOM revision created for engineering review.',
+        createdAt: '2026-06-01T00:00:00.000Z',
+      },
+    ],
     lines: [
       {
         id: '00000000-0000-4000-8000-000000000401',
@@ -212,7 +238,27 @@ function createPlanningMasterStoreForTests(): PlanningMasterStore {
       };
     },
     async transitionBuildConfiguration(_id, input) {
-      return { ...config, configurationStatus: input.state };
+      return {
+        ...config,
+        configurationStatus: input.state,
+        changeEvents: [
+          {
+            id: '00000000-0000-4000-8000-000000000812',
+            buildConfigurationId: config.id,
+            configurationCode: config.configurationCode,
+            configurationVersion: config.configurationVersion,
+            changeKind: input.state === 'LOCKED' ? ('LOCKED' as const) : ('RELEASED' as const),
+            previousStatus: 'DRAFT' as const,
+            newStatus: input.state,
+            changeSummary: input.changeSummary ?? 'Build configuration moved from DRAFT to LOCKED.',
+            approvalNote: input.approvalNote,
+            approvedBy: 'planner',
+            approvedAt: '2026-06-01T00:00:00.000Z',
+            appliedBy: 'planner',
+            createdAt: '2026-06-01T00:00:00.000Z',
+          },
+        ],
+      };
     },
     async listBoms(input) {
       return { items: [bom], total: 1, limit: input.limit, offset: input.offset };
@@ -225,8 +271,29 @@ function createPlanningMasterStoreForTests(): PlanningMasterStore {
         revision: input.revision ?? 1,
       };
     },
-    async approveBom() {
-      return { ...bom, bomStatus: 'APPROVED' };
+    async approveBom(_id, input) {
+      return {
+        ...bom,
+        bomStatus: 'APPROVED',
+        changeEvents: [
+          {
+            id: '00000000-0000-4000-8000-000000000822',
+            bomId: bom.id,
+            bomCode: bom.bomCode,
+            buildConfigurationId: bom.buildConfigurationId,
+            revision: bom.revision,
+            changeKind: 'APPROVED' as const,
+            previousStatus: 'DRAFT' as const,
+            newStatus: 'APPROVED' as const,
+            changeSummary: input.changeSummary ?? 'BOM revision 1 approved for production.',
+            approvalNote: input.approvalNote,
+            approvedBy: 'planner',
+            approvedAt: '2026-06-01T00:00:00.000Z',
+            appliedBy: 'planner',
+            createdAt: '2026-06-01T00:00:00.000Z',
+          },
+        ],
+      };
     },
     async listRoutingTemplates(input) {
       return { items: [routingTemplate], total: 1, limit: input.limit, offset: input.offset };
@@ -330,6 +397,29 @@ test('planning master handlers list and create build configurations', async () =
     };
     assert.equal(createPayload.buildConfiguration.configurationCode, 'CFG-GG4-NEW');
     assert.deepEqual(createPayload.buildConfiguration.selectedOptions, ['Audio']);
+
+    const missingApprovalResponse = await transitionBuildConfigurationHandler({
+      pathParameters: { id: '00000000-0000-4000-8000-000000000101' },
+      body: JSON.stringify({ state: 'LOCKED' }),
+    });
+    assert.equal(missingApprovalResponse.statusCode, 422);
+
+    const lockResponse = await transitionBuildConfigurationHandler({
+      pathParameters: { id: '00000000-0000-4000-8000-000000000101' },
+      body: JSON.stringify({
+        state: 'LOCKED',
+        approvalNote: 'Approved ECO-17',
+      }),
+    });
+    assert.equal(lockResponse.statusCode, 200);
+    const lockPayload = JSON.parse(lockResponse.body) as {
+      buildConfiguration: {
+        configurationStatus: string;
+        changeEvents: Array<{ approvalNote?: string }>;
+      };
+    };
+    assert.equal(lockPayload.buildConfiguration.configurationStatus, 'LOCKED');
+    assert.equal(lockPayload.buildConfiguration.changeEvents[0]?.approvalNote, 'Approved ECO-17');
   } finally {
     resetPlanningMasterStoreForTests();
   }
@@ -356,12 +446,22 @@ test('planning BOM handlers validate and approve revisions', async () => {
     });
     assert.equal(createResponse.statusCode, 201);
 
+    const missingApprovalResponse = await approveBomHandler({
+      pathParameters: { id: '00000000-0000-4000-8000-000000000301' },
+      body: JSON.stringify({}),
+    });
+    assert.equal(missingApprovalResponse.statusCode, 422);
+
     const approveResponse = await approveBomHandler({
       pathParameters: { id: '00000000-0000-4000-8000-000000000301' },
+      body: JSON.stringify({ approvalNote: 'Approved ECO-18' }),
     });
     assert.equal(approveResponse.statusCode, 200);
-    const approvePayload = JSON.parse(approveResponse.body) as { bom: { bomStatus: string } };
+    const approvePayload = JSON.parse(approveResponse.body) as {
+      bom: { bomStatus: string; changeEvents: Array<{ approvalNote?: string }> };
+    };
     assert.equal(approvePayload.bom.bomStatus, 'APPROVED');
+    assert.equal(approvePayload.bom.changeEvents[0]?.approvalNote, 'Approved ECO-18');
   } finally {
     resetPlanningMasterStoreForTests();
   }

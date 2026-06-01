@@ -143,7 +143,7 @@ export default async function ReportingPage({ searchParams }: ReportingPageProps
               {signals.blockedOrders.length === 1 ? '' : 's'} returned in the triage sample
             </p>
             <Link
-              href={erpRoute('blocked-work', { status: 'BLOCKED' })}
+              href={erpRoute('report-work-order-blockers')}
               className="text-xs font-semibold text-red-700 hover:underline"
             >
               Triage all

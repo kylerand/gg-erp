@@ -1,5 +1,8 @@
 import { PrismaClient, type WoStatus } from '@prisma/client';
 import {
+  type ErpBlockedAlert,
+  type ErpBlockedAlertFeed,
+  type ErpBlockedAlertSeverity,
   getLiveErpReports,
   getMissingReportingSnapshotKeys,
   type ErpReportBlockedWorkOrder,
@@ -29,6 +32,21 @@ export interface ReportingOpenArSummary {
   openInvoiceBalance: number;
 }
 
+interface BlockedAlertSourceRow {
+  id: string;
+  sourceType: ErpBlockedAlert['sourceType'];
+  workOrderId: string;
+  workOrderNumber: string;
+  workOrderTitle: string;
+  customerReference?: string | null;
+  assetReference?: string | null;
+  reason?: string | null;
+  reasonCode: string;
+  ownerRole: string;
+  ownerLabel: string;
+  updatedAt: Date;
+}
+
 interface CountRow {
   count: number | bigint | string;
 }
@@ -51,6 +69,170 @@ export const reportingSnapshotQueries = {
         title: true,
       },
     });
+  },
+
+  async listBlockedAlerts(limit: number): Promise<ErpBlockedAlert[]> {
+    const [blockedOrders, blockedOperations, blockedTasks, shortParts] = await Promise.all([
+      prisma.woOrder.findMany({
+        where: { status: 'BLOCKED' },
+        orderBy: [{ priority: 'asc' }, { updatedAt: 'asc' }],
+        take: limit,
+        select: {
+          id: true,
+          workOrderNumber: true,
+          title: true,
+          customerReference: true,
+          assetReference: true,
+          priority: true,
+          updatedAt: true,
+        },
+      }),
+      prisma.woOperation.findMany({
+        where: { operationStatus: 'BLOCKED' },
+        orderBy: [{ updatedAt: 'asc' }],
+        take: limit,
+        select: {
+          id: true,
+          operationCode: true,
+          operationName: true,
+          blockingReason: true,
+          requiredSkillCode: true,
+          updatedAt: true,
+          workOrder: {
+            select: {
+              id: true,
+              workOrderNumber: true,
+              title: true,
+              customerReference: true,
+              assetReference: true,
+              priority: true,
+            },
+          },
+        },
+      }),
+      prisma.technicianTask.findMany({
+        where: { state: 'BLOCKED' },
+        orderBy: [{ updatedAt: 'asc' }],
+        take: limit,
+        select: {
+          id: true,
+          workOrderId: true,
+          routingStepId: true,
+          technicianId: true,
+          blockedReason: true,
+          updatedAt: true,
+        },
+      }),
+      prisma.woPartLine.findMany({
+        where: { partStatus: 'SHORT' },
+        orderBy: [{ updatedAt: 'asc' }],
+        take: limit,
+        select: {
+          id: true,
+          shortageReason: true,
+          updatedAt: true,
+          part: { select: { sku: true, name: true } },
+          workOrder: {
+            select: {
+              id: true,
+              workOrderNumber: true,
+              title: true,
+              customerReference: true,
+              assetReference: true,
+              priority: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    const blockedTaskWorkOrderIds = [...new Set(blockedTasks.map((task) => task.workOrderId))];
+    const taskWorkOrders =
+      blockedTaskWorkOrderIds.length === 0
+        ? []
+        : await prisma.woOrder.findMany({
+            where: { id: { in: blockedTaskWorkOrderIds } },
+            select: {
+              id: true,
+              workOrderNumber: true,
+              title: true,
+              customerReference: true,
+              assetReference: true,
+              priority: true,
+            },
+          });
+    const taskWorkOrdersById = new Map(taskWorkOrders.map((workOrder) => [workOrder.id, workOrder]));
+
+    const rows: BlockedAlertSourceRow[] = [
+      ...blockedOrders.map((workOrder) => ({
+        id: workOrder.id,
+        sourceType: 'WORK_ORDER' as const,
+        workOrderId: workOrder.id,
+        workOrderNumber: workOrder.workOrderNumber,
+        workOrderTitle: workOrder.title,
+        customerReference: workOrder.customerReference,
+        assetReference: workOrder.assetReference,
+        reason: 'Work order is blocked.',
+        reasonCode: 'WORK_ORDER_BLOCKED',
+        ownerRole: 'shop_manager',
+        ownerLabel: 'Shop Manager',
+        updatedAt: workOrder.updatedAt,
+      })),
+      ...blockedOperations.map((operation) => ({
+        id: operation.id,
+        sourceType: 'OPERATION' as const,
+        workOrderId: operation.workOrder.id,
+        workOrderNumber: operation.workOrder.workOrderNumber,
+        workOrderTitle: workOrderLabel(operation.workOrder.title, operation.operationName),
+        customerReference: operation.workOrder.customerReference,
+        assetReference: operation.workOrder.assetReference,
+        reason:
+          operation.blockingReason ??
+          `${operation.operationName || operation.operationCode} is blocked.`,
+        reasonCode: classifyBlockedReason(operation.blockingReason ?? operation.requiredSkillCode),
+        ...ownerForReason(operation.blockingReason ?? operation.requiredSkillCode),
+        updatedAt: operation.updatedAt,
+      })),
+      ...blockedTasks.flatMap((task) => {
+        const workOrder = taskWorkOrdersById.get(task.workOrderId);
+        if (!workOrder) return [];
+        return [
+          {
+            id: task.id,
+            sourceType: 'TECHNICIAN_TASK' as const,
+            workOrderId: workOrder.id,
+            workOrderNumber: workOrder.workOrderNumber,
+            workOrderTitle: workOrderLabel(workOrder.title, `Task ${task.routingStepId}`),
+            customerReference: workOrder.customerReference,
+            assetReference: workOrder.assetReference,
+            reason: task.blockedReason ?? 'Technician task is blocked.',
+            reasonCode: classifyBlockedReason(task.blockedReason),
+            ownerRole: task.technicianId ? 'technician' : 'shop_manager',
+            ownerLabel: task.technicianId ? 'Assigned Technician' : 'Shop Manager',
+            updatedAt: task.updatedAt,
+          },
+        ];
+      }),
+      ...shortParts.map((partLine) => ({
+        id: partLine.id,
+        sourceType: 'PART_SHORTAGE' as const,
+        workOrderId: partLine.workOrder.id,
+        workOrderNumber: partLine.workOrder.workOrderNumber,
+        workOrderTitle: workOrderLabel(partLine.workOrder.title, partLine.part.name),
+        customerReference: partLine.workOrder.customerReference,
+        assetReference: partLine.workOrder.assetReference,
+        reason: partLine.shortageReason ?? `${partLine.part.sku} is short for this work order.`,
+        reasonCode: 'WAITING_PARTS',
+        ownerRole: 'parts_coordinator',
+        ownerLabel: 'Parts Coordinator',
+        updatedAt: partLine.updatedAt,
+      })),
+    ];
+
+    return rows
+      .map(toBlockedAlert)
+      .sort((a, b) => severityRank(a.severity) - severityRank(b.severity) || b.ageMinutes - a.ageMinutes)
+      .slice(0, limit);
   },
 
   async countShortageParts(): Promise<number> {
@@ -374,6 +556,114 @@ export const getReportingSnapshotHandler = wrapHandler(
   },
   { requireAuth: false },
 );
+
+export const getBlockedAlertsHandler = wrapHandler(
+  async (ctx) => {
+    const limit = clampInt(ctx.event.queryStringParameters?.limit, 1, 100, 50);
+    const items = await reportingSnapshotQueries.listBlockedAlerts(limit);
+    const generatedAt = new Date().toISOString();
+    const totalAge = items.reduce((sum, item) => sum + item.ageMinutes, 0);
+    const summary: ErpBlockedAlertFeed['summary'] = {
+      total: items.length,
+      p1: items.filter((item) => item.severity === 'P1').length,
+      p2: items.filter((item) => item.severity === 'P2').length,
+      p3: items.filter((item) => item.severity === 'P3').length,
+      unowned: items.filter((item) => item.ownerRole === 'shop_manager').length,
+      averageAgeMinutes: items.length > 0 ? Math.round(totalAge / items.length) : 0,
+      oldestAgeMinutes: items.reduce((oldest, item) => Math.max(oldest, item.ageMinutes), 0),
+    };
+
+    return jsonResponse(200, { generatedAt, summary, items } satisfies ErpBlockedAlertFeed);
+  },
+  { requireAuth: false },
+);
+
+function toBlockedAlert(row: BlockedAlertSourceRow): ErpBlockedAlert {
+  const updatedAt = row.updatedAt.toISOString();
+  const ageMinutes = Math.max(0, Math.floor((Date.now() - row.updatedAt.getTime()) / 60_000));
+  const severity = blockedAlertSeverity(ageMinutes, row.reasonCode);
+  const route = `/work-orders/${row.workOrderId}`;
+  return {
+    id: `${row.sourceType}:${row.id}`,
+    sourceType: row.sourceType,
+    sourceId: row.id,
+    workOrderId: row.workOrderId,
+    workOrderNumber: row.workOrderNumber,
+    workOrderTitle: row.workOrderTitle,
+    customerReference: row.customerReference ?? undefined,
+    assetReference: row.assetReference ?? undefined,
+    reason: row.reason?.trim() || 'Blocked item needs triage.',
+    reasonCode: row.reasonCode,
+    ownerRole: row.ownerRole,
+    ownerLabel: row.ownerLabel,
+    severity,
+    ageMinutes,
+    updatedAt,
+    nextAction: nextBlockedAlertAction(row.reasonCode, row.sourceType),
+    route,
+    actions: blockedAlertActions(row.workOrderId, row.reasonCode),
+  };
+}
+
+function blockedAlertActions(workOrderId: string, reasonCode: string) {
+  const actions = [
+    { label: 'Open work order', href: `/work-orders/${workOrderId}` },
+    { label: 'Message team', href: `/messages?workOrder=${encodeURIComponent(workOrderId)}` },
+  ];
+  if (reasonCode === 'WAITING_PARTS') {
+    actions.splice(1, 0, { label: 'Review parts', href: '/inventory/planning' });
+  } else {
+    actions.splice(1, 0, { label: 'Review dispatch', href: '/work-orders/dispatch' });
+  }
+  return actions;
+}
+
+function nextBlockedAlertAction(reasonCode: string, sourceType: ErpBlockedAlert['sourceType']): string {
+  if (reasonCode === 'WAITING_PARTS') return 'Confirm part availability, PO status, or substitution path.';
+  if (reasonCode === 'CUSTOMER_HOLD') return 'Confirm customer decision or sales/account owner follow-up.';
+  if (reasonCode === 'SAFETY_CONCERN') return 'Escalate to shop manager before restarting work.';
+  if (sourceType === 'TECHNICIAN_TASK') return 'Assign owner and resolve the technician task blocker.';
+  return 'Assign an owner, resolve the blocker, then move the work back into execution.';
+}
+
+function blockedAlertSeverity(ageMinutes: number, reasonCode: string): ErpBlockedAlertSeverity {
+  if (reasonCode === 'SAFETY_CONCERN' || ageMinutes >= 240) return 'P1';
+  if (ageMinutes >= 60 || reasonCode === 'WAITING_PARTS') return 'P2';
+  return 'P3';
+}
+
+function severityRank(severity: ErpBlockedAlertSeverity): number {
+  if (severity === 'P1') return 1;
+  if (severity === 'P2') return 2;
+  return 3;
+}
+
+function ownerForReason(reason?: string | null): Pick<BlockedAlertSourceRow, 'ownerRole' | 'ownerLabel'> {
+  const code = classifyBlockedReason(reason);
+  if (code === 'WAITING_PARTS') return { ownerRole: 'parts_coordinator', ownerLabel: 'Parts Coordinator' };
+  if (code === 'CUSTOMER_HOLD') return { ownerRole: 'sales', ownerLabel: 'Sales / Customer Owner' };
+  if (code === 'SAFETY_CONCERN') return { ownerRole: 'shop_manager', ownerLabel: 'Shop Manager' };
+  return { ownerRole: 'shop_manager', ownerLabel: 'Shop Manager' };
+}
+
+function classifyBlockedReason(reason?: string | null): string {
+  const normalized = (reason ?? '').toLowerCase();
+  if (/(part|vendor|po|purchase|stock|material)/.test(normalized)) return 'WAITING_PARTS';
+  if (/(customer|approval|hold|quote)/.test(normalized)) return 'CUSTOMER_HOLD';
+  if (/(safe|hazard|injury|fire|battery)/.test(normalized)) return 'SAFETY_CONCERN';
+  if (/(tool|lift|fixture|equipment)/.test(normalized)) return 'TOOLING_ISSUE';
+  return 'BLOCKED';
+}
+
+function workOrderLabel(workOrderTitle: string, childLabel: string): string {
+  return childLabel ? `${workOrderTitle} - ${childLabel}` : workOrderTitle;
+}
+
+function clampInt(value: string | undefined, min: number, max: number, fallback: number): number {
+  const parsed = Number.parseInt(value ?? '', 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
 
 async function captureMetric(
   reportKey: string,

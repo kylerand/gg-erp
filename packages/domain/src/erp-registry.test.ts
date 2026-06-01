@@ -68,7 +68,7 @@ test('registry route helper resolves module links and filtered routes', () => {
   );
   assert.equal(
     getRequiredErpRoute('report-work-order-blockers'),
-    '/work-orders/open?status=BLOCKED',
+    '/reporting/blocked-alerts',
   );
   assert.equal(
     getRequiredErpRoute('report-open-accounts-receivable', { query: 'Smith' }),

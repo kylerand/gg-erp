@@ -65,6 +65,56 @@ export interface ErpReportBlockedWorkOrder {
   title: string;
 }
 
+export type ErpBlockedAlertSourceType =
+  | 'WORK_ORDER'
+  | 'OPERATION'
+  | 'TECHNICIAN_TASK'
+  | 'PART_SHORTAGE';
+
+export type ErpBlockedAlertSeverity = 'P1' | 'P2' | 'P3';
+
+export interface ErpBlockedAlertAction {
+  label: string;
+  href: string;
+}
+
+export interface ErpBlockedAlert {
+  id: string;
+  sourceType: ErpBlockedAlertSourceType;
+  sourceId: string;
+  workOrderId: string;
+  workOrderNumber: string;
+  workOrderTitle: string;
+  customerReference?: string;
+  assetReference?: string;
+  reason: string;
+  reasonCode: string;
+  ownerRole: string;
+  ownerLabel: string;
+  severity: ErpBlockedAlertSeverity;
+  ageMinutes: number;
+  updatedAt: string;
+  nextAction: string;
+  route: string;
+  actions: ErpBlockedAlertAction[];
+}
+
+export interface ErpBlockedAlertSummary {
+  total: number;
+  p1: number;
+  p2: number;
+  p3: number;
+  unowned: number;
+  averageAgeMinutes: number;
+  oldestAgeMinutes: number;
+}
+
+export interface ErpBlockedAlertFeed {
+  generatedAt: string;
+  summary: ErpBlockedAlertSummary;
+  items: ErpBlockedAlert[];
+}
+
 export interface ErpReportingSnapshot {
   generatedAt: string;
   metrics: Record<string, ErpReportSnapshotMetric>;
@@ -82,7 +132,7 @@ export const ERP_REPORTS = [
     category: 'operations',
     module: 'work-orders',
     ownerContext: 'build-planning',
-    route: '/work-orders/open?status=BLOCKED',
+    route: '/reporting/blocked-alerts',
     drillThroughLabel: 'Triage blockers',
     cadence: 'live',
     status: 'live',

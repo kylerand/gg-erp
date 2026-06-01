@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-01T06:06:17.157Z",
+  "generatedAt": "2026-06-01T06:33:33.691Z",
   "sourceFile": "packages/migration/shopmonkey-sanitized-1773274402708.json",
   "sourceKind": "sanitized-report",
   "database": {
@@ -11,24 +11,24 @@
   "commands": [
     {
       "name": "Start disposable PostgreSQL",
-      "command": "docker run -d --name gg-erp-shopmonkey-rehearsal-1780293969859-7e7bcd7b -p 127.0.0.1::5432 postgres:16-alpine",
+      "command": "docker run -d --name gg-erp-shopmonkey-rehearsal-1780295604838-3fdfa962 -p 127.0.0.1::5432 postgres:16-alpine",
       "status": "PASS",
       "exitCode": 0,
-      "durationMs": 187
+      "durationMs": 125
     },
     {
       "name": "Apply Prisma migrations",
       "command": "npm run db:deploy --workspace=packages/db",
       "status": "PASS",
       "exitCode": 0,
-      "durationMs": 827
+      "durationMs": 916
     },
     {
       "name": "Run ShopMonkey loader",
       "command": "npx tsx packages/migration/src/cli/load-shopmonkey.ts packages/migration/shopmonkey-sanitized-1773274402708.json",
       "status": "PASS",
       "exitCode": 0,
-      "durationMs": 4877
+      "durationMs": 6332
     }
   ],
   "entities": [
@@ -115,6 +115,72 @@
       "expectedRows": 0,
       "status": "WARN",
       "detail": "Purchase Orders is absent from this export; confirm this is intentional."
+    }
+  ],
+  "referenceSeeds": [
+    {
+      "key": "baselineRoles",
+      "label": "Baseline roles",
+      "expected": 8,
+      "actual": 8,
+      "status": "PASS",
+      "detail": "Baseline roles verified 8/8 required reference rows."
+    },
+    {
+      "key": "baselinePermissions",
+      "label": "Baseline permissions",
+      "expected": 24,
+      "actual": 24,
+      "status": "PASS",
+      "detail": "Baseline permissions verified 24/24 required reference rows."
+    },
+    {
+      "key": "erpAdminGrants",
+      "label": "ERP admin permission grants",
+      "expected": 24,
+      "actual": 24,
+      "status": "PASS",
+      "detail": "ERP admin permission grants verified 24/24 required reference rows."
+    },
+    {
+      "key": "stockLocations",
+      "label": "Stock locations",
+      "expected": 4,
+      "actual": 4,
+      "status": "PASS",
+      "detail": "Stock locations verified 4/4 required reference rows."
+    },
+    {
+      "key": "stockBins",
+      "label": "Stock bins",
+      "expected": 4,
+      "actual": 4,
+      "status": "PASS",
+      "detail": "Stock bins verified 4/4 required reference rows."
+    },
+    {
+      "key": "mvpScenario",
+      "label": "MVP planning scenario",
+      "expected": 1,
+      "actual": 1,
+      "status": "PASS",
+      "detail": "MVP planning scenario verified 1/1 required reference rows."
+    },
+    {
+      "key": "mvpConstraints",
+      "label": "MVP planning constraints",
+      "expected": 4,
+      "actual": 4,
+      "status": "PASS",
+      "detail": "MVP planning constraints verified 4/4 required reference rows."
+    },
+    {
+      "key": "dealerTables",
+      "label": "Dealer relationship tables",
+      "expected": 2,
+      "actual": 2,
+      "status": "PASS",
+      "detail": "Dealer relationship tables verified 2/2 required reference rows."
     }
   ],
   "supportingCounts": {

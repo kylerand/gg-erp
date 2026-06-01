@@ -160,6 +160,7 @@ import {
   resolveReconciliationHandler,
   listOperationalLedgerHandler,
   listAccountingJournalsHandler,
+  getAccountingTrialBalanceHandler,
   postOperationalLedgerJournalsHandler,
   listAccountsHandler,
   updateAccountStatusHandler,
@@ -816,6 +817,8 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     result = await listOperationalLedgerHandler(event);
   } else if (pathname === '/accounting/journals' && method === 'GET') {
     result = await listAccountingJournalsHandler(event);
+  } else if (pathname === '/accounting/reports/trial-balance' && method === 'GET') {
+    result = await getAccountingTrialBalanceHandler(event);
   } else if (pathname === '/accounting/journals/post-operational-ledger' && method === 'POST') {
     result = await postOperationalLedgerJournalsHandler(event);
   } else if (pathname === '/accounting/integration-accounts' && method === 'GET') {
@@ -1100,6 +1103,7 @@ server.listen(PORT, () => {
   console.log(`   Reconcile   GET|POST /accounting/reconciliation/runs, GET /:id, GET /mismatches`);
   console.log(`   Ledger      GET /accounting/operational-ledger`);
   console.log(`   Journals    GET /accounting/journals, POST /accounting/journals/post-operational-ledger`);
+  console.log(`   Reports     GET /accounting/reports/trial-balance`);
   console.log(`   Accounts    GET /accounting/integration-accounts, PUT /:id/status`);
   console.log(
     `   Scheduling  GET /scheduling/slots, /labor-capacity, /demand-projection, /schedule-preview, /schedule-assignments, /capacity-slots`,

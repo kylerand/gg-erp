@@ -4,11 +4,16 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { EmptyState, LoadingSkeleton, PageHeader } from '@gg-erp/ui';
 import {
+  getAccountingTrialBalance,
   listAccountingJournals,
   listOperationalLedger,
   postOperationalLedgerJournals,
+  type AccountingCloseCheck,
+  type AccountingCloseStatus,
   type AccountingJournalEntry,
   type AccountingJournalResponse,
+  type AccountingTrialBalanceLine,
+  type AccountingTrialBalanceResponse,
   type OperationalLedgerEntry,
   type OperationalLedgerResponse,
   type OperationalLedgerSourceType,
@@ -40,6 +45,7 @@ export default function AccountingLedgerPage() {
   const [status, setStatus] = useState<'ALL' | OperationalLedgerStatus>('ALL');
   const [ledger, setLedger] = useState<OperationalLedgerResponse | null>(null);
   const [journals, setJournals] = useState<AccountingJournalResponse | null>(null);
+  const [trialBalance, setTrialBalance] = useState<AccountingTrialBalanceResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -47,7 +53,7 @@ export default function AccountingLedgerPage() {
 
   const loadData = useCallback(async () => {
     const sourceFilter = sourceType === 'ALL' ? undefined : sourceType;
-    const [ledgerData, journalData] = await Promise.all([
+    const [ledgerData, journalData, trialBalanceData] = await Promise.all([
       listOperationalLedger(
         {
           limit: 100,
@@ -64,8 +70,9 @@ export default function AccountingLedgerPage() {
         },
         STRICT_LIVE_DATA,
       ),
+      getAccountingTrialBalance(undefined, STRICT_LIVE_DATA),
     ]);
-    return { ledgerData, journalData };
+    return { ledgerData, journalData, trialBalanceData };
   }, [sourceType, status]);
 
   useEffect(() => {
@@ -74,15 +81,17 @@ export default function AccountingLedgerPage() {
       setLoading(true);
       setLoadError(null);
       try {
-        const { ledgerData, journalData } = await loadData();
+        const { ledgerData, journalData, trialBalanceData } = await loadData();
         if (!cancelled) {
           setLedger(ledgerData);
           setJournals(journalData);
+          setTrialBalance(trialBalanceData);
         }
       } catch (error) {
         if (!cancelled) {
           setLedger(null);
           setJournals(null);
+          setTrialBalance(null);
           setLoadError(error instanceof Error ? error.message : 'Ledger data failed to load.');
         }
       } finally {
@@ -110,9 +119,10 @@ export default function AccountingLedgerPage() {
       setPostResult(
         `${result.postedCount} new journals posted · ${result.skipped.existing} already posted · ${result.skipped.notPostable} held for review`,
       );
-      const { ledgerData, journalData } = await loadData();
+      const { ledgerData, journalData, trialBalanceData } = await loadData();
       setLedger(ledgerData);
       setJournals(journalData);
+      setTrialBalance(trialBalanceData);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'Journal posting failed.');
     } finally {
@@ -148,7 +158,7 @@ export default function AccountingLedgerPage() {
         </div>
       )}
 
-      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-5">
         <MetricCard
           label="Entries"
           value={summary?.entryCount ?? 0}
@@ -174,6 +184,13 @@ export default function AccountingLedgerPage() {
           value={journalSummary?.entryCount ?? 0}
           detail={`${formatUsdCents(journalSummary?.totalDebitCents ?? 0)} journal value`}
           loading={loading}
+        />
+        <MetricCard
+          label="Close status"
+          value={closeStatusLabel(trialBalance?.summary.closeStatus ?? 'READY')}
+          detail={`${trialBalance?.summary.accountCount ?? 0} trial balance accounts`}
+          loading={loading}
+          tone={closeStatusTone(trialBalance?.summary.closeStatus ?? 'READY')}
         />
       </div>
 
@@ -243,6 +260,11 @@ export default function AccountingLedgerPage() {
             );
           },
         )}
+      </div>
+
+      <div className="mb-8 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(420px,1.3fr)]">
+        <CloseReadinessPanel report={trialBalance} loading={loading} />
+        <TrialBalancePanel report={trialBalance} loading={loading} />
       </div>
 
       {loading ? (
@@ -328,6 +350,207 @@ function FilterBar({
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function CloseReadinessPanel({
+  report,
+  loading,
+}: {
+  report: AccountingTrialBalanceResponse | null;
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="rounded-lg border border-gray-200 bg-white p-4">
+        <div className="mb-4 h-5 w-44 animate-pulse rounded bg-gray-200" />
+        <LoadingSkeleton rows={4} cols={2} />
+      </div>
+    );
+  }
+
+  const summary = report?.summary;
+  const closeStatus = summary?.closeStatus ?? 'READY';
+
+  return (
+    <section className="rounded-lg border border-gray-200 bg-white p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-900">Period close readiness</h2>
+          <p className="mt-1 text-xs text-gray-500">
+            Live trial balance, unposted ledger entries, and sync exceptions.
+          </p>
+        </div>
+        <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${closeStatusClass(closeStatus)}`}>
+          {closeStatusLabel(closeStatus)}
+        </span>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+        <CloseMetric
+          label="Posted journals"
+          value={summary?.postedJournalCount ?? 0}
+          detail={formatUsdCents(summary?.totalDebitCents ?? 0)}
+        />
+        <CloseMetric
+          label="Unposted ready"
+          value={summary?.unpostedOperationalCount ?? 0}
+          detail={formatUsdCents(summary?.unpostedOperationalAmountCents ?? 0)}
+        />
+        <CloseMetric
+          label="Review items"
+          value={summary?.reviewItemCount ?? 0}
+          detail="Ledger rows"
+        />
+        <CloseMetric
+          label="Sync exceptions"
+          value={summary?.integrationExceptionCount ?? 0}
+          detail="Open queue"
+        />
+      </div>
+
+      {summary?.truncated && (
+        <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Trial balance includes the newest 2,000 posted journals. Narrow the period before using it
+          as final close evidence.
+        </div>
+      )}
+
+      <div className="mt-4 divide-y divide-gray-100">
+        {(report?.closeChecks ?? []).map((check) => (
+          <CloseCheckRow key={check.key} check={check} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function CloseMetric({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: string | number;
+  detail: string;
+}) {
+  return (
+    <div className="rounded-md bg-gray-50 px-3 py-2">
+      <div className="text-lg font-semibold text-gray-900">{value}</div>
+      <div className="font-semibold text-gray-500">{label}</div>
+      <div className="mt-0.5 text-[11px] text-gray-400">{detail}</div>
+    </div>
+  );
+}
+
+function CloseCheckRow({ check }: { check: AccountingCloseCheck }) {
+  return (
+    <div className="flex items-start justify-between gap-3 py-3">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <span
+            className={`h-2 w-2 shrink-0 rounded-full ${
+              check.ok ? 'bg-green-500' : check.severity === 'critical' ? 'bg-red-500' : 'bg-amber-500'
+            }`}
+          />
+          <p className="text-sm font-semibold text-gray-900">{check.label}</p>
+          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
+            {check.value}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-gray-500">{check.detail}</p>
+      </div>
+      {!check.ok && (
+        <Link
+          href={check.actionHref}
+          className="shrink-0 text-xs font-semibold text-[#B1581B] hover:text-[#7A3B12]"
+        >
+          {check.actionLabel}
+        </Link>
+      )}
+    </div>
+  );
+}
+
+function TrialBalancePanel({
+  report,
+  loading,
+}: {
+  report: AccountingTrialBalanceResponse | null;
+  loading: boolean;
+}) {
+  return (
+    <section className="rounded-lg border border-gray-200 bg-white p-4">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-900">Trial balance</h2>
+          <p className="mt-1 text-xs text-gray-500">
+            Posted journal lines grouped by account for the selected ledger period.
+          </p>
+        </div>
+        <div className="text-right text-xs text-gray-500">
+          <div>{formatUsdCents(report?.summary.totalDebitCents ?? 0)} debit</div>
+          <div>{formatUsdCents(report?.summary.totalCreditCents ?? 0)} credit</div>
+        </div>
+      </div>
+
+      {loading ? (
+        <LoadingSkeleton rows={5} cols={5} />
+      ) : !report || report.accountLines.length === 0 ? (
+        <div className="rounded-md border border-dashed border-gray-200 px-4 py-6 text-sm text-gray-500">
+          No posted journals are available for a trial balance yet.
+        </div>
+      ) : (
+        <TrialBalanceTable lines={report.accountLines} />
+      )}
+    </section>
+  );
+}
+
+function TrialBalanceTable({ lines }: { lines: AccountingTrialBalanceLine[] }) {
+  return (
+    <div className="max-h-[420px] overflow-auto rounded-lg border border-gray-200">
+      <table className="min-w-full text-sm">
+        <thead className="sticky top-0 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+          <tr>
+            <th className="px-3 py-2">Account</th>
+            <th className="px-3 py-2 text-right">Debits</th>
+            <th className="px-3 py-2 text-right">Credits</th>
+            <th className="px-3 py-2 text-right">Net</th>
+            <th className="px-3 py-2">Latest</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {lines.map((line) => (
+            <tr key={`${line.accountCode}:${line.accountName}`}>
+              <td className="px-3 py-2">
+                <div className="font-semibold text-gray-900">{line.accountName}</div>
+                <div className="mt-0.5 text-xs text-gray-400">
+                  {line.accountCode} · {line.journalLineCount} line
+                  {line.journalLineCount === 1 ? '' : 's'}
+                </div>
+              </td>
+              <td className="whitespace-nowrap px-3 py-2 text-right text-gray-700">
+                {formatUsdCents(line.debitCents)}
+              </td>
+              <td className="whitespace-nowrap px-3 py-2 text-right text-gray-700">
+                {formatUsdCents(line.creditCents)}
+              </td>
+              <td className="whitespace-nowrap px-3 py-2 text-right font-semibold text-gray-900">
+                {line.balanceSide === 'BALANCED'
+                  ? '$0'
+                  : `${formatUsdCents(
+                      line.balanceSide === 'DEBIT' ? line.netDebitCents : line.netCreditCents,
+                    )} ${line.balanceSide.toLowerCase()}`}
+              </td>
+              <td className="whitespace-nowrap px-3 py-2 text-gray-500">
+                {line.latestLedgerDate ? formatDate(line.latestLedgerDate) : 'No date'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -511,6 +734,30 @@ function statusLabel(status: OperationalLedgerStatus): string {
     .split('_')
     .map((part) => part[0]!.toUpperCase() + part.slice(1))
     .join(' ');
+}
+
+function closeStatusLabel(status: AccountingCloseStatus): string {
+  return {
+    READY: 'Ready',
+    NEEDS_REVIEW: 'Needs review',
+    BLOCKED: 'Blocked',
+  }[status];
+}
+
+function closeStatusTone(status: AccountingCloseStatus): 'green' | 'amber' | 'red' {
+  return ({
+    READY: 'green',
+    NEEDS_REVIEW: 'amber',
+    BLOCKED: 'red',
+  } as const)[status];
+}
+
+function closeStatusClass(status: AccountingCloseStatus): string {
+  return {
+    READY: 'border-green-200 bg-green-50 text-green-700',
+    NEEDS_REVIEW: 'border-amber-200 bg-amber-50 text-amber-800',
+    BLOCKED: 'border-red-200 bg-red-50 text-red-700',
+  }[status];
 }
 
 function formatUsdCents(value: number): string {

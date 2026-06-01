@@ -3608,6 +3608,54 @@ export interface AccountingJournalResponse {
   };
 }
 
+export type AccountingCloseStatus = 'READY' | 'NEEDS_REVIEW' | 'BLOCKED';
+export type AccountingBalanceSide = 'DEBIT' | 'CREDIT' | 'BALANCED';
+
+export interface AccountingTrialBalanceLine {
+  accountName: string;
+  accountCode: string;
+  debitCents: number;
+  creditCents: number;
+  netDebitCents: number;
+  netCreditCents: number;
+  balanceSide: AccountingBalanceSide;
+  journalLineCount: number;
+  latestLedgerDate: string | null;
+}
+
+export interface AccountingCloseCheck {
+  key: string;
+  label: string;
+  ok: boolean;
+  severity: 'info' | 'warning' | 'critical';
+  value: string;
+  detail: string;
+  actionLabel: string;
+  actionHref: string;
+}
+
+export interface AccountingTrialBalanceResponse {
+  generatedAt: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  currencyCode: 'USD';
+  summary: {
+    accountCount: number;
+    postedJournalCount: number;
+    totalDebitCents: number;
+    totalCreditCents: number;
+    outOfBalanceCents: number;
+    unpostedOperationalCount: number;
+    unpostedOperationalAmountCents: number;
+    reviewItemCount: number;
+    integrationExceptionCount: number;
+    truncated: boolean;
+    closeStatus: AccountingCloseStatus;
+  };
+  accountLines: AccountingTrialBalanceLine[];
+  closeChecks: AccountingCloseCheck[];
+}
+
 export interface PostOperationalLedgerJournalsResponse {
   posted: AccountingJournalEntry[];
   postedCount: number;
@@ -3628,6 +3676,28 @@ const emptyAccountingJournalSummary: AccountingJournalResponse['summary'] = {
     CUSTOMER_PAYMENT: { count: 0, amountCents: 0 },
     RECONCILIATION_VARIANCE: { count: 0, amountCents: 0 },
   },
+};
+
+const emptyAccountingTrialBalance: AccountingTrialBalanceResponse = {
+  generatedAt: new Date(0).toISOString(),
+  periodStart: null,
+  periodEnd: null,
+  currencyCode: 'USD',
+  summary: {
+    accountCount: 0,
+    postedJournalCount: 0,
+    totalDebitCents: 0,
+    totalCreditCents: 0,
+    outOfBalanceCents: 0,
+    unpostedOperationalCount: 0,
+    unpostedOperationalAmountCents: 0,
+    reviewItemCount: 0,
+    integrationExceptionCount: 0,
+    truncated: false,
+    closeStatus: 'READY',
+  },
+  accountLines: [],
+  closeChecks: [],
 };
 
 export async function listAccountingJournals(
@@ -3654,6 +3724,24 @@ export async function listAccountingJournals(
       offset: params?.offset ?? 0,
       summary: emptyAccountingJournalSummary,
     },
+    options,
+  );
+}
+
+export async function getAccountingTrialBalance(
+  params?: {
+    from?: string;
+    to?: string;
+  },
+  options?: ApiDataOptions,
+): Promise<AccountingTrialBalanceResponse> {
+  const qs = new URLSearchParams();
+  if (params?.from) qs.set('from', params.from);
+  if (params?.to) qs.set('to', params.to);
+  return apiFetch(
+    `/accounting/reports/trial-balance${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    emptyAccountingTrialBalance,
     options,
   );
 }

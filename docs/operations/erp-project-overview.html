@@ -345,15 +345,15 @@
       <header>
         <h1>Golfin Garage ERP Project Overview</h1>
         <p class="lede">
-          High-level status after the planning review-pack, accounting operational-ledger, and
-          journal-posting slices. The app has moved past polished static screens into a usable
+          High-level status after the planning review-pack, accounting operational-ledger,
+          journal-posting, and trial-balance close-readiness slices. The app has moved past polished static screens into a usable
           shop-ops ERP foundation, but ShopMonkey cutover remains blocked until complete parts and
           purchase-order source exports are captured.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 1, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 166</span>
-          <span class="chip">Active slice: Accounting journal posting foundation</span>
+          <span class="chip">Baseline: origin/main through PR 168</span>
+          <span class="chip">Active slice: Accounting trial balance and close readiness</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
@@ -423,8 +423,9 @@
                 pause/enable controls, run-now export evidence, and downloadable CSV output.
               </li>
               <li>
-                Accounting now has a live operational ledger, posted journal-entry model, and a
-                guarded journal-posting action for balanced ready payables and customer payments.
+                Accounting now has a live operational ledger, posted journal-entry model, guarded
+                journal-posting action, and a trial-balance/period-close readiness report from
+                posted journal lines.
               </li>
             </ul>
           </div>
@@ -445,14 +446,15 @@
                 grows.
               </li>
               <li>
-                Accounting is still integration-first, but the active slice promotes ready
-                operational ledger entries into first-party immutable journals. Financial reports,
-                close controls, and invoice/payment document depth remain future maturity work.
+                Accounting is still integration-first, but ready operational ledger entries now
+                promote into first-party immutable journals and the active slice turns those
+                journals into a trial balance with close-readiness blockers. Reversals, period
+                locks, and invoice/payment document depth remain future maturity work.
               </li>
               <li>
-                API smoke route exceptions are back to zero on deployed main. This branch adds two
-                pending-deploy accounting journal route exceptions that should be removed after CD
-                proves the new API Gateway routes reach Lambda.
+                API smoke route exceptions are back to zero on deployed main. This branch adds one
+                pending-deploy trial-balance report route exception that should be removed after CD
+                proves the new API Gateway route reaches Lambda.
               </li>
             </ul>
           </div>
@@ -492,8 +494,8 @@
                 route misses.
               </td>
               <td>
-                Keep status docs current, remove pending-deploy journal route exceptions after CD,
-                and run live UAT scripts by role.
+                Keep status docs current, remove the pending-deploy report route exception after
+                CD, and run live UAT scripts by role.
               </td>
             </tr>
             <tr>
@@ -527,8 +529,8 @@
               </td>
               <td>The app behaves like one ERP, not a collection of good module pages.</td>
               <td>
-                Deploy and clean up journal posting routes; harden read models and freshness
-                signals; complete setup/configuration domains.
+                Deploy trial-balance close-readiness, harden read models and freshness signals,
+                and complete setup/configuration domains.
               </td>
             </tr>
             <tr>
@@ -645,9 +647,9 @@
             <div class="bar warn"><span style="width: 66%"></span></div>
             <p>
               QuickBooks integration, sync status, reconciliation, payable review, mapping admin,
-              reference views, an operational ledger, and guarded journal posting now exist. Full
-              ERP accounting still needs financial reports, close controls, richer
-              invoices/payments, reversal flows, and a clean webhook error path.
+              reference views, an operational ledger, guarded journal posting, and a trial-balance
+              close-readiness report now exist. Full ERP accounting still needs period locks,
+              richer invoices/payments, reversal flows, and a clean webhook error path.
             </p>
           </div>
 
@@ -734,9 +736,9 @@
               <td>Latest production baseline</td>
               <td><span class="pill done">Merged</span></td>
               <td>
-                <code>origin/main</code> is through PR 166 after the accounting operational-ledger
-                deploy and QA allowlist cleanup. This branch adds immutable journal posting from
-                eligible operational ledger entries.
+                <code>origin/main</code> is through PR 168 after the accounting journal-posting
+                deploy and QA allowlist cleanup. This branch adds trial-balance and period-close
+                readiness reporting from posted internal journals.
               </td>
             </tr>
             <tr>
@@ -744,18 +746,18 @@
               <td><span class="pill done">Green</span></td>
               <td>
                 Latest main CI, QA smoke, QA coverage, Pages, and CD runs completed successfully
-                after PR 166 merged. The latest CD path proved the accounting operational-ledger
-                route live; this branch will require the same PR CI, main CD, live-smoke, and
-                route-allowlist cleanup loop.
+                after PR 168 merged. The latest CD path proved the accounting journal routes live;
+                this branch will require the same PR CI, main CD, live-smoke, and route-allowlist
+                cleanup loop.
               </td>
             </tr>
             <tr>
               <td>Route/API surface</td>
               <td><span class="pill info">Broad</span></td>
               <td>
-                Current smoke discovery covers 186 deployed API routes after the accounting ledger
-                cleanup. This branch adds two accounting journal routes, bringing local discovery to
-                188 before CD deploys them.
+                Current smoke discovery covers 188 deployed API routes after the accounting journal
+                cleanup. This branch adds one accounting report route, bringing local discovery to
+                189 before CD deploys it.
               </td>
             </tr>
             <tr>
@@ -769,17 +771,17 @@
               <td>
                 The registry defines live accounting-ledger and accounting-journal objects and
                 Accounting workspace links in addition to the existing planning, inventory,
-                reporting, and integration destinations.
+                reporting, and integration destinations. The trial-balance report lives inside the
+                accounting ledger workspace.
               </td>
             </tr>
             <tr>
               <td>Known route exceptions</td>
-              <td><span class="pill watch">2 Pending Deploy</span></td>
+              <td><span class="pill watch">1 Pending Deploy</span></td>
               <td>
                 <code>known-broken.json</code> contains short-lived pending-deploy entries for
-                <code>GET /accounting/journals</code> and
-                <code>POST /accounting/journals/post-operational-ledger</code>. Remove them after
-                CD deploys the Terraform routes and live smoke confirms requests reach Lambda.
+                <code>GET /accounting/reports/trial-balance</code>. Remove it after CD deploys the
+                Terraform route and live smoke confirms requests reach Lambda.
               </td>
             </tr>
           </tbody>
@@ -805,12 +807,12 @@
             work-order provenance, and version diff workflows need a heavier change-control gate.
           </li>
           <li>
-            <strong>Deploy and clean journal posting:</strong> land the immutable journal route
-            slice, prove CD/live smoke, then remove the two pending-deploy QA route exceptions.
+            <strong>Deploy and clean trial balance:</strong> land the accounting report route,
+            prove CD/live smoke, then remove the pending-deploy QA route exception.
           </li>
           <li>
-            <strong>Add accounting reports and close controls:</strong> use posted journals as the
-            source for trial-balance-style summaries, review queues, and reversal/close workflows.
+            <strong>Add accounting reversals and period locks:</strong> use posted journals and the
+            close-readiness checks as the source for reversal/close workflows.
           </li>
         </ol>
       </section>

@@ -753,6 +753,51 @@ const accountingJournalPostResult = z.object({
   summary: accountingJournalSummary,
 });
 
+const accountingTrialBalance = z.object({
+  generatedAt: isoDate,
+  periodStart: isoDate.nullable(),
+  periodEnd: isoDate.nullable(),
+  currencyCode: z.literal('USD'),
+  summary: z.object({
+    accountCount: positiveInt,
+    postedJournalCount: positiveInt,
+    totalDebitCents: z.number(),
+    totalCreditCents: z.number(),
+    outOfBalanceCents: z.number(),
+    unpostedOperationalCount: positiveInt,
+    unpostedOperationalAmountCents: z.number(),
+    reviewItemCount: positiveInt,
+    integrationExceptionCount: positiveInt,
+    truncated: z.boolean(),
+    closeStatus: z.enum(['READY', 'NEEDS_REVIEW', 'BLOCKED']),
+  }),
+  accountLines: z.array(
+    z.object({
+      accountName: z.string(),
+      accountCode: z.string(),
+      debitCents: z.number(),
+      creditCents: z.number(),
+      netDebitCents: z.number(),
+      netCreditCents: z.number(),
+      balanceSide: z.enum(['DEBIT', 'CREDIT', 'BALANCED']),
+      journalLineCount: positiveInt,
+      latestLedgerDate: isoDate.nullable(),
+    }),
+  ),
+  closeChecks: z.array(
+    z.object({
+      key: z.string(),
+      label: z.string(),
+      ok: z.boolean(),
+      severity: z.enum(['info', 'warning', 'critical']),
+      value: z.string(),
+      detail: z.string(),
+      actionLabel: z.string(),
+      actionHref: z.string(),
+    }),
+  ),
+});
+
 const reportMetric = z.object({
   value: z.string(),
   label: z.string(),
@@ -869,6 +914,7 @@ const ROUTES: RouteEntry[] = [
   { method: 'GET', template: '/accounting/status', schema: accountingStatus },
   { method: 'GET', template: '/accounting/operational-ledger', schema: operationalLedger },
   { method: 'GET', template: '/accounting/journals', schema: accountingJournals },
+  { method: 'GET', template: '/accounting/reports/trial-balance', schema: accountingTrialBalance },
   {
     method: 'POST',
     template: '/accounting/journals/post-operational-ledger',

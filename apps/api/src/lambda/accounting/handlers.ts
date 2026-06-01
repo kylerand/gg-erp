@@ -162,6 +162,55 @@ interface AccountingJournalResponse {
   lines: AccountingJournalLineResponse[];
 }
 
+type AccountingCloseStatus = 'READY' | 'NEEDS_REVIEW' | 'BLOCKED';
+type AccountingCloseCheckSeverity = 'info' | 'warning' | 'critical';
+type AccountingBalanceSide = 'DEBIT' | 'CREDIT' | 'BALANCED';
+
+interface AccountingTrialBalanceLineResponse {
+  accountName: string;
+  accountCode: string;
+  debitCents: number;
+  creditCents: number;
+  netDebitCents: number;
+  netCreditCents: number;
+  balanceSide: AccountingBalanceSide;
+  journalLineCount: number;
+  latestLedgerDate: string | null;
+}
+
+interface AccountingCloseCheckResponse {
+  key: string;
+  label: string;
+  ok: boolean;
+  severity: AccountingCloseCheckSeverity;
+  value: string;
+  detail: string;
+  actionLabel: string;
+  actionHref: string;
+}
+
+interface AccountingTrialBalanceResponse {
+  generatedAt: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  currencyCode: 'USD';
+  summary: {
+    accountCount: number;
+    postedJournalCount: number;
+    totalDebitCents: number;
+    totalCreditCents: number;
+    outOfBalanceCents: number;
+    unpostedOperationalCount: number;
+    unpostedOperationalAmountCents: number;
+    reviewItemCount: number;
+    integrationExceptionCount: number;
+    truncated: boolean;
+    closeStatus: AccountingCloseStatus;
+  };
+  accountLines: AccountingTrialBalanceLineResponse[];
+  closeChecks: AccountingCloseCheckResponse[];
+}
+
 interface JournalPostRequest {
   confirm?: boolean;
   sourceType?: OperationalLedgerSourceType;
@@ -188,6 +237,7 @@ const JOURNAL_POSTABLE_STATUSES = new Set<OperationalLedgerStatus>([
   'READY_FOR_REVIEW',
   'POSTED',
 ]);
+const TRIAL_BALANCE_JOURNAL_LIMIT = 2000;
 
 const OPERATIONAL_LEDGER_POSTING_RULES: OperationalLedgerPostingRule[] = [
   {
@@ -573,6 +623,228 @@ function summarizeJournals(entries: AccountingJournalResponse[]) {
   };
 }
 
+function parseOptionalReportDate(
+  value: string | undefined,
+  endOfDay: boolean,
+): Date | undefined | 'invalid' {
+  if (!value) return undefined;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'invalid';
+  if (endOfDay && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    date.setUTCHours(23, 59, 59, 999);
+  }
+  return date;
+}
+
+function formatReportDate(date: Date | undefined): string | null {
+  return date ? date.toISOString() : null;
+}
+
+function dollarsFromCents(cents: number): string {
+  const dollars = Math.abs(cents) / 100;
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(dollars);
+}
+
+function statusTotal(
+  summary: ReturnType<typeof summarizeLedgerEntries>,
+  status: OperationalLedgerStatus,
+): { count: number; amountCents: number } {
+  return summary.statusTotals[status] ?? { count: 0, amountCents: 0 };
+}
+
+function buildTrialBalanceReport(params: {
+  journals: AccountingJournalWithLines[];
+  journalTotal: number;
+  operationalSnapshot: Awaited<ReturnType<typeof loadOperationalLedgerSnapshot>>;
+  periodStart?: Date;
+  periodEnd?: Date;
+}): AccountingTrialBalanceResponse {
+  const accountMap = new Map<
+    string,
+    {
+      accountName: string;
+      accountCode: string;
+      debitCents: number;
+      creditCents: number;
+      journalLineCount: number;
+      latestLedgerDate: Date | null;
+    }
+  >();
+
+  for (const journal of params.journals) {
+    for (const line of journal.lines) {
+      const accountCode = line.accountCode ?? accountCodeFromName(line.accountName);
+      const key = `${accountCode}:${line.accountName}`;
+      const existing =
+        accountMap.get(key) ??
+        {
+          accountName: line.accountName,
+          accountCode,
+          debitCents: 0,
+          creditCents: 0,
+          journalLineCount: 0,
+          latestLedgerDate: null,
+        };
+      existing.debitCents += line.debitCents;
+      existing.creditCents += line.creditCents;
+      existing.journalLineCount += 1;
+      if (!existing.latestLedgerDate || journal.ledgerDate > existing.latestLedgerDate) {
+        existing.latestLedgerDate = journal.ledgerDate;
+      }
+      accountMap.set(key, existing);
+    }
+  }
+
+  const accountLines = [...accountMap.values()]
+    .map((account) => {
+      const net = account.debitCents - account.creditCents;
+      return {
+        accountName: account.accountName,
+        accountCode: account.accountCode,
+        debitCents: account.debitCents,
+        creditCents: account.creditCents,
+        netDebitCents: net > 0 ? net : 0,
+        netCreditCents: net < 0 ? Math.abs(net) : 0,
+        balanceSide: net > 0 ? 'DEBIT' : net < 0 ? 'CREDIT' : 'BALANCED',
+        journalLineCount: account.journalLineCount,
+        latestLedgerDate: account.latestLedgerDate?.toISOString() ?? null,
+      } satisfies AccountingTrialBalanceLineResponse;
+    })
+    .sort((a, b) => a.accountName.localeCompare(b.accountName));
+
+  const totalDebitCents = accountLines.reduce((sum, line) => sum + line.debitCents, 0);
+  const totalCreditCents = accountLines.reduce((sum, line) => sum + line.creditCents, 0);
+  const outOfBalanceCents = Math.abs(totalDebitCents - totalCreditCents);
+  const operationalSummary = summarizeLedgerEntries(
+    params.operationalSnapshot.entries,
+    params.operationalSnapshot.exceptions,
+  );
+  const postedSourceKeys = new Set(
+    params.journals.map((journal) => `${journal.sourceType}:${journal.sourceId}`),
+  );
+  const unpostedReadyEntries = params.operationalSnapshot.entries.filter(
+    (entry) =>
+      isPostableOperationalEntry(entry) &&
+      !postedSourceKeys.has(`${entry.sourceType}:${entry.sourceId}`),
+  );
+  const reviewItemCount =
+    statusTotal(operationalSummary, 'NEEDS_REVIEW').count +
+    statusTotal(operationalSummary, 'FAILED').count +
+    statusTotal(operationalSummary, 'MISMATCH').count;
+  const integrationExceptionCount =
+    operationalSummary.exceptions.invoice +
+    operationalSummary.exceptions.customer +
+    operationalSummary.exceptions.payment +
+    operationalSummary.exceptions.reconciliation;
+
+  const closeChecks: AccountingCloseCheckResponse[] = [
+    {
+      key: 'balanced-journals',
+      label: 'Posted journal balance',
+      ok: outOfBalanceCents === 0,
+      severity: 'critical',
+      value: outOfBalanceCents === 0 ? 'Balanced' : `${dollarsFromCents(outOfBalanceCents)} off`,
+      detail:
+        outOfBalanceCents === 0
+          ? 'Posted journal debits and credits net to zero.'
+          : 'Posted journal lines do not balance and must be corrected before close.',
+      actionLabel: 'Review journals',
+      actionHref: '/accounting/ledger',
+    },
+    {
+      key: 'ready-operational-ledger',
+      label: 'Ready operational entries',
+      ok: unpostedReadyEntries.length === 0,
+      severity: 'warning',
+      value: String(unpostedReadyEntries.length),
+      detail:
+        unpostedReadyEntries.length === 0
+          ? 'No ready operational entries are waiting to post.'
+          : `${dollarsFromCents(
+              unpostedReadyEntries.reduce((sum, entry) => sum + entry.amountCents, 0),
+            )} can be posted into journals.`,
+      actionLabel: 'Post ready journals',
+      actionHref: '/accounting/ledger',
+    },
+    {
+      key: 'ledger-review-items',
+      label: 'Ledger review items',
+      ok: reviewItemCount === 0,
+      severity: 'warning',
+      value: String(reviewItemCount),
+      detail:
+        reviewItemCount === 0
+          ? 'No failed, mismatched, or review-required operational entries are visible.'
+          : 'Some operational ledger rows need accounting review before period close.',
+      actionLabel: 'Open ledger review',
+      actionHref: '/accounting/ledger',
+    },
+    {
+      key: 'sync-exceptions',
+      label: 'Sync exceptions',
+      ok: integrationExceptionCount === 0,
+      severity: 'critical',
+      value: String(integrationExceptionCount),
+      detail:
+        integrationExceptionCount === 0
+          ? 'QuickBooks sync and reconciliation exception queues are clear.'
+          : 'QuickBooks sync or reconciliation exceptions remain unresolved.',
+      actionLabel: 'Review sync queue',
+      actionHref: '/accounting/sync?view=queue&state=FAILED',
+    },
+    {
+      key: 'reconciliation-mismatches',
+      label: 'Reconciliation mismatches',
+      ok: operationalSummary.exceptions.reconciliation === 0,
+      severity: 'critical',
+      value: String(operationalSummary.exceptions.reconciliation),
+      detail:
+        operationalSummary.exceptions.reconciliation === 0
+          ? 'No active reconciliation mismatches are open.'
+          : 'Resolve reconciliation mismatches before treating the period as close-ready.',
+      actionLabel: 'Open reconciliation',
+      actionHref: '/accounting/reconciliation',
+    },
+  ];
+
+  const hasCriticalBlocker = closeChecks.some((check) => !check.ok && check.severity === 'critical');
+  const hasWarning = closeChecks.some((check) => !check.ok && check.severity === 'warning');
+  const closeStatus: AccountingCloseStatus = hasCriticalBlocker
+    ? 'BLOCKED'
+    : hasWarning
+      ? 'NEEDS_REVIEW'
+      : 'READY';
+
+  return {
+    generatedAt: new Date().toISOString(),
+    periodStart: formatReportDate(params.periodStart),
+    periodEnd: formatReportDate(params.periodEnd),
+    currencyCode: 'USD',
+    summary: {
+      accountCount: accountLines.length,
+      postedJournalCount: params.journalTotal,
+      totalDebitCents,
+      totalCreditCents,
+      outOfBalanceCents,
+      unpostedOperationalCount: unpostedReadyEntries.length,
+      unpostedOperationalAmountCents: unpostedReadyEntries.reduce(
+        (sum, entry) => sum + entry.amountCents,
+        0,
+      ),
+      reviewItemCount,
+      integrationExceptionCount,
+      truncated: params.journals.length < params.journalTotal,
+      closeStatus,
+    },
+    accountLines,
+    closeChecks,
+  };
+}
+
 export const accountingJournalQueries = {
   async list(params: {
     take: number;
@@ -657,6 +929,46 @@ export const accountingJournalQueries = {
         },
       },
       include: { lines: true },
+    });
+  },
+};
+
+export const accountingReportQueries = {
+  async listPostedJournals(params: {
+    from?: Date;
+    to?: Date;
+    take: number;
+  }): Promise<AccountingJournalWithLines[]> {
+    return prisma.accountingJournalEntry.findMany({
+      where: {
+        status: 'POSTED',
+        ...(params.from || params.to
+          ? {
+              ledgerDate: {
+                ...(params.from ? { gte: params.from } : {}),
+                ...(params.to ? { lte: params.to } : {}),
+              },
+            }
+          : {}),
+      },
+      include: { lines: true },
+      orderBy: [{ ledgerDate: 'asc' }, { postedAt: 'asc' }],
+      take: params.take,
+    });
+  },
+  async countPostedJournals(params: { from?: Date; to?: Date }): Promise<number> {
+    return prisma.accountingJournalEntry.count({
+      where: {
+        status: 'POSTED',
+        ...(params.from || params.to
+          ? {
+              ledgerDate: {
+                ...(params.from ? { gte: params.from } : {}),
+                ...(params.to ? { lte: params.to } : {}),
+              },
+            }
+          : {}),
+      },
     });
   },
 };
@@ -1812,6 +2124,40 @@ export const listAccountingJournalsHandler = wrapHandler(async (ctx) => {
     offset,
     summary: summarizeJournals(items),
   });
+}, { requireAuth: false });
+
+export const getAccountingTrialBalanceHandler = wrapHandler(async (ctx) => {
+  const qs = ctx.event.queryStringParameters ?? {};
+  const from = parseOptionalReportDate(qs.from, false);
+  const to = parseOptionalReportDate(qs.to, true);
+
+  if (from === 'invalid') {
+    return jsonResponse(422, { message: 'Invalid from date. Use an ISO date or timestamp.' });
+  }
+  if (to === 'invalid') {
+    return jsonResponse(422, { message: 'Invalid to date. Use an ISO date or timestamp.' });
+  }
+  if (from && to && from > to) {
+    return jsonResponse(422, { message: 'from must be before to.' });
+  }
+
+  const [journals, journalTotal, operationalSnapshot] = await Promise.all([
+    accountingReportQueries.listPostedJournals({
+      from,
+      to,
+      take: TRIAL_BALANCE_JOURNAL_LIMIT,
+    }),
+    accountingReportQueries.countPostedJournals({ from, to }),
+    loadOperationalLedgerSnapshot(200),
+  ]);
+
+  return jsonResponse(200, buildTrialBalanceReport({
+    journals,
+    journalTotal,
+    operationalSnapshot,
+    periodStart: from,
+    periodEnd: to,
+  }));
 }, { requireAuth: false });
 
 export const postOperationalLedgerJournalsHandler = wrapHandler(async (ctx) => {

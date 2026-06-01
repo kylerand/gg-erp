@@ -1,0 +1,108 @@
+{
+  "generatedAt": "2026-06-01T05:27:40.114Z",
+  "sourceFile": "shopmonkey-sanitized-1773274402708.json",
+  "sourceChecksum": "74b65ace228ddec8c98c5d0d7b869db4e296261037d3c22d8415d0ce44d518cc",
+  "overallStatus": "WARN",
+  "totals": {
+    "entitiesPresent": 5,
+    "totalRows": 1021,
+    "validRows": 952,
+    "warnedRows": 69,
+    "skippedRows": 0
+  },
+  "gates": [
+    {
+      "key": "customers",
+      "label": "Customers",
+      "status": "WARN",
+      "total": 447,
+      "valid": 446,
+      "warned": 1,
+      "skipped": 0,
+      "validRatio": 0.9977628635346756,
+      "detail": "Customers is usable but needs review before cutover sign-off."
+    },
+    {
+      "key": "vehicles",
+      "label": "Vehicles",
+      "status": "PASS",
+      "total": 56,
+      "valid": 56,
+      "warned": 0,
+      "skipped": 0,
+      "validRatio": 1,
+      "detail": "Vehicles meets the preflight coverage gate."
+    },
+    {
+      "key": "orders",
+      "label": "Work Orders",
+      "status": "WARN",
+      "total": 465,
+      "valid": 397,
+      "warned": 68,
+      "skipped": 0,
+      "validRatio": 0.853763440860215,
+      "detail": "Work Orders is usable but needs review before cutover sign-off."
+    },
+    {
+      "key": "users",
+      "label": "Employees",
+      "status": "PASS",
+      "total": 28,
+      "valid": 28,
+      "warned": 0,
+      "skipped": 0,
+      "validRatio": 1,
+      "detail": "Employees meets the preflight coverage gate."
+    },
+    {
+      "key": "vendors",
+      "label": "Vendors",
+      "status": "PASS",
+      "total": 25,
+      "valid": 25,
+      "warned": 0,
+      "skipped": 0,
+      "validRatio": 1,
+      "detail": "Vendors meets the preflight coverage gate."
+    },
+    {
+      "key": "parts",
+      "label": "Parts",
+      "status": "WARN",
+      "total": 0,
+      "valid": 0,
+      "warned": 0,
+      "skipped": 0,
+      "validRatio": 0,
+      "detail": "Parts data is not present in this export."
+    },
+    {
+      "key": "purchaseOrders",
+      "label": "Purchase Orders",
+      "status": "WARN",
+      "total": 0,
+      "valid": 0,
+      "warned": 0,
+      "skipped": 0,
+      "validRatio": 0,
+      "detail": "Purchase Orders data is not present in this export."
+    },
+    {
+      "key": "lineItemAssignments",
+      "label": "Line Item Assignments",
+      "status": "WARN",
+      "total": 0,
+      "valid": 0,
+      "warned": 0,
+      "skipped": 0,
+      "validRatio": 0,
+      "detail": "Line Item Assignments data was not included; confirm this is intentional for this rehearsal."
+    }
+  ],
+  "nextActions": [
+    "Review warning gates: Customers, Work Orders, Parts, Purchase Orders, Line Item Assignments.",
+    "Run the loader against an isolated staging database and capture row-count reconciliation.",
+    "Compare imported customers, carts, work orders, parts, vendors, and accounting sync queues in the ERP UI."
+  ]
+}

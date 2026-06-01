@@ -39,6 +39,40 @@ export interface ErpSavedReportViewDescriptor {
   keywords: readonly string[];
 }
 
+export type ErpReportMetricTone = 'neutral' | 'green' | 'amber' | 'red';
+export type ErpReportSnapshotFreshnessStatus = 'LIVE' | 'STALE' | 'ERROR';
+
+export interface ErpReportSnapshotMetric {
+  value: string;
+  label: string;
+  tone: ErpReportMetricTone;
+  generatedAt: string;
+  source: string;
+}
+
+export interface ErpReportSnapshotFreshness {
+  reportKey: string;
+  source: string;
+  status: ErpReportSnapshotFreshnessStatus;
+  generatedAt: string;
+  lastSuccessfulAt?: string;
+  message?: string;
+}
+
+export interface ErpReportBlockedWorkOrder {
+  id: string;
+  workOrderNumber: string;
+  title: string;
+}
+
+export interface ErpReportingSnapshot {
+  generatedAt: string;
+  metrics: Record<string, ErpReportSnapshotMetric>;
+  freshness: Record<string, ErpReportSnapshotFreshness>;
+  blockedWorkOrders: ErpReportBlockedWorkOrder[];
+  warnings: Array<{ source: string; message: string }>;
+}
+
 export const ERP_REPORTS = [
   {
     key: 'report-work-order-blockers',
@@ -261,6 +295,18 @@ export function getErpReportByKey(key: string): ErpReportDescriptor | undefined 
 
 export function getLiveErpReports(): readonly ErpReportDescriptor[] {
   return ERP_REPORTS.filter((report) => report.status === 'live');
+}
+
+export function getLiveErpReportKeys(): readonly string[] {
+  return getLiveErpReports().map((report) => report.key);
+}
+
+export function getMissingReportingSnapshotKeys(
+  snapshot: Pick<ErpReportingSnapshot, 'metrics' | 'freshness'>,
+): string[] {
+  return getLiveErpReportKeys().filter(
+    (reportKey) => !snapshot.metrics[reportKey] && !snapshot.freshness[reportKey],
+  );
 }
 
 export function getLiveErpReportsByCategory(

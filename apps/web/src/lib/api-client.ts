@@ -1,4 +1,5 @@
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
+import type { ErpReportingSnapshot } from '@gg-erp/domain';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
 const IS_AUTH_MOCK = process.env.NEXT_PUBLIC_AUTH_MODE === 'mock';
@@ -2719,6 +2720,14 @@ export async function getQbStatus(options?: ApiDataOptions): Promise<{
     message?: string;
     overview?: QbOverview;
   }>('/accounting/status', undefined, undefined, options);
+}
+
+// ─── Reporting ────────────────────────────────────────────────────────────────
+
+export async function getReportingSnapshot(
+  options?: ApiDataOptions,
+): Promise<ErpReportingSnapshot> {
+  return apiFetch<ErpReportingSnapshot>('/reporting/snapshot', undefined, undefined, options);
 }
 
 // ─── Reconciliation ──────────────────────────────────────────────────────────

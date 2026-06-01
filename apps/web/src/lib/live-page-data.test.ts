@@ -726,6 +726,7 @@ test('dashboard KPI cards deep-link to filtered destination views', () => {
 test('reporting catalog is registry-backed with filtered drill-through destinations', () => {
   const reportingSource = readSource('app/reporting/page.tsx');
   const reportingExportSource = readSource('app/reporting/ReportingExportActions.tsx');
+  const apiClientSource = readSource('lib/api-client.ts');
   const assignmentsSource = readSource('app/training/assignments/page.tsx');
   const auditSource = readSource('app/admin/audit/page.tsx');
   const reportRegistrySource = readFileSync(
@@ -758,11 +759,16 @@ test('reporting catalog is registry-backed with filtered drill-through destinati
       'Saved Views',
       'reportingHref',
       'ReportCard',
+      'getReportingSnapshot',
       'allowMockFallback: false',
-      'listParts({ stock: ',
-      "listInventoryReservations(\n        { status: 'OPEN'",
-      "listAuditEvents({ search: 'DENIED'",
     ].filter((snippet) => !reportingSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    ['ErpReportingSnapshot', '/reporting/snapshot'].filter(
+      (snippet) => !apiClientSource.includes(snippet),
+    ),
     [],
   );
 

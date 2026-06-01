@@ -4,19 +4,11 @@ import {
   getErpSavedReportViews,
   getLiveErpReports,
   type ErpReportCategory,
+  type ErpReportBlockedWorkOrder,
   type ErpReportDescriptor,
+  type ErpReportSnapshotMetric,
 } from '@gg-erp/domain';
-import {
-  getQbStatus,
-  listAuditEvents,
-  listInventoryReservations,
-  listInvoiceSyncRecords,
-  listMyAssignments,
-  listParts,
-  listWoOrders,
-  type TrainingAssignment,
-  type WoOrder,
-} from '@/lib/api-client';
+import { getReportingSnapshot } from '@/lib/api-client';
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 import { ReportingExportActions } from './ReportingExportActions';
 
@@ -26,15 +18,11 @@ interface ReportingPageProps {
   searchParams?: Record<string, string | string[] | undefined>;
 }
 
-interface ReportMetric {
-  value: string;
-  label: string;
-  tone: 'neutral' | 'green' | 'amber' | 'red';
-}
+type ReportMetric = ErpReportSnapshotMetric;
 
 interface ReportSignals {
   metrics: Record<string, ReportMetric>;
-  blockedOrders: WoOrder[];
+  blockedOrders: ErpReportBlockedWorkOrder[];
   warnings: string[];
 }
 
@@ -90,177 +78,23 @@ function reportMatchesQuery(report: ErpReportDescriptor, query: string): boolean
   return haystack.includes(query.trim().toLowerCase());
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function isOverdue(assignment: TrainingAssignment): boolean {
-  return (
-    !['COMPLETED', 'CANCELLED', 'EXEMPT'].includes(assignment.assignmentStatus) &&
-    !!assignment.dueAt &&
-    new Date(assignment.dueAt) < new Date()
-  );
-}
-
-async function safeLoad<T>(
-  label: string,
-  warnings: string[],
-  load: () => Promise<T>,
-): Promise<T | null> {
-  try {
-    return await load();
-  } catch (error) {
-    warnings.push(error instanceof Error ? `${label}: ${error.message}` : `${label}: unavailable`);
-    return null;
-  }
-}
-
 async function loadReportSignals(): Promise<ReportSignals> {
-  const warnings: string[] = [];
-  const [
-    allWorkOrders,
-    blockedWorkOrders,
-    activeWorkOrders,
-    completedWorkOrders,
-    outOfStockParts,
-    openReservations,
-    trainingAssignments,
-    qbStatus,
-    failedSyncRecords,
-    deniedAuditEvents,
-  ] = await Promise.all([
-    safeLoad('work orders', warnings, () =>
-      listWoOrders({ limit: 1 }, { allowMockFallback: false }),
-    ),
-    safeLoad('blocked work orders', warnings, () =>
-      listWoOrders({ status: 'BLOCKED', limit: 5 }, { allowMockFallback: false }),
-    ),
-    safeLoad('active work orders', warnings, () =>
-      listWoOrders({ status: 'IN_PROGRESS', limit: 1 }, { allowMockFallback: false }),
-    ),
-    safeLoad('completed work orders', warnings, () =>
-      listWoOrders({ status: 'COMPLETED', limit: 1 }, { allowMockFallback: false }),
-    ),
-    safeLoad('out-of-stock parts', warnings, () =>
-      listParts({ stock: 'OUT', limit: 1 }, { allowMockFallback: false }),
-    ),
-    safeLoad('open reservations', warnings, () =>
-      listInventoryReservations(
-        { status: 'OPEN', page: 1, pageSize: 1 },
-        { allowMockFallback: false },
-      ),
-    ),
-    safeLoad('training assignments', warnings, () =>
-      listMyAssignments('', {}, { allowMockFallback: false }),
-    ),
-    safeLoad('QuickBooks status', warnings, () => getQbStatus({ allowMockFallback: false })),
-    safeLoad('QuickBooks sync failures', warnings, () =>
-      listInvoiceSyncRecords({ state: 'FAILED', limit: 100 }, { allowMockFallback: false }),
-    ),
-    safeLoad('denied audit events', warnings, () =>
-      listAuditEvents({ search: 'DENIED', limit: 1 }, { allowMockFallback: false }),
-    ),
-  ]);
-
-  const overdueAssignments =
-    trainingAssignments?.items.filter((assignment) => isOverdue(assignment)).length ?? null;
-  const openInvoiceCount = qbStatus?.overview?.openInvoiceCount;
-  const openInvoiceBalance = qbStatus?.overview?.openInvoiceBalance;
-
-  return {
-    warnings,
-    blockedOrders: blockedWorkOrders?.items ?? [],
-    metrics: {
-      ...(allWorkOrders
-        ? {
-            'report-active-shop-load': {
-              value: String(activeWorkOrders?.total ?? 0),
-              label: 'in progress',
-              tone: activeWorkOrders && activeWorkOrders.total > 0 ? 'amber' : 'green',
-            } satisfies ReportMetric,
-          }
-        : {}),
-      ...(blockedWorkOrders
-        ? {
-            'report-work-order-blockers': {
-              value: String(blockedWorkOrders.total),
-              label: 'blocked',
-              tone: blockedWorkOrders.total > 0 ? 'red' : 'green',
-            } satisfies ReportMetric,
-          }
-        : {}),
-      ...(completedWorkOrders
-        ? {
-            'report-completed-work-orders': {
-              value: String(completedWorkOrders.total),
-              label: 'completed',
-              tone: 'green',
-            } satisfies ReportMetric,
-          }
-        : {}),
-      ...(outOfStockParts
-        ? {
-            'report-material-shortages': {
-              value: String(outOfStockParts.total),
-              label: 'out of stock',
-              tone: outOfStockParts.total > 0 ? 'red' : 'green',
-            } satisfies ReportMetric,
-          }
-        : {}),
-      ...(openReservations
-        ? {
-            'report-open-reservations': {
-              value: String(openReservations.total),
-              label: 'open reservations',
-              tone: openReservations.total > 0 ? 'amber' : 'green',
-            } satisfies ReportMetric,
-          }
-        : {}),
-      ...(openInvoiceCount !== undefined
-        ? {
-            'report-open-accounts-receivable': {
-              value:
-                openInvoiceBalance !== undefined
-                  ? `${openInvoiceCount} / ${formatCurrency(openInvoiceBalance)}`
-                  : String(openInvoiceCount),
-              label: 'open invoices / balance',
-              tone: openInvoiceCount > 0 ? 'amber' : 'green',
-            } satisfies ReportMetric,
-          }
-        : {}),
-      ...(failedSyncRecords
-        ? {
-            'report-quickbooks-sync-failures': {
-              value: String(failedSyncRecords.items.length),
-              label: 'failed syncs',
-              tone: failedSyncRecords.items.length > 0 ? 'red' : 'green',
-            } satisfies ReportMetric,
-          }
-        : {}),
-      ...(overdueAssignments !== null
-        ? {
-            'report-overdue-training': {
-              value: String(overdueAssignments),
-              label: 'overdue',
-              tone: overdueAssignments > 0 ? 'red' : 'green',
-            } satisfies ReportMetric,
-          }
-        : {}),
-      ...(deniedAuditEvents
-        ? {
-            'report-audit-events': {
-              value: String(deniedAuditEvents.total),
-              label: 'denied events',
-              tone: deniedAuditEvents.total > 0 ? 'amber' : 'green',
-            } satisfies ReportMetric,
-          }
-        : {}),
-    },
-  };
+  try {
+    const snapshot = await getReportingSnapshot({ allowMockFallback: false });
+    return {
+      metrics: snapshot.metrics,
+      blockedOrders: snapshot.blockedWorkOrders,
+      warnings: snapshot.warnings.map((warning) => `${warning.source}: ${warning.message}`),
+    };
+  } catch (error) {
+    return {
+      metrics: {},
+      blockedOrders: [],
+      warnings: [
+        error instanceof Error ? `reporting.snapshot: ${error.message}` : 'reporting.snapshot: unavailable',
+      ],
+    };
+  }
 }
 
 function metricToneClasses(tone: ReportMetric['tone']): string {

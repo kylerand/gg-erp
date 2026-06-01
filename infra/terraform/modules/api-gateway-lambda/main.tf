@@ -919,6 +919,42 @@ resource "aws_apigatewayv2_route" "workspace_today" {
   authorizer_id      = local.authorizer_id
 }
 
+resource "aws_lambda_function" "reporting_snapshot" {
+  function_name    = "${var.name_prefix}-reporting-snapshot"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "reporting-snapshot.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/workspace-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.workspace_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.workspace_lambda_zip_path)
+  timeout          = 20
+  memory_size      = 256
+
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "reporting_snapshot" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.reporting_snapshot.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "reporting_snapshot" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "GET /reporting/snapshot"
+  target             = "integrations/${aws_apigatewayv2_integration.reporting_snapshot.id}"
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+  authorizer_id      = local.authorizer_id
+}
+
 # ─── Identity Lambda Functions ─────────────────────────────────────────────────
 
 resource "aws_lambda_function" "identity_me" {
@@ -5361,6 +5397,7 @@ resource "aws_apigatewayv2_route" "migration_cancel_batch" {
 locals {
   erp_lambdas = {
     workspace_today                       = aws_lambda_function.workspace_today
+    reporting_snapshot                    = aws_lambda_function.reporting_snapshot
     identity_me                           = aws_lambda_function.identity_me
     identity_list_dealers                 = aws_lambda_function.identity_list_dealers
     identity_list_employees               = aws_lambda_function.identity_list_employees

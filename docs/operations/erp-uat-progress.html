@@ -233,18 +233,18 @@
 
       <div class="summary">
         <div class="metric"><strong>16</strong><span>Tracked delivery slices</span></div>
-        <div class="metric"><strong>12</strong><span>Done</span></div>
-        <div class="metric"><strong>4</strong><span>In progress</span></div>
+        <div class="metric"><strong>15</strong><span>Done</span></div>
+        <div class="metric"><strong>1</strong><span>In progress</span></div>
         <div class="metric"><strong>0</strong><span>Not started</span></div>
       </div>
 
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: closing the manual New Work Order gap by creating execution-layer work
-          orders, operations, and BOM part demand from released planning packages.
+          Current focus: closing the remaining customer/dealer relationship model and hardening
+          production seed and reporting contracts around the now-actionable operator workflows.
         </p>
-        <div class="progress" aria-label="96 percent complete"><div style="width: 96%"></div></div>
+        <div class="progress" aria-label="98 percent complete"><div style="width: 98%"></div></div>
       </section>
 
       <section>
@@ -279,7 +279,7 @@
             </tr>
             <tr>
               <td>Unified work-order command center</td>
-              <td><span class="pill doing">In progress</span></td>
+              <td><span class="pill done">Done</span></td>
               <td>
                 `/work-orders/[id]` detail workspace with live material quantities, inline
                 reserve/release/fulfill, editable service operation transitions, labor logging, QC
@@ -291,12 +291,13 @@
                 links now focus the exact service operation inside the work-order command center.
                 Technician-task transitions now fail cleanly when unassigned work is started, My
                 Queue refreshes from the server after rejected task transitions, and manual New Work
-                Order creation is being moved from the legacy planning-only API onto the execution
-                work-order surface.
+                Order creation now creates execution-layer work orders with operations and BOM part
+                demand from released planning packages. The live API smoke enforces the
+                `POST /tickets/work-orders` route with no pending-route allowance.
               </td>
               <td>
-                Merge and deploy execution work-order create, then remove the temporary pending-route
-                QA smoke allowance.
+                Keep expanding routing, costing, job-card, and quality-gate depth as master APIs
+                stabilize.
               </td>
             </tr>
             <tr>

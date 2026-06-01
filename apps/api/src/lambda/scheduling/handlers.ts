@@ -1451,6 +1451,7 @@ function createPrismaProjectionQueries(): SchedulingProjectionQueries {
             estimatedMinutes: operation.estimatedMinutes,
             plannedStartAt: toOptionalIso(operation.plannedStartAt),
             plannedEndAt: toOptionalIso(operation.plannedEndAt),
+            updatedAt: toLatestIso(order.updatedAt, operation.updatedAt),
           }));
       });
     },
@@ -2037,6 +2038,15 @@ function toOptionalIso(value: Date | string | null | undefined): string | undefi
 
 function toIso(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+function toLatestIso(...values: Array<Date | string | null | undefined>): string | undefined {
+  const timestamps = values
+    .filter((value): value is Date | string => Boolean(value))
+    .map((value) => new Date(value).getTime())
+    .filter((value) => Number.isFinite(value));
+  if (timestamps.length === 0) return undefined;
+  return new Date(Math.max(...timestamps)).toISOString();
 }
 
 function isMissingCapacityTableError(error: unknown): boolean {

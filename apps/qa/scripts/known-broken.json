@@ -1,19 +1,4 @@
 {
   "_doc": "Routes with an expected non-healthy API smoke status in the currently deployed QA API. Smoke fails when this list drifts in EITHER direction — a new bug joins, OR an existing bug gets fixed/deployed (so we know to remove the entry). File a Linear ticket when adding long-lived handler bugs; remove pending-deploy entries after the route is live. Use expectRouteMiss for pending Terraform routes that are not deployed yet.",
-  "broken": [
-    {
-      "method": "GET",
-      "path": "/accounting/journals",
-      "expectStatus": 404,
-      "expectRouteMiss": true,
-      "note": "pending Terraform/API deploy for accounting journal list route"
-    },
-    {
-      "method": "POST",
-      "path": "/accounting/journals/post-operational-ledger",
-      "expectStatus": 404,
-      "expectRouteMiss": true,
-      "note": "pending Terraform/API deploy for accounting journal posting route"
-    }
-  ]
+  "broken": []
 }

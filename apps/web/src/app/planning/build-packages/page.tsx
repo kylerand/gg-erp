@@ -6,6 +6,9 @@ import { toast } from 'sonner';
 import {
   CheckCircle2,
   ClipboardList,
+  Copy,
+  FileText,
+  GitCompareArrows,
   History,
   PackageCheck,
   Plus,
@@ -58,6 +61,28 @@ interface DraftRoutingStep {
   jobCardInstructions: string;
   qcRequired: boolean;
   evidenceRequired: boolean;
+}
+
+interface VersionDiffSummary {
+  id: string;
+  label: string;
+  compareLabel: string;
+  status: string;
+  changes: string[];
+  actionLabel: string;
+}
+
+interface EcoReportRow {
+  id: string;
+  type: 'Configuration' | 'BOM' | 'Route';
+  label: string;
+  versionLabel: string;
+  status: string;
+  changeKind: string;
+  summary: string;
+  approvalNote?: string;
+  appliedBy?: string;
+  createdAt: string;
 }
 
 function formatDate(value?: string): string {
@@ -131,10 +156,151 @@ function formatCurrencyCents(value: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value / 100);
 }
 
+function centsToDollarsInput(value?: number): string {
+  return value === undefined || value === null ? '' : (value / 100).toFixed(2);
+}
+
 function dateInputToIso(value: string, exclusiveEnd = false): string {
   const date = new Date(`${value}T00:00:00`);
   if (exclusiveEnd) date.setDate(date.getDate() + 1);
   return date.toISOString();
+}
+
+function isoToDateInput(value?: string): string {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toISOString().slice(0, 10);
+}
+
+function nextConfigRevisionCode(config: BuildConfiguration): string {
+  return `${config.configurationCode}-R${(config.configurationVersion + 1).toString().padStart(2, '0')}`;
+}
+
+function nextBomRevisionCode(bom: BuildBom): string {
+  const nextRevision = (bom.revision + 1).toString().padStart(2, '0');
+  if (/-R\d+$/i.test(bom.bomCode)) return bom.bomCode.replace(/-R\d+$/i, `-R${nextRevision}`);
+  return `${bom.bomCode}-R${nextRevision}`;
+}
+
+function listChanges(changes: string[]): string[] {
+  return changes.length > 0 ? changes : ['No field-level differences captured; review approval history.'];
+}
+
+function configDiff(current: BuildConfiguration, previous?: BuildConfiguration): string[] {
+  if (!previous) {
+    return listChanges([
+      `Initial option set: ${current.selectedOptions.length ? current.selectedOptions.join(', ') : 'none captured'}.`,
+      current.notes ? 'Configuration notes captured on this version.' : 'No configuration notes captured.',
+    ]);
+  }
+
+  const previousOptions = new Set(previous.selectedOptions);
+  const currentOptions = new Set(current.selectedOptions);
+  const added = current.selectedOptions.filter((option) => !previousOptions.has(option));
+  const removed = previous.selectedOptions.filter((option) => !currentOptions.has(option));
+  const changes: string[] = [];
+
+  if (added.length) changes.push(`Options added: ${added.join(', ')}.`);
+  if (removed.length) changes.push(`Options removed: ${removed.join(', ')}.`);
+  if ((current.notes ?? '') !== (previous.notes ?? '')) changes.push('Engineering notes changed.');
+  if (current.configurationStatus !== previous.configurationStatus) {
+    changes.push(
+      `Status changed from ${statusText(previous.configurationStatus)} to ${statusText(
+        current.configurationStatus,
+      )}.`,
+    );
+  }
+
+  return listChanges(changes);
+}
+
+function bomDiff(current: BuildBom, previous?: BuildBom): string[] {
+  if (!previous) {
+    return listChanges([
+      `Initial BOM revision with ${current.lines.length} line${current.lines.length === 1 ? '' : 's'}.`,
+    ]);
+  }
+
+  const previousLines = new Map(previous.lines.map((line) => [line.partId, line]));
+  const currentLines = new Map(current.lines.map((line) => [line.partId, line]));
+  const changes: string[] = [];
+
+  for (const line of current.lines) {
+    const prior = previousLines.get(line.partId);
+    if (!prior) {
+      changes.push(`Added ${line.sku} x ${line.quantityPerUnit}.`);
+      continue;
+    }
+    if (line.quantityPerUnit !== prior.quantityPerUnit || line.scrapFactor !== prior.scrapFactor) {
+      changes.push(
+        `${line.sku} changed from ${prior.quantityPerUnit} (+${prior.scrapFactor} scrap) to ${line.quantityPerUnit} (+${line.scrapFactor} scrap).`,
+      );
+    }
+  }
+
+  for (const line of previous.lines) {
+    if (!currentLines.has(line.partId)) changes.push(`Removed ${line.sku}.`);
+  }
+  if ((current.notes ?? '') !== (previous.notes ?? '')) changes.push('BOM notes changed.');
+  if (current.bomStatus !== previous.bomStatus) {
+    changes.push(`Status changed from ${statusText(previous.bomStatus)} to ${statusText(current.bomStatus)}.`);
+  }
+
+  return listChanges(changes);
+}
+
+function routeDiff(current: RoutingTemplate, previous?: RoutingTemplate): string[] {
+  if (!previous) {
+    return listChanges([
+      `Initial route version with ${current.stepCount} step${current.stepCount === 1 ? '' : 's'} and ${current.estimatedMinutes} estimated minutes.`,
+    ]);
+  }
+
+  const previousSteps = new Map(previous.steps.map((step) => [step.operationCode, step]));
+  const currentSteps = new Map(current.steps.map((step) => [step.operationCode, step]));
+  const changes: string[] = [];
+
+  for (const step of current.steps) {
+    const prior = previousSteps.get(step.operationCode);
+    if (!prior) {
+      changes.push(`Added ${step.operationCode} · ${step.operationName}.`);
+      continue;
+    }
+    if (step.sequenceNo !== prior.sequenceNo) {
+      changes.push(`${step.operationCode} moved from sequence ${prior.sequenceNo} to ${step.sequenceNo}.`);
+    }
+    if (step.operationName !== prior.operationName) changes.push(`${step.operationCode} name changed.`);
+    if (step.estimatedMinutes !== prior.estimatedMinutes) {
+      changes.push(`${step.operationCode} changed from ${prior.estimatedMinutes} min to ${step.estimatedMinutes} min.`);
+    }
+    if ((step.laborRateCents ?? 0) !== (prior.laborRateCents ?? 0)) {
+      changes.push(`${step.operationCode} labor rate changed.`);
+    }
+    if (step.qcRequired !== prior.qcRequired || step.evidenceRequired !== prior.evidenceRequired) {
+      changes.push(`${step.operationCode} QC/evidence requirements changed.`);
+    }
+  }
+
+  for (const step of previous.steps) {
+    if (!currentSteps.has(step.operationCode)) changes.push(`Removed ${step.operationCode} · ${step.operationName}.`);
+  }
+  if (current.estimatedMinutes !== previous.estimatedMinutes) {
+    changes.push(`Total estimated minutes changed from ${previous.estimatedMinutes} to ${current.estimatedMinutes}.`);
+  }
+  if (current.estimatedLaborCostCents !== previous.estimatedLaborCostCents) {
+    changes.push(
+      `Estimated labor changed from ${formatCurrencyCents(previous.estimatedLaborCostCents)} to ${formatCurrencyCents(
+        current.estimatedLaborCostCents,
+      )}.`,
+    );
+  }
+  if ((current.notes ?? '') !== (previous.notes ?? '')) changes.push('Route notes changed.');
+  if (current.templateStatus !== previous.templateStatus) {
+    changes.push(`Status changed from ${statusText(previous.templateStatus)} to ${statusText(current.templateStatus)}.`);
+  }
+
+  return listChanges(changes);
 }
 
 export default function BuildPackagesPage() {
@@ -249,8 +415,211 @@ export default function BuildPackagesPage() {
     };
   }, [boms, configs, packages, routingTemplates]);
 
+  const versionDiffs = useMemo(() => {
+    const configsByVehicle = new Map<string, BuildConfiguration[]>();
+    for (const config of configs) {
+      const group = configsByVehicle.get(config.vehicleId) ?? [];
+      group.push(config);
+      configsByVehicle.set(config.vehicleId, group);
+    }
+
+    const configDiffs: VersionDiffSummary[] = configs
+      .slice()
+      .sort((left, right) => right.configurationVersion - left.configurationVersion)
+      .map((config) => {
+        const previous = (configsByVehicle.get(config.vehicleId) ?? [])
+          .filter((candidate) => candidate.configurationVersion < config.configurationVersion)
+          .sort((left, right) => right.configurationVersion - left.configurationVersion)[0];
+        return {
+          id: config.id,
+          label: config.configurationCode,
+          compareLabel: previous
+            ? `v${config.configurationVersion} vs v${previous.configurationVersion}`
+            : `v${config.configurationVersion} baseline`,
+          status: statusText(config.configurationStatus),
+          changes: configDiff(config, previous),
+          actionLabel: 'New config revision',
+        };
+      });
+
+    const bomsByConfiguration = new Map<string, BuildBom[]>();
+    for (const bom of boms) {
+      const group = bomsByConfiguration.get(bom.buildConfigurationId) ?? [];
+      group.push(bom);
+      bomsByConfiguration.set(bom.buildConfigurationId, group);
+    }
+
+    const bomDiffs: VersionDiffSummary[] = boms
+      .slice()
+      .sort((left, right) => right.revision - left.revision)
+      .map((bom) => {
+        const previous = (bomsByConfiguration.get(bom.buildConfigurationId) ?? [])
+          .filter((candidate) => candidate.revision < bom.revision)
+          .sort((left, right) => right.revision - left.revision)[0];
+        return {
+          id: bom.id,
+          label: bom.bomCode,
+          compareLabel: previous ? `rev ${bom.revision} vs rev ${previous.revision}` : `rev ${bom.revision} baseline`,
+          status: statusText(bom.bomStatus),
+          changes: bomDiff(bom, previous),
+          actionLabel: 'New BOM revision',
+        };
+      });
+
+    const routesByCode = new Map<string, RoutingTemplate[]>();
+    for (const route of routingTemplates) {
+      const group = routesByCode.get(route.routeCode) ?? [];
+      group.push(route);
+      routesByCode.set(route.routeCode, group);
+    }
+
+    const routeDiffs: VersionDiffSummary[] = routingTemplates
+      .slice()
+      .sort((left, right) => right.routeVersion - left.routeVersion)
+      .map((route) => {
+        const previous = (routesByCode.get(route.routeCode) ?? [])
+          .filter((candidate) => candidate.routeVersion < route.routeVersion)
+          .sort((left, right) => right.routeVersion - left.routeVersion)[0];
+        return {
+          id: route.id,
+          label: route.routeCode,
+          compareLabel: previous ? `v${route.routeVersion} vs v${previous.routeVersion}` : `v${route.routeVersion} baseline`,
+          status: statusText(route.templateStatus),
+          changes: routeDiff(route, previous),
+          actionLabel: 'New route version',
+        };
+      });
+
+    return {
+      configurations: configDiffs.slice(0, 4),
+      boms: bomDiffs.slice(0, 4),
+      routes: routeDiffs.slice(0, 4),
+    };
+  }, [boms, configs, routingTemplates]);
+
+  const ecoReportRows = useMemo(() => {
+    const rows: EcoReportRow[] = [];
+    for (const config of configs) {
+      for (const event of config.changeEvents) {
+        rows.push({
+          id: event.id,
+          type: 'Configuration',
+          label: event.configurationCode,
+          versionLabel: `v${event.configurationVersion}`,
+          status: statusText(event.newStatus),
+          changeKind: statusText(event.changeKind),
+          summary: event.changeSummary,
+          approvalNote: event.approvalNote,
+          appliedBy: event.appliedBy ?? event.approvedBy,
+          createdAt: event.createdAt,
+        });
+      }
+    }
+    for (const bom of boms) {
+      for (const event of bom.changeEvents) {
+        rows.push({
+          id: event.id,
+          type: 'BOM',
+          label: event.bomCode,
+          versionLabel: `rev ${event.revision}`,
+          status: statusText(event.newStatus),
+          changeKind: statusText(event.changeKind),
+          summary: event.changeSummary,
+          approvalNote: event.approvalNote,
+          appliedBy: event.appliedBy ?? event.approvedBy,
+          createdAt: event.createdAt,
+        });
+      }
+    }
+    for (const template of routingTemplates) {
+      for (const event of template.changeEvents) {
+        rows.push({
+          id: event.id,
+          type: 'Route',
+          label: event.routeCode,
+          versionLabel: `v${event.routeVersion}`,
+          status: statusText(event.newStatus),
+          changeKind: statusText(event.changeKind),
+          summary: event.changeSummary,
+          approvalNote: event.approvalNote,
+          appliedBy: event.appliedBy ?? event.approvedBy,
+          createdAt: event.createdAt,
+        });
+      }
+    }
+
+    return rows
+      .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
+      .slice(0, 12);
+  }, [boms, configs, routingTemplates]);
+
   function reload(): void {
     setReloadToken((current) => current + 1);
+  }
+
+  function scrollToForm(id: string): void {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function prepareConfigurationRevision(config: BuildConfiguration): void {
+    setVehicleId(config.vehicleId);
+    setConfigurationCode(nextConfigRevisionCode(config));
+    setSelectedOptionsText(config.selectedOptions.join(', '));
+    setConfigurationNotes(
+      `Revision from ${config.configurationCode} v${config.configurationVersion}.${config.notes ? ` ${config.notes}` : ''}`,
+    );
+    scrollToForm('configurationCode');
+    toast.success('Configuration revision draft loaded');
+  }
+
+  function prepareBomRevision(bom: BuildBom): void {
+    setBuildConfigurationId(bom.buildConfigurationId);
+    setBomCode(nextBomRevisionCode(bom));
+    setBomRevision(String(bom.revision + 1));
+    setBomNotes(`Revision from ${bom.bomCode} rev ${bom.revision}.${bom.notes ? ` ${bom.notes}` : ''}`);
+    setBomLines(
+      bom.lines.length
+        ? bom.lines.map((line) => ({
+            partId: line.partId,
+            quantityPerUnit: String(line.quantityPerUnit),
+            scrapFactor: String(line.scrapFactor),
+          }))
+        : [{ partId: '', quantityPerUnit: '1', scrapFactor: '0' }],
+    );
+    scrollToForm('buildConfigurationId');
+    toast.success('BOM revision draft loaded');
+  }
+
+  function prepareRouteRevision(template: RoutingTemplate): void {
+    setRouteCode(template.routeCode);
+    setRouteName(template.routeName);
+    setRouteBuildConfigurationId(template.buildConfigurationId ?? '');
+    setRouteEffectiveFrom(isoToDateInput(template.effectiveFrom));
+    setRouteEffectiveTo(isoToDateInput(template.effectiveTo));
+    setRouteNotes(
+      `Revision from ${template.routeCode} v${template.routeVersion}.${template.notes ? ` ${template.notes}` : ''}`,
+    );
+    setRoutingSteps(
+      template.steps.length
+        ? template.steps
+            .slice()
+            .sort((left, right) => left.sequenceNo - right.sequenceNo)
+            .map((step) => ({
+              operationCode: step.operationCode,
+              operationName: step.operationName,
+              workstationCode: step.workstationCode ?? '',
+              estimatedMinutes: String(step.estimatedMinutes),
+              laborRateDollars: centsToDollarsInput(step.laborRateCents),
+              requiredSkillCode: step.requiredSkillCode ?? '',
+              jobCardTitle: step.jobCardTitle ?? '',
+              jobCardInstructions: step.jobCardInstructions ?? '',
+              qcRequired: step.qcRequired,
+              evidenceRequired: step.evidenceRequired,
+            }))
+        : [defaultRoutingStep()],
+    );
+    scrollToForm('routeCode');
+    toast.success('Route version draft loaded');
   }
 
   async function submitConfiguration(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -989,6 +1358,188 @@ export default function BuildPackagesPage() {
         </Card>
       </div>
 
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <GitCompareArrows className="h-5 w-5 text-[#E87820]" />
+              Version Review
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 lg:grid-cols-3">
+            <section className="space-y-3">
+              <div>
+                <div className="text-sm font-semibold text-[#211F1E]">Configuration Diffs</div>
+                <div className="text-xs text-[#6E625A]">Latest cart option changes by version</div>
+              </div>
+              {versionDiffs.configurations.length === 0 ? (
+                <div className="rounded-md border border-[#E8DDD2] p-3 text-sm text-[#6E625A]">
+                  No configuration versions loaded.
+                </div>
+              ) : (
+                versionDiffs.configurations.map((diff) => (
+                  <div key={diff.id} className="rounded-md border border-[#E8DDD2] p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-semibold text-[#211F1E]">{diff.label}</div>
+                        <div className="text-xs text-[#6E625A]">
+                          {diff.compareLabel} · {diff.status}
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const config = configs.find((item) => item.id === diff.id);
+                          if (config) prepareConfigurationRevision(config);
+                        }}
+                      >
+                        <Copy className="mr-2 h-4 w-4" />
+                        Revise
+                      </Button>
+                    </div>
+                    <ul className="mt-3 space-y-1 text-xs text-[#4A4039]">
+                      {diff.changes.slice(0, 4).map((change) => (
+                        <li key={change}>{change}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))
+              )}
+            </section>
+
+            <section className="space-y-3">
+              <div>
+                <div className="text-sm font-semibold text-[#211F1E]">BOM Diffs</div>
+                <div className="text-xs text-[#6E625A]">Added, removed, and quantity changes</div>
+              </div>
+              {versionDiffs.boms.length === 0 ? (
+                <div className="rounded-md border border-[#E8DDD2] p-3 text-sm text-[#6E625A]">
+                  No BOM revisions loaded.
+                </div>
+              ) : (
+                versionDiffs.boms.map((diff) => (
+                  <div key={diff.id} className="rounded-md border border-[#E8DDD2] p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-semibold text-[#211F1E]">{diff.label}</div>
+                        <div className="text-xs text-[#6E625A]">
+                          {diff.compareLabel} · {diff.status}
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const bom = boms.find((item) => item.id === diff.id);
+                          if (bom) prepareBomRevision(bom);
+                        }}
+                      >
+                        <Copy className="mr-2 h-4 w-4" />
+                        Revise
+                      </Button>
+                    </div>
+                    <ul className="mt-3 space-y-1 text-xs text-[#4A4039]">
+                      {diff.changes.slice(0, 4).map((change) => (
+                        <li key={change}>{change}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))
+              )}
+            </section>
+
+            <section className="space-y-3">
+              <div>
+                <div className="text-sm font-semibold text-[#211F1E]">Route Diffs</div>
+                <div className="text-xs text-[#6E625A]">Step, labor, and gate changes</div>
+              </div>
+              {versionDiffs.routes.length === 0 ? (
+                <div className="rounded-md border border-[#E8DDD2] p-3 text-sm text-[#6E625A]">
+                  No routing versions loaded.
+                </div>
+              ) : (
+                versionDiffs.routes.map((diff) => (
+                  <div key={diff.id} className="rounded-md border border-[#E8DDD2] p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-semibold text-[#211F1E]">{diff.label}</div>
+                        <div className="text-xs text-[#6E625A]">
+                          {diff.compareLabel} · {diff.status}
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const template = routingTemplates.find((item) => item.id === diff.id);
+                          if (template) prepareRouteRevision(template);
+                        }}
+                      >
+                        <Copy className="mr-2 h-4 w-4" />
+                        Revise
+                      </Button>
+                    </div>
+                    <ul className="mt-3 space-y-1 text-xs text-[#4A4039]">
+                      {diff.changes.slice(0, 4).map((change) => (
+                        <li key={change}>{change}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))
+              )}
+            </section>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <FileText className="h-5 w-5 text-[#E87820]" />
+              ECO Report
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {ecoReportRows.length === 0 ? (
+              <div className="rounded-md border border-[#E8DDD2] p-3 text-sm text-[#6E625A]">
+                No engineering change events loaded.
+              </div>
+            ) : (
+              ecoReportRows.map((row) => (
+                <div key={row.id} className="rounded-md border border-[#E8DDD2] p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-[#9A4A12]">
+                        {row.type} · {row.changeKind}
+                      </div>
+                      <div className="font-semibold text-[#211F1E]">
+                        {row.label} · {row.versionLabel}
+                      </div>
+                    </div>
+                    <div className="text-right text-xs text-[#6E625A]">
+                      <div>{formatDate(row.createdAt)}</div>
+                      <div>{row.status}</div>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-sm text-[#4A4039]">{row.summary}</div>
+                  {row.approvalNote && (
+                    <div className="mt-2 rounded-md bg-[#F7F1EA] px-3 py-2 text-xs text-[#4A4039]">
+                      {row.approvalNote}
+                    </div>
+                  )}
+                  {row.appliedBy && (
+                    <div className="mt-2 text-xs text-[#6E625A]">Applied by {row.appliedBy}</div>
+                  )}
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
       <Card>
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="flex items-center gap-2 text-lg">
@@ -1155,6 +1706,16 @@ export default function BuildPackagesPage() {
                             ? 'Release'
                             : statusText(config.configurationStatus)}
                       </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => prepareConfigurationRevision(config)}
+                      >
+                        <Copy className="mr-2 h-4 w-4" />
+                        New Revision
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -1221,6 +1782,16 @@ export default function BuildPackagesPage() {
                       >
                         <CheckCircle2 className="mr-2 h-4 w-4" />
                         {canApprove ? 'Approve' : statusText(bom.bomStatus)}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => prepareBomRevision(bom)}
+                      >
+                        <Copy className="mr-2 h-4 w-4" />
+                        New Revision
                       </Button>
                     </div>
                   </div>
@@ -1313,6 +1884,16 @@ export default function BuildPackagesPage() {
                         : template.templateStatus === 'ACTIVE'
                           ? 'Retire'
                           : 'Activate'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => prepareRouteRevision(template)}
+                    >
+                      <Copy className="mr-2 h-4 w-4" />
+                      New Version
                     </Button>
                   </div>
                 </div>

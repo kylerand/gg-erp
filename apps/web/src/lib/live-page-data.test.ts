@@ -224,6 +224,11 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
       'transitionRoutingTemplate',
       'allowMockFallback: false',
       "erpRoute('create-work-order'",
+      'Version Review',
+      'ECO Report',
+      'prepareConfigurationRevision',
+      'prepareBomRevision',
+      'prepareRouteRevision',
     ].filter((call) => !buildPackagesSource.includes(call)),
     [],
   );

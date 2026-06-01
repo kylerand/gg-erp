@@ -7,26 +7,35 @@ import {
   setListDealersPrismaForTests,
 } from '../lambda/identity/list-dealers.handler.js';
 
-test('listDealersHandler returns customer-backed dealer accounts', async () => {
+test('listDealersHandler returns registry-backed dealer accounts', async () => {
   let findManyArgs: unknown;
   let countArgs: unknown;
   const updatedAt = new Date('2026-05-31T12:00:00Z');
 
   setListDealersPrismaForTests({
-    customer: {
+    dealerAccount: {
       findMany: async (args: unknown) => {
         findManyArgs = args;
         return [
           {
-            id: 'customer-1',
-            fullName: 'Jordan Manager',
-            companyName: 'Riverside Golf Club',
-            email: 'ops@riverside.example',
-            phone: '555-0100',
-            billingAddress: '100 Fairway Dr, Orlando, FL',
-            shippingAddress: null,
-            state: 'ACTIVE',
+            id: 'dealer-1',
+            dealerCode: 'DEALER-RIVER',
+            territory: 'Central Florida',
+            serviceRelationship: 'ACTIVE',
+            accountOwner: 'Jordan Manager',
+            notes: 'Preferred partner',
             updatedAt,
+            customer: {
+              id: 'customer-1',
+              fullName: 'Jordan Manager',
+              companyName: 'Riverside Golf Club',
+              email: 'ops@riverside.example',
+              phone: '555-0100',
+              billingAddress: '100 Fairway Dr, Orlando, FL',
+              shippingAddress: null,
+              state: 'ACTIVE',
+              updatedAt,
+            },
           },
         ];
       },
@@ -67,19 +76,23 @@ test('listDealersHandler returns customer-backed dealer accounts', async () => {
     assert.equal(payload.limit, 25);
     assert.equal(payload.offset, 0);
     assert.deepEqual(payload.items[0], {
-      id: 'customer-1',
+      id: 'dealer-1',
       customerId: 'customer-1',
+      dealerCode: 'DEALER-RIVER',
       name: 'Riverside Golf Club',
       primaryContact: 'Jordan Manager',
       contactEmail: 'ops@riverside.example',
-      territory: 'Orlando, FL',
+      territory: 'Central Florida',
       serviceRelationship: 'ACTIVE',
       customerState: 'ACTIVE',
       phone: '555-0100',
-      source: 'customer-company',
+      accountOwner: 'Jordan Manager',
+      notes: 'Preferred partner',
+      source: 'dealer-account',
       updatedAt: updatedAt.toISOString(),
     });
-    assert.ok(JSON.stringify(findManyArgs).includes('companyName'));
+    assert.ok(JSON.stringify(findManyArgs).includes('dealerCode'));
+    assert.ok(JSON.stringify(findManyArgs).includes('customer'));
     assert.ok(JSON.stringify(countArgs).includes('riverside'));
   } finally {
     await disconnectListDealersHandlerDependencies();

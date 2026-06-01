@@ -1,19 +1,19 @@
 import Link from 'next/link';
 import { PageHeader } from '@gg-erp/ui';
-import { listCartVehicles, listCustomers, listDealers } from '@/lib/api-client';
+import { listCustomers, listDealerRelationships, listDealers } from '@/lib/api-client';
 import { WorkspaceLinkGrid } from '@/components/WorkspaceLinkGrid';
 import { erpRoute } from '@/lib/erp-routes';
 
 export default async function CustomerDealersPage() {
   const strictApiOptions = { allowMockFallback: false } as const;
-  const [customersResult, dealersResult, vehiclesResult] = await Promise.allSettled([
+  const [customersResult, dealersResult, relationshipsResult] = await Promise.allSettled([
     listCustomers({ limit: 1, offset: 0 }, strictApiOptions),
     listDealers({ limit: 1, offset: 0 }, strictApiOptions),
-    listCartVehicles({ limit: 1, offset: 0 }, strictApiOptions),
+    listDealerRelationships({ limit: 1, offset: 0 }, strictApiOptions),
   ]);
   const customerTotal = customersResult.status === 'fulfilled' ? customersResult.value.total : null;
   const dealerTotal = dealersResult.status === 'fulfilled' ? dealersResult.value.total : null;
-  const relationshipTotal = vehiclesResult.status === 'fulfilled' ? vehiclesResult.value.total : null;
+  const relationshipTotal = relationshipsResult.status === 'fulfilled' ? relationshipsResult.value.total : null;
 
   return (
     <div>
@@ -47,7 +47,7 @@ export default async function CustomerDealersPage() {
           <div className="text-2xl font-bold text-gray-900">
             {relationshipTotal === null ? 'Unavailable' : relationshipTotal}
           </div>
-          <div className="text-xs text-gray-500 mt-1">Customer-cart links</div>
+          <div className="text-xs text-gray-500 mt-1">Dealer relationships</div>
         </Link>
       </div>
       <WorkspaceLinkGrid moduleKey="customers" />

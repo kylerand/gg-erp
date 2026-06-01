@@ -60,6 +60,7 @@ model CartVehicle {
   updatedAt    DateTime          @default(now()) @map("updated_at") @db.Timestamptz(6)
 
   buildConfigurations BuildConfiguration[]
+  dealerRelationships DealerRelationship[]
 
   @@index([customerId, state], map: "cart_vehicles_customer_state_idx")
   @@map("cart_vehicles")
@@ -1632,6 +1633,30 @@ enum CustomerLifecycleState {
   @@schema("customers")
 }
 
+enum DealerAccountState {
+  ACTIVE
+  INACTIVE
+
+  @@schema("customers")
+}
+
+enum DealerRelationshipType {
+  ACCOUNT_OWNER
+  SERVICING_DEALER
+  BILLING_ACCOUNT
+  WARRANTY_PROVIDER
+
+  @@schema("customers")
+}
+
+enum DealerRelationshipState {
+  ACTIVE
+  INACTIVE
+  ENDED
+
+  @@schema("customers")
+}
+
 model Customer {
   id                     String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   state                  CustomerLifecycleState @default(LEAD)
@@ -1648,8 +1673,59 @@ model Customer {
   archivedAt             DateTime?              @map("archived_at") @db.Timestamptz(6)
   version                Int                    @default(0)
 
+  dealerAccount       DealerAccount?
+  dealerRelationships DealerRelationship[]
+
   @@index([state])
   @@map("customers")
+  @@schema("customers")
+}
+
+model DealerAccount {
+  id                  String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId          String             @unique(map: "dealer_accounts_customer_active_uk") @map("customer_id") @db.Uuid
+  dealerCode          String?            @map("dealer_code")
+  territory           String?
+  serviceRelationship DealerAccountState @default(ACTIVE) @map("service_relationship")
+  accountOwner        String?            @map("account_owner")
+  notes               String?
+  createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime           @default(now()) @map("updated_at") @db.Timestamptz(6)
+  archivedAt          DateTime?          @map("archived_at") @db.Timestamptz(6)
+  version             Int                @default(0)
+
+  customer      Customer             @relation(fields: [customerId], references: [id])
+  relationships DealerRelationship[]
+
+  @@index([serviceRelationship, updatedAt], map: "dealer_accounts_relationship_idx")
+  @@index([territory], map: "dealer_accounts_territory_idx")
+  @@map("dealer_accounts")
+  @@schema("customers")
+}
+
+model DealerRelationship {
+  id                String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  dealerAccountId   String                  @map("dealer_account_id") @db.Uuid
+  customerId        String                  @map("customer_id") @db.Uuid
+  cartVehicleId     String?                 @map("cart_vehicle_id") @db.Uuid
+  relationshipType  DealerRelationshipType  @default(SERVICING_DEALER) @map("relationship_type")
+  relationshipState DealerRelationshipState @default(ACTIVE) @map("relationship_state")
+  escalationOwner   String?                 @map("escalation_owner")
+  notes             String?
+  startedAt         DateTime                @default(now()) @map("started_at") @db.Timestamptz(6)
+  endedAt           DateTime?               @map("ended_at") @db.Timestamptz(6)
+  createdAt         DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version           Int                     @default(0)
+
+  dealerAccount DealerAccount @relation(fields: [dealerAccountId], references: [id])
+  customer      Customer      @relation(fields: [customerId], references: [id])
+  cartVehicle   CartVehicle?  @relation(fields: [cartVehicleId], references: [id])
+
+  @@index([dealerAccountId, relationshipState], map: "customer_dealer_relationships_dealer_state_idx")
+  @@index([customerId, relationshipState], map: "customer_dealer_relationships_customer_state_idx")
+  @@index([cartVehicleId], map: "customer_dealer_relationships_vehicle_idx")
+  @@map("customer_dealer_relationships")
   @@schema("customers")
 }
 

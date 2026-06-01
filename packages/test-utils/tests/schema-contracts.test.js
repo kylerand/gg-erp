@@ -11,7 +11,9 @@ const migrationArtifactsPromise = (async () => {
     referenceSeed,
     prismaReferenceSeed,
     prismaStockBinSchema,
-    prismaStockBinSeed
+    prismaStockBinSeed,
+    prismaDealerRelationshipSchema,
+    prismaDealerRelationshipSeed
   ] = await Promise.all([
     readFile(new URL('../../../apps/api/src/migrations/0002_canonical_erp_domain.sql', import.meta.url), 'utf8'),
     readFile(new URL('../../../packages/db/prisma/migrations/0001_init/migration.sql', import.meta.url), 'utf8'),
@@ -50,6 +52,20 @@ const migrationArtifactsPromise = (async () => {
         import.meta.url
       ),
       'utf8'
+    ),
+    readFile(
+      new URL(
+        '../../../packages/db/prisma/migrations/20260601033000_add_customer_dealer_relationships/migration.sql',
+        import.meta.url
+      ),
+      'utf8'
+    ),
+    readFile(
+      new URL(
+        '../../../packages/db/prisma/migrations/20260601034000_seed_customer_dealer_relationships/migration.sql',
+        import.meta.url
+      ),
+      'utf8'
     )
   ]);
 
@@ -61,7 +77,9 @@ const migrationArtifactsPromise = (async () => {
     referenceSeed,
     prismaReferenceSeed,
     prismaStockBinSchema,
-    prismaStockBinSeed
+    prismaStockBinSeed,
+    prismaDealerRelationshipSchema,
+    prismaDealerRelationshipSeed
   };
 })();
 
@@ -199,6 +217,35 @@ test('deploy migrations include inventory reservation storage used by runtime ha
   assert.match(prismaStockBinSchema, /stock_bins_location_code_active_uk/i);
 });
 
+test('deploy migrations include dedicated customer dealer relationship storage', async () => {
+  const { prismaDealerRelationshipSchema } = await migrationArtifactsPromise;
+
+  const dealerAccounts = findTableDefinition(prismaDealerRelationshipSchema, 'customers.dealer_accounts');
+  assert.match(dealerAccounts, /customer_id\s+uuid\s+not null\s+references customers\.customers\(id\)/i);
+  assert.match(
+    dealerAccounts,
+    /service_relationship\s+customers\."DealerAccountState"\s+not null\s+default 'ACTIVE'/i
+  );
+  assert.match(dealerAccounts, /version\s+integer\s+not null\s+default\s+0\s+check\s+\(version\s+>=\s+0\)/i);
+
+  const relationships = findTableDefinition(
+    prismaDealerRelationshipSchema,
+    'customers.customer_dealer_relationships'
+  );
+  assert.match(
+    relationships,
+    /dealer_account_id\s+uuid\s+not null\s+references customers\.dealer_accounts\(id\)/i
+  );
+  assert.match(relationships, /customer_id\s+uuid\s+not null\s+references customers\.customers\(id\)/i);
+  assert.match(relationships, /cart_vehicle_id\s+uuid\s+references planning\.cart_vehicles\(id\)/i);
+  assert.match(
+    relationships,
+    /relationship_type\s+customers\."DealerRelationshipType"\s+not null\s+default 'SERVICING_DEALER'/i
+  );
+  assert.match(prismaDealerRelationshipSchema, /dealer_accounts_customer_active_uk/i);
+  assert.match(prismaDealerRelationshipSchema, /customer_dealer_relationships_active_vehicle_uk/i);
+});
+
 test('audit tables are present for traceability', async () => {
   const { canonical } = await migrationArtifactsPromise;
   const auditTables = ['audit.audit_events', 'audit.entity_change_sets', 'audit.access_audit_events'];
@@ -277,7 +324,12 @@ test('identity authz migration remains coherent with canonical identity entities
 });
 
 test('reference data seed is idempotent and avoids transaction-like rows', async () => {
-  const { referenceSeed, prismaReferenceSeed, prismaStockBinSeed } = await migrationArtifactsPromise;
+  const {
+    referenceSeed,
+    prismaReferenceSeed,
+    prismaStockBinSeed,
+    prismaDealerRelationshipSeed
+  } = await migrationArtifactsPromise;
 
   assert.match(referenceSeed, /insert into identity\.roles/i);
   assert.match(referenceSeed, /insert into identity\.permissions/i);
@@ -313,6 +365,12 @@ test('reference data seed is idempotent and avoids transaction-like rows', async
   assert.doesNotMatch(prismaStockBinSeed, /on conflict/i);
   assert.doesNotMatch(prismaStockBinSeed, /\bDO\s+\$\$/i);
 
+  assert.match(prismaDealerRelationshipSeed, /insert into customers\.dealer_accounts/i);
+  assert.match(prismaDealerRelationshipSeed, /insert into customers\.customer_dealer_relationships/i);
+  assert.match(prismaDealerRelationshipSeed, /where not exists\s*\(/i);
+  assert.doesNotMatch(prismaDealerRelationshipSeed, /on conflict/i);
+  assert.doesNotMatch(prismaDealerRelationshipSeed, /\bDO\s+\$\$/i);
+
   for (const roleCode of [
     'ERP_ADMIN',
     'SHOP_MANAGER',
@@ -346,5 +404,9 @@ test('reference data seed is idempotent and avoids transaction-like rows', async
   assert.ok(prismaStockBinSeed.includes("'GENERAL'"), 'Expected Prisma stock-bin seed to include pick face bin');
   assert.ok(prismaStockBinSeed.includes("'INBOUND'"), 'Expected Prisma stock-bin seed to include receiving bin');
   assert.ok(prismaStockBinSeed.includes("'WIP'"), 'Expected Prisma stock-bin seed to include bay WIP bins');
+  assert.ok(
+    prismaDealerRelationshipSeed.includes("'ACCOUNT_OWNER'"),
+    'Expected dealer relationship seed to include account-owner links'
+  );
   assert.ok(prismaReferenceSeed.includes('inventory."StockLocationType"'));
 });

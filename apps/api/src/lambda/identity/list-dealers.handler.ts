@@ -29,6 +29,17 @@ interface DealerCustomerRecord {
   updatedAt: Date;
 }
 
+interface DealerAccountRecord {
+  id: string;
+  dealerCode: string | null;
+  territory: string | null;
+  serviceRelationship: 'ACTIVE' | 'INACTIVE';
+  accountOwner: string | null;
+  notes: string | null;
+  updatedAt: Date;
+  customer: DealerCustomerRecord;
+}
+
 function parsePositiveInteger(value: string | undefined, fallback: number): number {
   if (!value) return fallback;
   const parsed = Number.parseInt(value, 10);
@@ -46,18 +57,22 @@ function territoryFromAddress(record: DealerCustomerRecord): string | undefined 
   return parts[0];
 }
 
-function toDealerResponse(record: DealerCustomerRecord) {
+function toDealerResponse(record: DealerAccountRecord) {
+  const customer = record.customer;
   return {
     id: record.id,
-    customerId: record.id,
-    name: record.companyName?.trim() || record.fullName,
-    primaryContact: record.companyName?.trim() ? record.fullName : undefined,
-    contactEmail: record.email,
-    phone: record.phone ?? undefined,
-    territory: territoryFromAddress(record),
-    serviceRelationship: record.state === 'ACTIVE' || record.state === 'LEAD' ? 'ACTIVE' : 'INACTIVE',
-    customerState: record.state,
-    source: 'customer-company',
+    customerId: customer.id,
+    dealerCode: record.dealerCode ?? undefined,
+    name: customer.companyName?.trim() || customer.fullName,
+    primaryContact: customer.companyName?.trim() ? customer.fullName : undefined,
+    contactEmail: customer.email,
+    phone: customer.phone ?? undefined,
+    territory: record.territory ?? territoryFromAddress(customer),
+    serviceRelationship: record.serviceRelationship,
+    customerState: customer.state,
+    accountOwner: record.accountOwner ?? undefined,
+    notes: record.notes ?? undefined,
+    source: 'dealer-account',
     updatedAt: record.updatedAt.toISOString(),
   };
 }
@@ -69,41 +84,39 @@ export const handler = wrapHandler(
     const limit = Math.min(parsePositiveInteger(qs.limit, 100), 500);
     const offset = parsePositiveInteger(qs.offset, 0);
 
-    const dealerAccountWhere = {
-      state: { not: 'ARCHIVED' as const },
-      OR: [
-        { companyName: { not: null } },
-        { fullName: { contains: 'dealer', mode: 'insensitive' as const } },
-        { email: { contains: 'dealer', mode: 'insensitive' as const } },
-        { externalReference: { contains: 'dealer', mode: 'insensitive' as const } },
-      ],
+    const activeAccountWhere = {
+      archivedAt: null,
     };
     const searchWhere = search
       ? {
           OR: [
-            { fullName: { contains: search, mode: 'insensitive' as const } },
-            { companyName: { contains: search, mode: 'insensitive' as const } },
-            { email: { contains: search, mode: 'insensitive' as const } },
-            { phone: { contains: search, mode: 'insensitive' as const } },
-            { billingAddress: { contains: search, mode: 'insensitive' as const } },
-            { shippingAddress: { contains: search, mode: 'insensitive' as const } },
+            { dealerCode: { contains: search, mode: 'insensitive' as const } },
+            { territory: { contains: search, mode: 'insensitive' as const } },
+            { accountOwner: { contains: search, mode: 'insensitive' as const } },
+            { customer: { is: { fullName: { contains: search, mode: 'insensitive' as const } } } },
+            { customer: { is: { companyName: { contains: search, mode: 'insensitive' as const } } } },
+            { customer: { is: { email: { contains: search, mode: 'insensitive' as const } } } },
+            { customer: { is: { phone: { contains: search, mode: 'insensitive' as const } } } },
+            { customer: { is: { billingAddress: { contains: search, mode: 'insensitive' as const } } } },
+            { customer: { is: { shippingAddress: { contains: search, mode: 'insensitive' as const } } } },
           ],
         }
       : undefined;
-    const where = searchWhere ? { AND: [dealerAccountWhere, searchWhere] } : dealerAccountWhere;
+    const where = searchWhere ? { AND: [activeAccountWhere, searchWhere] } : activeAccountWhere;
 
     const [items, total] = await Promise.all([
-      getPrisma().customer.findMany({
+      getPrisma().dealerAccount.findMany({
         where,
-        orderBy: [{ state: 'asc' }, { companyName: 'asc' }, { fullName: 'asc' }],
+        include: { customer: true },
+        orderBy: [{ serviceRelationship: 'asc' }, { updatedAt: 'desc' }],
         take: limit,
         skip: offset,
       }),
-      getPrisma().customer.count({ where }),
+      getPrisma().dealerAccount.count({ where }),
     ]);
 
     return jsonResponse(200, {
-      items: items.map(toDealerResponse),
+      items: (items as DealerAccountRecord[]).map(toDealerResponse),
       total,
       limit,
       offset,

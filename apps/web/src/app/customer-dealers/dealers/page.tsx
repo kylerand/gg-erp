@@ -55,7 +55,7 @@ export default function DealersPage() {
     <div>
       <PageHeader
         title="Dealer Accounts"
-        description={loading ? 'Loading live dealer accounts...' : `${total} customer-backed accounts`}
+        description={loading ? 'Loading live dealer accounts...' : `${total} live dealer accounts`}
         action={
           <Link href={erpRoute('create-customer')}>
             <Button className="bg-yellow-400 text-gray-900 hover:bg-yellow-300">
@@ -91,8 +91,8 @@ export default function DealersPage() {
           title={search ? 'No dealer accounts matched' : 'No dealer accounts yet'}
           description={
             search
-              ? `No customer-backed dealer account matches "${search}".`
-              : 'Create or update customer company profiles to surface dealer and commercial accounts here.'
+              ? `No dealer account matches "${search}".`
+              : 'Create dealer account records from live commercial customer profiles to populate this list.'
           }
         />
       ) : (
@@ -113,7 +113,9 @@ export default function DealersPage() {
                 <tr key={dealer.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="font-medium text-gray-900">{dealer.name}</div>
-                    <div className="text-xs text-gray-500">{dealer.customerState ?? 'Customer record'}</div>
+                    <div className="text-xs text-gray-500">
+                      {[dealer.dealerCode, dealer.customerState].filter(Boolean).join(' · ') || 'Dealer account'}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-gray-600">{dealerContactLine(dealer) || '-'}</td>
                   <td className="px-4 py-3 text-gray-600">{dealer.phone ?? '-'}</td>

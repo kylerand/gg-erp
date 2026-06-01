@@ -303,10 +303,31 @@ const customer = z.object({
 
 const dealer = z.object({
   id: z.string(), // Mock data uses 'd-1' style; relax UUID requirement.
+  customerId: z.string().optional(),
+  dealerCode: z.string().optional(),
   name: z.string(),
   contactEmail: z.string().optional(),
   serviceRelationship: z.enum(['ACTIVE', 'INACTIVE']),
   territory: z.string().optional(),
+  source: z.string().optional(),
+});
+
+const dealerRelationship = z.object({
+  id: z.string(),
+  dealerId: z.string(),
+  dealerCustomerId: z.string(),
+  dealerCode: z.string().optional(),
+  dealerName: z.string(),
+  serviceRelationship: z.enum(['ACTIVE', 'INACTIVE']),
+  territory: z.string().optional(),
+  customerId: z.string(),
+  customerName: z.string(),
+  customerEmail: z.string().optional(),
+  cartVehicleId: z.string().optional(),
+  cartDisplayName: z.string().optional(),
+  relationshipType: z.enum(['ACCOUNT_OWNER', 'SERVICING_DEALER', 'BILLING_ACCOUNT', 'WARRANTY_PROVIDER']),
+  relationshipState: z.enum(['ACTIVE', 'INACTIVE', 'ENDED']),
+  source: z.string().optional(),
 });
 
 // ─── Tickets / Tasks ──────────────────────────────────────────────────────
@@ -489,6 +510,7 @@ const ROUTES: RouteEntry[] = [
   // Identity / Customers / Dealers
   { method: 'GET', template: '/identity/customers', schema: paginated(customer) },
   { method: 'GET', template: '/identity/dealers', schema: paginated(dealer) },
+  { method: 'GET', template: '/identity/dealer-relationships', schema: paginated(dealerRelationship) },
 
   // Accounting
   { method: 'GET', template: '/accounting/status', schema: accountingStatus },

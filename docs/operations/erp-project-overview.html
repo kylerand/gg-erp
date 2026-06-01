@@ -360,19 +360,19 @@
 
       <div class="summary">
         <div class="metric">
-          <strong>75%</strong>
+          <strong>76%</strong>
           <span>Estimated production readiness for an internal ERP rollout.</span>
-          <div class="bar warn"><span style="width: 75%"></span></div>
+          <div class="bar warn"><span style="width: 76%"></span></div>
         </div>
         <div class="metric">
-          <strong>88%</strong>
+          <strong>89%</strong>
           <span>Actionability remediation from the UAT plan.</span>
-          <div class="bar good"><span style="width: 88%"></span></div>
+          <div class="bar good"><span style="width: 89%"></span></div>
         </div>
         <div class="metric">
-          <strong>74%</strong>
+          <strong>76%</strong>
           <span>Live workflow/API contract completeness.</span>
-          <div class="bar warn"><span style="width: 74%"></span></div>
+          <div class="bar warn"><span style="width: 76%"></span></div>
         </div>
         <div class="metric">
           <strong>58%</strong>
@@ -402,7 +402,9 @@
               <li>
                 Planning masters now let operators create, lock, and release build configurations,
                 author BOM revisions from live active parts, approve BOMs, capture approval notes
-                and change history, and reuse released configuration/BOM pairs as build packages.
+                and change history, compare live configuration/BOM/route versions, prefill new
+                revisions from existing masters, and reuse released configuration/BOM pairs as build
+                packages.
               </li>
               <li>
                 Dashboards, KPI cards, reporting cards, and many workspace links now deep-link to
@@ -433,8 +435,8 @@
               <li>
                 Planning now has routing/job-card, build-configuration, and BOM masters with
                 effective windows, costing metadata, QC/evidence seeding, and approval history.
-                It still needs version diff/reporting views before it matches ERPNext-style
-                manufacturing depth.
+                It still needs full-history drill-ins and formal ECO approval packages before it
+                matches ERPNext-style manufacturing depth.
               </li>
               <li>
                 Accounting is still integration-first; internal GL, financial reports, and ledger
@@ -609,17 +611,18 @@
           <div class="module-card">
             <header>
               <h3>Planning Masters</h3>
-              <span class="pill doing">78%</span>
+              <span class="pill doing">82%</span>
             </header>
-            <div class="bar warn"><span style="width: 78%"></span></div>
+            <div class="bar good"><span style="width: 82%"></span></div>
             <p>
               Build package selection no longer depends only on historical work orders. Operators
               can author build configurations, lock/release them, create BOM revisions from active
               parts, approve BOMs, publish approved pairs into the package catalog, and attach
               effective-dated costed job-card routes that seed execution operations and QC gates.
               Route activation/retirement, configuration lock/release, and BOM approval now require
-              approval notes and expose the latest change event inline. Remaining depth is version
-              diff views, ECO reporting, and edit/new-revision workflows.
+              approval notes, expose the latest change event inline, compare live versions, roll
+              events into an ECO report, and prefill new revision drafts from existing masters.
+              Remaining depth is dedicated full-history drill-ins and formal ECO approval packages.
             </p>
           </div>
 
@@ -783,8 +786,9 @@
             in live UAT runs.
           </li>
           <li>
-            <strong>Deepen planning execution:</strong> add version diff views, ECO reporting, and
-            edit/new-revision workflows on top of the route/configuration/BOM approval history.
+            <strong>Deepen planning execution:</strong> add full-history drill-ins and formal ECO
+            approval packages on top of the route/configuration/BOM approval history and version
+            diff workflows.
           </li>
           <li>
             <strong>Move toward ERP ledgers:</strong> start internal accounting ledger design and

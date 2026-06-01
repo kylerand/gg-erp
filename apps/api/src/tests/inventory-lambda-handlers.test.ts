@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test, { mock } from 'node:test';
 import {
   createInventoryAdjustmentHandler,
+  createCycleCountHandler,
   createInventoryTransferHandler,
   inventoryLedgerQueries,
   inventoryLocationQueries,
@@ -377,6 +378,80 @@ test('createInventoryTransferHandler posts transfer rows, balances, and ledger e
   }
 });
 
+test('createCycleCountHandler posts count lines, variances, balances, and ledger entries', async () => {
+  const harness = createCycleCountHarness();
+  setInventoryHandlerPrismaForTests(harness.prisma as never);
+
+  try {
+    const response = await createCycleCountHandler({
+      httpMethod: 'POST',
+      headers: { 'x-correlation-id': 'cycle-count-correlation' },
+      body: JSON.stringify({
+        stockLocationId: TEST_LOCATION_ID,
+        scheduledFor: '2026-05-31',
+        notes: 'End of month bay count',
+        lines: [
+          {
+            stockLotId: TEST_STOCK_LOT_ID,
+            countedQuantity: 3,
+            reasonCode: 'cycle_count',
+          },
+        ],
+      }),
+    });
+
+    assert.equal(response.statusCode, 201);
+    const payload = JSON.parse(response.body) as {
+      cycleCount: {
+        lineCount: number;
+        varianceCount: number;
+        netQuantityDelta: number;
+        lines: Array<{ varianceQuantity: number; reasonCode: string }>;
+      };
+    };
+    assert.equal(payload.cycleCount.lineCount, 1);
+    assert.equal(payload.cycleCount.varianceCount, 1);
+    assert.equal(payload.cycleCount.netQuantityDelta, -2);
+    assert.equal(payload.cycleCount.lines[0].varianceQuantity, -2);
+    assert.equal(payload.cycleCount.lines[0].reasonCode, 'CYCLE_COUNT');
+
+    assert.ok(
+      harness.executeCalls.some((call) => call.sql.includes('INSERT INTO inventory.cycle_counts')),
+    );
+    assert.ok(
+      harness.executeCalls.some((call) =>
+        call.sql.includes('INSERT INTO inventory.cycle_count_lines'),
+      ),
+    );
+    assert.ok(
+      harness.executeCalls.some((call) =>
+        call.sql.includes('INSERT INTO inventory.inventory_adjustments'),
+      ),
+    );
+    assert.ok(
+      harness.executeCalls.some((call) =>
+        call.sql.includes('INSERT INTO inventory.inventory_adjustment_lines'),
+      ),
+    );
+
+    const ledgerCall = harness.executeCalls.find((call) =>
+      call.sql.includes('INSERT INTO inventory.inventory_ledger_entries'),
+    );
+    assert.ok(ledgerCall);
+    assert.ok(ledgerCall.values.includes('CYCLE_COUNT'));
+    assert.ok(ledgerCall.values.includes('CYCLE_COUNT_LINE'));
+
+    const balanceUpdate = harness.queryCalls.find((call) =>
+      call.sql.includes('UPDATE inventory.inventory_balances'),
+    );
+    assert.ok(balanceUpdate);
+    assert.ok(balanceUpdate.sql.includes('quantity_on_hand ='));
+    assert.ok(balanceUpdate.sql.includes('last_ledger_entry_id'));
+  } finally {
+    setInventoryHandlerPrismaForTests(undefined);
+  }
+});
+
 test('listLotsHandler returns an empty page when no lots are available', async () => {
   const listLotsMock = mock.method(inventoryLotQueries, 'listLots', async () => ({
     items: [],
@@ -711,6 +786,63 @@ function createInventoryTransferHarness() {
           {
             id: TEST_DESTINATION_LOCATION_ID,
             locationName: 'Bay 1',
+          },
+        ];
+      }
+
+      if (sql.includes('UPDATE inventory.inventory_balances')) {
+        return [{ id: 'balance-1' }];
+      }
+
+      throw new Error(`Unhandled query: ${sql}`);
+    }),
+    $executeRaw: mock.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      executeCalls.push({ sql: sqlText(strings), values });
+      return 1;
+    }),
+  };
+
+  const prisma = {
+    $transaction: mock.fn(async (callback: (transaction: typeof tx) => Promise<unknown>) =>
+      callback(tx),
+    ),
+  };
+
+  return { prisma, queryCalls, executeCalls };
+}
+
+function createCycleCountHarness() {
+  const queryCalls: RawSqlCall[] = [];
+  const executeCalls: RawSqlCall[] = [];
+
+  const tx = {
+    $queryRaw: mock.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const sql = sqlText(strings);
+      queryCalls.push({ sql, values });
+
+      if (sql.includes('FROM inventory.stock_locations')) {
+        return [
+          {
+            id: TEST_LOCATION_ID,
+            locationName: 'Main Warehouse',
+          },
+        ];
+      }
+
+      if (sql.includes('FROM inventory.stock_lots lot')) {
+        return [
+          {
+            stockLotId: TEST_STOCK_LOT_ID,
+            lotNumber: 'LOT-001',
+            lotState: 'AVAILABLE',
+            partId: TEST_PART_ID,
+            partSku: 'GG-LIFT',
+            partName: 'Lift kit',
+            unitOfMeasure: 'EA',
+            stockLocationId: TEST_LOCATION_ID,
+            locationName: 'Main Warehouse',
+            quantityOnHand: 5,
+            quantityReserved: 1,
           },
         ];
       }

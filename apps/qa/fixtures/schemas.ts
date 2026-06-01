@@ -181,6 +181,40 @@ const inventoryTransfer = z.object({
   correlationId: z.string(),
 });
 
+const cycleCountLine = z.object({
+  stockLotId: uuid,
+  lotNumber: z.string().optional(),
+  partId: uuid,
+  partSku: z.string(),
+  partName: z.string(),
+  expectedQuantity: z.number(),
+  countedQuantity: z.number(),
+  varianceQuantity: z.number(),
+  reasonCode: z.string(),
+  ledgerEntryId: uuid.optional(),
+  adjustmentLineId: uuid.optional(),
+});
+
+const cycleCount = z.object({
+  id: uuid,
+  cycleCountNumber: z.string(),
+  status: z.string(),
+  stockLocationId: uuid,
+  locationName: z.string(),
+  scheduledFor: z.string(),
+  startedAt: isoDate,
+  completedAt: isoDate,
+  notes: z.string().optional(),
+  lineCount: positiveInt,
+  varianceCount: z.number(),
+  netQuantityDelta: z.number(),
+  adjustmentId: uuid.optional(),
+  adjustmentNumber: z.string().optional(),
+  ledgerEntryIds: z.array(uuid),
+  lines: z.array(cycleCountLine),
+  correlationId: z.string(),
+});
+
 // ─── Customers / Dealers ──────────────────────────────────────────────────
 
 const customer = z.object({
@@ -330,6 +364,11 @@ const ROUTES: RouteEntry[] = [
     method: 'POST',
     template: '/inventory/transfers',
     schema: z.object({ transfer: inventoryTransfer }),
+  },
+  {
+    method: 'POST',
+    template: '/inventory/cycle-counts',
+    schema: z.object({ cycleCount }),
   },
 
   // Identity / Customers / Dealers

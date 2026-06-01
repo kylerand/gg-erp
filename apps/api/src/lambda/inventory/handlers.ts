@@ -912,6 +912,21 @@ interface CreateInventoryTransferInput {
   notes?: string;
 }
 
+interface CreateCycleCountLineInput {
+  stockLotId: string;
+  countedQuantity: number;
+  reasonCode?: string;
+}
+
+interface CreateCycleCountInput {
+  stockLocationId: string;
+  scheduledFor?: string;
+  notes?: string;
+  tolerancePercent?: number;
+  supervisorOverrideActorId?: string;
+  lines: CreateCycleCountLineInput[];
+}
+
 interface InventoryLocationResponse {
   id: string;
   locationCode: string;
@@ -976,6 +991,25 @@ interface InventoryTransferLocationRow {
   locationName: string;
 }
 
+interface CycleCountLocationRow {
+  id: string;
+  locationName: string;
+}
+
+interface CycleCountLotRow {
+  stockLotId: string;
+  lotNumber: string | null;
+  lotState: string;
+  partId: string;
+  partSku: string;
+  partName: string;
+  unitOfMeasure: string;
+  stockLocationId: string;
+  locationName: string;
+  quantityOnHand: unknown;
+  quantityReserved: unknown;
+}
+
 interface InventoryTransferResponse {
   id: string;
   transferNumber: string;
@@ -998,6 +1032,40 @@ interface InventoryTransferResponse {
   transferInLedgerEntryId: string;
   shippedAt: string;
   receivedAt: string;
+  correlationId: string;
+}
+
+interface CycleCountLineResponse {
+  stockLotId: string;
+  lotNumber?: string;
+  partId: string;
+  partSku: string;
+  partName: string;
+  expectedQuantity: number;
+  countedQuantity: number;
+  varianceQuantity: number;
+  reasonCode: string;
+  ledgerEntryId?: string;
+  adjustmentLineId?: string;
+}
+
+interface CycleCountResponse {
+  id: string;
+  cycleCountNumber: string;
+  status: string;
+  stockLocationId: string;
+  locationName: string;
+  scheduledFor: string;
+  startedAt: string;
+  completedAt: string;
+  notes?: string;
+  lineCount: number;
+  varianceCount: number;
+  netQuantityDelta: number;
+  adjustmentId?: string;
+  adjustmentNumber?: string;
+  ledgerEntryIds: string[];
+  lines: CycleCountLineResponse[];
   correlationId: string;
 }
 
@@ -1047,6 +1115,15 @@ class AdjustmentCommandError extends Error {
 }
 
 class TransferCommandError extends Error {
+  constructor(
+    readonly statusCode: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+class CycleCountCommandError extends Error {
   constructor(
     readonly statusCode: number,
     message: string,
@@ -2008,6 +2085,357 @@ export const inventoryTransferCommands = {
   },
 };
 
+export const inventoryCycleCountCommands = {
+  async createCycleCount(
+    input: CreateCycleCountInput,
+    correlationId: string,
+  ): Promise<CycleCountResponse> {
+    const cycleCountId = randomUUID();
+    const cycleCountNumber = `CNT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${cycleCountId.slice(0, 8).toUpperCase()}`;
+    const postedAt = new Date();
+    const scheduledFor = input.scheduledFor?.trim() || postedAt.toISOString().slice(0, 10);
+    const notes = input.notes?.trim() || undefined;
+    const tolerancePercent = input.tolerancePercent;
+    const countedByLot = new Map(input.lines.map((line) => [line.stockLotId, line]));
+
+    return getInventoryPrisma().$transaction(async (tx) => {
+      const locations = await tx.$queryRaw<CycleCountLocationRow[]>`
+        SELECT id::text AS "id", location_name AS "locationName"
+        FROM inventory.stock_locations
+        WHERE id = ${input.stockLocationId}::uuid
+          AND deleted_at IS NULL
+      `;
+      const location = locations[0];
+      if (!location) {
+        throw new CycleCountCommandError(
+          404,
+          `Stock location not found: ${input.stockLocationId}`,
+        );
+      }
+
+      const lotIds = input.lines.map((line) => Prisma.sql`${line.stockLotId}::uuid`);
+      const lots = await tx.$queryRaw<CycleCountLotRow[]>`
+        SELECT
+          lot.id::text AS "stockLotId",
+          lot.lot_number AS "lotNumber",
+          lot.lot_state AS "lotState",
+          p.id::text AS "partId",
+          p.sku AS "partSku",
+          p.name AS "partName",
+          p.unit_of_measure AS "unitOfMeasure",
+          loc.id::text AS "stockLocationId",
+          loc.location_name AS "locationName",
+          bal.quantity_on_hand AS "quantityOnHand",
+          bal.quantity_reserved AS "quantityReserved"
+        FROM inventory.stock_lots lot
+        JOIN inventory.parts p ON p.id = lot.part_id
+        JOIN inventory.stock_locations loc ON loc.id = lot.stock_location_id
+        JOIN inventory.inventory_balances bal
+          ON bal.stock_lot_id = lot.id
+         AND bal.stock_location_id = lot.stock_location_id
+        WHERE lot.id IN (${Prisma.join(lotIds)})
+          AND lot.stock_location_id = ${input.stockLocationId}::uuid
+        FOR UPDATE OF lot, bal
+      `;
+
+      if (lots.length !== input.lines.length) {
+        const found = new Set(lots.map((lot) => lot.stockLotId));
+        const missing = input.lines
+          .map((line) => line.stockLotId)
+          .filter((stockLotId) => !found.has(stockLotId));
+        throw new CycleCountCommandError(
+          404,
+          `Stock lot not found at ${location.locationName}: ${missing.join(', ')}`,
+        );
+      }
+
+      for (const lot of lots) {
+        if (lot.lotState !== 'AVAILABLE') {
+          throw new CycleCountCommandError(
+            409,
+            `Stock lot ${lot.lotNumber ?? lot.stockLotId} cannot be counted in ${lot.lotState} state.`,
+          );
+        }
+        const line = countedByLot.get(lot.stockLotId);
+        const countedQuantity = line?.countedQuantity ?? 0;
+        const reservedQuantity = numberFromDb(lot.quantityReserved);
+        if (countedQuantity < reservedQuantity) {
+          throw new CycleCountCommandError(
+            409,
+            `Counted quantity for ${lot.partSku} cannot be below reserved quantity (${reservedQuantity}).`,
+          );
+        }
+
+        const expectedQuantity = numberFromDb(lot.quantityOnHand);
+        const absoluteVariance = Math.abs(countedQuantity - expectedQuantity);
+        if (
+          tolerancePercent !== undefined &&
+          expectedQuantity > 0 &&
+          (absoluteVariance / expectedQuantity) * 100 > tolerancePercent &&
+          !input.supervisorOverrideActorId?.trim()
+        ) {
+          throw new CycleCountCommandError(
+            409,
+            `Supervisor override is required for ${lot.partSku}; variance exceeds ${tolerancePercent}%.`,
+          );
+        }
+      }
+
+      const variances = lots
+        .map((lot) => {
+          const line = countedByLot.get(lot.stockLotId)!;
+          const expectedQuantity = numberFromDb(lot.quantityOnHand);
+          return {
+            lot,
+            line,
+            expectedQuantity,
+            countedQuantity: line.countedQuantity,
+            varianceQuantity: line.countedQuantity - expectedQuantity,
+          };
+        })
+        .filter((line) => line.varianceQuantity !== 0);
+
+      const adjustmentId = variances.length > 0 ? randomUUID() : undefined;
+      const adjustmentNumber = adjustmentId
+        ? `ADJ-${postedAt.toISOString().slice(0, 10).replace(/-/g, '')}-${adjustmentId.slice(0, 8).toUpperCase()}`
+        : undefined;
+
+      await tx.$executeRaw`
+        INSERT INTO inventory.cycle_counts (
+          id,
+          cycle_count_number,
+          stock_location_id,
+          cycle_count_status,
+          scheduled_for,
+          started_at,
+          completed_at,
+          notes,
+          created_at,
+          updated_at,
+          correlation_id,
+          version
+        )
+        VALUES (
+          ${cycleCountId}::uuid,
+          ${cycleCountNumber},
+          ${location.id}::uuid,
+          'POSTED',
+          ${scheduledFor}::date,
+          ${postedAt},
+          ${postedAt},
+          ${notes ?? null},
+          now(),
+          now(),
+          ${correlationId},
+          0
+        )
+      `;
+
+      if (adjustmentId && adjustmentNumber) {
+        await tx.$executeRaw`
+          INSERT INTO inventory.inventory_adjustments (
+            id,
+            adjustment_number,
+            adjustment_type,
+            adjustment_status,
+            stock_location_id,
+            reason_code,
+            notes,
+            counted_at,
+            posted_at,
+            created_at,
+            updated_at,
+            correlation_id,
+            version
+          )
+          VALUES (
+            ${adjustmentId}::uuid,
+            ${adjustmentNumber},
+            'CYCLE_COUNT',
+            'POSTED',
+            ${location.id}::uuid,
+            'CYCLE_COUNT',
+            ${notes ?? null},
+            ${postedAt},
+            ${postedAt},
+            now(),
+            now(),
+            ${correlationId},
+            0
+          )
+        `;
+      }
+
+      const responseLines: CycleCountLineResponse[] = [];
+      const ledgerEntryIds: string[] = [];
+      let netQuantityDelta = 0;
+      let lineNumber = 0;
+
+      for (const lot of lots) {
+        lineNumber += 1;
+        const inputLine = countedByLot.get(lot.stockLotId)!;
+        const expectedQuantity = numberFromDb(lot.quantityOnHand);
+        const countedQuantity = inputLine.countedQuantity;
+        const varianceQuantity = countedQuantity - expectedQuantity;
+        const reasonCode = inputLine.reasonCode?.trim().toUpperCase() || 'CYCLE_COUNT';
+        const cycleCountLineId = randomUUID();
+        let ledgerEntryId: string | undefined;
+        let adjustmentLineId: string | undefined;
+
+        if (varianceQuantity !== 0) {
+          netQuantityDelta += varianceQuantity;
+          ledgerEntryId = await appendInventoryLedgerEntry(tx, {
+            partId: lot.partId,
+            stockLocationId: lot.stockLocationId,
+            stockLotId: lot.stockLotId,
+            movementType: 'CYCLE_COUNT',
+            quantityDelta: varianceQuantity,
+            reasonCode,
+            sourceDocumentType: 'CYCLE_COUNT_LINE',
+            sourceDocumentId: cycleCountLineId,
+            correlationId,
+          });
+          ledgerEntryIds.push(ledgerEntryId);
+          adjustmentLineId = randomUUID();
+
+          await tx.$executeRaw`
+            INSERT INTO inventory.inventory_adjustment_lines (
+              id,
+              inventory_adjustment_id,
+              line_number,
+              part_id,
+              stock_lot_id,
+              quantity_delta,
+              expected_quantity,
+              counted_quantity,
+              ledger_entry_id,
+              reason_code,
+              created_at,
+              updated_at,
+              correlation_id,
+              version
+            )
+            VALUES (
+              ${adjustmentLineId}::uuid,
+              ${adjustmentId}::uuid,
+              ${lineNumber},
+              ${lot.partId}::uuid,
+              ${lot.stockLotId}::uuid,
+              ${varianceQuantity},
+              ${expectedQuantity},
+              ${countedQuantity},
+              ${ledgerEntryId}::uuid,
+              ${reasonCode},
+              now(),
+              now(),
+              ${correlationId},
+              0
+            )
+          `;
+
+          const updatedBalances = await tx.$queryRaw<Array<{ id: string }>>`
+            UPDATE inventory.inventory_balances
+            SET
+              quantity_on_hand = ${countedQuantity},
+              last_ledger_entry_id = ${ledgerEntryId}::uuid,
+              updated_at = now(),
+              last_correlation_id = ${correlationId},
+              version = version + 1
+            WHERE stock_lot_id = ${lot.stockLotId}::uuid
+              AND stock_location_id = ${lot.stockLocationId}::uuid
+              AND ${countedQuantity} >= quantity_reserved
+            RETURNING id::text AS "id"
+          `;
+          if (updatedBalances.length === 0) {
+            throw new CycleCountCommandError(
+              409,
+              `Inventory balance for ${lot.partSku} cannot accept that count.`,
+            );
+          }
+
+          await tx.$executeRaw`
+            UPDATE inventory.stock_lots
+            SET
+              lot_state = CASE WHEN ${countedQuantity} <= 0 THEN 'CLOSED' ELSE lot_state END,
+              updated_at = now(),
+              version = version + 1
+            WHERE id = ${lot.stockLotId}::uuid
+          `;
+        }
+
+        await tx.$executeRaw`
+          INSERT INTO inventory.cycle_count_lines (
+            id,
+            cycle_count_id,
+            line_number,
+            part_id,
+            stock_lot_id,
+            expected_quantity,
+            counted_quantity,
+            variance_quantity,
+            adjustment_line_id,
+            reason_code,
+            created_at,
+            updated_at,
+            correlation_id,
+            version
+          )
+          VALUES (
+            ${cycleCountLineId}::uuid,
+            ${cycleCountId}::uuid,
+            ${lineNumber},
+            ${lot.partId}::uuid,
+            ${lot.stockLotId}::uuid,
+            ${expectedQuantity},
+            ${countedQuantity},
+            ${varianceQuantity},
+            ${adjustmentLineId ? Prisma.sql`${adjustmentLineId}::uuid` : null},
+            ${reasonCode},
+            now(),
+            now(),
+            ${correlationId},
+            0
+          )
+        `;
+
+        responseLines.push({
+          stockLotId: lot.stockLotId,
+          lotNumber: lot.lotNumber ?? undefined,
+          partId: lot.partId,
+          partSku: lot.partSku,
+          partName: lot.partName,
+          expectedQuantity,
+          countedQuantity,
+          varianceQuantity,
+          reasonCode,
+          ledgerEntryId,
+          adjustmentLineId,
+        });
+      }
+
+      return {
+        id: cycleCountId,
+        cycleCountNumber,
+        status: 'POSTED',
+        stockLocationId: location.id,
+        locationName: location.locationName,
+        scheduledFor,
+        startedAt: postedAt.toISOString(),
+        completedAt: postedAt.toISOString(),
+        notes,
+        lineCount: responseLines.length,
+        varianceCount: variances.length,
+        netQuantityDelta,
+        adjustmentId,
+        adjustmentNumber,
+        ledgerEntryIds,
+        lines: responseLines,
+        correlationId,
+      };
+    });
+  },
+};
+
 type InventorySqlClient = Prisma.TransactionClient | PrismaClient;
 
 interface ActionReservation {
@@ -2222,6 +2650,18 @@ async function handleInventoryTransferCommand(command: Promise<InventoryTransfer
     return jsonResponse(201, { transfer });
   } catch (error) {
     if (error instanceof TransferCommandError) {
+      return jsonResponse(error.statusCode, { message: error.message });
+    }
+    throw error;
+  }
+}
+
+async function handleCycleCountCommand(command: Promise<CycleCountResponse>) {
+  try {
+    const cycleCount = await command;
+    return jsonResponse(201, { cycleCount });
+  } catch (error) {
+    if (error instanceof CycleCountCommandError) {
       return jsonResponse(error.statusCode, { message: error.message });
     }
     throw error;
@@ -2675,6 +3115,55 @@ function validateCreateInventoryTransferInput(
   if (input.notes !== undefined && input.notes.length > 1000) {
     return 'notes must be 1000 characters or fewer.';
   }
+  return undefined;
+}
+
+function validateCreateCycleCountInput(input: CreateCycleCountInput): string | undefined {
+  const stockLocationId = parseOptionalUuid(input.stockLocationId, 'stockLocationId');
+  if (stockLocationId.error || !stockLocationId.value) {
+    return stockLocationId.error ?? 'stockLocationId is required.';
+  }
+  if (!Array.isArray(input.lines) || input.lines.length === 0) {
+    return 'At least one cycle count line is required.';
+  }
+  if (input.lines.length > 200) {
+    return 'Cycle count batches are limited to 200 lines.';
+  }
+  if (input.scheduledFor !== undefined) {
+    const scheduledFor = input.scheduledFor.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduledFor) || Number.isNaN(Date.parse(`${scheduledFor}T00:00:00.000Z`))) {
+      return 'scheduledFor must be a YYYY-MM-DD date.';
+    }
+  }
+  if (input.notes !== undefined && input.notes.length > 1000) {
+    return 'notes must be 1000 characters or fewer.';
+  }
+  if (
+    input.tolerancePercent !== undefined &&
+    (!Number.isFinite(input.tolerancePercent) || input.tolerancePercent < 0)
+  ) {
+    return 'tolerancePercent must be zero or greater.';
+  }
+
+  const lotIds = new Set<string>();
+  for (let index = 0; index < input.lines.length; index += 1) {
+    const line = input.lines[index]!;
+    const stockLotId = parseOptionalUuid(line.stockLotId, `lines[${index}].stockLotId`);
+    if (stockLotId.error || !stockLotId.value) {
+      return stockLotId.error ?? `lines[${index}].stockLotId is required.`;
+    }
+    if (lotIds.has(stockLotId.value)) {
+      return `Duplicate stock lot in cycle count: ${stockLotId.value}.`;
+    }
+    lotIds.add(stockLotId.value);
+    if (!Number.isFinite(line.countedQuantity) || line.countedQuantity < 0) {
+      return `lines[${index}].countedQuantity must be zero or greater.`;
+    }
+    if (line.reasonCode !== undefined && line.reasonCode.trim().length > 80) {
+      return `lines[${index}].reasonCode must be 80 characters or fewer.`;
+    }
+  }
+
   return undefined;
 }
 
@@ -3371,6 +3860,21 @@ export const createInventoryTransferHandler = wrapHandler(
 
     return handleInventoryTransferCommand(
       inventoryTransferCommands.createTransfer(body.value, ctx.correlationId),
+    );
+  },
+  { requireAuth: false },
+);
+
+export const createCycleCountHandler = wrapHandler(
+  async (ctx) => {
+    const body = parseBody<CreateCycleCountInput>(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
+
+    const validation = validateCreateCycleCountInput(body.value);
+    if (validation) return jsonResponse(422, { message: validation });
+
+    return handleCycleCountCommand(
+      inventoryCycleCountCommands.createCycleCount(body.value, ctx.correlationId),
     );
   },
   { requireAuth: false },

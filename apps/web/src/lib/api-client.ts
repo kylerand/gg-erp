@@ -1758,6 +1758,64 @@ export async function createInventoryTransfer(
   return data.transfer;
 }
 
+export interface CreateCycleCountLineInput {
+  stockLotId: string;
+  countedQuantity: number;
+  reasonCode?: string;
+}
+
+export interface CreateCycleCountInput {
+  stockLocationId: string;
+  scheduledFor?: string;
+  notes?: string;
+  tolerancePercent?: number;
+  supervisorOverrideActorId?: string;
+  lines: CreateCycleCountLineInput[];
+}
+
+export interface CycleCountLine {
+  stockLotId: string;
+  lotNumber?: string;
+  partId: string;
+  partSku: string;
+  partName: string;
+  expectedQuantity: number;
+  countedQuantity: number;
+  varianceQuantity: number;
+  reasonCode: string;
+  ledgerEntryId?: string;
+  adjustmentLineId?: string;
+}
+
+export interface CycleCount {
+  id: string;
+  cycleCountNumber: string;
+  status: string;
+  stockLocationId: string;
+  locationName: string;
+  scheduledFor: string;
+  startedAt: string;
+  completedAt: string;
+  notes?: string;
+  lineCount: number;
+  varianceCount: number;
+  netQuantityDelta: number;
+  adjustmentId?: string;
+  adjustmentNumber?: string;
+  ledgerEntryIds: string[];
+  lines: CycleCountLine[];
+  correlationId: string;
+}
+
+export async function createCycleCount(input: CreateCycleCountInput): Promise<CycleCount> {
+  const data = await apiFetch<{ cycleCount: CycleCount }>('/inventory/cycle-counts', {
+    method: 'POST',
+    headers: mutationHeaders(),
+    body: JSON.stringify(input),
+  });
+  return data.cycleCount;
+}
+
 export type InventoryLedgerMovementType =
   | 'RECEIPT'
   | 'RESERVATION'

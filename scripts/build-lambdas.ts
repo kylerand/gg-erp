@@ -68,6 +68,7 @@ const lambdas: LambdaEntry[] = [
   { context: 'inventory', handler: 'list-ledger',               entry: 'apps/api/src/lambda/inventory/list-ledger.handler.ts' },
   { context: 'inventory', handler: 'create-adjustment',         entry: 'apps/api/src/lambda/inventory/create-adjustment.handler.ts' },
   { context: 'inventory', handler: 'create-transfer',           entry: 'apps/api/src/lambda/inventory/create-transfer.handler.ts' },
+  { context: 'inventory', handler: 'create-cycle-count',        entry: 'apps/api/src/lambda/inventory/create-cycle-count.handler.ts' },
   { context: 'inventory', handler: 'list-vendors',              entry: 'apps/api/src/lambda/inventory/list-vendors.handler.ts' },
   { context: 'inventory', handler: 'get-vendor',               entry: 'apps/api/src/lambda/inventory/get-vendor.handler.ts' },
   { context: 'inventory', handler: 'list-purchase-orders',      entry: 'apps/api/src/lambda/inventory/list-purchase-orders.handler.ts' },

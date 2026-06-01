@@ -51,6 +51,7 @@ test('registry route helper resolves module links and filtered routes', () => {
   assert.equal(getRequiredErpRoute('cycle-count'), '/inventory/cycle-counts');
   assert.equal(getRequiredErpRoute('create-sales-opportunity'), '/sales/opportunities/new');
   assert.equal(getRequiredErpRoute('quickbooks-customer'), '/accounting/quickbooks/customers');
+  assert.equal(getRequiredErpRoute('accounting-ledger'), '/accounting/ledger');
   assert.equal(getRequiredErpRoute('accounting-settings'), '/admin/accounting');
   assert.equal(getRequiredErpRoute('migration-cutover'), '/admin/migration');
   assert.equal(

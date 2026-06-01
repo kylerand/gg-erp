@@ -158,6 +158,7 @@ import {
   getReconciliationRunHandler,
   listMismatchesHandler,
   resolveReconciliationHandler,
+  listOperationalLedgerHandler,
   listAccountsHandler,
   updateAccountStatusHandler,
   getFailureSummaryHandler,
@@ -809,6 +810,8 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
       ...event,
       pathParameters: { id: qbReconciliationRecordMatch[1] },
     });
+  } else if (pathname === '/accounting/operational-ledger' && method === 'GET') {
+    result = await listOperationalLedgerHandler(event);
   } else if (pathname === '/accounting/integration-accounts' && method === 'GET') {
     result = await listAccountsHandler(event);
   } else if (qbIntegrationAccountMatch && pathname.endsWith('/status') && method === 'PUT') {
@@ -1089,6 +1092,7 @@ server.listen(PORT, () => {
   console.log(`   Customers   GET|POST /accounting/customers`);
   console.log(`   Payments    GET /accounting/payment-syncs, POST /:id/retry`);
   console.log(`   Reconcile   GET|POST /accounting/reconciliation/runs, GET /:id, GET /mismatches`);
+  console.log(`   Ledger      GET /accounting/operational-ledger`);
   console.log(`   Accounts    GET /accounting/integration-accounts, PUT /:id/status`);
   console.log(
     `   Scheduling  GET /scheduling/slots, /labor-capacity, /demand-projection, /schedule-preview, /schedule-assignments, /capacity-slots`,

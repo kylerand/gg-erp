@@ -420,6 +420,15 @@ export const ERP_WORKSPACES = [
         keywords: ['payable', 'ap', 'vendor bill', 'purchase order', 'receiving'],
       },
       {
+        key: 'accounting-ledger',
+        label: 'Accounting Ledger',
+        description: 'Review operational entries across payables, payments, and reconciliation.',
+        route: '/accounting/ledger',
+        status: 'live',
+        objectKey: 'accounting-ledger',
+        keywords: ['ledger', 'journal', 'gl', 'payables', 'payments', 'reconciliation'],
+      },
+      {
         key: 'accounting-reconciliation',
         label: 'Reconciliation',
         description: 'Compare ERP and QuickBooks records.',

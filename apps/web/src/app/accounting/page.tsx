@@ -12,6 +12,7 @@ import {
   listCustomerSyncs,
   listIntegrationAccounts,
   getFailureSummary,
+  listOperationalLedger,
   listPurchaseOrders,
   type InvoiceSyncRecord,
   type ReconciliationRun,
@@ -35,6 +36,9 @@ interface AccountingMetrics {
   lastReconciliation?: ReconciliationRun;
   reconciliationRunCount: number;
   integrationAccountsCount: number;
+  ledgerEntries: number;
+  ledgerReviewCount: number;
+  ledgerValue: number;
 }
 
 const EMPTY: AccountingMetrics = {
@@ -51,6 +55,9 @@ const EMPTY: AccountingMetrics = {
   payablesValue: 0,
   reconciliationRunCount: 0,
   integrationAccountsCount: 0,
+  ledgerEntries: 0,
+  ledgerReviewCount: 0,
+  ledgerValue: 0,
 };
 
 const STRICT_LIVE_DATA = { allowMockFallback: false } as const;
@@ -70,6 +77,7 @@ const ACCOUNTING_LINKS = {
   accounts: erpRoute('quickbooks-chart-of-accounts'),
   recentInvoices: erpRoute('quickbooks-invoice'),
   openInvoices: erpRoute('quickbooks-invoice', { filter: 'OPEN' }),
+  ledger: erpRoute('accounting-ledger'),
   reconciliation: erpRoute('accounting-reconciliation'),
   integrationSettings: erpRoute('integration-settings'),
 };
@@ -96,6 +104,7 @@ export default function AccountingPage() {
         accounts,
         failureSummary,
         payables,
+        ledger,
       ] = await Promise.allSettled([
         getQbStatus(STRICT_LIVE_DATA),
         listInvoiceSyncRecords(undefined, STRICT_LIVE_DATA),
@@ -109,6 +118,7 @@ export default function AccountingPage() {
         listIntegrationAccounts(STRICT_LIVE_DATA),
         getFailureSummary(STRICT_LIVE_DATA),
         listPurchaseOrders({ pageSize: 200 }, STRICT_LIVE_DATA),
+        listOperationalLedger({ limit: 100 }, STRICT_LIVE_DATA),
       ]);
 
       if (cancelled) return;
@@ -128,6 +138,7 @@ export default function AccountingPage() {
         accounts,
         failureSummary,
         payables,
+        ledger,
       ].find((r): r is PromiseRejectedResult => r.status === 'rejected');
 
       const invoiceSyncedItems = ok(invoiceSynced)?.items ?? [];
@@ -136,6 +147,7 @@ export default function AccountingPage() {
       void invoiceAll;
       void customerAll;
       const payableSummary = summarizePayables(ok(payables)?.items ?? []);
+      const ledgerSummary = ok(ledger)?.summary;
 
       setM({
         qb: ok(qb) ?? null,
@@ -154,6 +166,12 @@ export default function AccountingPage() {
         lastReconciliation: ok(recons)?.items[0],
         reconciliationRunCount: ok(recons)?.total ?? 0,
         integrationAccountsCount: ok(accounts)?.total ?? 0,
+        ledgerEntries: ledgerSummary?.entryCount ?? 0,
+        ledgerReviewCount:
+          (ledgerSummary?.statusTotals.NEEDS_REVIEW.count ?? 0) +
+          (ledgerSummary?.statusTotals.FAILED.count ?? 0) +
+          (ledgerSummary?.statusTotals.MISMATCH.count ?? 0),
+        ledgerValue: (ledgerSummary?.totalDebitCents ?? 0) / 100,
       });
       setLoadError(rejected ? errorMessage(rejected.reason) : null);
       setLoading(false);
@@ -377,7 +395,7 @@ export default function AccountingPage() {
           <span>Local sync state</span>
           <span className="group-open:rotate-90 transition-transform inline-block">▸</span>
         </summary>
-        <div className="grid grid-cols-2 gap-4 mb-6 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-4 mb-6 lg:grid-cols-6">
           <KpiCard
             label="Total failures"
             value={m.failureSummary.total}
@@ -420,6 +438,14 @@ export default function AccountingPage() {
             tone="neutral"
             subline={`${m.customersSyncedTotal} total · ${m.customerFailed} failed`}
             href={ACCOUNTING_LINKS.customersSynced}
+            loading={loading}
+          />
+          <KpiCard
+            label="Ledger entries"
+            value={m.ledgerEntries}
+            tone={m.ledgerReviewCount > 0 ? 'amber' : 'neutral'}
+            subline={`${m.ledgerReviewCount} review · ${formatUsd(m.ledgerValue)}`}
+            href={ACCOUNTING_LINKS.ledger}
             loading={loading}
           />
         </div>

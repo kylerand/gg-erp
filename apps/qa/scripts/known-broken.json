@@ -1,4 +1,40 @@
 {
   "_doc": "Routes with an expected non-healthy API smoke status in the currently deployed QA API. Smoke fails when this list drifts in EITHER direction — a new bug joins, OR an existing bug gets fixed/deployed (so we know to remove the entry). File a Linear ticket when adding long-lived handler bugs; remove pending-deploy entries after the route is live. Use expectRouteMiss for pending Terraform routes that are not deployed yet.",
-  "broken": []
+  "broken": [
+    {
+      "method": "GET",
+      "path": "/reporting/subscriptions",
+      "expectStatus": 404,
+      "expectRouteMiss": true,
+      "note": "pending deploy of report subscription route"
+    },
+    {
+      "method": "POST",
+      "path": "/reporting/subscriptions",
+      "expectStatus": 404,
+      "expectRouteMiss": true,
+      "note": "pending deploy of report subscription route"
+    },
+    {
+      "method": "PATCH",
+      "path": "/reporting/subscriptions/{subscriptionId}",
+      "expectStatus": 404,
+      "expectRouteMiss": true,
+      "note": "pending deploy of report subscription update route"
+    },
+    {
+      "method": "GET",
+      "path": "/reporting/exports",
+      "expectStatus": 404,
+      "expectRouteMiss": true,
+      "note": "pending deploy of report export route"
+    },
+    {
+      "method": "POST",
+      "path": "/reporting/exports/run-now",
+      "expectStatus": 404,
+      "expectRouteMiss": true,
+      "note": "pending deploy of report export run-now route"
+    }
+  ]
 }

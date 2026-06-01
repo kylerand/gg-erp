@@ -6,11 +6,18 @@ import {
   type ErpReportCategory,
   type ErpReportBlockedWorkOrder,
   type ErpReportDescriptor,
+  type ErpReportExportRun,
   type ErpReportSnapshotMetric,
+  type ErpReportSubscription,
 } from '@gg-erp/domain';
-import { getReportingSnapshot } from '@/lib/api-client';
+import {
+  getReportExportRuns,
+  getReportSubscriptions,
+  getReportingSnapshot,
+} from '@/lib/api-client';
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 import { ReportingExportActions } from './ReportingExportActions';
+import { ReportingSubscriptionsPanel } from './ReportingSubscriptionsPanel';
 
 type ReportingCategoryFilter = ErpReportCategory | 'all';
 
@@ -23,6 +30,12 @@ type ReportMetric = ErpReportSnapshotMetric;
 interface ReportSignals {
   metrics: Record<string, ReportMetric>;
   blockedOrders: ErpReportBlockedWorkOrder[];
+  warnings: string[];
+}
+
+interface ReportingAutomation {
+  subscriptions: ErpReportSubscription[];
+  exportRuns: ErpReportExportRun[];
   warnings: string[];
 }
 
@@ -91,8 +104,30 @@ async function loadReportSignals(): Promise<ReportSignals> {
       metrics: {},
       blockedOrders: [],
       warnings: [
-        error instanceof Error ? `reporting.snapshot: ${error.message}` : 'reporting.snapshot: unavailable',
+        error instanceof Error
+          ? `reporting.snapshot: ${error.message}`
+          : 'reporting.snapshot: unavailable',
       ],
+    };
+  }
+}
+
+async function loadReportingAutomation(): Promise<ReportingAutomation> {
+  try {
+    const [subscriptions, exportRuns] = await Promise.all([
+      getReportSubscriptions({ allowMockFallback: false }),
+      getReportExportRuns({ limit: 20 }, { allowMockFallback: false }),
+    ]);
+    return {
+      subscriptions: subscriptions.items,
+      exportRuns: exportRuns.items,
+      warnings: [],
+    };
+  } catch {
+    return {
+      subscriptions: [],
+      exportRuns: [],
+      warnings: [],
     };
   }
 }
@@ -120,7 +155,7 @@ export default async function ReportingPage({ searchParams }: ReportingPageProps
       (activeCategory === 'all' || report.category === activeCategory) &&
       reportMatchesQuery(report, query),
   );
-  const signals = await loadReportSignals();
+  const [signals, automation] = await Promise.all([loadReportSignals(), loadReportingAutomation()]);
 
   return (
     <div>
@@ -129,7 +164,7 @@ export default async function ReportingPage({ searchParams }: ReportingPageProps
         description={`${filteredReports.length} operational report${filteredReports.length === 1 ? '' : 's'} ready for drill-through`}
       />
 
-      {signals.warnings.length > 0 && (
+      {[...signals.warnings, ...automation.warnings].length > 0 && (
         <div className="mb-6 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-900">
           Some live report signals could not be loaded. The report destinations are still available.
         </div>
@@ -166,6 +201,12 @@ export default async function ReportingPage({ searchParams }: ReportingPageProps
       )}
 
       <ReportingExportActions reports={filteredReports} savedViews={savedViews} />
+
+      <ReportingSubscriptionsPanel
+        savedViews={savedViews}
+        initialSubscriptions={automation.subscriptions}
+        initialExportRuns={automation.exportRuns}
+      />
 
       <section className="mb-6">
         <div className="mb-3 flex items-center justify-between gap-3">

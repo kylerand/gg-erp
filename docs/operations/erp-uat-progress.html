@@ -241,8 +241,9 @@
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: ShopMonkey cutover readiness is blocked on missing parts and purchase-order
-          source exports. Preflight and isolated rehearsal evidence now fail that gate explicitly.
+          Current focus: reporting saved-view subscriptions and in-app CSV export evidence are being
+          made live. ShopMonkey cutover readiness remains blocked on missing parts and
+          purchase-order source exports.
         </p>
         <div class="progress" aria-label="95 percent complete"><div style="width: 95%"></div></div>
       </section>
@@ -292,8 +293,8 @@
                 Technician-task transitions now fail cleanly when unassigned work is started, My
                 Queue refreshes from the server after rejected task transitions, and manual New Work
                 Order creation now creates execution-layer work orders with operations and BOM part
-                demand from released planning packages. The live API smoke enforces the
-                `POST /tickets/work-orders` route with no pending-route allowance.
+                demand from released planning packages. The live API smoke enforces the `POST
+                /tickets/work-orders` route with no pending-route allowance.
               </td>
               <td>
                 Keep expanding routing, costing, job-card, and quality-gate depth as master APIs
@@ -324,8 +325,8 @@
                 those references instead of leaving records stranded in planning-only storage.
                 Work-order list selectors resolve cart and customer context instead of rendering
                 vehicle/configuration IDs, and Planning exposes the build package catalog as an
-                operator page. The catalog now includes authored build-configuration and approved-BOM
-                packages in addition to reusable history.
+                operator page. The catalog now includes authored build-configuration and
+                approved-BOM packages in addition to reusable history.
               </td>
               <td>
                 Backfill richer routing, job-card, and costing selectors once those master APIs are
@@ -349,12 +350,12 @@
               <td>Customer and dealer ops</td>
               <td><span class="pill done">Done</span></td>
               <td>
-                Customer/dealer landing cards use strict live totals for customers, dedicated
-                dealer accounts, and explicit dealer relationship rows. Dealer accounts read the
+                Customer/dealer landing cards use strict live totals for customers, dedicated dealer
+                accounts, and explicit dealer relationship rows. Dealer accounts read the
                 `customers.dealer_accounts` model with customer profile context, and relationship
                 rows read `customers.customer_dealer_relationships` with dealer, customer, cart,
-                status, and action-link context. Deploy migrations seed existing commercial
-                customer profiles and dealer-owned carts into the dedicated model.
+                status, and action-link context. Deploy migrations seed existing commercial customer
+                profiles and dealer-owned carts into the dedicated model.
               </td>
               <td>
                 Add create/update dealer assignment workflows once relationship ownership mutation
@@ -479,25 +480,28 @@
                 action text, and direct links into work orders, dispatch, parts, and messages.
                 Operators can now acknowledge or escalate each blocker with a persisted triage note
                 in `reporting.blocked_alert_triage_events`, and the page refreshes acknowledged and
-                escalated counts from the live feed.
+                escalated counts from the live feed. Saved report views now support persisted in-app
+                CSV subscriptions, pause/enable controls, run-now export evidence, and latest CSV
+                downloads backed by `reporting.report_subscriptions` and
+                `reporting.report_export_runs`.
               </td>
               <td>
-                Add persisted report subscriptions and scheduled exports once delivery preferences
-                are designed.
+                Add external delivery channels and recipient preferences after email/Slack policy is
+                chosen.
               </td>
             </tr>
             <tr>
               <td>ShopMonkey cutover readiness</td>
               <td><span class="pill todo">Blocked</span></td>
               <td>
-                `/admin/migration` is registered in the admin catalog and reads live
-                `GET /migration/batches` data with mock fallback disabled. The page summarizes
-                rehearsal batches, record coverage, migration errors, and cutover gate status, then
-                links into customers, parts, work orders, and accounting sync for imported-domain
-                inspection. `validate:shopmonkey-cutover` now produces sanitized JSON/HTML
-                preflight evidence; the latest report fails because the current export contains
-                zero parts and zero purchase orders. `rehearse:shopmonkey-cutover` runs the loader
-                against a disposable PostgreSQL database and writes counts-only evidence to
+                `/admin/migration` is registered in the admin catalog and reads live `GET
+                /migration/batches` data with mock fallback disabled. The page summarizes rehearsal
+                batches, record coverage, migration errors, and cutover gate status, then links into
+                customers, parts, work orders, and accounting sync for imported-domain inspection.
+                `validate:shopmonkey-cutover` now produces sanitized JSON/HTML preflight evidence;
+                the latest report fails because the current export contains zero parts and zero
+                purchase orders. `rehearse:shopmonkey-cutover` runs the loader against a disposable
+                PostgreSQL database and writes counts-only evidence to
                 `docs/operations/shopmonkey-isolated-rehearsal.html`; the current rehearsal proves
                 migrations and the loader can load 28 employees, 447 customers, 56 vehicles, 465
                 work orders, and 25 vendors with zero migration errors, then fails the production
@@ -512,13 +516,13 @@
               <td>Production reference seed</td>
               <td><span class="pill done">Done</span></td>
               <td>
-                Baseline roles, permissions, role-permission grants, stock locations, stock bins, and
-                `MVP_BASELINE` planning constraints are seeded through idempotent reference
+                Baseline roles, permissions, role-permission grants, stock locations, stock bins,
+                and `MVP_BASELINE` planning constraints are seeded through idempotent reference
                 migrations. Stock bins now exist in the deploy-applied Prisma schema with day-one
                 `GENERAL`, `INBOUND`, and bay `WIP` bins, and dealer account/relationship bootstrap
-                rows are derived from live commercial customer and cart ownership records. The isolated
-                ShopMonkey cutover rehearsal now verifies those reference seed gates inside the
-                disposable database before emitting evidence.
+                rows are derived from live commercial customer and cart ownership records. The
+                isolated ShopMonkey cutover rehearsal now verifies those reference seed gates inside
+                the disposable database before emitting evidence.
               </td>
               <td>Keep seed gates in the cutover artifact as reference data evolves.</td>
             </tr>
@@ -526,32 +530,37 @@
               <td>Inventory stock-bin schema</td>
               <td><span class="pill done">Done</span></td>
               <td>
-                The deploy migration chain now creates `inventory.stock_bins`, indexes active bins by
-                location/code/state/pickability, exposes a Prisma `StockBin` model, and seeds the
+                The deploy migration chain now creates `inventory.stock_bins`, indexes active bins
+                by location/code/state/pickability, exposes a Prisma `StockBin` model, and seeds the
                 default warehouse, receiving, and bay bins.
               </td>
-              <td>Add bin-aware lot, reservation, and movement mutations when the UI starts collecting bin-level stock actions.</td>
+              <td>
+                Add bin-aware lot, reservation, and movement mutations when the UI starts collecting
+                bin-level stock actions.
+              </td>
             </tr>
             <tr>
               <td>Fresh Prisma deploy reliability</td>
               <td><span class="pill done">Done</span></td>
               <td>
-                The inventory reservation storage migration now drops duplicate check constraints before
-                re-adding them, the Prisma migration integrity script rejects unsafe duplicate
-                inline/add-constraint patterns, and a throwaway Postgres deploy applied all 29
-                migrations from an empty database.
+                The inventory reservation storage migration now drops duplicate check constraints
+                before re-adding them, the Prisma migration integrity script rejects unsafe
+                duplicate inline/add-constraint patterns, and a throwaway Postgres deploy applied
+                all 29 migrations from an empty database.
               </td>
-              <td>Keep fresh-deploy verification in release checks when migration tooling changes.</td>
+              <td>
+                Keep fresh-deploy verification in release checks when migration tooling changes.
+              </td>
             </tr>
             <tr>
               <td>Admin configuration catalog</td>
               <td><span class="pill done">Done</span></td>
               <td>
                 `ERP_ADMIN_CONFIGURATION_DOMAINS` backs the admin landing catalog with live
-                user-access, accounting-settings, integration-health, migration-cutover, and audit-trail
-                destinations; integration health uses strict live QuickBooks, sync queue, account,
-                and reconciliation sources, and `/admin/accounting` configures live QuickBooks
-                dimension and tax mappings.
+                user-access, accounting-settings, integration-health, migration-cutover, and
+                audit-trail destinations; integration health uses strict live QuickBooks, sync
+                queue, account, and reconciliation sources, and `/admin/accounting` configures live
+                QuickBooks dimension and tax mappings.
               </td>
               <td>Add API-key, webhook, and template domains only when those APIs exist.</td>
             </tr>

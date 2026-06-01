@@ -77,6 +77,9 @@ type LedgerPaymentSyncRecord = Awaited<
 type LedgerReconciliationRecord = Awaited<
   ReturnType<typeof prisma.reconciliationRecord.findMany>
 >[number];
+type AccountingJournalWithLines = Prisma.AccountingJournalEntryGetPayload<{
+  include: { lines: true };
+}>;
 
 type OperationalLedgerSourceType =
   | 'PAYABLE_RECEIPT'
@@ -125,6 +128,46 @@ interface OperationalLedgerPostingRule {
   status: 'active-preview';
 }
 
+type AccountingJournalStatus = 'POSTED' | 'REVERSED';
+
+interface AccountingJournalLineResponse {
+  id: string;
+  lineNumber: number;
+  accountName: string;
+  accountCode: string | null;
+  debitCents: number;
+  creditCents: number;
+  memo: string | null;
+  dimensionType: string | null;
+  dimensionId: string | null;
+}
+
+interface AccountingJournalResponse {
+  id: string;
+  journalNumber: string;
+  sourceType: OperationalLedgerSourceType;
+  sourceId: string;
+  sourceLedgerEntryId: string;
+  sourceDocumentNumber: string;
+  counterparty: string | null;
+  ledgerDate: string;
+  currencyCode: 'USD';
+  status: AccountingJournalStatus;
+  totalDebitCents: number;
+  totalCreditCents: number;
+  memo: string | null;
+  postedAt: string;
+  postedBy: string | null;
+  correlationId: string | null;
+  lines: AccountingJournalLineResponse[];
+}
+
+interface JournalPostRequest {
+  confirm?: boolean;
+  sourceType?: OperationalLedgerSourceType;
+  limit?: number;
+}
+
 const OPERATIONAL_LEDGER_SOURCE_TYPES = new Set<OperationalLedgerSourceType>([
   'PAYABLE_RECEIPT',
   'CUSTOMER_PAYMENT',
@@ -140,6 +183,11 @@ const OPERATIONAL_LEDGER_STATUSES = new Set<OperationalLedgerStatus>([
   'RESOLVED',
 ]);
 const PAYABLE_LEDGER_STATES = ['PARTIALLY_RECEIVED', 'RECEIVED'] as const;
+const ACCOUNTING_JOURNAL_STATUSES = new Set<AccountingJournalStatus>(['POSTED', 'REVERSED']);
+const JOURNAL_POSTABLE_STATUSES = new Set<OperationalLedgerStatus>([
+  'READY_FOR_REVIEW',
+  'POSTED',
+]);
 
 const OPERATIONAL_LEDGER_POSTING_RULES: OperationalLedgerPostingRule[] = [
   {
@@ -388,6 +436,230 @@ function summarizeLedgerEntries(entries: OperationalLedgerEntry[], exceptions: L
     exceptions,
   };
 }
+
+async function loadOperationalLedgerSnapshot(take: number): Promise<{
+  entries: OperationalLedgerEntry[];
+  exceptions: LedgerExceptionCounts;
+}> {
+  const [
+    payables,
+    payments,
+    reconciliationRecords,
+    invoiceFailures,
+    customerFailures,
+    paymentFailures,
+    reconciliationMismatches,
+  ] = await Promise.all([
+    operationalLedgerQueries.listPayablePurchaseOrders(take),
+    operationalLedgerQueries.listPaymentSyncRecords(take),
+    operationalLedgerQueries.listReconciliationRecords(take),
+    operationalLedgerQueries.countInvoiceFailures(),
+    operationalLedgerQueries.countCustomerFailures(),
+    operationalLedgerQueries.countPaymentFailures(),
+    operationalLedgerQueries.countReconciliationMismatches(),
+  ]);
+
+  const entries = [
+    ...payables.map(buildPayableLedgerEntry).filter((entry): entry is OperationalLedgerEntry => !!entry),
+    ...payments.map(buildPaymentLedgerEntry),
+    ...reconciliationRecords.map(buildReconciliationLedgerEntry),
+  ].sort((a, b) => Date.parse(b.ledgerDate) - Date.parse(a.ledgerDate));
+
+  return {
+    entries,
+    exceptions: {
+      invoice: invoiceFailures,
+      customer: customerFailures,
+      payment: paymentFailures,
+      reconciliation: reconciliationMismatches,
+    },
+  };
+}
+
+function parseJournalLimit(value: string | number | undefined, fallback = 50): number {
+  const parsed = Number(value ?? fallback);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(Math.trunc(parsed), 200);
+}
+
+function parseJournalOffset(value: string | undefined): number {
+  const parsed = Number(value ?? 0);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return Math.trunc(parsed);
+}
+
+function accountCodeFromName(name: string): string {
+  return name
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 48);
+}
+
+function journalNumberForLedgerEntry(entry: OperationalLedgerEntry): string {
+  const sourcePrefix: Record<OperationalLedgerSourceType, string> = {
+    PAYABLE_RECEIPT: 'AP',
+    CUSTOMER_PAYMENT: 'PAY',
+    RECONCILIATION_VARIANCE: 'REC',
+  };
+  const ledgerDate = entry.ledgerDate.slice(0, 10).replace(/-/g, '');
+  const sourceSuffix = entry.sourceId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 10).toUpperCase();
+  return `GJ-${sourcePrefix[entry.sourceType]}-${ledgerDate}-${sourceSuffix}`;
+}
+
+function isPostableOperationalEntry(entry: OperationalLedgerEntry): boolean {
+  return (
+    JOURNAL_POSTABLE_STATUSES.has(entry.status) &&
+    entry.debitCents === entry.creditCents &&
+    entry.debitCents > 0
+  );
+}
+
+function mapJournal(entry: AccountingJournalWithLines): AccountingJournalResponse {
+  return {
+    id: entry.id,
+    journalNumber: entry.journalNumber,
+    sourceType: entry.sourceType as OperationalLedgerSourceType,
+    sourceId: entry.sourceId,
+    sourceLedgerEntryId: entry.sourceLedgerEntryId,
+    sourceDocumentNumber: entry.sourceDocumentNumber,
+    counterparty: entry.counterparty,
+    ledgerDate: entry.ledgerDate.toISOString(),
+    currencyCode: 'USD',
+    status: entry.status as AccountingJournalStatus,
+    totalDebitCents: entry.totalDebitCents,
+    totalCreditCents: entry.totalCreditCents,
+    memo: entry.memo,
+    postedAt: entry.postedAt.toISOString(),
+    postedBy: entry.postedBy,
+    correlationId: entry.correlationId,
+    lines: entry.lines
+      .slice()
+      .sort((a, b) => a.lineNumber - b.lineNumber)
+      .map((line) => ({
+        id: line.id,
+        lineNumber: line.lineNumber,
+        accountName: line.accountName,
+        accountCode: line.accountCode,
+        debitCents: line.debitCents,
+        creditCents: line.creditCents,
+        memo: line.memo,
+        dimensionType: line.dimensionType,
+        dimensionId: line.dimensionId,
+      })),
+  };
+}
+
+function summarizeJournals(entries: AccountingJournalResponse[]) {
+  const sourceTotals = Object.fromEntries(
+    [...OPERATIONAL_LEDGER_SOURCE_TYPES].map((sourceType) => [
+      sourceType,
+      { count: 0, amountCents: 0 },
+    ]),
+  ) as Record<OperationalLedgerSourceType, { count: number; amountCents: number }>;
+
+  for (const entry of entries) {
+    sourceTotals[entry.sourceType].count += 1;
+    sourceTotals[entry.sourceType].amountCents += entry.totalDebitCents;
+  }
+
+  return {
+    generatedAt: new Date().toISOString(),
+    entryCount: entries.length,
+    totalDebitCents: entries.reduce((sum, entry) => sum + entry.totalDebitCents, 0),
+    totalCreditCents: entries.reduce((sum, entry) => sum + entry.totalCreditCents, 0),
+    sourceTotals,
+  };
+}
+
+export const accountingJournalQueries = {
+  async list(params: {
+    take: number;
+    skip: number;
+    sourceType?: OperationalLedgerSourceType;
+    status?: AccountingJournalStatus;
+  }): Promise<AccountingJournalWithLines[]> {
+    return prisma.accountingJournalEntry.findMany({
+      where: {
+        ...(params.sourceType ? { sourceType: params.sourceType } : {}),
+        ...(params.status ? { status: params.status } : {}),
+      },
+      include: { lines: true },
+      orderBy: [{ ledgerDate: 'desc' }, { postedAt: 'desc' }],
+      take: params.take,
+      skip: params.skip,
+    });
+  },
+  async count(params: {
+    sourceType?: OperationalLedgerSourceType;
+    status?: AccountingJournalStatus;
+  }): Promise<number> {
+    return prisma.accountingJournalEntry.count({
+      where: {
+        ...(params.sourceType ? { sourceType: params.sourceType } : {}),
+        ...(params.status ? { status: params.status } : {}),
+      },
+    });
+  },
+  async findBySource(entry: OperationalLedgerEntry): Promise<AccountingJournalWithLines | null> {
+    return prisma.accountingJournalEntry.findUnique({
+      where: { sourceType_sourceId: { sourceType: entry.sourceType, sourceId: entry.sourceId } },
+      include: { lines: true },
+    });
+  },
+  async createFromOperationalEntry(
+    entry: OperationalLedgerEntry,
+    context: { actorId: string; correlationId: string },
+  ): Promise<AccountingJournalWithLines> {
+    const existing = await this.findBySource(entry);
+    if (existing) return existing;
+
+    return prisma.accountingJournalEntry.create({
+      data: {
+        journalNumber: journalNumberForLedgerEntry(entry),
+        sourceType: entry.sourceType,
+        sourceId: entry.sourceId,
+        sourceLedgerEntryId: entry.id,
+        sourceDocumentNumber: entry.documentNumber,
+        counterparty: entry.counterparty,
+        ledgerDate: new Date(entry.ledgerDate),
+        currencyCode: entry.currency,
+        status: 'POSTED',
+        totalDebitCents: entry.debitCents,
+        totalCreditCents: entry.creditCents,
+        memo: entry.memo,
+        postedBy: context.actorId,
+        correlationId: context.correlationId,
+        lines: {
+          create: [
+            {
+              lineNumber: 1,
+              accountName: entry.accountDebit,
+              accountCode: accountCodeFromName(entry.accountDebit),
+              debitCents: entry.debitCents,
+              creditCents: 0,
+              memo: entry.memo,
+              dimensionType: entry.relatedRecordType,
+              dimensionId: entry.relatedRecordId,
+            },
+            {
+              lineNumber: 2,
+              accountName: entry.accountCredit,
+              accountCode: accountCodeFromName(entry.accountCredit),
+              debitCents: 0,
+              creditCents: entry.creditCents,
+              memo: entry.memo,
+              dimensionType: entry.relatedRecordType,
+              dimensionId: entry.relatedRecordId,
+            },
+          ],
+        },
+      },
+      include: { lines: true },
+    });
+  },
+};
 
 // ─── OAuth: redirect to QB ────────────────────────────────────────────────────
 
@@ -1491,29 +1763,8 @@ export const listOperationalLedgerHandler = wrapHandler(async (ctx) => {
   }
 
   const take = Math.min(limit + offset, 200);
-  const [
-    payables,
-    payments,
-    reconciliationRecords,
-    invoiceFailures,
-    customerFailures,
-    paymentFailures,
-    reconciliationMismatches,
-  ] = await Promise.all([
-    operationalLedgerQueries.listPayablePurchaseOrders(take),
-    operationalLedgerQueries.listPaymentSyncRecords(take),
-    operationalLedgerQueries.listReconciliationRecords(take),
-    operationalLedgerQueries.countInvoiceFailures(),
-    operationalLedgerQueries.countCustomerFailures(),
-    operationalLedgerQueries.countPaymentFailures(),
-    operationalLedgerQueries.countReconciliationMismatches(),
-  ]);
-
-  const entries = [
-    ...payables.map(buildPayableLedgerEntry).filter((entry): entry is OperationalLedgerEntry => !!entry),
-    ...payments.map(buildPaymentLedgerEntry),
-    ...reconciliationRecords.map(buildReconciliationLedgerEntry),
-  ]
+  const snapshot = await loadOperationalLedgerSnapshot(take);
+  const entries = snapshot.entries
     .filter((entry) => !sourceType || entry.sourceType === sourceType)
     .filter((entry) => !status || entry.status === status)
     .sort((a, b) => Date.parse(b.ledgerDate) - Date.parse(a.ledgerDate));
@@ -1523,13 +1774,100 @@ export const listOperationalLedgerHandler = wrapHandler(async (ctx) => {
     total: entries.length,
     limit,
     offset,
-    summary: summarizeLedgerEntries(entries, {
-      invoice: invoiceFailures,
-      customer: customerFailures,
-      payment: paymentFailures,
-      reconciliation: reconciliationMismatches,
-    }),
+    summary: summarizeLedgerEntries(entries, snapshot.exceptions),
     postingRules: OPERATIONAL_LEDGER_POSTING_RULES,
+  });
+}, { requireAuth: false });
+
+// ─── Accounting journals ────────────────────────────────────────────────────
+
+export const listAccountingJournalsHandler = wrapHandler(async (ctx) => {
+  const qs = ctx.event.queryStringParameters ?? {};
+  const limit = parseJournalLimit(qs.limit);
+  const offset = parseJournalOffset(qs.offset);
+  const sourceType = qs.sourceType as OperationalLedgerSourceType | undefined;
+  const status = qs.status as AccountingJournalStatus | undefined;
+
+  if (sourceType && !OPERATIONAL_LEDGER_SOURCE_TYPES.has(sourceType)) {
+    return jsonResponse(422, {
+      message: `Invalid sourceType. Must be one of: ${[...OPERATIONAL_LEDGER_SOURCE_TYPES].join(', ')}`,
+    });
+  }
+  if (status && !ACCOUNTING_JOURNAL_STATUSES.has(status)) {
+    return jsonResponse(422, {
+      message: `Invalid status. Must be one of: ${[...ACCOUNTING_JOURNAL_STATUSES].join(', ')}`,
+    });
+  }
+
+  const [rows, total] = await Promise.all([
+    accountingJournalQueries.list({ take: limit, skip: offset, sourceType, status }),
+    accountingJournalQueries.count({ sourceType, status }),
+  ]);
+  const items = rows.map(mapJournal);
+
+  return jsonResponse(200, {
+    items,
+    total,
+    limit,
+    offset,
+    summary: summarizeJournals(items),
+  });
+}, { requireAuth: false });
+
+export const postOperationalLedgerJournalsHandler = wrapHandler(async (ctx) => {
+  const body = parseBody<JournalPostRequest>(ctx.event);
+  if (!body.ok) {
+    return jsonResponse(400, { message: body.error });
+  }
+  if (body.value.confirm !== true) {
+    return jsonResponse(400, {
+      message: 'Set confirm=true to post operational ledger entries into immutable journals.',
+    });
+  }
+  if (
+    body.value.sourceType &&
+    !OPERATIONAL_LEDGER_SOURCE_TYPES.has(body.value.sourceType)
+  ) {
+    return jsonResponse(422, {
+      message: `Invalid sourceType. Must be one of: ${[...OPERATIONAL_LEDGER_SOURCE_TYPES].join(', ')}`,
+    });
+  }
+
+  const limit = parseJournalLimit(body.value.limit, 100);
+  const snapshot = await loadOperationalLedgerSnapshot(limit);
+  const sourceEntries = snapshot.entries.filter(
+    (entry) => !body.value.sourceType || entry.sourceType === body.value.sourceType,
+  );
+  const candidates = sourceEntries
+    .filter(isPostableOperationalEntry)
+    .slice(0, limit);
+
+  const posted: AccountingJournalResponse[] = [];
+  const skipped = {
+    notPostable: sourceEntries.length - candidates.length,
+    existing: 0,
+  };
+
+  for (const entry of candidates) {
+    const existing = await accountingJournalQueries.findBySource(entry);
+    if (existing) {
+      skipped.existing += 1;
+      posted.push(mapJournal(existing));
+      continue;
+    }
+
+    const journal = await accountingJournalQueries.createFromOperationalEntry(entry, {
+      actorId: ctx.actorUserId ?? 'system',
+      correlationId: ctx.correlationId,
+    });
+    posted.push(mapJournal(journal));
+  }
+
+  return jsonResponse(201, {
+    posted,
+    postedCount: posted.length - skipped.existing,
+    skipped,
+    summary: summarizeJournals(posted),
   });
 }, { requireAuth: false });
 

@@ -345,39 +345,39 @@
       <header>
         <h1>Golfin Garage ERP Project Overview</h1>
         <p class="lede">
-          High-level status after the planning review-pack and accounting operational-ledger
-          slices. The app has moved past polished static screens into a usable shop-ops ERP
-          foundation, but ShopMonkey cutover remains blocked until complete parts and purchase-order
-          source exports are captured.
+          High-level status after the planning review-pack, accounting operational-ledger, and
+          journal-posting slices. The app has moved past polished static screens into a usable
+          shop-ops ERP foundation, but ShopMonkey cutover remains blocked until complete parts and
+          purchase-order source exports are captured.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 1, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 164</span>
-          <span class="chip">Active slice: Accounting operational ledger foundation</span>
+          <span class="chip">Baseline: origin/main through PR 166</span>
+          <span class="chip">Active slice: Accounting journal posting foundation</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
 
       <div class="summary">
         <div class="metric">
-          <strong>78%</strong>
+          <strong>79%</strong>
           <span>Estimated production readiness for an internal ERP rollout.</span>
-          <div class="bar warn"><span style="width: 78%"></span></div>
+          <div class="bar warn"><span style="width: 79%"></span></div>
         </div>
         <div class="metric">
-          <strong>91%</strong>
+          <strong>92%</strong>
           <span>Actionability remediation from the UAT plan.</span>
-          <div class="bar good"><span style="width: 91%"></span></div>
+          <div class="bar good"><span style="width: 92%"></span></div>
         </div>
         <div class="metric">
-          <strong>78%</strong>
+          <strong>80%</strong>
           <span>Live workflow/API contract completeness.</span>
-          <div class="bar warn"><span style="width: 78%"></span></div>
+          <div class="bar warn"><span style="width: 80%"></span></div>
         </div>
         <div class="metric">
-          <strong>61%</strong>
+          <strong>64%</strong>
           <span>ERPNext-style breadth: ledgers, lifecycle, setup, reports.</span>
-          <div class="bar risk"><span style="width: 61%"></span></div>
+          <div class="bar risk"><span style="width: 64%"></span></div>
         </div>
       </div>
 
@@ -422,6 +422,10 @@
                 Reporting now has a live in-app automation path: saved-view subscriptions,
                 pause/enable controls, run-now export evidence, and downloadable CSV output.
               </li>
+              <li>
+                Accounting now has a live operational ledger, posted journal-entry model, and a
+                guarded journal-posting action for balanced ready payables and customer payments.
+              </li>
             </ul>
           </div>
           <div class="callout">
@@ -441,15 +445,14 @@
                 grows.
               </li>
               <li>
-                Accounting is still integration-first, but the active slice adds a first-party
-                operational ledger surface from live payables, payments, and reconciliation
-                variance. Immutable GL journals, financial reports, and close controls remain
-                future maturity work.
+                Accounting is still integration-first, but the active slice promotes ready
+                operational ledger entries into first-party immutable journals. Financial reports,
+                close controls, and invoice/payment document depth remain future maturity work.
               </li>
               <li>
-                API smoke route exceptions are back to zero on deployed main. This branch adds one
-                pending-deploy accounting ledger route exception that should be removed after CD
-                proves the new API Gateway route reaches Lambda.
+                API smoke route exceptions are back to zero on deployed main. This branch adds two
+                pending-deploy accounting journal route exceptions that should be removed after CD
+                proves the new API Gateway routes reach Lambda.
               </li>
             </ul>
           </div>
@@ -481,16 +484,16 @@
               </td>
               <td>June 4, 2026</td>
               <td>
-                <span class="pill doing">76%</span>
-                <div class="bar warn"><span style="width: 76%"></span></div>
+                <span class="pill doing">78%</span>
+                <div class="bar warn"><span style="width: 78%"></span></div>
               </td>
               <td>
                 Internal users can complete normal shop workflows without placeholder clicks or
                 route misses.
               </td>
               <td>
-                Reconcile remaining stale status docs, finish remaining selectors, and run live UAT
-                scripts by role.
+                Keep status docs current, remove pending-deploy journal route exceptions after CD,
+                and run live UAT scripts by role.
               </td>
             </tr>
             <tr>
@@ -499,8 +502,8 @@
               </td>
               <td>June 20, 2026</td>
               <td>
-                <span class="pill doing">65%</span>
-                <div class="bar warn"><span style="width: 65%"></span></div>
+                <span class="pill doing">66%</span>
+                <div class="bar warn"><span style="width: 66%"></span></div>
               </td>
               <td>
                 Sales, work orders, inventory, purchasing, training, reporting, and admin can run a
@@ -519,13 +522,13 @@
               </td>
               <td>July 20, 2026</td>
               <td>
-                <span class="pill watch">48%</span>
-                <div class="bar risk"><span style="width: 48%"></span></div>
+                <span class="pill watch">51%</span>
+                <div class="bar risk"><span style="width: 51%"></span></div>
               </td>
               <td>The app behaves like one ERP, not a collection of good module pages.</td>
               <td>
-                Convert operational accounting entries into immutable journal consequences; harden
-                read models and freshness signals; complete setup/configuration domains.
+                Deploy and clean up journal posting routes; harden read models and freshness
+                signals; complete setup/configuration domains.
               </td>
             </tr>
             <tr>
@@ -536,15 +539,15 @@
               </td>
               <td>August 19, 2026</td>
               <td>
-                <span class="pill watch">36%</span>
-                <div class="bar risk"><span style="width: 36%"></span></div>
+                <span class="pill watch">39%</span>
+                <div class="bar risk"><span style="width: 39%"></span></div>
               </td>
               <td>
                 Business objects, lifecycle, reports, settings, permissions, ledgers, and role
                 workspaces are consistent across the ERP.
               </td>
               <td>
-                Standardize document lifecycle, immutable accounting journals, financial reports,
+                Standardize document lifecycle, financial reports, close controls,
                 warranty/support flows, and setup masters.
               </td>
             </tr>
@@ -637,14 +640,14 @@
           <div class="module-card">
             <header>
               <h3>Accounting And QuickBooks</h3>
-              <span class="pill doing">62%</span>
+              <span class="pill doing">66%</span>
             </header>
-            <div class="bar warn"><span style="width: 62%"></span></div>
+            <div class="bar warn"><span style="width: 66%"></span></div>
             <p>
               QuickBooks integration, sync status, reconciliation, payable review, mapping admin,
-              reference views, and an operational ledger preview now exist. Full ERP accounting
-              still needs immutable GL journals, invoices/payments, financial reports, close
-              controls, and a clean webhook error path.
+              reference views, an operational ledger, and guarded journal posting now exist. Full
+              ERP accounting still needs financial reports, close controls, richer
+              invoices/payments, reversal flows, and a clean webhook error path.
             </p>
           </div>
 
@@ -704,9 +707,9 @@
           <div class="module-card">
             <header>
               <h3>QA, CI, CD, Operations</h3>
-              <span class="pill doing">78%</span>
+              <span class="pill doing">80%</span>
             </header>
-            <div class="bar good"><span style="width: 78%"></span></div>
+            <div class="bar good"><span style="width: 80%"></span></div>
             <p>
               PR and main CI/QA/CD discipline is strong. The remaining work is better role-based
               live UAT, deeper data assertions, route-registry drift checks, and cleanup of stale
@@ -731,9 +734,9 @@
               <td>Latest production baseline</td>
               <td><span class="pill done">Merged</span></td>
               <td>
-                <code>origin/main</code> is through PR 164 after the ECO review-pack deploy and
-                QA allowlist cleanup. This branch adds the first accounting operational-ledger
-                surface.
+                <code>origin/main</code> is through PR 166 after the accounting operational-ledger
+                deploy and QA allowlist cleanup. This branch adds immutable journal posting from
+                eligible operational ledger entries.
               </td>
             </tr>
             <tr>
@@ -741,17 +744,18 @@
               <td><span class="pill done">Green</span></td>
               <td>
                 Latest main CI, QA smoke, QA coverage, Pages, and CD runs completed successfully
-                after PR 164 merged. The latest CD path proved the planning review-pack route live;
-                this branch will require the same PR CI, main CD, and live-smoke loop.
+                after PR 166 merged. The latest CD path proved the accounting operational-ledger
+                route live; this branch will require the same PR CI, main CD, live-smoke, and
+                route-allowlist cleanup loop.
               </td>
             </tr>
             <tr>
               <td>Route/API surface</td>
               <td><span class="pill info">Broad</span></td>
               <td>
-                Current smoke discovery covers 186 API routes after adding the accounting
-                operational-ledger API. The branch has broad Lambda handler and API test coverage
-                across planning, inventory, tickets, reporting, accounting, and sales.
+                Current smoke discovery covers 186 deployed API routes after the accounting ledger
+                cleanup. This branch adds two accounting journal routes, bringing local discovery to
+                188 before CD deploys them.
               </td>
             </tr>
             <tr>
@@ -763,18 +767,19 @@
               <td>ERP registry direction</td>
               <td><span class="pill doing">In Progress</span></td>
               <td>
-                The registry defines a live accounting-ledger object and Accounting workspace link
-                in addition to the existing planning, inventory, reporting, and integration
-                destinations.
+                The registry defines live accounting-ledger and accounting-journal objects and
+                Accounting workspace links in addition to the existing planning, inventory,
+                reporting, and integration destinations.
               </td>
             </tr>
             <tr>
               <td>Known route exceptions</td>
-              <td><span class="pill watch">1 Pending Deploy</span></td>
+              <td><span class="pill watch">2 Pending Deploy</span></td>
               <td>
-                <code>known-broken.json</code> contains a short-lived pending-deploy entry for
-                <code>GET /accounting/operational-ledger</code>. Remove it after CD deploys the
-                Terraform route and live smoke confirms the request reaches Lambda.
+                <code>known-broken.json</code> contains short-lived pending-deploy entries for
+                <code>GET /accounting/journals</code> and
+                <code>POST /accounting/journals/post-operational-ledger</code>. Remove them after
+                CD deploys the Terraform routes and live smoke confirms requests reach Lambda.
               </td>
             </tr>
           </tbody>
@@ -800,9 +805,12 @@
             work-order provenance, and version diff workflows need a heavier change-control gate.
           </li>
           <li>
-            <strong>Turn ledger preview into journals:</strong> promote the operational ledger
-            source rules into immutable GL journal tables and posting services before adding more
-            financial-report UI.
+            <strong>Deploy and clean journal posting:</strong> land the immutable journal route
+            slice, prove CD/live smoke, then remove the two pending-deploy QA route exceptions.
+          </li>
+          <li>
+            <strong>Add accounting reports and close controls:</strong> use posted journals as the
+            source for trial-balance-style summaries, review queues, and reversal/close workflows.
           </li>
         </ol>
       </section>

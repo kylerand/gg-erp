@@ -429,6 +429,15 @@ export const ERP_WORKSPACES = [
         keywords: ['ledger', 'journal', 'gl', 'payables', 'payments', 'reconciliation'],
       },
       {
+        key: 'accounting-journal',
+        label: 'Journal Entries',
+        description: 'Review posted debit and credit lines created from operational entries.',
+        route: '/accounting/ledger',
+        status: 'live',
+        objectKey: 'accounting-journal',
+        keywords: ['journal', 'gl', 'posted', 'debit', 'credit'],
+      },
+      {
         key: 'accounting-reconciliation',
         label: 'Reconciliation',
         description: 'Compare ERP and QuickBooks records.',

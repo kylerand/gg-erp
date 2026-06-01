@@ -1289,9 +1289,13 @@ test('accounting sync monitor exposes live purchase-order payable handoff', () =
   );
 
   assert.deepEqual(
-    ['vendor-payable', '/accounting/sync?view=payables', 'accounting-ledger', '/accounting/ledger'].filter(
-      (snippet) => !workspaceSource.includes(snippet) || !registrySource.includes(snippet),
-    ),
+    [
+      'vendor-payable',
+      '/accounting/sync?view=payables',
+      'accounting-ledger',
+      'accounting-journal',
+      '/accounting/ledger',
+    ].filter((snippet) => !workspaceSource.includes(snippet) || !registrySource.includes(snippet)),
     [],
   );
 
@@ -1301,7 +1305,10 @@ test('accounting sync monitor exposes live purchase-order payable handoff', () =
       'export async function listPaymentSyncRecords',
       'export async function retryPaymentSync',
       'export async function listOperationalLedger',
+      'export async function listAccountingJournals',
+      'export async function postOperationalLedgerJournals',
       '/accounting/operational-ledger',
+      '/accounting/journals',
     ].filter((snippet) => !apiClientSource.includes(snippet)),
     [],
   );
@@ -1310,6 +1317,10 @@ test('accounting sync monitor exposes live purchase-order payable handoff', () =
     [
       'const STRICT_LIVE_DATA = { allowMockFallback: false } as const',
       'listOperationalLedger(',
+      'listAccountingJournals(',
+      'postOperationalLedgerJournals(',
+      'Post ready journals',
+      'Posted journals',
       'Payable receipts',
       'Customer payments',
       'Reconciliation variance',

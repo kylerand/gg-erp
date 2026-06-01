@@ -3560,6 +3560,124 @@ export async function listOperationalLedger(
   );
 }
 
+export type AccountingJournalStatus = 'POSTED' | 'REVERSED';
+
+export interface AccountingJournalLine {
+  id: string;
+  lineNumber: number;
+  accountName: string;
+  accountCode: string | null;
+  debitCents: number;
+  creditCents: number;
+  memo: string | null;
+  dimensionType: string | null;
+  dimensionId: string | null;
+}
+
+export interface AccountingJournalEntry {
+  id: string;
+  journalNumber: string;
+  sourceType: OperationalLedgerSourceType;
+  sourceId: string;
+  sourceLedgerEntryId: string;
+  sourceDocumentNumber: string;
+  counterparty: string | null;
+  ledgerDate: string;
+  currencyCode: 'USD';
+  status: AccountingJournalStatus;
+  totalDebitCents: number;
+  totalCreditCents: number;
+  memo: string | null;
+  postedAt: string;
+  postedBy: string | null;
+  correlationId: string | null;
+  lines: AccountingJournalLine[];
+}
+
+export interface AccountingJournalResponse {
+  items: AccountingJournalEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+  summary: {
+    generatedAt: string;
+    entryCount: number;
+    totalDebitCents: number;
+    totalCreditCents: number;
+    sourceTotals: Record<OperationalLedgerSourceType, { count: number; amountCents: number }>;
+  };
+}
+
+export interface PostOperationalLedgerJournalsResponse {
+  posted: AccountingJournalEntry[];
+  postedCount: number;
+  skipped: {
+    notPostable: number;
+    existing: number;
+  };
+  summary: AccountingJournalResponse['summary'];
+}
+
+const emptyAccountingJournalSummary: AccountingJournalResponse['summary'] = {
+  generatedAt: new Date(0).toISOString(),
+  entryCount: 0,
+  totalDebitCents: 0,
+  totalCreditCents: 0,
+  sourceTotals: {
+    PAYABLE_RECEIPT: { count: 0, amountCents: 0 },
+    CUSTOMER_PAYMENT: { count: 0, amountCents: 0 },
+    RECONCILIATION_VARIANCE: { count: 0, amountCents: 0 },
+  },
+};
+
+export async function listAccountingJournals(
+  params?: {
+    sourceType?: OperationalLedgerSourceType;
+    status?: AccountingJournalStatus;
+    limit?: number;
+    offset?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<AccountingJournalResponse> {
+  const qs = new URLSearchParams();
+  if (params?.sourceType) qs.set('sourceType', params.sourceType);
+  if (params?.status) qs.set('status', params.status);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  return apiFetch(
+    `/accounting/journals${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    {
+      items: [],
+      total: 0,
+      limit: params?.limit ?? 50,
+      offset: params?.offset ?? 0,
+      summary: emptyAccountingJournalSummary,
+    },
+    options,
+  );
+}
+
+export async function postOperationalLedgerJournals(
+  input: { sourceType?: OperationalLedgerSourceType; limit?: number } = {},
+  options?: ApiDataOptions,
+): Promise<PostOperationalLedgerJournalsResponse> {
+  return apiFetch(
+    '/accounting/journals/post-operational-ledger',
+    {
+      method: 'POST',
+      body: JSON.stringify({ ...input, confirm: true }),
+    },
+    {
+      posted: [],
+      postedCount: 0,
+      skipped: { notPostable: 0, existing: 0 },
+      summary: emptyAccountingJournalSummary,
+    },
+    options,
+  );
+}
+
 // ─── Dealers (legacy alias) ───────────────────────────────────────────────────
 
 export interface Dealer {

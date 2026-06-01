@@ -8,6 +8,7 @@ This context owns the QuickBooks Online integration and all outbound accounting 
 - Invoice sync: push invoices to QB when work orders complete
 - Customer sync: ensure GG customers exist in QB before invoice creation
 - Entity mapping: track GG ID ↔ QB ID relationships for idempotent syncs
+- Internal journal posting: persist balanced debit/credit consequences from operational ledger entries
 - Webhook ingestion: receive and store QB change notifications
 - Token management: secure storage and automatic refresh of QB OAuth tokens
 - Emits domain events for cross-context communication
@@ -25,6 +26,7 @@ This context owns the QuickBooks Online integration and all outbound accounting 
 | `customerSync.service.ts` | Customer sync state machine + QB push |
 | `customerSync.routes.ts` | RPC-style route wrappers for customer sync |
 | `entityMapping.service.ts` | GG ID ↔ QB ID mapping CRUD |
+| `handlers.ts` | QuickBooks handlers plus operational ledger and journal posting endpoints |
 
 ## Lambda Handlers
 
@@ -37,6 +39,8 @@ This context owns the QuickBooks Online integration and all outbound accounting 
 | `list-sync` | `GET /accounting/sync` | List invoice sync records |
 | `retry-sync` | `POST /accounting/sync/:id/retry` | Retry a failed sync |
 | `webhook` | `POST /accounting/webhook` | Receive QB webhook events |
+| `list-journals` | `GET /accounting/journals` | List immutable journal headers and lines |
+| `post-operational-ledger-journals` | `POST /accounting/journals/post-operational-ledger` | Post eligible operational ledger entries |
 
 ## Domain Events Emitted
 

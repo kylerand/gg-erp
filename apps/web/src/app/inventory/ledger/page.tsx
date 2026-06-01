@@ -19,6 +19,7 @@ const MOVEMENT_FILTERS: Array<{ value: InventoryLedgerMovementType | 'ALL'; labe
   { value: 'RELEASE', label: 'Releases' },
   { value: 'ISSUE', label: 'Issues' },
   { value: 'ADJUSTMENT', label: 'Adjustments' },
+  { value: 'CYCLE_COUNT', label: 'Cycle Counts' },
   { value: 'TRANSFER_OUT', label: 'Transfers Out' },
   { value: 'TRANSFER_IN', label: 'Transfers In' },
 ];

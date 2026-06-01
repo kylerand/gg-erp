@@ -55,6 +55,7 @@ import {
   listInventoryLedgerHandler,
   createInventoryAdjustmentHandler,
   createInventoryTransferHandler,
+  createCycleCountHandler,
   listInventoryLocationsHandler,
 } from './lambda/inventory/handlers.js';
 import {
@@ -367,6 +368,8 @@ async function route(
     result = await createInventoryAdjustmentHandler(event);
   } else if (pathname === '/inventory/transfers' && method === 'POST') {
     result = await createInventoryTransferHandler(event);
+  } else if (pathname === '/inventory/cycle-counts' && method === 'POST') {
+    result = await createCycleCountHandler(event);
   } else if (pathname === '/inventory/manufacturers' && method === 'GET') {
     result = await listManufacturersHandler(event);
   } else if (pathname === '/inventory/manufacturers' && method === 'POST') {
@@ -745,7 +748,7 @@ server.listen(PORT, () => {
   console.log(`   Auth        GET /auth/me`);
   console.log(`   Workspace   GET /workspace/today`);
   console.log(`   Customers   GET|POST /identity/customers, GET|POST /:id/transition`);
-  console.log(`   Inventory   GET|POST /inventory/parts, PATCH /inventory/parts/:id, GET /inventory/vendors, GET /inventory/ledger, POST /inventory/adjustments, POST /inventory/transfers`);
+  console.log(`   Inventory   GET|POST /inventory/parts, PATCH /inventory/parts/:id, GET /inventory/vendors, GET /inventory/ledger, POST /inventory/adjustments, POST /inventory/transfers, POST /inventory/cycle-counts`);
   console.log(`   Tickets     /tickets/work-orders/:id/tasks|operations|rework|qc-gates|time-entries`);
   console.log(`   Queue       GET /tickets/wo-queue, GET /tickets/wo-queue/:id`);
   console.log(`   Time        GET /tickets/time-entries`);

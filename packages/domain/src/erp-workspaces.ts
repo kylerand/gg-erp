@@ -205,6 +205,15 @@ export const ERP_WORKSPACES = [
         keywords: ['transfer', 'move stock', 'locations'],
       },
       {
+        key: 'cycle-count',
+        label: 'Cycle Counts',
+        description: 'Post physical counts and variance corrections.',
+        route: '/inventory/cycle-counts',
+        status: 'live',
+        objectKey: 'cycle-count',
+        keywords: ['cycle count', 'stock count', 'variance'],
+      },
+      {
         key: 'purchase-order',
         label: 'Purchase Orders',
         description: 'Track vendor orders, ETAs, and line-level receiving.',

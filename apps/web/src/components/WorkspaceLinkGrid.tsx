@@ -49,6 +49,7 @@ const ICON_BY_ITEM_KEY: Partial<Record<string, LucideIcon>> = {
   'inventory-ledger': History,
   'inventory-adjustment': SlidersHorizontal,
   'inventory-transfer': ArrowRightLeft,
+  'cycle-count': ClipboardCheck,
   receiving: Truck,
   manufacturer: Factory,
   'material-planning': BarChart3,

@@ -828,6 +828,7 @@ export default function WorkOrderDetailPage() {
         <aside className="space-y-4">
           <CustomerProfileDrawer workOrder={workOrder} onUpdated={load} />
           <CartProfileDrawer workOrder={workOrder} onUpdated={load} />
+          <BuildProvenancePanel workOrder={workOrder} />
           <SalesContextPanel workOrder={workOrder} />
 
           <section id="messages" className="rounded-lg border border-gray-200 bg-white p-4">
@@ -953,6 +954,135 @@ function SectionHeader({
 
 function EmptyPanel({ text }: { text: string }) {
   return <div className="px-4 py-8 text-sm text-gray-500">{text}</div>;
+}
+
+function BuildProvenancePanel({ workOrder }: { workOrder: WoOrderDetail }) {
+  const provenance = workOrder.buildProvenance;
+  const masterSearch =
+    provenance?.configuration?.code ??
+    provenance?.bom?.code ??
+    provenance?.routingTemplate?.code ??
+    workOrder.assetReference ??
+    workOrder.number;
+
+  if (!provenance) {
+    return (
+      <section className="rounded-lg border border-gray-200 bg-white p-4">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+          <PackageCheck size={15} />
+          Build Provenance
+        </h2>
+        <p className="mt-3 text-sm text-gray-500">
+          No released build package is linked to this work order yet.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-lg border border-gray-200 bg-white p-4">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+          <PackageCheck size={15} />
+          Build Provenance
+        </h2>
+        <Link
+          href={erpRoute('build-package', { search: masterSearch })}
+          className="text-xs font-semibold text-[#B1581B] hover:underline"
+        >
+          Review masters
+        </Link>
+      </div>
+
+      <div className="mt-4 space-y-3 text-sm">
+        {provenance.configuration && (
+          <ProvenanceRow
+            label="Configuration"
+            title={`${provenance.configuration.code} v${provenance.configuration.version}`}
+            meta={displayStatus(provenance.configuration.status)}
+            href={erpRoute('build-package', { search: provenance.configuration.code })}
+          />
+        )}
+        {provenance.bom && (
+          <ProvenanceRow
+            label="BOM"
+            title={`${provenance.bom.code} rev ${provenance.bom.revision}`}
+            meta={`${displayStatus(provenance.bom.status)} · ${provenance.bom.lineCount} lines`}
+            href={erpRoute('build-package', { search: provenance.bom.code })}
+          />
+        )}
+        {provenance.routingTemplate && (
+          <ProvenanceRow
+            label="Route"
+            title={`${provenance.routingTemplate.code} v${provenance.routingTemplate.version}`}
+            meta={`${displayStatus(provenance.routingTemplate.status)} · ${provenance.routingTemplate.stepCount} steps`}
+            href={erpRoute('build-package', { search: provenance.routingTemplate.code })}
+          />
+        )}
+      </div>
+
+      <div className="mt-4 border-t border-gray-100 pt-3">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Latest ECO Activity
+          </div>
+          <Link
+            href={erpRoute('planning-change-event', { search: masterSearch })}
+            className="text-xs font-semibold text-[#B1581B] hover:underline"
+          >
+            Full history
+          </Link>
+        </div>
+        {provenance.latestChanges.length > 0 ? (
+          <div className="space-y-2">
+            {provenance.latestChanges.slice(0, 3).map((change) => (
+              <Link
+                key={change.id}
+                href={erpRoute('planning-change-event', { search: change.recordCode })}
+                className="block rounded-md border border-gray-100 bg-gray-50 px-3 py-2 hover:border-[#E37125]"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-semibold text-gray-900">
+                    {change.recordCode} · {displayStatus(change.changeKind)}
+                  </span>
+                  <span className="text-xs text-gray-500">{formatDateTime(change.createdAt)}</span>
+                </div>
+                <div className="mt-1 text-xs text-gray-600">{change.changeSummary}</div>
+                {change.approvalNote && (
+                  <div className="mt-1 text-xs text-[#8A4A18]">{change.approvalNote}</div>
+                )}
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500">No ECO events are recorded for this package.</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ProvenanceRow({
+  label,
+  title,
+  meta,
+  href,
+}: {
+  label: string;
+  title: string;
+  meta: string;
+  href: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="block rounded-md border border-gray-100 px-3 py-2 hover:border-[#E37125] hover:bg-[#FFF8F1]"
+    >
+      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</div>
+      <div className="mt-1 font-semibold text-gray-900">{title}</div>
+      <div className="mt-1 text-xs text-gray-600">{meta}</div>
+    </Link>
+  );
 }
 
 function ServiceLine({

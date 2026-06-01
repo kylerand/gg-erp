@@ -166,6 +166,9 @@ test('work-order detail page wires live execution panels', () => {
     'getOperationActions',
     'CustomerProfileDrawer',
     'CartProfileDrawer',
+    'BuildProvenancePanel',
+    "erpRoute('build-package'",
+    "erpRoute('planning-change-event'",
     'updateCustomer',
     'updateCartVehicle',
     'SalesContextPanel',
@@ -239,10 +242,14 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
   assert.ok(apiClientSource.includes('/planning/build-configurations'));
   assert.ok(apiClientSource.includes('/planning/boms'));
   assert.ok(apiClientSource.includes('/planning/routing-templates'));
+  assert.ok(apiClientSource.includes('/tickets/wo-queue/'));
   assert.deepEqual(
-    ['listPlanningChangeEvents', 'allowMockFallback: false', "erpRoute('build-package'"].filter(
-      (call) => !engineeringChangesSource.includes(call),
-    ),
+    [
+      'listPlanningChangeEvents',
+      'allowMockFallback: false',
+      "erpRoute('build-package'",
+      "searchParams.get('search')",
+    ].filter((call) => !engineeringChangesSource.includes(call)),
     [],
   );
   assert.ok(apiClientSource.includes('/tickets/work-orders'));

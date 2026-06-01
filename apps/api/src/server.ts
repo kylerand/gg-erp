@@ -18,9 +18,12 @@ import {
   approveBomHandler,
   createBomHandler,
   createBuildConfigurationHandler,
+  createRoutingTemplateHandler,
   listBomsHandler,
   listBuildConfigurationsHandler,
+  listRoutingTemplatesHandler,
   transitionBuildConfigurationHandler,
+  transitionRoutingTemplateHandler,
 } from './lambda/work-orders/planning-masters.js';
 import {
   triggerBatchHandler,
@@ -334,6 +337,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     /^\/planning\/build-configurations\/([^/]+)(?:\/state)?$/,
   );
   const bomApproveMatch = pathname.match(/^\/planning\/boms\/([^/]+)\/approve$/);
+  const routingTemplateMatch = pathname.match(/^\/planning\/routing-templates\/([^/]+)\/state$/);
   const blockedAlertActionMatch = pathname.match(
     /^\/reporting\/blocked-alerts\/([^/]+)\/(acknowledge|escalate)$/,
   );
@@ -400,6 +404,15 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     result = await createBomHandler(event);
   } else if (bomApproveMatch && method === 'PATCH') {
     result = await approveBomHandler({ ...event, pathParameters: { id: bomApproveMatch[1] } });
+  } else if (pathname === '/planning/routing-templates' && method === 'GET') {
+    result = await listRoutingTemplatesHandler(event);
+  } else if (pathname === '/planning/routing-templates' && method === 'POST') {
+    result = await createRoutingTemplateHandler(event);
+  } else if (routingTemplateMatch && method === 'PATCH') {
+    result = await transitionRoutingTemplateHandler({
+      ...event,
+      pathParameters: { id: routingTemplateMatch[1] },
+    });
   } else if (pathname === '/planning/vehicles' && method === 'GET') {
     result = await listVehiclesHandler(event);
   } else if (vehicleMatch && method === 'PATCH') {
@@ -1060,7 +1073,7 @@ server.listen(PORT, () => {
   console.log(`   Time        GET /tickets/time-entries`);
   console.log(`   Routing     GET|PATCH /tickets/routing-steps/:id`);
   console.log(
-    `   Planning    GET|POST /planning/work-orders, GET /planning/build-packages, GET|POST /planning/build-configurations, GET|POST /planning/boms`,
+    `   Planning    GET|POST /planning/work-orders, GET /planning/build-packages, GET|POST /planning/build-configurations|boms|routing-templates`,
   );
   console.log(`   SOP         GET|POST /sop, /sop/modules, /sop/modules/:id`);
   console.log(`   Training    PUT /sop/modules/:id/step-progress, POST /sop/modules/:id/quiz`);

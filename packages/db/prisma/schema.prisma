@@ -38,6 +38,14 @@ enum BomStatus {
   @@schema("planning")
 }
 
+enum RoutingTemplateStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+
+  @@schema("planning")
+}
+
 enum CartVehicleStatus {
   REGISTERED
   IN_BUILD
@@ -119,10 +127,11 @@ model BuildConfiguration {
   updatedAt            DateTime                 @default(now()) @map("updated_at") @db.Timestamptz(6)
   version              Int                      @default(0)
 
-  vehicle      CartVehicle          @relation(fields: [vehicleId], references: [id])
-  supersededBy BuildConfiguration?  @relation("BuildConfigurationSupersede", fields: [supersededById], references: [id])
-  supersedes   BuildConfiguration[] @relation("BuildConfigurationSupersede")
-  boms         BuildBom[]
+  vehicle          CartVehicle          @relation(fields: [vehicleId], references: [id])
+  supersededBy     BuildConfiguration?  @relation("BuildConfigurationSupersede", fields: [supersededById], references: [id])
+  supersedes       BuildConfiguration[] @relation("BuildConfigurationSupersede")
+  boms             BuildBom[]
+  routingTemplates RoutingTemplate[]
 
   @@unique([vehicleId, configurationVersion], map: "build_configurations_vehicle_version_key")
   @@index([configurationStatus], map: "build_configurations_status_idx")
@@ -174,6 +183,62 @@ model BuildBomLine {
   @@unique([bomId, partId], map: "build_bom_lines_bom_part_key")
   @@index([partId], map: "build_bom_lines_part_idx")
   @@map("build_bom_lines")
+  @@schema("planning")
+}
+
+model RoutingTemplate {
+  id                   String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  routeCode            String                @map("route_code")
+  routeName            String                @map("route_name")
+  routeVersion         Int                   @default(1) @map("route_version")
+  buildConfigurationId String?               @map("build_configuration_id") @db.Uuid
+  templateStatus       RoutingTemplateStatus @default(DRAFT) @map("template_status")
+  effectiveFrom        DateTime              @default(now()) @map("effective_from") @db.Timestamptz(6)
+  effectiveTo          DateTime?             @map("effective_to") @db.Timestamptz(6)
+  notes                String?
+  activatedAt          DateTime?             @map("activated_at") @db.Timestamptz(6)
+  retiredAt            DateTime?             @map("retired_at") @db.Timestamptz(6)
+  createdByUserId      String?               @map("created_by_user_id") @db.Uuid
+  updatedByUserId      String?               @map("updated_by_user_id") @db.Uuid
+  lastCorrelationId    String?               @map("last_correlation_id")
+  lastRequestId        String?               @map("last_request_id")
+  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime              @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version              Int                   @default(0)
+
+  buildConfiguration BuildConfiguration?   @relation(fields: [buildConfigurationId], references: [id], onDelete: SetNull)
+  steps              RoutingTemplateStep[]
+
+  @@unique([routeCode, routeVersion], map: "routing_templates_code_version_key")
+  @@index([templateStatus], map: "routing_templates_status_idx")
+  @@index([buildConfigurationId], map: "routing_templates_build_configuration_idx")
+  @@index([routeCode, templateStatus], map: "routing_templates_code_status_idx")
+  @@map("routing_templates")
+  @@schema("planning")
+}
+
+model RoutingTemplateStep {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  routingTemplateId   String   @map("routing_template_id") @db.Uuid
+  sequenceNo          Int      @map("sequence_no")
+  operationCode       String   @map("operation_code")
+  operationName       String   @map("operation_name")
+  workstationCode     String?  @map("workstation_code")
+  estimatedMinutes    Int      @map("estimated_minutes")
+  requiredSkillCode   String?  @map("required_skill_code")
+  jobCardTitle        String?  @map("job_card_title")
+  jobCardInstructions String?  @map("job_card_instructions")
+  qcRequired          Boolean  @default(false) @map("qc_required")
+  evidenceRequired    Boolean  @default(false) @map("evidence_required")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  routingTemplate RoutingTemplate @relation(fields: [routingTemplateId], references: [id], onDelete: Cascade)
+
+  @@unique([routingTemplateId, sequenceNo], map: "routing_template_steps_sequence_key")
+  @@unique([routingTemplateId, operationCode], map: "routing_template_steps_operation_key")
+  @@index([workstationCode], map: "routing_template_steps_workstation_idx")
+  @@map("routing_template_steps")
   @@schema("planning")
 }
 

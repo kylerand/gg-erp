@@ -398,6 +398,7 @@ export interface WorkOrderBuildPackage {
 
 export type BuildConfigurationStatus = 'DRAFT' | 'LOCKED' | 'RELEASED' | 'SUPERSEDED';
 export type BomStatus = 'DRAFT' | 'APPROVED' | 'OBSOLETE';
+export type RoutingTemplateStatus = 'DRAFT' | 'ACTIVE' | 'RETIRED';
 
 export interface BuildConfiguration {
   id: string;
@@ -449,6 +450,55 @@ export interface BuildBom {
   lines: BomLine[];
 }
 
+export interface RoutingTemplateStepInput {
+  sequenceNo?: number;
+  operationCode: string;
+  operationName: string;
+  workstationCode?: string;
+  estimatedMinutes: number;
+  requiredSkillCode?: string;
+  jobCardTitle?: string;
+  jobCardInstructions?: string;
+  qcRequired?: boolean;
+  evidenceRequired?: boolean;
+}
+
+export interface RoutingTemplateStep {
+  id: string;
+  routingTemplateId: string;
+  sequenceNo: number;
+  operationCode: string;
+  operationName: string;
+  workstationCode?: string;
+  estimatedMinutes: number;
+  requiredSkillCode?: string;
+  jobCardTitle?: string;
+  jobCardInstructions?: string;
+  qcRequired: boolean;
+  evidenceRequired: boolean;
+}
+
+export interface RoutingTemplate {
+  id: string;
+  routeCode: string;
+  routeName: string;
+  routeVersion: number;
+  buildConfigurationId?: string;
+  configurationCode?: string;
+  templateStatus: RoutingTemplateStatus;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  notes?: string;
+  activatedAt?: string;
+  retiredAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+  stepCount: number;
+  estimatedMinutes: number;
+  steps: RoutingTemplateStep[];
+}
+
 export interface CreateBuildConfigurationInput {
   configurationCode: string;
   vehicleId: string;
@@ -465,6 +515,17 @@ export interface CreateBomInput {
   lines: BomLineInput[];
 }
 
+export interface CreateRoutingTemplateInput {
+  routeCode: string;
+  routeName: string;
+  routeVersion?: number;
+  buildConfigurationId?: string;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+  notes?: string;
+  steps: RoutingTemplateStepInput[];
+}
+
 export interface CreateWorkOrderInput {
   workOrderNumber: string;
   vehicleId: string;
@@ -476,6 +537,7 @@ export interface CreateWorkOrderInput {
 }
 
 export type CreateExecutionWorkOrderInput = CreateWorkOrderInput & {
+  routingTemplateId?: string;
   title?: string;
   priority?: number;
   stockLocationId?: string;
@@ -696,6 +758,56 @@ export async function approveBom(id: string): Promise<BuildBom> {
     },
   );
   return data.bom;
+}
+
+export async function listRoutingTemplates(
+  params?: {
+    search?: string;
+    status?: RoutingTemplateStatus;
+    buildConfigurationId?: string;
+    limit?: number;
+    offset?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<{ items: RoutingTemplate[]; total: number; limit: number; offset: number }> {
+  const qs = new URLSearchParams();
+  if (params?.search) qs.set('search', params.search);
+  if (params?.status) qs.set('status', params.status);
+  if (params?.buildConfigurationId) qs.set('buildConfigurationId', params.buildConfigurationId);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  return apiFetch(
+    `/planning/routing-templates${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    { items: [], total: 0, limit: params?.limit ?? 50, offset: params?.offset ?? 0 },
+    options,
+  );
+}
+
+export async function createRoutingTemplate(
+  input: CreateRoutingTemplateInput,
+): Promise<RoutingTemplate> {
+  const data = await apiFetch<{ routingTemplate: RoutingTemplate }>('/planning/routing-templates', {
+    method: 'POST',
+    headers: mutationHeaders(),
+    body: JSON.stringify(input),
+  });
+  return data.routingTemplate;
+}
+
+export async function transitionRoutingTemplate(
+  id: string,
+  status: RoutingTemplateStatus,
+): Promise<RoutingTemplate> {
+  const data = await apiFetch<{ routingTemplate: RoutingTemplate }>(
+    `/planning/routing-templates/${encodeURIComponent(id)}/state`,
+    {
+      method: 'PATCH',
+      headers: mutationHeaders(),
+      body: JSON.stringify({ status }),
+    },
+  );
+  return data.routingTemplate;
 }
 
 export async function createWorkOrder(input: CreateWorkOrderInput): Promise<WorkOrder> {

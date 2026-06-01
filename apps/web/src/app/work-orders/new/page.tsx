@@ -8,8 +8,10 @@ import {
   listBuildPackages,
   listCartVehicles,
   listCustomers,
+  listRoutingTemplates,
   type CartVehicle,
   type Customer,
+  type RoutingTemplate,
   type WorkOrderBuildPackage,
 } from '@/lib/api-client';
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
@@ -26,6 +28,11 @@ interface BuildPackageOption extends SearchableSelectOption {
   bomId: string;
   workOrderCount: number;
   lastUsedAt: string;
+}
+
+interface RoutingTemplateOption extends SearchableSelectOption {
+  stepCount: number;
+  estimatedMinutes: number;
 }
 
 function customerOption(customer: Customer): SearchableSelectOption {
@@ -59,6 +66,23 @@ function buildPackageOption(pkg: WorkOrderBuildPackage): BuildPackageOption {
   };
 }
 
+function routingTemplateOption(template: RoutingTemplate): RoutingTemplateOption {
+  return {
+    id: template.id,
+    stepCount: template.stepCount,
+    estimatedMinutes: template.estimatedMinutes,
+    label: `${template.routeCode} · ${template.routeName}`,
+    description: [
+      template.configurationCode,
+      `${template.stepCount} steps`,
+      `${template.estimatedMinutes} min`,
+    ]
+      .filter(Boolean)
+      .join(' · '),
+    meta: template.templateStatus.toLowerCase(),
+  };
+}
+
 export default function NewWorkOrderPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -69,6 +93,7 @@ export default function NewWorkOrderPage() {
   const [customerId, setCustomerId] = useState(searchParams.get('customerId') ?? '');
   const [vehicleId, setVehicleId] = useState(searchParams.get('vehicleId') ?? '');
   const [buildPackageId, setBuildPackageId] = useState(searchParams.get('buildPackageId') ?? '');
+  const [routingTemplateId, setRoutingTemplateId] = useState(searchParams.get('routingTemplateId') ?? '');
   const [manualBuildConfigurationId, setManualBuildConfigurationId] = useState('');
   const [manualBomId, setManualBomId] = useState('');
   const [scheduledDate, setScheduledDate] = useState('');
@@ -76,9 +101,11 @@ export default function NewWorkOrderPage() {
   const [customerSearch, setCustomerSearch] = useState('');
   const [vehicleSearch, setVehicleSearch] = useState('');
   const [buildPackageSearch, setBuildPackageSearch] = useState('');
+  const [routingTemplateSearch, setRoutingTemplateSearch] = useState('');
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [vehicles, setVehicles] = useState<CartVehicle[]>([]);
   const [buildPackages, setBuildPackages] = useState<WorkOrderBuildPackage[]>([]);
+  const [routingTemplates, setRoutingTemplates] = useState<RoutingTemplate[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -102,18 +129,28 @@ export default function NewWorkOrderPage() {
         { search: buildPackageSearch || undefined, limit: 100 },
         { allowMockFallback: false },
       ),
+      listRoutingTemplates(
+        {
+          search: routingTemplateSearch || undefined,
+          status: 'ACTIVE',
+          limit: 100,
+        },
+        { allowMockFallback: false },
+      ),
     ])
-      .then(([customerResult, vehicleResult, buildPackageResult]) => {
+      .then(([customerResult, vehicleResult, buildPackageResult, routingTemplateResult]) => {
         if (!active) return;
         setCustomers(customerResult.items);
         setVehicles(vehicleResult.items);
         setBuildPackages(buildPackageResult.items);
+        setRoutingTemplates(routingTemplateResult.items);
       })
       .catch((err: unknown) => {
         if (!active) return;
         setCustomers([]);
         setVehicles([]);
         setBuildPackages([]);
+        setRoutingTemplates([]);
         setReferenceError(err instanceof Error ? err.message : 'Failed to load selector data.');
       })
       .finally(() => {
@@ -123,11 +160,21 @@ export default function NewWorkOrderPage() {
     return () => {
       active = false;
     };
-  }, [buildPackageSearch, customerId, customerSearch, vehicleSearch]);
+  }, [
+    buildPackageSearch,
+    customerId,
+    customerSearch,
+    routingTemplateSearch,
+    vehicleSearch,
+  ]);
 
   const customerOptions = useMemo(() => customers.map(customerOption), [customers]);
   const vehicleOptions = useMemo(() => vehicles.map(vehicleOption), [vehicles]);
   const packageOptions = useMemo(() => buildPackages.map(buildPackageOption), [buildPackages]);
+  const routingTemplateOptions = useMemo(
+    () => routingTemplates.map(routingTemplateOption),
+    [routingTemplates],
+  );
   const filteredPackageOptions = useMemo(() => {
     const query = buildPackageSearch.trim().toLowerCase();
     if (!query) return packageOptions;
@@ -141,6 +188,7 @@ export default function NewWorkOrderPage() {
   const selectedCustomer = customerOptions.find((option) => option.id === customerId);
   const selectedVehicle = vehicleOptions.find((option) => option.id === vehicleId);
   const selectedBuildPackage = packageOptions.find((option) => option.id === buildPackageId);
+  const selectedRoutingTemplate = routingTemplateOptions.find((option) => option.id === routingTemplateId);
   const resolvedBuildConfigurationId =
     selectedBuildPackage?.buildConfigurationId ?? manualBuildConfigurationId.trim();
   const resolvedBomId = selectedBuildPackage?.bomId ?? manualBomId.trim();
@@ -170,6 +218,7 @@ export default function NewWorkOrderPage() {
         customerId: customerId || undefined,
         buildConfigurationId: resolvedBuildConfigurationId,
         bomId: resolvedBomId,
+        routingTemplateId: routingTemplateId || undefined,
         description: description.trim() || undefined,
         scheduledDate: scheduledDate ? new Date(scheduledDate).toISOString() : undefined,
       });
@@ -282,6 +331,21 @@ export default function NewWorkOrderPage() {
                   setManualBomId(nextPackage.bomId);
                 }
               }}
+            />
+
+            <SearchableSelect
+              id="routingTemplate"
+              label="Routing Template"
+              value={routingTemplateId}
+              selectedOption={selectedRoutingTemplate}
+              searchValue={routingTemplateSearch}
+              options={routingTemplateOptions}
+              loading={referenceLoading}
+              error={referenceError}
+              placeholder="Search active routes and job-card templates"
+              emptyText="No active routing templates matched this search."
+              onSearchChange={setRoutingTemplateSearch}
+              onChange={setRoutingTemplateId}
             />
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

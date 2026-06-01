@@ -431,16 +431,17 @@
                 before shared staging or production cutover.
               </li>
               <li>
-                Planning still needs routing masters, job-card parity, effective dating, costing,
-                and change-control guardrails before it matches ERPNext-style manufacturing depth.
+                Planning now has first-pass routing/job-card masters, but still needs effective
+                dating, costing, and change-control guardrails before it matches ERPNext-style
+                manufacturing depth.
               </li>
               <li>
                 Accounting is still integration-first; internal GL, financial reports, and ledger
                 consequences are not mature yet.
               </li>
               <li>
-                API smoke route exceptions are back to zero after CD promoted the reporting
-                subscription/export routes.
+                API smoke route exceptions are limited to pending deployment of the new
+                routing-template routes and should return to zero after CD promotes this slice.
               </li>
             </ul>
           </div>
@@ -614,7 +615,7 @@
               Build package selection no longer depends only on historical work orders. Operators
               can author build configurations, lock/release them, create BOM revisions from active
               parts, approve BOMs, and publish approved pairs into the package catalog. Remaining
-              depth is routing masters, costing, engineering change control, and effective dates.
+              depth is costing, engineering change control, effective dates, and quality gates.
             </p>
           </div>
 
@@ -714,8 +715,8 @@
               <td>Latest production baseline</td>
               <td><span class="pill done">Merged</span></td>
               <td>
-                <code>origin/main</code> is at <code>0f74391</code>, from PR 150: blocked-alert
-                action route allowance cleanup after PR 149 deployed.
+                <code>origin/main</code> is at <code>a328e77</code>, from PR 153: reporting route
+                allowance cleanup after PR 152 deployed.
               </td>
             </tr>
             <tr>
@@ -730,29 +731,32 @@
               <td>Route/API surface</td>
               <td><span class="pill info">Broad</span></td>
               <td>
-                Recent smoke discovery covered 173 API routes. Main has broad Lambda handler and API
-                test coverage across planning, inventory, tickets, reporting, accounting, and sales.
+                Current smoke discovery covers 181 API routes. The branch has broad Lambda handler
+                and API test coverage across planning, inventory, tickets, reporting, accounting,
+                and sales.
               </td>
             </tr>
             <tr>
               <td>Web surface</td>
               <td><span class="pill info">Broad</span></td>
-              <td>Main has 58 app route files under <code>apps/web/src/app</code>.</td>
+              <td>The app has 64 route files under <code>apps/web/src/app</code>.</td>
             </tr>
             <tr>
               <td>ERP registry direction</td>
               <td><span class="pill doing">In Progress</span></td>
               <td>
-                Main defines 37 registry objects, 35 workspace links, 5 quick actions, and 14
-                reports. More registry-backed coverage is active locally but not merged.
+                The registry defines 38 objects, 36 workspace links, 5 quick actions, and 14
+                reports after adding routing-template planning destinations.
               </td>
             </tr>
             <tr>
               <td>Known route exceptions</td>
-              <td><span class="pill done">0 Open</span></td>
+              <td><span class="pill doing">3 Pending Deploy</span></td>
               <td>
                 <code>POST /accounting/webhook</code> returns an explicit 400 for unsigned non-empty
-                probes; <code>known-broken.json</code> is empty.
+                probes; <code>known-broken.json</code> only allows the three pending
+                <code>/planning/routing-templates</code> API Gateway route-miss checks until CD
+                promotes this slice.
               </td>
             </tr>
           </tbody>
@@ -773,9 +777,9 @@
             in live UAT runs.
           </li>
           <li>
-            <strong>Deepen planning execution:</strong> add routing masters, job-card templates,
-            effective dating, and engineering change control around released configurations and
-            approved BOMs.
+            <strong>Deepen planning execution:</strong> extend routing/job-card templates with
+            effective dating, costing, quality gates, and engineering change control around released
+            configurations and approved BOMs.
           </li>
           <li>
             <strong>Move toward ERP ledgers:</strong> start internal accounting ledger design and

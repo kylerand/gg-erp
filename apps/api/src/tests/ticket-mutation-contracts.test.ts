@@ -190,6 +190,171 @@ test('createWoOrderHandler creates execution work order operations and BOM part 
   }
 });
 
+test('createWoOrderHandler uses active routing template steps when supplied', async () => {
+  const ACTOR_ID = '00000000-0000-4000-8000-000000000101';
+  const VEHICLE_ID = '00000000-0000-4000-8000-000000000102';
+  const CUSTOMER_ID = '00000000-0000-4000-8000-000000000103';
+  const CONFIG_ID = '00000000-0000-4000-8000-000000000104';
+  const BOM_ID = '00000000-0000-4000-8000-000000000105';
+  const PART_ID = '00000000-0000-4000-8000-000000000106';
+  const ROUTING_TEMPLATE_ID = '00000000-0000-4000-8000-000000000107';
+
+  let operationRows: Array<{
+    operationCode: string;
+    sequenceNo: number;
+    operationName: string;
+    requiredSkillCode: string;
+    estimatedMinutes: number;
+  }> = [];
+
+  const tx = {
+    workOrder: {
+      async create(args: unknown) {
+        return args;
+      },
+    },
+    woOrder: {
+      async create(args: {
+        data: {
+          id: string;
+          workOrderNumber: string;
+          title: string;
+          description?: string;
+          customerReference?: string | null;
+          assetReference?: string | null;
+          status: 'READY' | 'SCHEDULED';
+          priority: number;
+          stockLocationId?: string | null;
+          openedAt: Date;
+          dueAt?: Date | null;
+          createdAt: Date;
+          updatedAt: Date;
+        };
+      }) {
+        return {
+          ...args.data,
+          completedAt: null,
+        };
+      },
+    },
+    woOperation: {
+      async createMany(args: { data: typeof operationRows }) {
+        operationRows = args.data;
+        return { count: args.data.length };
+      },
+    },
+    woPartLine: {
+      async createMany() {
+        return { count: 1 };
+      },
+    },
+    woStatusHistory: {
+      async create(args: unknown) {
+        return args;
+      },
+    },
+  };
+
+  setTicketHandlerPrismaForTests({
+    woOrder: {
+      async findUnique() {
+        return null;
+      },
+    },
+    workOrder: {
+      async findUnique() {
+        return null;
+      },
+    },
+    async $queryRaw(strings: TemplateStringsArray) {
+      const sql = Array.from(strings).join('');
+      if (sql.includes('FROM planning.build_configurations')) {
+        return [
+          {
+            buildConfigurationId: CONFIG_ID,
+            configurationCode: 'PKG-ALPHA',
+            configurationVersion: 2,
+            configurationStatus: 'RELEASED',
+            vehicleId: VEHICLE_ID,
+            vehicleDisplayName: '2026 GG - SERIAL-1',
+            customerId: CUSTOMER_ID,
+            customerDisplayName: 'Golfin Garage',
+            bomId: BOM_ID,
+            bomCode: 'BOM-ALPHA',
+            revision: 3,
+            bomStatus: 'APPROVED',
+          },
+        ];
+      }
+      if (sql.includes('FROM planning.routing_templates')) {
+        return [
+          {
+            routingTemplateId: ROUTING_TEMPLATE_ID,
+            routeCode: 'RT-GG4-STREET',
+            routeName: 'GG4 Street Build',
+            routeVersion: 1,
+            templateStatus: 'ACTIVE',
+          },
+        ];
+      }
+      if (sql.includes('FROM planning.routing_template_steps')) {
+        return [
+          {
+            id: '00000000-0000-4000-8000-000000000108',
+            sequenceNo: 10,
+            operationCode: 'FRAME',
+            operationName: 'Frame assembly',
+            workstationCode: 'BAY-1',
+            estimatedMinutes: 75,
+            requiredSkillCode: 'MECHANICAL',
+          },
+        ];
+      }
+      if (sql.includes('FROM planning.build_bom_lines')) {
+        return [
+          {
+            partId: PART_ID,
+            partSku: 'LIFT-KIT',
+            partName: 'Lift kit',
+            quantityPerUnit: '1',
+            scrapFactor: '0',
+            installStage: 'FRAME',
+          },
+        ];
+      }
+      throw new Error(`Unexpected query: ${sql}`);
+    },
+    async $transaction(fn: (inner: typeof tx) => Promise<unknown>) {
+      return fn(tx);
+    },
+  } as unknown as Partial<PrismaClient>);
+
+  try {
+    const response = await createWoOrderHandler({
+      headers: { 'x-actor-id': ACTOR_ID, 'x-correlation-id': 'test-correlation' },
+      body: JSON.stringify({
+        workOrderNumber: 'WO-TEST-002',
+        vehicleId: VEHICLE_ID,
+        customerId: CUSTOMER_ID,
+        buildConfigurationId: CONFIG_ID,
+        bomId: BOM_ID,
+        routingTemplateId: ROUTING_TEMPLATE_ID,
+      }),
+      requestContext: { requestId: 'request-1' },
+    });
+
+    assert.equal(response.statusCode, 201);
+    assert.equal(operationRows.length, 1);
+    assert.equal(operationRows[0]?.operationCode, 'FRAME');
+    assert.equal(operationRows[0]?.operationName, 'Frame assembly');
+    assert.equal(operationRows[0]?.sequenceNo, 10);
+    assert.equal(operationRows[0]?.requiredSkillCode, 'MECHANICAL');
+    assert.equal(operationRows[0]?.estimatedMinutes, 75);
+  } finally {
+    setTicketHandlerPrismaForTests(undefined);
+  }
+});
+
 test('createTaskHandler returns 400 for invalid JSON', async () => {
   const response = await createTaskHandler({
     body: '{invalid-json',

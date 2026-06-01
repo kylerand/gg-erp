@@ -11,9 +11,12 @@ import {
   approveBomHandler,
   createBomHandler,
   createBuildConfigurationHandler,
+  createRoutingTemplateHandler,
   listBuildConfigurationsHandler,
+  listRoutingTemplatesHandler,
   resetPlanningMasterStoreForTests,
   setPlanningMasterStoreForTests,
+  transitionRoutingTemplateHandler,
   type PlanningMasterStore,
 } from '../lambda/work-orders/planning-masters.js';
 
@@ -148,6 +151,37 @@ function createPlanningMasterStoreForTests(): PlanningMasterStore {
       },
     ],
   };
+  const routingTemplate = {
+    id: '00000000-0000-4000-8000-000000000601',
+    routeCode: 'RT-GG4-STREET',
+    routeName: 'GG4 Street Build',
+    routeVersion: 1,
+    buildConfigurationId: config.id,
+    configurationCode: config.configurationCode,
+    templateStatus: 'DRAFT' as const,
+    effectiveFrom: '2026-06-01T00:00:00.000Z',
+    createdAt: '2026-06-01T00:00:00.000Z',
+    updatedAt: '2026-06-01T00:00:00.000Z',
+    version: 0,
+    stepCount: 1,
+    estimatedMinutes: 90,
+    steps: [
+      {
+        id: '00000000-0000-4000-8000-000000000701',
+        routingTemplateId: '00000000-0000-4000-8000-000000000601',
+        sequenceNo: 10,
+        operationCode: 'FRAME',
+        operationName: 'Frame assembly',
+        workstationCode: 'BAY-1',
+        estimatedMinutes: 90,
+        requiredSkillCode: 'MECHANICAL',
+        jobCardTitle: 'Frame assembly',
+        jobCardInstructions: 'Install lift and torque suspension hardware.',
+        qcRequired: true,
+        evidenceRequired: false,
+      },
+    ],
+  };
 
   return {
     async listBuildConfigurations(input) {
@@ -178,6 +212,34 @@ function createPlanningMasterStoreForTests(): PlanningMasterStore {
     },
     async approveBom() {
       return { ...bom, bomStatus: 'APPROVED' };
+    },
+    async listRoutingTemplates(input) {
+      return { items: [routingTemplate], total: 1, limit: input.limit, offset: input.offset };
+    },
+    async createRoutingTemplate(input) {
+      return {
+        ...routingTemplate,
+        routeCode: input.routeCode,
+        routeName: input.routeName,
+        buildConfigurationId: input.buildConfigurationId,
+        steps: input.steps.map((step, index) => ({
+          id: `00000000-0000-4000-8000-0000000007${String(index + 1).padStart(2, '0')}`,
+          routingTemplateId: routingTemplate.id,
+          sequenceNo: step.sequenceNo ?? index + 1,
+          operationCode: step.operationCode,
+          operationName: step.operationName,
+          workstationCode: step.workstationCode,
+          estimatedMinutes: step.estimatedMinutes,
+          requiredSkillCode: step.requiredSkillCode,
+          jobCardTitle: step.jobCardTitle,
+          jobCardInstructions: step.jobCardInstructions,
+          qcRequired: step.qcRequired ?? false,
+          evidenceRequired: step.evidenceRequired ?? false,
+        })),
+      };
+    },
+    async transitionRoutingTemplate(_id, input) {
+      return { ...routingTemplate, templateStatus: input.status };
     },
     async listBuildPackages(input) {
       return {
@@ -260,6 +322,57 @@ test('planning BOM handlers validate and approve revisions', async () => {
     assert.equal(approveResponse.statusCode, 200);
     const approvePayload = JSON.parse(approveResponse.body) as { bom: { bomStatus: string } };
     assert.equal(approvePayload.bom.bomStatus, 'APPROVED');
+  } finally {
+    resetPlanningMasterStoreForTests();
+  }
+});
+
+test('planning routing template handlers validate, create, and activate job-card steps', async () => {
+  setPlanningMasterStoreForTests(createPlanningMasterStoreForTests());
+  try {
+    const listResponse = await listRoutingTemplatesHandler({
+      queryStringParameters: { status: 'DRAFT', limit: '10' },
+    });
+    assert.equal(listResponse.statusCode, 200);
+    const listPayload = JSON.parse(listResponse.body) as { items: Array<{ routeCode: string }> };
+    assert.equal(listPayload.items[0]?.routeCode, 'RT-GG4-STREET');
+
+    const invalidResponse = await createRoutingTemplateHandler({ body: JSON.stringify({}) });
+    assert.equal(invalidResponse.statusCode, 422);
+
+    const createResponse = await createRoutingTemplateHandler({
+      body: JSON.stringify({
+        routeCode: 'RT-GG4-NEW',
+        routeName: 'New GG4 Build',
+        buildConfigurationId: '00000000-0000-4000-8000-000000000101',
+        steps: [
+          {
+            operationCode: 'FRAME',
+            operationName: 'Frame assembly',
+            estimatedMinutes: 75,
+            jobCardTitle: 'Frame install',
+            qcRequired: true,
+          },
+        ],
+      }),
+    });
+    assert.equal(createResponse.statusCode, 201);
+    const createPayload = JSON.parse(createResponse.body) as {
+      routingTemplate: { routeCode: string; steps: Array<{ jobCardTitle?: string; qcRequired: boolean }> };
+    };
+    assert.equal(createPayload.routingTemplate.routeCode, 'RT-GG4-NEW');
+    assert.equal(createPayload.routingTemplate.steps[0]?.jobCardTitle, 'Frame install');
+    assert.equal(createPayload.routingTemplate.steps[0]?.qcRequired, true);
+
+    const activateResponse = await transitionRoutingTemplateHandler({
+      pathParameters: { id: '00000000-0000-4000-8000-000000000601' },
+      body: JSON.stringify({ status: 'ACTIVE' }),
+    });
+    assert.equal(activateResponse.statusCode, 200);
+    const activatePayload = JSON.parse(activateResponse.body) as {
+      routingTemplate: { templateStatus: string };
+    };
+    assert.equal(activatePayload.routingTemplate.templateStatus, 'ACTIVE');
   } finally {
     resetPlanningMasterStoreForTests();
   }

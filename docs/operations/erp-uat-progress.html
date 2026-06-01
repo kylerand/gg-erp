@@ -297,8 +297,8 @@
                 /tickets/work-orders` route with no pending-route allowance.
               </td>
               <td>
-                Keep expanding routing, costing, job-card, and quality-gate depth as master APIs
-                stabilize.
+                Keep expanding costing, effective dating, engineering change control, and
+                quality-gate depth as master APIs stabilize.
               </td>
             </tr>
             <tr>
@@ -318,19 +318,20 @@
               <td>
                 Work-order, sales opportunity, quote create, time logging, inventory reservation,
                 and purchase-order create/edit screens use live customer, cart, opportunity, part,
-                vendor, work-order, active employee, and live build-package selectors with mock
-                fallback disabled. Work-order create now reads released build package options from
-                the dedicated planning catalog and supports manual engineering-approved references
-                when no package is reusable. The submit path now creates executable work orders from
-                those references instead of leaving records stranded in planning-only storage.
+                vendor, work-order, active employee, live build-package, and active routing-template
+                selectors with mock fallback disabled. Work-order create now reads released build
+                package options from the dedicated planning catalog and supports manual
+                engineering-approved references when no package is reusable. The submit path now
+                creates executable work orders from those references, and can use an active
+                routing/job-card template for operation rows instead of leaving records stranded in
+                planning-only storage.
                 Work-order list selectors resolve cart and customer context instead of rendering
                 vehicle/configuration IDs, and Planning exposes the build package catalog as an
                 operator page. The catalog now includes authored build-configuration and
                 approved-BOM packages in addition to reusable history.
               </td>
               <td>
-                Backfill richer routing, job-card, and costing selectors once those master APIs are
-                stable.
+                Backfill richer costing selectors once those master APIs are stable.
               </td>
             </tr>
             <tr>
@@ -338,12 +339,14 @@
               <td><span class="pill done">Done</span></td>
               <td>
                 `/planning/build-packages` now reads strict live packages, build configurations,
-                BOMs, cart vehicles, and active parts. Operators can create build configurations,
-                lock and release them, author BOM revisions from live parts, approve BOMs, and
-                publish approved configuration/BOM pairs into the build-package catalog.
+                BOMs, routing templates, cart vehicles, and active parts. Operators can create build
+                configurations, lock and release them, author BOM revisions from live parts, approve
+                BOMs, publish approved configuration/BOM pairs into the build-package catalog, create
+                ordered route/job-card templates, and activate or retire route versions.
               </td>
               <td>
-                Keep adding routing, costing, and quality gates that consume the planning masters.
+                Keep adding costing, effective dating, engineering change control, and quality gates
+                that consume the planning masters.
               </td>
             </tr>
             <tr>

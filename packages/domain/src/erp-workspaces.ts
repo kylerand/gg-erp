@@ -381,6 +381,15 @@ export const ERP_WORKSPACES = [
         objectKey: 'build-bom',
         keywords: ['bom', 'bill of materials', 'revision', 'materials'],
       },
+      {
+        key: 'routing-template',
+        label: 'Routing Templates',
+        description: 'Manage route operations and job-card templates.',
+        route: '/planning/build-packages?view=routing',
+        status: 'live',
+        objectKey: 'routing-template',
+        keywords: ['routing', 'route', 'job card', 'operation', 'template'],
+      },
     ],
   },
   {

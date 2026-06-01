@@ -14,6 +14,7 @@ const prisma = new PrismaClient();
 
 type BuildConfigurationStatus = 'DRAFT' | 'LOCKED' | 'RELEASED' | 'SUPERSEDED';
 type BomStatus = 'DRAFT' | 'APPROVED' | 'OBSOLETE';
+type RoutingTemplateStatus = 'DRAFT' | 'ACTIVE' | 'RETIRED';
 
 const BUILD_CONFIGURATION_STATUSES: BuildConfigurationStatus[] = [
   'DRAFT',
@@ -22,6 +23,7 @@ const BUILD_CONFIGURATION_STATUSES: BuildConfigurationStatus[] = [
   'SUPERSEDED',
 ];
 const BOM_STATUSES: BomStatus[] = ['DRAFT', 'APPROVED', 'OBSOLETE'];
+const ROUTING_TEMPLATE_STATUSES: RoutingTemplateStatus[] = ['DRAFT', 'ACTIVE', 'RETIRED'];
 
 interface RequestContext {
   actorId?: string;
@@ -79,6 +81,55 @@ export interface BomResponse {
   lines: BomLineResponse[];
 }
 
+export interface RoutingTemplateStepInput {
+  sequenceNo?: number;
+  operationCode: string;
+  operationName: string;
+  workstationCode?: string;
+  estimatedMinutes: number;
+  requiredSkillCode?: string;
+  jobCardTitle?: string;
+  jobCardInstructions?: string;
+  qcRequired?: boolean;
+  evidenceRequired?: boolean;
+}
+
+export interface RoutingTemplateStepResponse {
+  id: string;
+  routingTemplateId: string;
+  sequenceNo: number;
+  operationCode: string;
+  operationName: string;
+  workstationCode?: string;
+  estimatedMinutes: number;
+  requiredSkillCode?: string;
+  jobCardTitle?: string;
+  jobCardInstructions?: string;
+  qcRequired: boolean;
+  evidenceRequired: boolean;
+}
+
+export interface RoutingTemplateResponse {
+  id: string;
+  routeCode: string;
+  routeName: string;
+  routeVersion: number;
+  buildConfigurationId?: string;
+  configurationCode?: string;
+  templateStatus: RoutingTemplateStatus;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  notes?: string;
+  activatedAt?: string;
+  retiredAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+  stepCount: number;
+  estimatedMinutes: number;
+  steps: RoutingTemplateStepResponse[];
+}
+
 export interface CreateBuildConfigurationInput {
   configurationCode: string;
   vehicleId: string;
@@ -97,6 +148,21 @@ export interface CreateBomInput {
   revision?: number;
   notes?: string;
   lines: BomLineInput[];
+}
+
+export interface CreateRoutingTemplateInput {
+  routeCode: string;
+  routeName: string;
+  routeVersion?: number;
+  buildConfigurationId?: string;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+  notes?: string;
+  steps: RoutingTemplateStepInput[];
+}
+
+export interface TransitionRoutingTemplateInput {
+  status: RoutingTemplateStatus;
 }
 
 export interface PlanningMasterStore {
@@ -125,6 +191,22 @@ export interface PlanningMasterStore {
   }): Promise<{ items: BomResponse[]; total: number; limit: number; offset: number }>;
   createBom(input: CreateBomInput, context: RequestContext): Promise<BomResponse>;
   approveBom(id: string, context: RequestContext): Promise<BomResponse>;
+  listRoutingTemplates(input: {
+    search?: string;
+    status?: RoutingTemplateStatus;
+    buildConfigurationId?: string;
+    limit: number;
+    offset: number;
+  }): Promise<{ items: RoutingTemplateResponse[]; total: number; limit: number; offset: number }>;
+  createRoutingTemplate(
+    input: CreateRoutingTemplateInput,
+    context: RequestContext,
+  ): Promise<RoutingTemplateResponse>;
+  transitionRoutingTemplate(
+    id: string,
+    input: TransitionRoutingTemplateInput,
+    context: RequestContext,
+  ): Promise<RoutingTemplateResponse>;
   listBuildPackages(input: ListBuildPackagesQuery): Promise<ListBuildPackagesResponse>;
 }
 
@@ -182,6 +264,17 @@ function toPositiveNumber(value: unknown): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : Number.NaN;
 }
 
+function toBoolean(value: unknown): boolean {
+  return value === true || value === 'true' || value === 1 || value === '1';
+}
+
+function toDateTime(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value !== 'string') return undefined;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+}
+
 function iso(value: unknown): string {
   return value instanceof Date ? value.toISOString() : String(value);
 }
@@ -230,6 +323,41 @@ interface BomLineRow {
   quantityPerUnit: Prisma.Decimal | number | string;
   scrapFactor: Prisma.Decimal | number | string;
   lineNote: string | null;
+}
+
+interface RoutingTemplateRow {
+  id: string;
+  routeCode: string;
+  routeName: string;
+  routeVersion: number;
+  buildConfigurationId: string | null;
+  configurationCode: string | null;
+  templateStatus: RoutingTemplateStatus;
+  effectiveFrom: Date | string;
+  effectiveTo: Date | string | null;
+  notes: string | null;
+  activatedAt: Date | string | null;
+  retiredAt: Date | string | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+  version: number;
+  stepCount: bigint | number | string;
+  estimatedMinutes: bigint | number | string;
+}
+
+interface RoutingTemplateStepRow {
+  id: string;
+  routingTemplateId: string;
+  sequenceNo: number;
+  operationCode: string;
+  operationName: string;
+  workstationCode: string | null;
+  estimatedMinutes: number;
+  requiredSkillCode: string | null;
+  jobCardTitle: string | null;
+  jobCardInstructions: string | null;
+  qcRequired: boolean;
+  evidenceRequired: boolean;
 }
 
 function mapConfiguration(row: BuildConfigurationRow): BuildConfigurationResponse {
@@ -281,6 +409,49 @@ function mapBomLine(row: BomLineRow): BomLineResponse {
   };
 }
 
+function mapRoutingTemplateStep(row: RoutingTemplateStepRow): RoutingTemplateStepResponse {
+  return {
+    id: row.id,
+    routingTemplateId: row.routingTemplateId,
+    sequenceNo: Number(row.sequenceNo),
+    operationCode: row.operationCode,
+    operationName: row.operationName,
+    workstationCode: row.workstationCode ?? undefined,
+    estimatedMinutes: Number(row.estimatedMinutes),
+    requiredSkillCode: row.requiredSkillCode ?? undefined,
+    jobCardTitle: row.jobCardTitle ?? undefined,
+    jobCardInstructions: row.jobCardInstructions ?? undefined,
+    qcRequired: Boolean(row.qcRequired),
+    evidenceRequired: Boolean(row.evidenceRequired),
+  };
+}
+
+function mapRoutingTemplate(
+  row: RoutingTemplateRow,
+  steps: RoutingTemplateStepResponse[],
+): RoutingTemplateResponse {
+  return {
+    id: row.id,
+    routeCode: row.routeCode,
+    routeName: row.routeName,
+    routeVersion: Number(row.routeVersion),
+    buildConfigurationId: row.buildConfigurationId ?? undefined,
+    configurationCode: row.configurationCode ?? undefined,
+    templateStatus: row.templateStatus,
+    effectiveFrom: iso(row.effectiveFrom),
+    effectiveTo: optionalIso(row.effectiveTo),
+    notes: row.notes ?? undefined,
+    activatedAt: optionalIso(row.activatedAt),
+    retiredAt: optionalIso(row.retiredAt),
+    createdAt: iso(row.createdAt),
+    updatedAt: iso(row.updatedAt),
+    version: Number(row.version),
+    stepCount: Number(row.stepCount),
+    estimatedMinutes: Number(row.estimatedMinutes),
+    steps,
+  };
+}
+
 function configurationSelect(where: Prisma.Sql, orderLimit: Prisma.Sql): Prisma.Sql {
   return Prisma.sql`
     SELECT
@@ -326,6 +497,35 @@ function bomSelect(where: Prisma.Sql, orderLimit: Prisma.Sql): Prisma.Sql {
   `;
 }
 
+function routingTemplateSelect(where: Prisma.Sql, orderLimit: Prisma.Sql): Prisma.Sql {
+  return Prisma.sql`
+    SELECT
+      rt.id::text AS "id",
+      rt.route_code AS "routeCode",
+      rt.route_name AS "routeName",
+      rt.route_version AS "routeVersion",
+      rt.build_configuration_id::text AS "buildConfigurationId",
+      bc.configuration_code AS "configurationCode",
+      rt.template_status::text AS "templateStatus",
+      rt.effective_from AS "effectiveFrom",
+      rt.effective_to AS "effectiveTo",
+      rt.notes AS "notes",
+      rt.activated_at AS "activatedAt",
+      rt.retired_at AS "retiredAt",
+      rt.created_at AS "createdAt",
+      rt.updated_at AS "updatedAt",
+      rt.version AS "version",
+      count(rts.id)::bigint AS "stepCount",
+      coalesce(sum(rts.estimated_minutes), 0)::bigint AS "estimatedMinutes"
+    FROM planning.routing_templates rt
+    LEFT JOIN planning.build_configurations bc ON bc.id = rt.build_configuration_id
+    LEFT JOIN planning.routing_template_steps rts ON rts.routing_template_id = rt.id
+    ${where}
+    GROUP BY rt.id, bc.id
+    ${orderLimit}
+  `;
+}
+
 async function loadBomLines(db: DbClient, bomIds: string[]): Promise<Map<string, BomLineResponse[]>> {
   if (bomIds.length === 0) return new Map();
   const rows = await db.$queryRaw<BomLineRow[]>`
@@ -353,6 +553,38 @@ async function loadBomLines(db: DbClient, bomIds: string[]): Promise<Map<string,
   return byBom;
 }
 
+async function loadRoutingTemplateSteps(
+  db: DbClient,
+  routingTemplateIds: string[],
+): Promise<Map<string, RoutingTemplateStepResponse[]>> {
+  if (routingTemplateIds.length === 0) return new Map();
+  const rows = await db.$queryRaw<RoutingTemplateStepRow[]>`
+    SELECT
+      id::text AS "id",
+      routing_template_id::text AS "routingTemplateId",
+      sequence_no AS "sequenceNo",
+      operation_code AS "operationCode",
+      operation_name AS "operationName",
+      workstation_code AS "workstationCode",
+      estimated_minutes AS "estimatedMinutes",
+      required_skill_code AS "requiredSkillCode",
+      job_card_title AS "jobCardTitle",
+      job_card_instructions AS "jobCardInstructions",
+      qc_required AS "qcRequired",
+      evidence_required AS "evidenceRequired"
+    FROM planning.routing_template_steps
+    WHERE routing_template_id::text IN (${Prisma.join(routingTemplateIds)})
+    ORDER BY routing_template_id, sequence_no ASC
+  `;
+
+  const byTemplate = new Map<string, RoutingTemplateStepResponse[]>();
+  for (const row of rows) {
+    const item = mapRoutingTemplateStep(row);
+    byTemplate.set(item.routingTemplateId, [...(byTemplate.get(item.routingTemplateId) ?? []), item]);
+  }
+  return byTemplate;
+}
+
 async function getConfigurationById(
   db: DbClient,
   id: string,
@@ -374,6 +606,19 @@ async function getBomById(db: DbClient, id: string): Promise<BomResponse | undef
   if (!row) return undefined;
   const linesByBom = await loadBomLines(db, [row.id]);
   return mapBom(row, linesByBom.get(row.id) ?? []);
+}
+
+async function getRoutingTemplateById(
+  db: DbClient,
+  id: string,
+): Promise<RoutingTemplateResponse | undefined> {
+  const rows = await db.$queryRaw<RoutingTemplateRow[]>(
+    routingTemplateSelect(Prisma.sql`WHERE rt.id = ${id}::uuid`, Prisma.sql`LIMIT 1`),
+  );
+  const row = rows[0];
+  if (!row) return undefined;
+  const stepsByTemplate = await loadRoutingTemplateSteps(db, [row.id]);
+  return mapRoutingTemplate(row, stepsByTemplate.get(row.id) ?? []);
 }
 
 function validationError(
@@ -480,6 +725,106 @@ function validateCreateBom(input: unknown): CreateBomInput {
     revision,
     notes,
     lines: normalizedLines,
+  };
+}
+
+function validateCreateRoutingTemplate(input: unknown): CreateRoutingTemplateInput {
+  const body = input as Partial<CreateRoutingTemplateInput>;
+  const issues: Array<{ field: string; message: string }> = [];
+  const routeCode = normalizeText(body.routeCode);
+  const routeName = normalizeText(body.routeName);
+  const routeVersion = toPositiveInt(body.routeVersion);
+  const buildConfigurationId = normalizeText(body.buildConfigurationId);
+  const effectiveFrom = toDateTime(body.effectiveFrom);
+  const effectiveTo = toDateTime(body.effectiveTo);
+  const notes = normalizeText(body.notes);
+  const steps = Array.isArray(body.steps) ? body.steps : [];
+
+  if (!routeCode) issues.push({ field: 'routeCode', message: 'routeCode is required.' });
+  if (!routeName) issues.push({ field: 'routeName', message: 'routeName is required.' });
+  if (body.routeVersion !== undefined && !routeVersion) {
+    issues.push({ field: 'routeVersion', message: 'routeVersion must be a positive integer.' });
+  }
+  if (buildConfigurationId && !isUuid(buildConfigurationId)) {
+    issues.push({ field: 'buildConfigurationId', message: 'buildConfigurationId must be a UUID.' });
+  }
+  if (body.effectiveFrom !== undefined && !effectiveFrom) {
+    issues.push({ field: 'effectiveFrom', message: 'effectiveFrom must be a valid date.' });
+  }
+  if (body.effectiveTo !== undefined && !effectiveTo) {
+    issues.push({ field: 'effectiveTo', message: 'effectiveTo must be a valid date.' });
+  }
+  if (effectiveFrom && effectiveTo && new Date(effectiveTo) <= new Date(effectiveFrom)) {
+    issues.push({ field: 'effectiveTo', message: 'effectiveTo must be after effectiveFrom.' });
+  }
+  if (steps.length === 0) {
+    issues.push({ field: 'steps', message: 'At least one routing step is required.' });
+  }
+
+  const seenSequences = new Set<number>();
+  const seenOperationCodes = new Set<string>();
+  const normalizedSteps = steps.map((step, index): RoutingTemplateStepInput => {
+    const sequenceNo = toPositiveInt(step?.sequenceNo) ?? index + 1;
+    const operationCode = normalizeText(step?.operationCode);
+    const operationName = normalizeText(step?.operationName);
+    const estimatedMinutes = toPositiveInt(step?.estimatedMinutes);
+    const workstationCode = normalizeText(step?.workstationCode);
+    const requiredSkillCode = normalizeText(step?.requiredSkillCode);
+    const jobCardTitle = normalizeText(step?.jobCardTitle);
+    const jobCardInstructions = normalizeText(step?.jobCardInstructions);
+
+    if (step?.sequenceNo !== undefined && !toPositiveInt(step.sequenceNo)) {
+      issues.push({ field: `steps.${index}.sequenceNo`, message: 'sequenceNo must be a positive integer.' });
+    }
+    if (seenSequences.has(sequenceNo)) {
+      issues.push({ field: `steps.${index}.sequenceNo`, message: 'sequenceNo must be unique.' });
+    } else {
+      seenSequences.add(sequenceNo);
+    }
+    if (!operationCode) {
+      issues.push({ field: `steps.${index}.operationCode`, message: 'operationCode is required.' });
+    } else if (seenOperationCodes.has(operationCode)) {
+      issues.push({ field: `steps.${index}.operationCode`, message: 'operationCode must be unique.' });
+    } else {
+      seenOperationCodes.add(operationCode);
+    }
+    if (!operationName) {
+      issues.push({ field: `steps.${index}.operationName`, message: 'operationName is required.' });
+    }
+    if (!estimatedMinutes) {
+      issues.push({
+        field: `steps.${index}.estimatedMinutes`,
+        message: 'estimatedMinutes must be a positive integer.',
+      });
+    }
+
+    return {
+      sequenceNo,
+      operationCode: operationCode ?? '',
+      operationName: operationName ?? '',
+      workstationCode,
+      estimatedMinutes: estimatedMinutes ?? Number.NaN,
+      requiredSkillCode,
+      jobCardTitle,
+      jobCardInstructions,
+      qcRequired: toBoolean(step?.qcRequired),
+      evidenceRequired: toBoolean(step?.evidenceRequired),
+    };
+  });
+
+  if (issues.length) {
+    throw validationError('Routing template validation failed.', issues);
+  }
+
+  return {
+    routeCode: routeCode!,
+    routeName: routeName!,
+    routeVersion,
+    buildConfigurationId,
+    effectiveFrom,
+    effectiveTo,
+    notes,
+    steps: normalizedSteps,
   };
 }
 
@@ -822,6 +1167,216 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
     });
   }
 
+  async listRoutingTemplates(input: {
+    search?: string;
+    status?: RoutingTemplateStatus;
+    buildConfigurationId?: string;
+    limit: number;
+    offset: number;
+  }): Promise<{ items: RoutingTemplateResponse[]; total: number; limit: number; offset: number }> {
+    const predicates: Prisma.Sql[] = [];
+    if (input.status) {
+      predicates.push(Prisma.sql`rt.template_status = ${input.status}::planning."RoutingTemplateStatus"`);
+    }
+    if (input.buildConfigurationId) {
+      predicates.push(Prisma.sql`rt.build_configuration_id = ${input.buildConfigurationId}::uuid`);
+    }
+    if (input.search) {
+      const pattern = `%${input.search}%`;
+      predicates.push(Prisma.sql`(
+        rt.route_code ILIKE ${pattern}
+        OR rt.route_name ILIKE ${pattern}
+        OR rt.notes ILIKE ${pattern}
+        OR bc.configuration_code ILIKE ${pattern}
+      )`);
+    }
+    const where =
+      predicates.length > 0
+        ? Prisma.sql`WHERE ${Prisma.join(predicates, ' AND ')}`
+        : Prisma.empty;
+
+    const rows = await prisma.$queryRaw<RoutingTemplateRow[]>(
+      routingTemplateSelect(
+        where,
+        Prisma.sql`ORDER BY rt.updated_at DESC LIMIT ${input.limit} OFFSET ${input.offset}`,
+      ),
+    );
+    const totalRows = await prisma.$queryRaw<Array<{ count: bigint }>>`
+      SELECT count(*)::bigint AS count
+      FROM planning.routing_templates rt
+      LEFT JOIN planning.build_configurations bc ON bc.id = rt.build_configuration_id
+      ${where}
+    `;
+    const stepsByTemplate = await loadRoutingTemplateSteps(
+      prisma,
+      rows.map((row) => row.id),
+    );
+
+    return {
+      items: rows.map((row) => mapRoutingTemplate(row, stepsByTemplate.get(row.id) ?? [])),
+      total: Number(totalRows[0]?.count ?? 0),
+      limit: input.limit,
+      offset: input.offset,
+    };
+  }
+
+  async createRoutingTemplate(
+    input: CreateRoutingTemplateInput,
+    context: RequestContext,
+  ): Promise<RoutingTemplateResponse> {
+    return prisma.$transaction(async (tx) => {
+      if (input.buildConfigurationId) {
+        const configRows = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id::text AS id
+          FROM planning.build_configurations
+          WHERE id = ${input.buildConfigurationId}::uuid
+        `;
+        if (!configRows[0]) {
+          throw new PlanningMasterCommandError('Build configuration was not found.', 404);
+        }
+      }
+
+      const routeVersion =
+        input.routeVersion ??
+        Number(
+          (
+            await tx.$queryRaw<Array<{ nextVersion: number }>>`
+              SELECT coalesce(max(route_version), 0)::int + 1 AS "nextVersion"
+              FROM planning.routing_templates
+              WHERE route_code = ${input.routeCode}
+            `
+          )[0]?.nextVersion ?? 1,
+        );
+
+      const inserted = await tx.$queryRaw<Array<{ id: string }>>`
+        INSERT INTO planning.routing_templates (
+          route_code,
+          route_name,
+          route_version,
+          build_configuration_id,
+          effective_from,
+          effective_to,
+          notes,
+          created_by_user_id,
+          updated_by_user_id,
+          last_correlation_id,
+          last_request_id
+        )
+        VALUES (
+          ${input.routeCode},
+          ${input.routeName},
+          ${routeVersion},
+          ${input.buildConfigurationId ?? null}::uuid,
+          ${input.effectiveFrom ?? new Date().toISOString()}::timestamptz,
+          ${input.effectiveTo ?? null}::timestamptz,
+          ${input.notes ?? null},
+          ${actorUuid(context.actorId)}::uuid,
+          ${actorUuid(context.actorId)}::uuid,
+          ${context.correlationId},
+          ${context.requestId ?? null}
+        )
+        RETURNING id::text
+      `;
+      const routingTemplateId = inserted[0]!.id;
+
+      await tx.$executeRaw`
+        INSERT INTO planning.routing_template_steps (
+          routing_template_id,
+          sequence_no,
+          operation_code,
+          operation_name,
+          workstation_code,
+          estimated_minutes,
+          required_skill_code,
+          job_card_title,
+          job_card_instructions,
+          qc_required,
+          evidence_required
+        )
+        VALUES ${Prisma.join(
+          input.steps.map((step, index) => Prisma.sql`(
+            ${routingTemplateId}::uuid,
+            ${step.sequenceNo ?? index + 1},
+            ${step.operationCode},
+            ${step.operationName},
+            ${step.workstationCode ?? null},
+            ${step.estimatedMinutes},
+            ${step.requiredSkillCode ?? null},
+            ${step.jobCardTitle ?? null},
+            ${step.jobCardInstructions ?? null},
+            ${step.qcRequired ?? false},
+            ${step.evidenceRequired ?? false}
+          )`),
+        )}
+      `;
+
+      const created = await getRoutingTemplateById(tx, routingTemplateId);
+      if (!created) throw new PlanningMasterCommandError('Routing template was not created.', 500);
+      return created;
+    });
+  }
+
+  async transitionRoutingTemplate(
+    id: string,
+    input: TransitionRoutingTemplateInput,
+    context: RequestContext,
+  ): Promise<RoutingTemplateResponse> {
+    if (!isUuid(id)) throw new PlanningMasterCommandError('Routing template ID must be a UUID.', 400);
+    if (!ROUTING_TEMPLATE_STATUSES.includes(input.status)) {
+      throw new PlanningMasterCommandError(`Invalid routing template status: ${input.status}`, 422);
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const current = await getRoutingTemplateById(tx, id);
+      if (!current) throw new PlanningMasterCommandError('Routing template was not found.', 404);
+      if (input.status === 'ACTIVE' && current.steps.length === 0) {
+        throw new PlanningMasterCommandError(
+          'Routing template requires at least one step before activation.',
+          409,
+        );
+      }
+
+      if (input.status === 'ACTIVE') {
+        await tx.$executeRaw`
+          UPDATE planning.routing_templates
+          SET template_status = 'RETIRED',
+              retired_at = coalesce(retired_at, now()),
+              updated_at = now(),
+              updated_by_user_id = ${actorUuid(context.actorId)}::uuid,
+              last_correlation_id = ${context.correlationId},
+              last_request_id = ${context.requestId ?? null},
+              version = version + 1
+          WHERE route_code = ${current.routeCode}
+            AND template_status = 'ACTIVE'
+            AND id <> ${id}::uuid
+        `;
+      }
+
+      await tx.$executeRaw`
+        UPDATE planning.routing_templates
+        SET template_status = ${input.status}::planning."RoutingTemplateStatus",
+            activated_at = CASE
+              WHEN ${input.status} = 'ACTIVE' THEN coalesce(activated_at, now())
+              ELSE activated_at
+            END,
+            retired_at = CASE
+              WHEN ${input.status} = 'RETIRED' THEN coalesce(retired_at, now())
+              ELSE retired_at
+            END,
+            updated_at = now(),
+            updated_by_user_id = ${actorUuid(context.actorId)}::uuid,
+            last_correlation_id = ${context.correlationId},
+            last_request_id = ${context.requestId ?? null},
+            version = version + 1
+        WHERE id = ${id}::uuid
+      `;
+
+      const updated = await getRoutingTemplateById(tx, id);
+      if (!updated) throw new PlanningMasterCommandError('Routing template was not found.', 404);
+      return updated;
+    });
+  }
+
   async listBuildPackages(input: ListBuildPackagesQuery): Promise<ListBuildPackagesResponse> {
     const search = input.search?.trim();
     const rows = await prisma.$queryRaw<
@@ -1086,6 +1641,67 @@ export async function approveBomHandler(
     if (!id) return json(400, { message: 'BOM ID is required.' });
     const item = await planningMasterStore.approveBom(id, requestContext(event));
     return json(200, { bom: item });
+  } catch (error) {
+    return errorJson(error);
+  }
+}
+
+export async function listRoutingTemplatesHandler(
+  event: ApiGatewayProxyEventLike,
+): Promise<ApiGatewayProxyResultLike> {
+  const query = event.queryStringParameters ?? {};
+  const limit = toLimit(query.limit);
+  const offset = toOffset(query.offset);
+  const status = query.status?.trim() as RoutingTemplateStatus | undefined;
+  const buildConfigurationId = query.buildConfigurationId?.trim();
+  if (Number.isNaN(limit)) return json(422, { message: 'limit must be a positive integer.' });
+  if (Number.isNaN(offset)) return json(422, { message: 'offset must be a non-negative integer.' });
+  if (status && !ROUTING_TEMPLATE_STATUSES.includes(status)) {
+    return json(422, { message: `Invalid routing template status: ${status}` });
+  }
+  if (buildConfigurationId && !isUuid(buildConfigurationId)) {
+    return json(422, { message: 'buildConfigurationId must be a UUID.' });
+  }
+
+  const result = await planningMasterStore.listRoutingTemplates({
+    search: query.search?.trim() || undefined,
+    status,
+    buildConfigurationId,
+    limit,
+    offset,
+  });
+  return json(200, result);
+}
+
+export async function createRoutingTemplateHandler(
+  event: ApiGatewayProxyEventLike,
+): Promise<ApiGatewayProxyResultLike> {
+  try {
+    const input = validateCreateRoutingTemplate(parseJsonBody(event.body));
+    const item = await planningMasterStore.createRoutingTemplate(input, requestContext(event));
+    return json(201, { routingTemplate: item });
+  } catch (error) {
+    return errorJson(error);
+  }
+}
+
+export async function transitionRoutingTemplateHandler(
+  event: ApiGatewayProxyEventLike & { pathParameters?: { id?: string } },
+): Promise<ApiGatewayProxyResultLike> {
+  try {
+    const id = event.pathParameters?.id;
+    if (!id) return json(400, { message: 'Routing template ID is required.' });
+    const body = parseJsonBody(event.body) as Partial<TransitionRoutingTemplateInput> & {
+      state?: RoutingTemplateStatus;
+    } | undefined;
+    const status = body?.status ?? body?.state;
+    if (!status) return json(400, { message: 'Body must include { status }.' });
+    const item = await planningMasterStore.transitionRoutingTemplate(
+      id,
+      { status },
+      requestContext(event),
+    );
+    return json(200, { routingTemplate: item });
   } catch (error) {
     return errorJson(error);
   }

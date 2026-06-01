@@ -3,22 +3,34 @@
 import Link from 'next/link';
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { CheckCircle2, ClipboardList, PackageCheck, Plus, RefreshCw, Search } from 'lucide-react';
+import {
+  CheckCircle2,
+  ClipboardList,
+  PackageCheck,
+  Plus,
+  RefreshCw,
+  Route,
+  Search,
+} from 'lucide-react';
 import { PageHeader } from '@gg-erp/ui';
 import {
   approveBom,
   createBom,
   createBuildConfiguration,
+  createRoutingTemplate,
   listBoms,
   listBuildConfigurations,
   listBuildPackages,
   listCartVehicles,
   listParts,
+  listRoutingTemplates,
+  transitionRoutingTemplate,
   transitionBuildConfiguration,
   type BuildBom,
   type BuildConfiguration,
   type CartVehicle,
   type Part,
+  type RoutingTemplate,
   type WorkOrderBuildPackage,
 } from '@/lib/api-client';
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
@@ -32,6 +44,18 @@ interface DraftBomLine {
   partId: string;
   quantityPerUnit: string;
   scrapFactor: string;
+}
+
+interface DraftRoutingStep {
+  operationCode: string;
+  operationName: string;
+  workstationCode: string;
+  estimatedMinutes: string;
+  requiredSkillCode: string;
+  jobCardTitle: string;
+  jobCardInstructions: string;
+  qcRequired: boolean;
+  evidenceRequired: boolean;
 }
 
 function formatDate(value?: string): string {
@@ -74,10 +98,30 @@ function nextBomCode(config?: BuildConfiguration): string {
   return `BOM-${base}-R${(config?.configurationVersion ?? 1).toString().padStart(2, '0')}`;
 }
 
+function nextRouteCode(config?: BuildConfiguration): string {
+  const base = config?.configurationCode ?? 'BUILD';
+  return `RT-${base}`;
+}
+
+function defaultRoutingStep(): DraftRoutingStep {
+  return {
+    operationCode: '',
+    operationName: '',
+    workstationCode: '',
+    estimatedMinutes: '60',
+    requiredSkillCode: '',
+    jobCardTitle: '',
+    jobCardInstructions: '',
+    qcRequired: false,
+    evidenceRequired: false,
+  };
+}
+
 export default function BuildPackagesPage() {
   const [packages, setPackages] = useState<WorkOrderBuildPackage[]>([]);
   const [configs, setConfigs] = useState<BuildConfiguration[]>([]);
   const [boms, setBoms] = useState<BuildBom[]>([]);
+  const [routingTemplates, setRoutingTemplates] = useState<RoutingTemplate[]>([]);
   const [vehicles, setVehicles] = useState<CartVehicle[]>([]);
   const [parts, setParts] = useState<Part[]>([]);
   const [search, setSearch] = useState('');
@@ -99,6 +143,12 @@ export default function BuildPackagesPage() {
     { partId: '', quantityPerUnit: '1', scrapFactor: '0' },
   ]);
 
+  const [routeCode, setRouteCode] = useState('');
+  const [routeName, setRouteName] = useState('');
+  const [routeBuildConfigurationId, setRouteBuildConfigurationId] = useState('');
+  const [routeNotes, setRouteNotes] = useState('');
+  const [routingSteps, setRoutingSteps] = useState<DraftRoutingStep[]>([defaultRoutingStep()]);
+
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -108,14 +158,19 @@ export default function BuildPackagesPage() {
       listBuildPackages({ search: search || undefined, limit: 100 }, { allowMockFallback: false }),
       listBuildConfigurations({ search: search || undefined, limit: 100 }, { allowMockFallback: false }),
       listBoms({ search: search || undefined, limit: 100 }, { allowMockFallback: false }),
+      listRoutingTemplates(
+        { search: search || undefined, limit: 100 },
+        { allowMockFallback: false },
+      ),
       listCartVehicles({ limit: 100 }, { allowMockFallback: false }),
       listParts({ partState: 'ACTIVE', limit: 100 }, { allowMockFallback: false }),
     ])
-      .then(([packageResult, configResult, bomResult, vehicleResult, partResult]) => {
+      .then(([packageResult, configResult, bomResult, routingResult, vehicleResult, partResult]) => {
         if (!active) return;
         setPackages(packageResult.items);
         setConfigs(configResult.items);
         setBoms(bomResult.items);
+        setRoutingTemplates(routingResult.items);
         setVehicles(vehicleResult.items);
         setParts(partResult.items);
       })
@@ -124,6 +179,7 @@ export default function BuildPackagesPage() {
         setPackages([]);
         setConfigs([]);
         setBoms([]);
+        setRoutingTemplates([]);
         setError(err instanceof Error ? err.message : 'Planning catalog failed to load.');
       })
       .finally(() => {
@@ -137,6 +193,7 @@ export default function BuildPackagesPage() {
 
   const selectedVehicle = vehicles.find((vehicle) => vehicle.id === vehicleId);
   const selectedConfig = configs.find((config) => config.id === buildConfigurationId);
+  const selectedRouteConfig = configs.find((config) => config.id === routeBuildConfigurationId);
 
   useEffect(() => {
     if (selectedVehicle && !configurationCode) {
@@ -150,15 +207,22 @@ export default function BuildPackagesPage() {
     }
   }, [bomCode, selectedConfig]);
 
+  useEffect(() => {
+    if (selectedRouteConfig && !routeCode) {
+      setRouteCode(nextRouteCode(selectedRouteConfig));
+    }
+  }, [routeCode, selectedRouteConfig]);
+
   const stats = useMemo(() => {
     const workOrderCount = packages.reduce((total, pkg) => total + pkg.workOrderCount, 0);
     return {
       packageCount: packages.length,
       releasedConfigs: configs.filter((config) => config.configurationStatus === 'RELEASED').length,
       approvedBoms: boms.filter((bom) => bom.bomStatus === 'APPROVED').length,
+      activeRoutes: routingTemplates.filter((template) => template.templateStatus === 'ACTIVE').length,
       workOrderCount,
     };
-  }, [boms, configs, packages]);
+  }, [boms, configs, packages, routingTemplates]);
 
   function reload(): void {
     setReloadToken((current) => current + 1);
@@ -260,6 +324,71 @@ export default function BuildPackagesPage() {
     }
   }
 
+  async function submitRoutingTemplate(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    const steps = routingSteps
+      .filter((step) => step.operationCode.trim() || step.operationName.trim())
+      .map((step, index) => ({
+        sequenceNo: (index + 1) * 10,
+        operationCode: step.operationCode.trim(),
+        operationName: step.operationName.trim(),
+        workstationCode: step.workstationCode.trim() || undefined,
+        estimatedMinutes: Number(step.estimatedMinutes),
+        requiredSkillCode: step.requiredSkillCode.trim() || undefined,
+        jobCardTitle: step.jobCardTitle.trim() || undefined,
+        jobCardInstructions: step.jobCardInstructions.trim() || undefined,
+        qcRequired: step.qcRequired,
+        evidenceRequired: step.evidenceRequired,
+      }));
+    if (!routeCode.trim() || !routeName.trim()) {
+      toast.error('Route code and name are required.');
+      return;
+    }
+    if (steps.length === 0) {
+      toast.error('Add at least one routing step.');
+      return;
+    }
+    if (steps.some((step) => !step.operationCode || !step.operationName || !step.estimatedMinutes)) {
+      toast.error('Each routing step needs a code, name, and estimated minutes.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await createRoutingTemplate({
+        routeCode: routeCode.trim(),
+        routeName: routeName.trim(),
+        buildConfigurationId: routeBuildConfigurationId || undefined,
+        notes: routeNotes.trim() || undefined,
+        steps,
+      });
+      toast.success('Routing template created');
+      setRouteCode('');
+      setRouteName('');
+      setRouteBuildConfigurationId('');
+      setRouteNotes('');
+      setRoutingSteps([defaultRoutingStep()]);
+      reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create routing template.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function transitionRoute(template: RoutingTemplate, status: 'ACTIVE' | 'RETIRED'): Promise<void> {
+    setSaving(true);
+    try {
+      await transitionRoutingTemplate(template.id, status);
+      toast.success(status === 'ACTIVE' ? 'Routing template activated' : 'Routing template retired');
+      reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update routing template.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -267,7 +396,7 @@ export default function BuildPackagesPage() {
         description="Release build configurations, approve BOM revisions, and reuse them in work orders."
       />
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardContent className="p-4">
             <div className="text-2xl font-bold text-[#211F1E]">{stats.packageCount}</div>
@@ -288,13 +417,19 @@ export default function BuildPackagesPage() {
         </Card>
         <Card>
           <CardContent className="p-4">
+            <div className="text-2xl font-bold text-[#211F1E]">{stats.activeRoutes}</div>
+            <div className="text-sm text-[#6E625A]">Active routes</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
             <div className="text-2xl font-bold text-[#211F1E]">{stats.workOrderCount}</div>
             <div className="text-sm text-[#6E625A]">Work orders</div>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-3">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
@@ -508,6 +643,244 @@ export default function BuildPackagesPage() {
             </form>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Route className="h-5 w-5 text-[#E87820]" />
+              Routing Template
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={submitRoutingTemplate} className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="routeCode">Route Code</Label>
+                  <Input
+                    id="routeCode"
+                    value={routeCode}
+                    onChange={(event) => setRouteCode(event.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="routeName">Route Name</Label>
+                  <Input
+                    id="routeName"
+                    value={routeName}
+                    onChange={(event) => setRouteName(event.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="routeBuildConfigurationId">Configuration</Label>
+                <select
+                  id="routeBuildConfigurationId"
+                  className="h-10 w-full rounded-md border border-[#D9CCBE] bg-white px-3 text-sm"
+                  value={routeBuildConfigurationId}
+                  onChange={(event) => {
+                    setRouteBuildConfigurationId(event.target.value);
+                    setRouteCode('');
+                  }}
+                >
+                  <option value="">Reusable route</option>
+                  {configs.map((config) => (
+                    <option key={config.id} value={config.id}>
+                      {config.configurationCode} · {statusText(config.configurationStatus)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label>Job Card Steps</Label>
+                {routingSteps.map((step, index) => (
+                  <div key={index} className="rounded-md border border-[#E8DDD2] p-3">
+                    <div className="grid gap-2 sm:grid-cols-[96px_1fr_88px]">
+                      <Input
+                        aria-label="Operation code"
+                        value={step.operationCode}
+                        onChange={(event) =>
+                          setRoutingSteps((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? { ...item, operationCode: event.target.value }
+                                : item,
+                            ),
+                          )
+                        }
+                        placeholder="FRAME"
+                        required
+                      />
+                      <Input
+                        aria-label="Operation name"
+                        value={step.operationName}
+                        onChange={(event) =>
+                          setRoutingSteps((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? { ...item, operationName: event.target.value }
+                                : item,
+                            ),
+                          )
+                        }
+                        placeholder="Frame assembly"
+                        required
+                      />
+                      <Input
+                        aria-label="Estimated minutes"
+                        value={step.estimatedMinutes}
+                        onChange={(event) =>
+                          setRoutingSteps((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? { ...item, estimatedMinutes: event.target.value }
+                                : item,
+                            ),
+                          )
+                        }
+                        type="number"
+                        min="1"
+                        required
+                      />
+                    </div>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                      <Input
+                        aria-label="Workstation code"
+                        value={step.workstationCode}
+                        onChange={(event) =>
+                          setRoutingSteps((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? { ...item, workstationCode: event.target.value }
+                                : item,
+                            ),
+                          )
+                        }
+                        placeholder="BAY-1"
+                      />
+                      <Input
+                        aria-label="Skill code"
+                        value={step.requiredSkillCode}
+                        onChange={(event) =>
+                          setRoutingSteps((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? { ...item, requiredSkillCode: event.target.value }
+                                : item,
+                            ),
+                          )
+                        }
+                        placeholder="MECHANICAL"
+                      />
+                    </div>
+                    <Input
+                      className="mt-2"
+                      aria-label="Job card title"
+                      value={step.jobCardTitle}
+                      onChange={(event) =>
+                        setRoutingSteps((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? { ...item, jobCardTitle: event.target.value }
+                              : item,
+                          ),
+                        )
+                      }
+                      placeholder="Job card title"
+                    />
+                    <Textarea
+                      className="mt-2"
+                      aria-label="Job card instructions"
+                      value={step.jobCardInstructions}
+                      onChange={(event) =>
+                        setRoutingSteps((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? { ...item, jobCardInstructions: event.target.value }
+                              : item,
+                          ),
+                        )
+                      }
+                      rows={2}
+                      placeholder="Torque specs, inspection notes, and handoff requirements"
+                    />
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap gap-3 text-sm text-[#4A4039]">
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={step.qcRequired}
+                            onChange={(event) =>
+                              setRoutingSteps((current) =>
+                                current.map((item, itemIndex) =>
+                                  itemIndex === index
+                                    ? { ...item, qcRequired: event.target.checked }
+                                    : item,
+                                ),
+                              )
+                            }
+                          />
+                          QC
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={step.evidenceRequired}
+                            onChange={(event) =>
+                              setRoutingSteps((current) =>
+                                current.map((item, itemIndex) =>
+                                  itemIndex === index
+                                    ? { ...item, evidenceRequired: event.target.checked }
+                                    : item,
+                                ),
+                              )
+                            }
+                          />
+                          Evidence
+                        </label>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setRoutingSteps((current) =>
+                            current.filter((_, itemIndex) => itemIndex !== index),
+                          )
+                        }
+                        disabled={routingSteps.length === 1}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setRoutingSteps((current) => [...current, defaultRoutingStep()])}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Step
+                </Button>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="routeNotes">Notes</Label>
+                <Textarea
+                  id="routeNotes"
+                  value={routeNotes}
+                  onChange={(event) => setRouteNotes(event.target.value)}
+                  rows={2}
+                />
+              </div>
+              <Button type="submit" disabled={saving || loading}>
+                <Plus className="mr-2 h-4 w-4" />
+                Create Route
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
@@ -607,7 +980,7 @@ export default function BuildPackagesPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-3">
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Configurations</CardTitle>
@@ -669,6 +1042,73 @@ export default function BuildPackagesPage() {
                 </Button>
               </div>
             ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Routing Templates</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {routingTemplates.slice(0, 8).map((template) => (
+              <div
+                key={template.id}
+                className="flex flex-col gap-2 border-b border-[#EFE6DC] pb-3 last:border-b-0"
+              >
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <div className="font-semibold text-[#211F1E]">
+                      {template.routeCode} · {template.routeName}
+                    </div>
+                    <div className="text-xs text-[#6E625A]">
+                      v{template.routeVersion} · {statusText(template.templateStatus)} ·{' '}
+                      {template.stepCount} steps · {template.estimatedMinutes} min
+                    </div>
+                    {template.configurationCode && (
+                      <div className="mt-1 text-xs text-[#6E625A]">
+                        {template.configurationCode}
+                      </div>
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={saving}
+                    onClick={() =>
+                      transitionRoute(
+                        template,
+                        template.templateStatus === 'ACTIVE' ? 'RETIRED' : 'ACTIVE',
+                      )
+                    }
+                  >
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                    {template.templateStatus === 'ACTIVE' ? 'Retire' : 'Activate'}
+                  </Button>
+                </div>
+                {template.steps.slice(0, 4).map((step) => (
+                  <div
+                    key={step.id}
+                    className="rounded-md bg-[#F7F1EA] px-3 py-2 text-xs text-[#4A4039]"
+                  >
+                    <span className="font-semibold text-[#211F1E]">
+                      {step.sequenceNo}. {step.operationCode}
+                    </span>{' '}
+                    {step.operationName} · {step.estimatedMinutes} min
+                    {(step.qcRequired || step.evidenceRequired) && (
+                      <span className="ml-2 text-[#6E625A]">
+                        {[step.qcRequired ? 'QC' : '', step.evidenceRequired ? 'Evidence' : '']
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))}
+            {routingTemplates.length === 0 && (
+              <div className="text-sm text-[#6E625A]">No routing templates matched.</div>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -440,8 +440,8 @@
                 consequences are not mature yet.
               </li>
               <li>
-                API smoke route exceptions are limited to pending deployment of the new
-                routing-template routes and should return to zero after CD promotes this slice.
+                API smoke route exceptions are back to zero after the routing-template routes
+                deployed and were verified live.
               </li>
             </ul>
           </div>
@@ -715,16 +715,16 @@
               <td>Latest production baseline</td>
               <td><span class="pill done">Merged</span></td>
               <td>
-                <code>origin/main</code> is at <code>a328e77</code>, from PR 153: reporting route
-                allowance cleanup after PR 152 deployed.
+                <code>origin/main</code> is at <code>e2891fd</code>, from PR 154: planning
+                routing-template and job-card masters.
               </td>
             </tr>
             <tr>
               <td>Recent pipeline health</td>
               <td><span class="pill done">Green</span></td>
               <td>
-                Latest main CI, QA, Pages, and prior CD runs completed successfully. Latest
-                scheduled QA on May 21, 2026 also succeeded.
+                Latest main CI, QA, Pages, and CD runs completed successfully after PR 154 merged.
+                Latest scheduled QA on May 21, 2026 also succeeded.
               </td>
             </tr>
             <tr>
@@ -751,12 +751,12 @@
             </tr>
             <tr>
               <td>Known route exceptions</td>
-              <td><span class="pill doing">3 Pending Deploy</span></td>
+              <td><span class="pill done">0 Known</span></td>
               <td>
-                <code>POST /accounting/webhook</code> returns an explicit 400 for unsigned non-empty
-                probes; <code>known-broken.json</code> only allows the three pending
-                <code>/planning/routing-templates</code> API Gateway route-miss checks until CD
-                promotes this slice.
+                <code>known-broken.json</code> is empty. Live verification after CD confirmed
+                <code>GET /planning/routing-templates</code> returns a handler response and the
+                mutating routing-template routes return auth challenges, not API Gateway route
+                misses.
               </td>
             </tr>
           </tbody>

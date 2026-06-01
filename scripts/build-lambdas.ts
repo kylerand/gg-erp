@@ -168,6 +168,8 @@ const lambdas: LambdaEntry[] = [
   { context: 'accounting', handler: 'list-mismatches',           entry: 'apps/api/src/lambda/accounting/list-mismatches.handler.ts' },
   { context: 'accounting', handler: 'resolve-reconciliation',    entry: 'apps/api/src/lambda/accounting/resolve-reconciliation.handler.ts' },
   { context: 'accounting', handler: 'list-operational-ledger',   entry: 'apps/api/src/lambda/accounting/list-operational-ledger.handler.ts' },
+  { context: 'accounting', handler: 'list-journals',             entry: 'apps/api/src/lambda/accounting/list-journals.handler.ts' },
+  { context: 'accounting', handler: 'post-operational-ledger-journals', entry: 'apps/api/src/lambda/accounting/post-operational-ledger-journals.handler.ts' },
   { context: 'accounting', handler: 'get-failure-summary',       entry: 'apps/api/src/lambda/accounting/get-failure-summary.handler.ts' },
   { context: 'accounting', handler: 'retry-failed',              entry: 'apps/api/src/lambda/accounting/retry-failed.handler.ts' },
 

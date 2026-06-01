@@ -2132,6 +2132,72 @@ model CustomerSyncRecord {
   @@schema("accounting")
 }
 
+enum AccountingJournalSourceType {
+  PAYABLE_RECEIPT
+  CUSTOMER_PAYMENT
+  RECONCILIATION_VARIANCE
+
+  @@schema("accounting")
+}
+
+enum AccountingJournalStatus {
+  POSTED
+  REVERSED
+
+  @@schema("accounting")
+}
+
+model AccountingJournalEntry {
+  id                   String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  journalNumber        String                      @unique @map("journal_number")
+  sourceType           AccountingJournalSourceType @map("source_type")
+  sourceId             String                      @map("source_id")
+  sourceLedgerEntryId  String                      @unique @map("source_ledger_entry_id")
+  sourceDocumentNumber String                      @map("source_document_number")
+  counterparty         String?
+  ledgerDate           DateTime                    @map("ledger_date") @db.Timestamptz(6)
+  currencyCode         String                      @default("USD") @map("currency_code")
+  status               AccountingJournalStatus     @default(POSTED)
+  totalDebitCents      Int                         @map("total_debit_cents")
+  totalCreditCents     Int                         @map("total_credit_cents")
+  memo                 String?
+  postedAt             DateTime                    @default(now()) @map("posted_at") @db.Timestamptz(6)
+  postedBy             String?                     @map("posted_by")
+  correlationId        String?                     @map("correlation_id")
+  createdAt            DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  version              Int                         @default(0)
+
+  lines AccountingJournalLine[]
+
+  @@unique([sourceType, sourceId])
+  @@index([ledgerDate], map: "journal_entries_ledger_date_idx")
+  @@index([status], map: "journal_entries_status_idx")
+  @@index([sourceType, ledgerDate], map: "journal_entries_source_date_idx")
+  @@map("journal_entries")
+  @@schema("accounting")
+}
+
+model AccountingJournalLine {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  journalEntryId String   @map("journal_entry_id") @db.Uuid
+  lineNumber     Int      @map("line_number")
+  accountName    String   @map("account_name")
+  accountCode    String?  @map("account_code")
+  debitCents     Int      @default(0) @map("debit_cents")
+  creditCents    Int      @default(0) @map("credit_cents")
+  memo           String?
+  dimensionType  String?  @map("dimension_type")
+  dimensionId    String?  @map("dimension_id")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  journalEntry AccountingJournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+
+  @@unique([journalEntryId, lineNumber])
+  @@index([accountName], map: "journal_lines_account_name_idx")
+  @@map("journal_lines")
+  @@schema("accounting")
+}
+
 // ============================================================
 // integrations schema — payment sync & reconciliation
 // ============================================================

@@ -695,6 +695,64 @@ const operationalLedger = z.object({
   ),
 });
 
+const accountingJournalLine = z.object({
+  id: uuid,
+  lineNumber: positiveInt,
+  accountName: z.string(),
+  accountCode: z.string().nullable(),
+  debitCents: z.number(),
+  creditCents: z.number(),
+  memo: z.string().nullable(),
+  dimensionType: z.string().nullable(),
+  dimensionId: z.string().nullable(),
+});
+
+const accountingJournal = z.object({
+  id: uuid,
+  journalNumber: z.string(),
+  sourceType: z.enum(['PAYABLE_RECEIPT', 'CUSTOMER_PAYMENT', 'RECONCILIATION_VARIANCE']),
+  sourceId: z.string(),
+  sourceLedgerEntryId: z.string(),
+  sourceDocumentNumber: z.string(),
+  counterparty: z.string().nullable(),
+  ledgerDate: isoDate,
+  currencyCode: z.literal('USD'),
+  status: z.enum(['POSTED', 'REVERSED']),
+  totalDebitCents: z.number(),
+  totalCreditCents: z.number(),
+  memo: z.string().nullable(),
+  postedAt: isoDate,
+  postedBy: z.string().nullable(),
+  correlationId: z.string().nullable(),
+  lines: z.array(accountingJournalLine),
+});
+
+const accountingJournalSummary = z.object({
+  generatedAt: isoDate,
+  entryCount: positiveInt,
+  totalDebitCents: z.number(),
+  totalCreditCents: z.number(),
+  sourceTotals: z.record(z.string(), operationalLedgerTotals),
+});
+
+const accountingJournals = z.object({
+  items: z.array(accountingJournal),
+  total: positiveInt,
+  limit: positiveInt,
+  offset: positiveInt,
+  summary: accountingJournalSummary,
+});
+
+const accountingJournalPostResult = z.object({
+  posted: z.array(accountingJournal),
+  postedCount: positiveInt,
+  skipped: z.object({
+    notPostable: positiveInt,
+    existing: positiveInt,
+  }),
+  summary: accountingJournalSummary,
+});
+
 const reportMetric = z.object({
   value: z.string(),
   label: z.string(),
@@ -810,6 +868,12 @@ const ROUTES: RouteEntry[] = [
   // Accounting
   { method: 'GET', template: '/accounting/status', schema: accountingStatus },
   { method: 'GET', template: '/accounting/operational-ledger', schema: operationalLedger },
+  { method: 'GET', template: '/accounting/journals', schema: accountingJournals },
+  {
+    method: 'POST',
+    template: '/accounting/journals/post-operational-ledger',
+    schema: accountingJournalPostResult,
+  },
   {
     method: 'GET',
     template: '/accounting/reconciliation/runs',

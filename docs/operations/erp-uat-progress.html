@@ -232,20 +232,20 @@
       </header>
 
       <div class="summary">
-        <div class="metric"><strong>20</strong><span>Tracked delivery slices</span></div>
+        <div class="metric"><strong>21</strong><span>Tracked delivery slices</span></div>
         <div class="metric"><strong>19</strong><span>Done</span></div>
-        <div class="metric"><strong>0</strong><span>In progress</span></div>
+        <div class="metric"><strong>1</strong><span>In progress</span></div>
         <div class="metric"><strong>1</strong><span>Blocked</span></div>
       </div>
 
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: reporting saved-view subscriptions and in-app CSV export evidence are being
-          made live. ShopMonkey cutover readiness remains blocked on missing parts and
-          purchase-order source exports.
+          Current focus: accounting journal posting is being made live from the operational ledger.
+          ShopMonkey cutover readiness remains blocked on missing parts and purchase-order source
+          exports.
         </p>
-        <div class="progress" aria-label="95 percent complete"><div style="width: 95%"></div></div>
+        <div class="progress" aria-label="96 percent complete"><div style="width: 96%"></div></div>
       </section>
 
       <section>
@@ -405,8 +405,22 @@
                 received POs into bill-review or receiving actions.
               </td>
               <td>
-                Add escalation subscriptions and deeper financial report integration after internal
-                ledger work.
+                Operational ledger and immutable journal posting are now the active internal-ledger
+                follow-on slice before deeper financial reports.
+              </td>
+            </tr>
+            <tr>
+              <td>Accounting journal posting</td>
+              <td><span class="pill doing">In progress</span></td>
+              <td>
+                This branch adds accounting journal-entry and journal-line schema, live journal list
+                and guarded post-operational-ledger APIs, posted-journal UI on
+                <code>/accounting/ledger</code>, and registry/workspace metadata for journal
+                entries.
+              </td>
+              <td>
+                Pass PR CI/QA, merge, prove CD/live smoke for the two new journal routes, then
+                remove the pending-deploy QA route exceptions.
               </td>
             </tr>
             <tr>

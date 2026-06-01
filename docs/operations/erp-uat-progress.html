@@ -232,9 +232,9 @@
       </header>
 
       <div class="summary">
-        <div class="metric"><strong>19</strong><span>Tracked delivery slices</span></div>
+        <div class="metric"><strong>20</strong><span>Tracked delivery slices</span></div>
         <div class="metric"><strong>19</strong><span>Done</span></div>
-        <div class="metric"><strong>0</strong><span>In progress</span></div>
+        <div class="metric"><strong>1</strong><span>In progress</span></div>
         <div class="metric"><strong>0</strong><span>Not started</span></div>
       </div>
 
@@ -244,7 +244,7 @@
           Current focus: validating ShopMonkey cutover readiness around the now-actionable
           operator workflows and keeping new mutation slices on the same live-data standard.
         </p>
-        <div class="progress" aria-label="100 percent complete"><div style="width: 100%"></div></div>
+        <div class="progress" aria-label="95 percent complete"><div style="width: 95%"></div></div>
       </section>
 
       <section>
@@ -478,6 +478,21 @@
               <td>Add persisted report subscriptions and scheduled exports once subscription tables are designed.</td>
             </tr>
             <tr>
+              <td>ShopMonkey cutover readiness</td>
+              <td><span class="pill doing">In progress</span></td>
+              <td>
+                `/admin/migration` is registered in the admin catalog and reads live
+                `GET /migration/batches` data with mock fallback disabled. The page summarizes
+                rehearsal batches, record coverage, migration errors, and cutover gate status, then
+                links into customers, parts, work orders, and accounting sync for imported-domain
+                inspection.
+              </td>
+              <td>
+                Run the staging rehearsal from the latest ShopMonkey export and attach
+                row-count/reconciliation evidence.
+              </td>
+            </tr>
+            <tr>
               <td>Production reference seed</td>
               <td><span class="pill done">Done</span></td>
               <td>
@@ -515,10 +530,10 @@
               <td><span class="pill done">Done</span></td>
               <td>
                 `ERP_ADMIN_CONFIGURATION_DOMAINS` backs the admin landing catalog with live
-                user-access, accounting-settings, integration-health, and audit-trail destinations;
-                integration health uses strict live QuickBooks, sync queue, account, and
-                reconciliation sources, and `/admin/accounting` configures live QuickBooks dimension
-                and tax mappings.
+                user-access, accounting-settings, integration-health, migration-cutover, and audit-trail
+                destinations; integration health uses strict live QuickBooks, sync queue, account,
+                and reconciliation sources, and `/admin/accounting` configures live QuickBooks
+                dimension and tax mappings.
               </td>
               <td>Add API-key, webhook, and template domains only when those APIs exist.</td>
             </tr>

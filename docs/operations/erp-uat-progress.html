@@ -232,8 +232,8 @@
       </header>
 
       <div class="summary">
-        <div class="metric"><strong>18</strong><span>Tracked delivery slices</span></div>
-        <div class="metric"><strong>17</strong><span>Done</span></div>
+        <div class="metric"><strong>19</strong><span>Tracked delivery slices</span></div>
+        <div class="metric"><strong>18</strong><span>Done</span></div>
         <div class="metric"><strong>1</strong><span>In progress</span></div>
         <div class="metric"><strong>0</strong><span>Not started</span></div>
       </div>
@@ -480,13 +480,22 @@
               <td>Production reference seed</td>
               <td><span class="pill done">Done</span></td>
               <td>
-                Baseline roles, permissions, role-permission grants, stock locations, and
-                `MVP_BASELINE` planning constraints are seeded through an idempotent reference
-                migration. The seed is tracked both as the architecture migration artifact and as a
-                deploy-applied Prisma-compatible migration; stock bins remain tied to inventory
-                scaffold deploy-schema alignment.
+                Baseline roles, permissions, role-permission grants, stock locations, stock bins, and
+                `MVP_BASELINE` planning constraints are seeded through idempotent reference
+                migrations. Stock bins now exist in the deploy-applied Prisma schema with day-one
+                `GENERAL`, `INBOUND`, and bay `WIP` bins.
               </td>
-              <td>Run staging seed verification during cutover rehearsal; seed stock bins after deploy-schema alignment.</td>
+              <td>Run staging seed verification during cutover rehearsal.</td>
+            </tr>
+            <tr>
+              <td>Inventory stock-bin schema</td>
+              <td><span class="pill done">Done</span></td>
+              <td>
+                The deploy migration chain now creates `inventory.stock_bins`, indexes active bins by
+                location/code/state/pickability, exposes a Prisma `StockBin` model, and seeds the
+                default warehouse, receiving, and bay bins.
+              </td>
+              <td>Add bin-aware lot, reservation, and movement mutations when the UI starts collecting bin-level stock actions.</td>
             </tr>
             <tr>
               <td>Fresh Prisma deploy reliability</td>

@@ -643,6 +643,7 @@ model UnitOfMeasure {
   deletedAt    DateTime?   @map("deleted_at") @db.Timestamptz(6)
   version      Int         @default(0)
 
+  capacityStockBins  StockBin[]
   purchaseOrderLines PurchaseOrderLine[]
 
   @@map("units_of_measure")
@@ -800,11 +801,42 @@ model StockLocation {
 
   parent          StockLocation?  @relation("LocationHierarchy", fields: [parentLocationId], references: [id])
   children        StockLocation[] @relation("LocationHierarchy")
+  stockBins       StockBin[]
   stockLots       StockLot[]
   workOrders      WoOrder[]
   defaultForParts Part[]          @relation("DefaultLocationForParts")
 
   @@map("stock_locations")
+  @@schema("inventory")
+}
+
+model StockBin {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  stockLocationId   String    @map("stock_location_id") @db.Uuid
+  binCode           String    @map("bin_code")
+  binName           String    @map("bin_name")
+  binType           String    @default("STORAGE") @map("bin_type")
+  binState          String    @default("ACTIVE") @map("bin_state")
+  isPickable        Boolean   @default(true) @map("is_pickable")
+  capacityQuantity  Decimal?  @map("capacity_quantity") @db.Decimal(14, 3)
+  capacityUomId     String?   @map("capacity_uom_id") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  createdByUserId   String?   @map("created_by_user_id") @db.Uuid
+  updatedByUserId   String?   @map("updated_by_user_id") @db.Uuid
+  lastCorrelationId String?   @map("last_correlation_id")
+  lastRequestId     String?   @map("last_request_id")
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedByUserId   String?   @map("deleted_by_user_id") @db.Uuid
+  deleteReason      String?   @map("delete_reason")
+  version           Int       @default(0)
+
+  stockLocation StockLocation  @relation(fields: [stockLocationId], references: [id])
+  capacityUom   UnitOfMeasure? @relation(fields: [capacityUomId], references: [id])
+
+  @@index([stockLocationId, binState], map: "stock_bins_location_state_idx")
+  @@index([stockLocationId, isPickable], map: "stock_bins_pickable_idx")
+  @@map("stock_bins")
   @@schema("inventory")
 }
 

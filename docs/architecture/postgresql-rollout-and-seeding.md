@@ -27,7 +27,7 @@ This document defines an MVP-simple rollout sequence for the existing migration 
 | Stage 0: preflight | release checklist + DB snapshot | Validate ownership, migration lock strategy, backup readiness | Prevents ambiguous ownership/race conditions during DDL rollout |
 | Stage 1: bootstrap | `0001_initial_schema.sql` | Create baseline schemas/tables for first environment bootstrap only | Keeps migration history complete and reproducible from an empty cluster |
 | Stage 2: canonical | `0002_canonical_erp_domain.sql` | Install canonical domain model and append-only controls | Aligns runtime schema with architecture docs and domain boundaries |
-| Stage 3: seed reference data | `apps/api/src/migrations/0005_seed_reference_data.sql` and `packages/db/prisma/migrations/20260601030000_seed_reference_data/migration.sql` | Insert minimal roles, permissions, locations, and planning defaults; architecture seed also covers bins once the inventory scaffold is in the deploy chain | Enables immediate operability without leaking environment-specific fixtures |
+| Stage 3: seed reference data | `apps/api/src/migrations/0005_seed_reference_data.sql` and deploy-applied Prisma seed migrations | Insert minimal roles, permissions, locations, stock bins, and planning defaults | Enables immediate operability without leaking environment-specific fixtures |
 | Stage 4+: additive evolution | `0006_*.sql` / later Prisma migrations onward | Expand/migrate/contract changes only | Enables safer zero/low-downtime schema evolution as live data volume grows |
 
 ### Important note on `0002`
@@ -94,7 +94,7 @@ For post-`0002` additive migrations, prefer forward-fix migrations over emergenc
 ### Seeding principles
 
 1. Seed **reference data only**, not demo transactions.
-2. Use deterministic natural keys (`role_code`, `permission_code`, `location_code`, `scenario_name`, `constraint_key`; plus `bin_code` once bins are in the deploy schema) for idempotency.
+2. Use deterministic natural keys (`role_code`, `permission_code`, `location_code`, `bin_code`, `scenario_name`, `constraint_key`) for idempotency.
 3. Keep one seed migration for baseline data; environment-specific records belong in separate operational runbooks.
 
 ### A. Roles and permissions
@@ -146,7 +146,7 @@ Minimum viable location topology:
 | `HQ-BAY-01` | `BAY` | execution bay 1 |
 | `HQ-BAY-02` | `BAY` | execution bay 2 |
 
-Seed at least one pickable warehouse, one receiving stage, and one bay so work orders, reservations, and planning FKs have valid targets on day one. The architecture seed also creates default bins for each location (`GENERAL`, `INBOUND`, and bay `WIP` bins); the deploy-applied Prisma seed defers bins until the inventory scaffold is aligned into the deploy migration chain.
+Seed at least one pickable warehouse, one receiving stage, and one bay so work orders, reservations, and planning FKs have valid targets on day one. The architecture seed and deploy-applied Prisma seed both create default bins for each location (`GENERAL`, `INBOUND`, and bay `WIP` bins).
 
 ### D. Planning defaults (`planning.*`)
 

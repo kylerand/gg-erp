@@ -9,7 +9,9 @@ const migrationArtifactsPromise = (async () => {
     identityAuthz,
     reservationStorage,
     referenceSeed,
-    prismaReferenceSeed
+    prismaReferenceSeed,
+    prismaStockBinSchema,
+    prismaStockBinSeed
   ] = await Promise.all([
     readFile(new URL('../../../apps/api/src/migrations/0002_canonical_erp_domain.sql', import.meta.url), 'utf8'),
     readFile(new URL('../../../packages/db/prisma/migrations/0001_init/migration.sql', import.meta.url), 'utf8'),
@@ -34,10 +36,33 @@ const migrationArtifactsPromise = (async () => {
         import.meta.url
       ),
       'utf8'
+    ),
+    readFile(
+      new URL(
+        '../../../packages/db/prisma/migrations/20260601031000_add_inventory_stock_bins/migration.sql',
+        import.meta.url
+      ),
+      'utf8'
+    ),
+    readFile(
+      new URL(
+        '../../../packages/db/prisma/migrations/20260601032000_seed_stock_bins/migration.sql',
+        import.meta.url
+      ),
+      'utf8'
     )
   ]);
 
-  return { canonical, prismaInit, identityAuthz, reservationStorage, referenceSeed, prismaReferenceSeed };
+  return {
+    canonical,
+    prismaInit,
+    identityAuthz,
+    reservationStorage,
+    referenceSeed,
+    prismaReferenceSeed,
+    prismaStockBinSchema,
+    prismaStockBinSeed
+  };
 })();
 
 function escapeRegex(value) {
@@ -149,7 +174,7 @@ test('inventory ledger remains immutable append-only', async () => {
 });
 
 test('deploy migrations include inventory reservation storage used by runtime handlers', async () => {
-  const { reservationStorage } = await migrationArtifactsPromise;
+  const { reservationStorage, prismaStockBinSchema } = await migrationArtifactsPromise;
 
   for (const tableName of [
     'inventory.inventory_reservations',
@@ -166,6 +191,12 @@ test('deploy migrations include inventory reservation storage used by runtime ha
   const balances = findTableDefinition(reservationStorage, 'inventory.inventory_balances');
   assert.match(balances, /quantity_allocated\s+numeric\(14,3\)\s+not null\s+default\s+0/i);
   assert.match(balances, /quantity_consumed\s+numeric\(14,3\)\s+not null\s+default\s+0/i);
+
+  const stockBins = findTableDefinition(prismaStockBinSchema, 'inventory.stock_bins');
+  assert.match(stockBins, /stock_location_id\s+uuid\s+not null\s+references inventory\.stock_locations\(id\)/i);
+  assert.match(stockBins, /bin_code\s+text\s+not null/i);
+  assert.match(stockBins, /bin_type\s+text\s+not null\s+default 'STORAGE'/i);
+  assert.match(prismaStockBinSchema, /stock_bins_location_code_active_uk/i);
 });
 
 test('audit tables are present for traceability', async () => {
@@ -246,7 +277,7 @@ test('identity authz migration remains coherent with canonical identity entities
 });
 
 test('reference data seed is idempotent and avoids transaction-like rows', async () => {
-  const { referenceSeed, prismaReferenceSeed } = await migrationArtifactsPromise;
+  const { referenceSeed, prismaReferenceSeed, prismaStockBinSeed } = await migrationArtifactsPromise;
 
   assert.match(referenceSeed, /insert into identity\.roles/i);
   assert.match(referenceSeed, /insert into identity\.permissions/i);
@@ -276,6 +307,11 @@ test('reference data seed is idempotent and avoids transaction-like rows', async
   assert.doesNotMatch(prismaReferenceSeed, /\blast_correlation_id\b/i);
   assert.doesNotMatch(prismaReferenceSeed, /insert into planning\.plan_publications/i);
   assert.doesNotMatch(prismaReferenceSeed, /\bDO\s+\$\$/i);
+
+  assert.match(prismaStockBinSeed, /insert into inventory\.stock_bins/i);
+  assert.match(prismaStockBinSeed, /where not exists\s*\(/i);
+  assert.doesNotMatch(prismaStockBinSeed, /on conflict/i);
+  assert.doesNotMatch(prismaStockBinSeed, /\bDO\s+\$\$/i);
 
   for (const roleCode of [
     'ERP_ADMIN',
@@ -307,5 +343,8 @@ test('reference data seed is idempotent and avoids transaction-like rows', async
   }
 
   assert.ok(referenceSeed.includes("'WIP'"), 'Expected architecture seed to include bay bins');
+  assert.ok(prismaStockBinSeed.includes("'GENERAL'"), 'Expected Prisma stock-bin seed to include pick face bin');
+  assert.ok(prismaStockBinSeed.includes("'INBOUND'"), 'Expected Prisma stock-bin seed to include receiving bin');
+  assert.ok(prismaStockBinSeed.includes("'WIP'"), 'Expected Prisma stock-bin seed to include bay WIP bins');
   assert.ok(prismaReferenceSeed.includes('inventory."StockLocationType"'));
 });

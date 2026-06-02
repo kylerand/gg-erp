@@ -121,7 +121,7 @@ export function CustomerSelector({
       {selectedInactive && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
           This customer is {selectedCustomer?.state.toLowerCase()}. Activate the customer before
-          using it on new quotes or work orders.
+          using it on new sales or work-order records.
         </div>
       )}
     </div>

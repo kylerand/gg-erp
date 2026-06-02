@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { PageHeader, LoadingSkeleton, EmptyState, StatusBadge } from '@gg-erp/ui';
 import {
   createDealerRelationship,
@@ -139,7 +140,18 @@ function relationshipDraft(row: DealerRelationship): RelationshipDraft {
   };
 }
 
-function createRelationshipDraft(): CreateRelationshipDraft {
+function normalizeRelationshipTypeParam(value: string | null): DealerRelationship['relationshipType'] {
+  const candidate = value?.toUpperCase().replace(/[\s-]+/g, '_') as
+    | DealerRelationship['relationshipType']
+    | undefined;
+  return candidate && RELATIONSHIP_TYPE_OPTIONS.includes(candidate)
+    ? candidate
+    : 'SERVICING_DEALER';
+}
+
+function createRelationshipDraft(
+  overrides: Partial<CreateRelationshipDraft> = {},
+): CreateRelationshipDraft {
   return {
     dealerId: '',
     customerId: '',
@@ -148,21 +160,35 @@ function createRelationshipDraft(): CreateRelationshipDraft {
     relationshipState: 'ACTIVE',
     escalationOwner: '',
     notes: '',
+    ...overrides,
   };
 }
 
 export default function RelationshipsPage() {
+  const searchParams = useSearchParams();
+  const filterCustomerId = searchParams.get('customerId')?.trim() || undefined;
+  const prefillVehicleId = searchParams.get('vehicleId')?.trim() ?? '';
+  const prefillRelationshipType = normalizeRelationshipTypeParam(
+    searchParams.get('relationshipType'),
+  );
+  const initialCreatePanelOpen = searchParams.get('create') === 'relationship';
   const [relationships, setRelationships] = useState<DealerRelationship[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(() => searchParams.get('search') ?? '');
   const [editingRelationshipId, setEditingRelationshipId] = useState<string | undefined>();
   const [relationshipEditDraft, setRelationshipEditDraft] = useState<RelationshipDraft | undefined>();
   const [savingRelationshipId, setSavingRelationshipId] = useState<string | undefined>();
   const [relationshipSaveError, setRelationshipSaveError] = useState<string | undefined>();
-  const [createPanelOpen, setCreatePanelOpen] = useState(false);
-  const [createDraft, setCreateDraft] = useState<CreateRelationshipDraft>(() => createRelationshipDraft());
+  const [createPanelOpen, setCreatePanelOpen] = useState(initialCreatePanelOpen);
+  const [createDraft, setCreateDraft] = useState<CreateRelationshipDraft>(() =>
+    createRelationshipDraft({
+      customerId: filterCustomerId ?? '',
+      cartVehicleId: prefillVehicleId,
+      relationshipType: prefillRelationshipType,
+    }),
+  );
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [dealerSearch, setDealerSearch] = useState('');
   const [dealersLoading, setDealersLoading] = useState(true);
@@ -182,7 +208,7 @@ export default function RelationshipsPage() {
     setError(undefined);
     try {
       const relationshipResult = await listDealerRelationships(
-        { limit: RELATIONSHIP_LIMIT },
+        { customerId: filterCustomerId, limit: RELATIONSHIP_LIMIT },
         STRICT_LIVE_DATA,
       );
       setRelationships(relationshipResult.items);
@@ -194,7 +220,7 @@ export default function RelationshipsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filterCustomerId]);
 
   useEffect(() => {
     void load();
@@ -317,7 +343,13 @@ export default function RelationshipsPage() {
   };
 
   const resetCreateDraft = () => {
-    setCreateDraft(createRelationshipDraft());
+    setCreateDraft(
+      createRelationshipDraft({
+        customerId: filterCustomerId ?? '',
+        cartVehicleId: prefillVehicleId,
+        relationshipType: prefillRelationshipType,
+      }),
+    );
     setSelectedCustomer(undefined);
     setDealerSearch('');
     setCartSearch('');

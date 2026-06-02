@@ -241,8 +241,8 @@
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: making dealer relationship rows writable by adding a row-level state,
-          escalation owner, and notes workflow backed by the live identity relationship API.
+          Current focus: making dealer/customer/cart assignments actionable by adding a live
+          relationship link workflow backed by the identity relationship API.
           Customer records now show QuickBooks customer-sync and payment-sync activity alongside a
           combined timeline, derived next actions, writable profile, writable cart, inline activity
           logging, work-order, quote, opportunity, and activity context.
@@ -400,15 +400,18 @@
                 standalone profile editing through the live customer update API. PR #180 added
                 row-level cart asset editing through the live vehicle update API. PR #181 added a
                 combined customer timeline from live asset, service, sales, and accounting records.
-                PR #182 added derived customer next actions, and PR #183 added customer-level
-                activity logging through the live sales activity API. This branch adds relationship
-                state, escalation owner, and notes editing through
-                <code>PATCH /identity/dealer-relationships/{id}</code>.
+                PR #182 added derived customer next actions, PR #183 added customer-level activity
+                logging through the live sales activity API, PR #184 added relationship state,
+                escalation owner, and notes editing through
+                <code>PATCH /identity/dealer-relationships/{id}</code>, and PR #185 removed the
+                deployed-route allowlist after CD. This branch adds a live relationship link
+                workflow through <code>POST /identity/dealer-relationships</code> with dealer,
+                active-customer, and optional cart selectors.
               </td>
               <td>
-                Finish CI/QA for dealer relationship updates, then add create/rebind dealer,
-                customer, and cart assignment workflows once relationship ownership mutation rules
-                are finalized.
+                Finish CI/QA/CD for dealer relationship creation, remove the temporary pending-deploy
+                route allowlist after CD, then add dealer account creation/profile updates and richer
+                warranty handoff workflows.
               </td>
             </tr>
             <tr>

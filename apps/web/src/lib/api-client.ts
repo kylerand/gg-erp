@@ -4153,6 +4153,30 @@ export interface UpdateDealerRelationshipInput {
   notes?: string | null;
 }
 
+export interface CreateDealerRelationshipInput {
+  dealerId: string;
+  customerId: string;
+  cartVehicleId?: string | null;
+  relationshipType?: DealerRelationship['relationshipType'];
+  relationshipState?: Exclude<DealerRelationship['relationshipState'], 'ENDED'>;
+  escalationOwner?: string | null;
+  notes?: string | null;
+}
+
+export async function createDealerRelationship(
+  input: CreateDealerRelationshipInput,
+): Promise<DealerRelationship> {
+  const data = await apiFetch<{ relationship: DealerRelationship }>(
+    '/identity/dealer-relationships',
+    {
+      method: 'POST',
+      headers: mutationHeaders(),
+      body: JSON.stringify(input),
+    },
+  );
+  return data.relationship;
+}
+
 export async function updateDealerRelationship(
   id: string,
   input: UpdateDealerRelationshipInput,
@@ -4161,6 +4185,7 @@ export async function updateDealerRelationship(
     `/identity/dealer-relationships/${id}`,
     {
       method: 'PATCH',
+      headers: mutationHeaders(),
       body: JSON.stringify(input),
     },
   );

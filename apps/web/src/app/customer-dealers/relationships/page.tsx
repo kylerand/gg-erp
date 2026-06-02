@@ -4,20 +4,48 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { PageHeader, LoadingSkeleton, EmptyState, StatusBadge } from '@gg-erp/ui';
 import {
+  createDealerRelationship,
+  listCartVehicles,
+  listDealers,
   listDealerRelationships,
   updateDealerRelationship,
+  type CartVehicle,
+  type Customer,
+  type Dealer,
   type DealerRelationship,
 } from '@/lib/api-client';
 import { erpRoute } from '@/lib/erp-routes';
+import { CustomerSelector } from '@/components/customers/CustomerSelector';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import {
+  SearchableSelect,
+  type SearchableSelectOption,
+} from '@/components/ui/searchable-select';
 
 const STRICT_LIVE_DATA = { allowMockFallback: false } as const;
 const RELATIONSHIP_LIMIT = 100;
 const RELATIONSHIP_STATE_OPTIONS = ['ACTIVE', 'INACTIVE', 'ENDED'] as const;
+const CREATE_RELATIONSHIP_STATE_OPTIONS = ['ACTIVE', 'INACTIVE'] as const;
+const RELATIONSHIP_TYPE_OPTIONS: DealerRelationship['relationshipType'][] = [
+  'ACCOUNT_OWNER',
+  'SERVICING_DEALER',
+  'BILLING_ACCOUNT',
+  'WARRANTY_PROVIDER',
+];
 
 interface RelationshipDraft {
   relationshipState: DealerRelationship['relationshipState'];
+  escalationOwner: string;
+  notes: string;
+}
+
+interface CreateRelationshipDraft {
+  dealerId: string;
+  customerId: string;
+  cartVehicleId: string;
+  relationshipType: DealerRelationship['relationshipType'];
+  relationshipState: Exclude<DealerRelationship['relationshipState'], 'ENDED'>;
   escalationOwner: string;
   notes: string;
 }
@@ -39,6 +67,34 @@ function workOrderHref(row: DealerRelationship): string {
 
 function relationshipLabel(type: DealerRelationship['relationshipType']): string {
   return type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function dealerOption(dealer: Dealer): SearchableSelectOption {
+  return {
+    id: dealer.id,
+    label: dealer.name,
+    description: [dealer.dealerCode, dealer.primaryContact, dealer.contactEmail]
+      .filter(Boolean)
+      .join(' · '),
+    meta: [dealer.territory, dealer.serviceRelationship].filter(Boolean).join(' · '),
+  };
+}
+
+function cartOption(vehicle: CartVehicle): SearchableSelectOption {
+  return {
+    id: vehicle.id,
+    label: `${vehicle.modelYear} ${vehicle.modelCode}`,
+    description: [vehicle.vin, vehicle.serialNumber].filter(Boolean).join(' · '),
+    meta: vehicle.state,
+  };
+}
+
+function optionMatchesSearch(option: SearchableSelectOption, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  return [option.label, option.description, option.meta].some((value) =>
+    value?.toLowerCase().includes(needle),
+  );
 }
 
 function cartDetail(row: DealerRelationship): string {
@@ -83,6 +139,18 @@ function relationshipDraft(row: DealerRelationship): RelationshipDraft {
   };
 }
 
+function createRelationshipDraft(): CreateRelationshipDraft {
+  return {
+    dealerId: '',
+    customerId: '',
+    cartVehicleId: '',
+    relationshipType: 'SERVICING_DEALER',
+    relationshipState: 'ACTIVE',
+    escalationOwner: '',
+    notes: '',
+  };
+}
+
 export default function RelationshipsPage() {
   const [relationships, setRelationships] = useState<DealerRelationship[]>([]);
   const [total, setTotal] = useState(0);
@@ -93,6 +161,21 @@ export default function RelationshipsPage() {
   const [relationshipEditDraft, setRelationshipEditDraft] = useState<RelationshipDraft | undefined>();
   const [savingRelationshipId, setSavingRelationshipId] = useState<string | undefined>();
   const [relationshipSaveError, setRelationshipSaveError] = useState<string | undefined>();
+  const [createPanelOpen, setCreatePanelOpen] = useState(false);
+  const [createDraft, setCreateDraft] = useState<CreateRelationshipDraft>(() => createRelationshipDraft());
+  const [dealers, setDealers] = useState<Dealer[]>([]);
+  const [dealerSearch, setDealerSearch] = useState('');
+  const [dealersLoading, setDealersLoading] = useState(true);
+  const [dealersError, setDealersError] = useState<string | undefined>();
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | undefined>();
+  const [customerLoading, setCustomerLoading] = useState(false);
+  const [cartVehicles, setCartVehicles] = useState<CartVehicle[]>([]);
+  const [cartSearch, setCartSearch] = useState('');
+  const [cartLoading, setCartLoading] = useState(false);
+  const [cartError, setCartError] = useState<string | undefined>();
+  const [creatingRelationship, setCreatingRelationship] = useState(false);
+  const [createError, setCreateError] = useState<string | undefined>();
+  const [createSuccess, setCreateSuccess] = useState<string | undefined>();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -117,11 +200,86 @@ export default function RelationshipsPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    let active = true;
+    setDealersLoading(true);
+    setDealersError(undefined);
+    listDealers({ limit: 100 }, STRICT_LIVE_DATA)
+      .then((dealerResult) => {
+        if (!active) return;
+        setDealers(dealerResult.items);
+      })
+      .catch((err: unknown) => {
+        if (!active) return;
+        setDealers([]);
+        setDealersError(err instanceof Error ? err.message : 'Failed to load dealer accounts.');
+      })
+      .finally(() => {
+        if (!active) return;
+        setDealersLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    setCartSearch('');
+    if (!createDraft.customerId) {
+      setCartVehicles([]);
+      setCartError(undefined);
+      setCartLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    setCartLoading(true);
+    setCartError(undefined);
+    listCartVehicles({ customerId: createDraft.customerId, limit: 100 }, STRICT_LIVE_DATA)
+      .then((cartResult) => {
+        if (!active) return;
+        setCartVehicles(cartResult.items);
+      })
+      .catch((err: unknown) => {
+        if (!active) return;
+        setCartVehicles([]);
+        setCartError(err instanceof Error ? err.message : 'Failed to load customer carts.');
+      })
+      .finally(() => {
+        if (!active) return;
+        setCartLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [createDraft.customerId]);
+
   const filteredRows = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return relationships;
     return relationships.filter((row) => rowSearchText(row).includes(query));
   }, [relationships, search]);
+
+  const dealerOptions = useMemo(() => {
+    const options = dealers.map(dealerOption);
+    return options.filter((option) => optionMatchesSearch(option, dealerSearch));
+  }, [dealerSearch, dealers]);
+  const selectedDealerOption = useMemo(() => {
+    const dealer = dealers.find((item) => item.id === createDraft.dealerId);
+    return dealer ? dealerOption(dealer) : undefined;
+  }, [createDraft.dealerId, dealers]);
+  const cartOptions = useMemo(() => {
+    const options = cartVehicles.map(cartOption);
+    return options.filter((option) => optionMatchesSearch(option, cartSearch));
+  }, [cartSearch, cartVehicles]);
+  const selectedCartOption = useMemo(() => {
+    const vehicle = cartVehicles.find((item) => item.id === createDraft.cartVehicleId);
+    return vehicle ? cartOption(vehicle) : undefined;
+  }, [cartVehicles, createDraft.cartVehicleId]);
 
   const beginRelationshipEdit = (row: DealerRelationship) => {
     setEditingRelationshipId(row.id);
@@ -158,6 +316,58 @@ export default function RelationshipsPage() {
     }
   };
 
+  const resetCreateDraft = () => {
+    setCreateDraft(createRelationshipDraft());
+    setSelectedCustomer(undefined);
+    setDealerSearch('');
+    setCartSearch('');
+  };
+
+  const submitCreateRelationship = async () => {
+    setCreateError(undefined);
+    setCreateSuccess(undefined);
+    if (!createDraft.dealerId) {
+      setCreateError('Select a dealer account before linking a relationship.');
+      return;
+    }
+    if (!createDraft.customerId) {
+      setCreateError('Select an active customer before linking a relationship.');
+      return;
+    }
+    if (customerLoading) {
+      setCreateError('Wait for the selected customer to finish loading.');
+      return;
+    }
+    if (!selectedCustomer || selectedCustomer.state !== 'ACTIVE') {
+      setCreateError('Only active customer catalog records can be linked to dealer relationships.');
+      return;
+    }
+
+    setCreatingRelationship(true);
+    try {
+      const created = await createDealerRelationship({
+        dealerId: createDraft.dealerId,
+        customerId: createDraft.customerId,
+        cartVehicleId: createDraft.cartVehicleId || null,
+        relationshipType: createDraft.relationshipType,
+        relationshipState: createDraft.relationshipState,
+        escalationOwner: createDraft.escalationOwner || null,
+        notes: createDraft.notes || null,
+      });
+      setRelationships((current) => [created, ...current.filter((item) => item.id !== created.id)]);
+      setTotal((current) => current + 1);
+      setCreateSuccess(`Linked ${created.dealerName} to ${created.customerName}.`);
+      resetCreateDraft();
+      setCreatePanelOpen(false);
+    } catch (err) {
+      setCreateError(
+        err instanceof Error ? err.message : 'Failed to link dealer relationship.',
+      );
+    } finally {
+      setCreatingRelationship(false);
+    }
+  };
+
   return (
     <div>
       <PageHeader
@@ -168,11 +378,24 @@ export default function RelationshipsPage() {
             : `${total} live dealer relationship records`
         }
         action={
-          <Link href={erpRoute('create-work-order')}>
-            <Button className="bg-yellow-400 text-gray-900 hover:bg-yellow-300">
-              New Work Order
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              className="bg-yellow-400 text-gray-900 hover:bg-yellow-300"
+              onClick={() => {
+                setCreatePanelOpen((current) => !current);
+                setCreateError(undefined);
+                setCreateSuccess(undefined);
+              }}
+            >
+              {createPanelOpen ? 'Close Link Form' : 'Link Relationship'}
             </Button>
-          </Link>
+            <Link href={erpRoute('create-work-order')}>
+              <Button variant="outline">
+                New Work Order
+              </Button>
+            </Link>
+          </div>
         }
       />
 
@@ -187,6 +410,199 @@ export default function RelationshipsPage() {
           Open dealer accounts
         </Link>
       </div>
+
+      {createSuccess && (
+        <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+          {createSuccess}
+        </div>
+      )}
+
+      {createPanelOpen && (
+        <div className="mb-5 rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Link Dealer Relationship</h2>
+              <p className="mt-1 text-sm text-gray-600">
+                Create a live dealer/customer assignment for service, billing, warranty, or account ownership.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                resetCreateDraft();
+                setCreateError(undefined);
+              }}
+            >
+              Reset
+            </Button>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <SearchableSelect
+              id="dealerRelationshipDealer"
+              label="Dealer Account"
+              required
+              value={createDraft.dealerId}
+              selectedOption={selectedDealerOption}
+              searchValue={dealerSearch}
+              options={dealerOptions}
+              loading={dealersLoading}
+              error={dealersError}
+              placeholder="Search dealer by account, contact, email, or territory"
+              emptyText="No live dealer account matched. Create or activate the dealer account first."
+              onSearchChange={setDealerSearch}
+              onChange={(dealerId) =>
+                setCreateDraft((current) => ({
+                  ...current,
+                  dealerId,
+                }))
+              }
+            />
+
+            <CustomerSelector
+              id="dealerRelationshipCustomer"
+              label="Customer"
+              required
+              value={createDraft.customerId}
+              onLoadingChange={setCustomerLoading}
+              onResolvedCustomer={setSelectedCustomer}
+              onChange={(customerId, customer) => {
+                setCreateDraft((current) => ({
+                  ...current,
+                  customerId,
+                  cartVehicleId: '',
+                }));
+                setSelectedCustomer(customer);
+              }}
+            />
+
+            <SearchableSelect
+              id="dealerRelationshipCart"
+              label="Customer Cart"
+              value={createDraft.cartVehicleId}
+              selectedOption={selectedCartOption}
+              searchValue={cartSearch}
+              options={cartOptions}
+              loading={cartLoading}
+              error={cartError}
+              placeholder="Optional cart, VIN, serial, or model"
+              emptyText={
+                createDraft.customerId
+                  ? 'No carts are registered for this customer. Leave blank for a customer-level relationship.'
+                  : 'Select a customer before choosing a cart.'
+              }
+              onSearchChange={setCartSearch}
+              onChange={(cartVehicleId) =>
+                setCreateDraft((current) => ({
+                  ...current,
+                  cartVehicleId,
+                }))
+              }
+            />
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-sm font-medium text-gray-700">
+                Type
+                <select
+                  value={createDraft.relationshipType}
+                  onChange={(event) =>
+                    setCreateDraft((current) => ({
+                      ...current,
+                      relationshipType: event.target.value as DealerRelationship['relationshipType'],
+                    }))
+                  }
+                  className="mt-1 h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
+                >
+                  {RELATIONSHIP_TYPE_OPTIONS.map((type) => (
+                    <option key={type} value={type}>
+                      {relationshipLabel(type)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="text-sm font-medium text-gray-700">
+                State
+                <select
+                  value={createDraft.relationshipState}
+                  onChange={(event) =>
+                    setCreateDraft((current) => ({
+                      ...current,
+                      relationshipState: event.target.value as CreateRelationshipDraft['relationshipState'],
+                    }))
+                  }
+                  className="mt-1 h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
+                >
+                  {CREATE_RELATIONSHIP_STATE_OPTIONS.map((state) => (
+                    <option key={state} value={state}>
+                      {state}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <label className="text-sm font-medium text-gray-700">
+              Escalation Owner
+              <Input
+                value={createDraft.escalationOwner}
+                onChange={(event) =>
+                  setCreateDraft((current) => ({
+                    ...current,
+                    escalationOwner: event.target.value,
+                  }))
+                }
+                placeholder="Manager or owner"
+                className="mt-1"
+              />
+            </label>
+
+            <label className="text-sm font-medium text-gray-700 lg:col-span-2">
+              Notes
+              <textarea
+                value={createDraft.notes}
+                onChange={(event) =>
+                  setCreateDraft((current) => ({
+                    ...current,
+                    notes: event.target.value,
+                  }))
+                }
+                rows={2}
+                className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                placeholder="Service coverage, billing context, warranty instructions"
+              />
+            </label>
+          </div>
+
+          {createError && (
+            <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {createError}
+            </div>
+          )}
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              className="bg-yellow-400 text-gray-900 hover:bg-yellow-300"
+              disabled={creatingRelationship || customerLoading || dealersLoading || cartLoading}
+              onClick={() => void submitCreateRelationship()}
+            >
+              {creatingRelationship ? 'Linking...' : 'Create Relationship'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setCreatePanelOpen(false);
+                setCreateError(undefined);
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

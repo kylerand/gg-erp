@@ -350,15 +350,15 @@
           deploy, accounting document-snapshot deploy, completed customer-selector hardening,
           deployed customer workspace drill-in, deployed customer accounting-history context,
           deployed standalone customer profile editing, deployed standalone cart asset editing,
-          deployed customer timeline, deployed next actions, deployed customer activity logging, and
-          active dealer relationship update work. The app has moved past polished static screens into a
+          deployed customer timeline, deployed next actions, deployed customer activity logging,
+          deployed dealer relationship updates, and active dealer relationship creation work. The app has moved past polished static screens into a
           usable shop-ops ERP foundation, but ShopMonkey cutover remains blocked until complete
           parts and purchase-order source exports are captured.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 2, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 183</span>
-          <span class="chip">Active slice: Dealer relationship updates</span>
+          <span class="chip">Baseline: origin/main through PR 185</span>
+          <span class="chip">Active slice: Dealer relationship creation</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
@@ -500,7 +500,7 @@
                 route misses.
               </td>
               <td>
-                Finish dealer relationship updates, verify live service/sales/accounting history
+                Finish dealer relationship creation, verify live service/sales/accounting history
                 drill-ins, and run live UAT scripts by role.
               </td>
             </tr>
@@ -676,10 +676,10 @@
               service, sales, asset, and accounting timeline. PR #182 added derived customer next
               actions for accounting failures, blocked work, overdue follow-up, accepted or expiring
               quotes, stale opportunities, and missing intake context. PR #183 added inline customer
-              activity logging through the live sales activity API. This branch adds row-level
-              dealer relationship state, escalation owner, and notes editing through the live
-              identity relationship API. Deeper warranty and dealer create/rebind workflows still
-              need more complete surfaces.
+              activity logging through the live sales activity API, PR #184 added row-level dealer
+              relationship state, escalation owner, and notes editing, and PR #185 removed the
+              deployed-route allowlist after CD. This branch adds a live dealer relationship link
+              workflow with dealer, active-customer, and optional cart selectors.
             </p>
           </div>
 
@@ -753,9 +753,9 @@
               <td>Latest production baseline</td>
               <td><span class="pill done">Merged</span></td>
               <td>
-                <code>origin/main</code> is through PR 183 after customer activity logging deployed
-                through CI, QA smoke, QA coverage, and Pages. This branch adds row-level dealer
-                relationship state, owner, and notes updates.
+                <code>origin/main</code> is through PR 185 after dealer relationship updates and
+                route-allowlist cleanup passed CI, QA smoke, QA coverage, and Pages. This branch
+                adds live dealer relationship creation.
               </td>
             </tr>
             <tr>
@@ -824,10 +824,9 @@
             work-order provenance, and version diff workflows need a heavier change-control gate.
           </li>
           <li>
-            <strong>Deepen customer workspaces:</strong> finish dealer relationship state, owner,
-            and notes mutation, verify profile/cart/sales/work-order/accounting reads and writes,
-            and then tackle dealer assignment create/rebind mutations once relationship ownership
-            rules are finalized.
+            <strong>Deepen customer workspaces:</strong> finish dealer relationship creation,
+            remove its pending-deploy route allowlist after CD, then add dealer account
+            creation/profile updates and richer warranty handoff workflows.
           </li>
         </ol>
       </section>

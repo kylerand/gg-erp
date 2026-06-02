@@ -462,7 +462,14 @@ test('customer dealer ops views are backed by live customer and cart data', () =
   assert.deepEqual(
     [
       'listDealerRelationships(',
+      'createDealerRelationship(',
       'updateDealerRelationship(',
+      'listDealers({ limit: 100 }, STRICT_LIVE_DATA)',
+      'listCartVehicles({ customerId: createDraft.customerId, limit: 100 }, STRICT_LIVE_DATA)',
+      'CustomerSelector',
+      'SearchableSelect',
+      'Link Relationship',
+      'Create Relationship',
       'STRICT_LIVE_DATA',
       'dealerLookupHref',
       'workOrderHref',
@@ -485,6 +492,7 @@ test('customer dealer ops views are backed by live customer and cart data', () =
     [
       'export async function listDealers',
       'export async function listDealerRelationships',
+      'export async function createDealerRelationship',
       'export async function updateDealerRelationship',
       'params?:',
       '/identity/dealers',
@@ -508,6 +516,8 @@ test('customer dealer ops views are backed by live customer and cart data', () =
   assert.deepEqual(
     [
       'getPrisma().dealerRelationship.findMany',
+      'export const createDealerRelationshipHandler',
+      'getPrisma().dealerRelationship.create',
       'export const updateDealerRelationshipHandler',
       'getPrisma().dealerRelationship.update',
       'dealerAccount: { include: { customer: true } }',

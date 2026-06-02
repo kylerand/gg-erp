@@ -339,7 +339,12 @@ test('createInventoryTransferHandler posts transfer rows, balances, and ledger e
 
     assert.equal(response.statusCode, 201);
     const payload = JSON.parse(response.body) as {
-      transfer: { quantity: number; reasonCode: string; fromStockLotId: string; toStockLotId: string };
+      transfer: {
+        quantity: number;
+        reasonCode: string;
+        fromStockLotId: string;
+        toStockLotId: string;
+      };
     };
     assert.equal(payload.transfer.quantity, 2);
     assert.equal(payload.transfer.reasonCode, 'SHOP_MOVE');
@@ -356,12 +361,18 @@ test('createInventoryTransferHandler posts transfer rows, balances, and ledger e
     assert.ok(ledgerCalls.every((call) => call.values.includes('SHOP_MOVE')));
 
     assert.ok(
-      harness.executeCalls.some((call) => call.sql.includes('INSERT INTO inventory.inventory_transfers')),
+      harness.executeCalls.some((call) =>
+        call.sql.includes('INSERT INTO inventory.inventory_transfers'),
+      ),
     );
     assert.ok(
-      harness.executeCalls.some((call) => call.sql.includes('INSERT INTO inventory.inventory_transfer_lines')),
+      harness.executeCalls.some((call) =>
+        call.sql.includes('INSERT INTO inventory.inventory_transfer_lines'),
+      ),
     );
-    assert.ok(harness.executeCalls.some((call) => call.sql.includes('INSERT INTO inventory.stock_lots')));
+    assert.ok(
+      harness.executeCalls.some((call) => call.sql.includes('INSERT INTO inventory.stock_lots')),
+    );
 
     const sourceBalanceUpdate = harness.queryCalls.find((call) =>
       call.sql.includes('UPDATE inventory.inventory_balances'),
@@ -371,7 +382,9 @@ test('createInventoryTransferHandler posts transfer rows, balances, and ledger e
     assert.ok(sourceBalanceUpdate.sql.includes('last_ledger_entry_id'));
 
     assert.ok(
-      harness.executeCalls.some((call) => call.sql.includes('INSERT INTO inventory.inventory_balances')),
+      harness.executeCalls.some((call) =>
+        call.sql.includes('INSERT INTO inventory.inventory_balances'),
+      ),
     );
   } finally {
     setInventoryHandlerPrismaForTests(undefined);
@@ -533,6 +546,90 @@ test('updatePartHandler assigns an active default vendor to a part', async () =>
     assert.equal(payload.part.id, partId);
     assert.equal(payload.part.defaultVendorId, vendorId);
     assert.equal(payload.part.defaultVendorName, 'MadJax');
+  } finally {
+    setInventoryHandlerPrismaForTests(undefined);
+  }
+});
+
+test('updatePartHandler edits core part fields', async () => {
+  const partId = '11111111-1111-4111-8111-111111111111';
+  const partFindFirst = mock.fn(async () => ({ id: partId }));
+  const partUpdate = mock.fn(async (args: { data: Record<string, unknown> }) => ({
+    id: partId,
+    sku: 'GG-MADJAX-LIFT',
+    name: args.data.name,
+    description: args.data.description,
+    unitOfMeasure: args.data.unitOfMeasure,
+    partState: args.data.partState,
+    category: args.data.category,
+    installStage: args.data.installStage,
+    lifecycleLevel: args.data.lifecycleLevel,
+    reorderPoint: args.data.reorderPoint,
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+    stockLots: [],
+  }));
+  const prisma = {
+    part: { findFirst: partFindFirst, update: partUpdate },
+    vendor: { findFirst: mock.fn(async () => null) },
+  };
+  setInventoryHandlerPrismaForTests(prisma as never);
+
+  try {
+    const response = await updatePartHandler({
+      httpMethod: 'PATCH',
+      pathParameters: { id: partId },
+      body: JSON.stringify({
+        name: '  MadJax lift kit XL  ',
+        description: '',
+        unitOfMeasure: 'ea',
+        reorderPoint: 4,
+        partState: 'INACTIVE',
+        category: 'HARDWARE',
+        installStage: null,
+        lifecycleLevel: 'RAW_COMPONENT',
+      }),
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(partFindFirst.mock.calls.length, 1);
+    assert.equal(partUpdate.mock.calls.length, 1);
+
+    const updateArgs = partUpdate.mock.calls[0].arguments[0] as {
+      where: { id: string };
+      data: Record<string, unknown>;
+    };
+    assert.equal(updateArgs.where.id, partId);
+    assert.equal(updateArgs.data.name, 'MadJax lift kit XL');
+    assert.equal(updateArgs.data.description, null);
+    assert.equal(updateArgs.data.unitOfMeasure, 'EA');
+    assert.equal(updateArgs.data.reorderPoint, 4);
+    assert.equal(updateArgs.data.partState, 'INACTIVE');
+    assert.equal(updateArgs.data.category, 'HARDWARE');
+    assert.equal(updateArgs.data.installStage, null);
+    assert.equal(updateArgs.data.lifecycleLevel, 'RAW_COMPONENT');
+    assert.deepEqual(updateArgs.data.version, { increment: 1 });
+
+    const payload = JSON.parse(response.body) as {
+      part: {
+        name: string;
+        description?: string;
+        unitOfMeasure: string;
+        partState: string;
+        category?: string;
+        installStage?: string;
+        lifecycleLevel?: string;
+        reorderPoint: number;
+      };
+    };
+    assert.equal(payload.part.name, 'MadJax lift kit XL');
+    assert.equal(payload.part.description, undefined);
+    assert.equal(payload.part.unitOfMeasure, 'EA');
+    assert.equal(payload.part.partState, 'INACTIVE');
+    assert.equal(payload.part.category, 'HARDWARE');
+    assert.equal(payload.part.installStage, undefined);
+    assert.equal(payload.part.lifecycleLevel, 'RAW_COMPONENT');
+    assert.equal(payload.part.reorderPoint, 4);
   } finally {
     setInventoryHandlerPrismaForTests(undefined);
   }

@@ -386,11 +386,7 @@ export const inventoryLocationQueries = {
   async listLocations(): Promise<InventoryLocationResponse[]> {
     const locations = await getInventoryPrisma().stockLocation.findMany({
       where: { deletedAt: null },
-      orderBy: [
-        { isPickable: 'desc' },
-        { locationType: 'asc' },
-        { locationCode: 'asc' },
-      ],
+      orderBy: [{ isPickable: 'desc' }, { locationType: 'asc' }, { locationCode: 'asc' }],
     });
 
     return locations.map((location) => ({
@@ -1826,7 +1822,10 @@ export const inventoryTransferCommands = {
         throw new TransferCommandError(404, `Stock lot not found: ${input.stockLotId}`);
       }
       if (lot.lotState !== 'AVAILABLE') {
-        throw new TransferCommandError(409, `Stock lot cannot be transferred in ${lot.lotState} state.`);
+        throw new TransferCommandError(
+          409,
+          `Stock lot cannot be transferred in ${lot.lotState} state.`,
+        );
       }
       if (!lot.unitOfMeasureId) {
         throw new TransferCommandError(
@@ -1849,7 +1848,10 @@ export const inventoryTransferCommands = {
         );
       }
       if (destination.id === lot.fromStockLocationId) {
-        throw new TransferCommandError(409, 'Destination location must differ from source location.');
+        throw new TransferCommandError(
+          409,
+          'Destination location must differ from source location.',
+        );
       }
 
       const onHand = numberFromDb(lot.quantityOnHand);
@@ -2011,7 +2013,10 @@ export const inventoryTransferCommands = {
         RETURNING id::text AS "id"
       `;
       if (updatedSourceBalances.length === 0) {
-        throw new TransferCommandError(409, 'Source inventory balance cannot fulfill that transfer.');
+        throw new TransferCommandError(
+          409,
+          'Source inventory balance cannot fulfill that transfer.',
+        );
       }
 
       await tx.$executeRaw`
@@ -2107,10 +2112,7 @@ export const inventoryCycleCountCommands = {
       `;
       const location = locations[0];
       if (!location) {
-        throw new CycleCountCommandError(
-          404,
-          `Stock location not found: ${input.stockLocationId}`,
-        );
+        throw new CycleCountCommandError(404, `Stock location not found: ${input.stockLocationId}`);
       }
 
       const lotIds = input.lines.map((line) => Prisma.sql`${line.stockLotId}::uuid`);
@@ -3131,7 +3133,10 @@ function validateCreateCycleCountInput(input: CreateCycleCountInput): string | u
   }
   if (input.scheduledFor !== undefined) {
     const scheduledFor = input.scheduledFor.trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduledFor) || Number.isNaN(Date.parse(`${scheduledFor}T00:00:00.000Z`))) {
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(scheduledFor) ||
+      Number.isNaN(Date.parse(`${scheduledFor}T00:00:00.000Z`))
+    ) {
       return 'scheduledFor must be a YYYY-MM-DD date.';
     }
   }
@@ -4045,8 +4050,81 @@ export const getPartHandler = wrapHandler(
 
 // ─── Update Part ──────────────────────────────────────────────────────────────
 
+const UPDATE_PART_STATES = ['ACTIVE', 'INACTIVE', 'DISCONTINUED'] as const;
+const UPDATE_PART_CATEGORIES = [
+  'ELECTRONICS',
+  'AUDIO',
+  'FABRICATION',
+  'HARDWARE',
+  'SMALL_PARTS',
+  'DRIVE_TRAIN',
+] as const;
+const UPDATE_PART_INSTALL_STAGES = [
+  'FABRICATION',
+  'FRAME',
+  'WIRING',
+  'PARTS_PREP',
+  'FINAL_ASSEMBLY',
+] as const;
+const UPDATE_PART_LIFECYCLE_LEVELS = [
+  'RAW_MATERIAL',
+  'RAW_COMPONENT',
+  'PREPARED_COMPONENT',
+  'ASSEMBLED_COMPONENT',
+] as const;
+
 interface UpdatePartBody {
+  name?: string;
+  description?: string | null;
+  unitOfMeasure?: string;
+  reorderPoint?: number;
+  partState?: string;
+  category?: string | null;
+  installStage?: string | null;
+  lifecycleLevel?: string;
   defaultVendorId?: string | null;
+}
+
+const UPDATE_PART_FIELDS = [
+  'name',
+  'description',
+  'unitOfMeasure',
+  'reorderPoint',
+  'partState',
+  'category',
+  'installStage',
+  'lifecycleLevel',
+  'defaultVendorId',
+] as const;
+
+function hasBodyField(body: object, field: string): boolean {
+  return Object.prototype.hasOwnProperty.call(body, field);
+}
+
+function nullableEnumValue(
+  value: unknown,
+  field: string,
+  allowed: readonly string[],
+): { ok: true; value: string | null } | { ok: false; message: string } {
+  if (value === null || value === '') return { ok: true, value: null };
+  if (typeof value !== 'string')
+    return { ok: false, message: `${field} must be a string or null.` };
+  if (!allowed.includes(value)) {
+    return { ok: false, message: `Invalid ${field}: ${value}` };
+  }
+  return { ok: true, value };
+}
+
+function requiredEnumValue(
+  value: unknown,
+  field: string,
+  allowed: readonly string[],
+): { ok: true; value: string } | { ok: false; message: string } {
+  if (typeof value !== 'string') return { ok: false, message: `${field} must be a string.` };
+  if (!allowed.includes(value)) {
+    return { ok: false, message: `Invalid ${field}: ${value}` };
+  }
+  return { ok: true, value };
 }
 
 export const updatePartHandler = wrapHandler(
@@ -4061,7 +4139,7 @@ export const updatePartHandler = wrapHandler(
       return jsonResponse(422, { message: 'Request body must be an object.' });
     }
 
-    if (!Object.prototype.hasOwnProperty.call(body.value, 'defaultVendorId')) {
+    if (!UPDATE_PART_FIELDS.some((field) => hasBodyField(body.value, field))) {
       return jsonResponse(422, {
         message: 'At least one supported part field is required.',
       });
@@ -4080,7 +4158,75 @@ export const updatePartHandler = wrapHandler(
       version: { increment: 1 },
     };
 
-    if (Object.prototype.hasOwnProperty.call(body.value, 'defaultVendorId')) {
+    if (hasBodyField(body.value, 'name')) {
+      const rawName = body.value.name;
+      if (typeof rawName !== 'string' || !rawName.trim()) {
+        return jsonResponse(422, { message: 'name must be a non-empty string.' });
+      }
+      data.name = rawName.trim();
+    }
+
+    if (hasBodyField(body.value, 'description')) {
+      const rawDescription = body.value.description;
+      if (rawDescription === null || rawDescription === '') {
+        data.description = null;
+      } else if (typeof rawDescription !== 'string') {
+        return jsonResponse(422, { message: 'description must be a string or null.' });
+      } else {
+        data.description = rawDescription.trim() || null;
+      }
+    }
+
+    if (hasBodyField(body.value, 'unitOfMeasure')) {
+      const rawUnitOfMeasure = body.value.unitOfMeasure;
+      if (typeof rawUnitOfMeasure !== 'string' || !rawUnitOfMeasure.trim()) {
+        return jsonResponse(422, { message: 'unitOfMeasure must be a non-empty string.' });
+      }
+      data.unitOfMeasure = rawUnitOfMeasure.trim().toUpperCase();
+    }
+
+    if (hasBodyField(body.value, 'reorderPoint')) {
+      const reorderPoint = Number(body.value.reorderPoint);
+      if (!Number.isFinite(reorderPoint) || reorderPoint < 0) {
+        return jsonResponse(422, { message: 'reorderPoint must be zero or greater.' });
+      }
+      data.reorderPoint = reorderPoint;
+    }
+
+    if (hasBodyField(body.value, 'partState')) {
+      const partState = requiredEnumValue(body.value.partState, 'partState', UPDATE_PART_STATES);
+      if (!partState.ok) return jsonResponse(422, { message: partState.message });
+      data.partState = partState.value as Prisma.PartUncheckedUpdateInput['partState'];
+    }
+
+    if (hasBodyField(body.value, 'category')) {
+      const category = nullableEnumValue(body.value.category, 'category', UPDATE_PART_CATEGORIES);
+      if (!category.ok) return jsonResponse(422, { message: category.message });
+      data.category = category.value as Prisma.PartUncheckedUpdateInput['category'];
+    }
+
+    if (hasBodyField(body.value, 'installStage')) {
+      const installStage = nullableEnumValue(
+        body.value.installStage,
+        'installStage',
+        UPDATE_PART_INSTALL_STAGES,
+      );
+      if (!installStage.ok) return jsonResponse(422, { message: installStage.message });
+      data.installStage = installStage.value as Prisma.PartUncheckedUpdateInput['installStage'];
+    }
+
+    if (hasBodyField(body.value, 'lifecycleLevel')) {
+      const lifecycleLevel = requiredEnumValue(
+        body.value.lifecycleLevel,
+        'lifecycleLevel',
+        UPDATE_PART_LIFECYCLE_LEVELS,
+      );
+      if (!lifecycleLevel.ok) return jsonResponse(422, { message: lifecycleLevel.message });
+      data.lifecycleLevel =
+        lifecycleLevel.value as Prisma.PartUncheckedUpdateInput['lifecycleLevel'];
+    }
+
+    if (hasBodyField(body.value, 'defaultVendorId')) {
       const rawVendorId = body.value.defaultVendorId;
       if (rawVendorId === null || rawVendorId === '') {
         data.defaultVendorId = null;

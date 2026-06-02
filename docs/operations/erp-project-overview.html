@@ -348,15 +348,15 @@
           High-level status after the planning review-pack, accounting operational-ledger,
           journal-posting, trial-balance close-readiness, period-control deploy, close-package
           deploy, accounting document-snapshot deploy, completed customer-selector hardening,
-          deployed customer workspace drill-in, and active customer accounting-history slice. The
-          app has moved past polished static screens into a usable shop-ops ERP foundation, but
-          ShopMonkey cutover remains blocked until complete parts and purchase-order source exports
-          are captured.
+          deployed customer workspace drill-in, deployed customer accounting-history context, and
+          active standalone customer profile-editing slice. The app has moved past polished static
+          screens into a usable shop-ops ERP foundation, but ShopMonkey cutover remains blocked
+          until complete parts and purchase-order source exports are captured.
         </p>
         <div class="meta-row">
-          <span class="chip">Reviewed: June 1, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 177</span>
-          <span class="chip">Active slice: Customer accounting history</span>
+          <span class="chip">Reviewed: June 2, 2026</span>
+          <span class="chip">Baseline: origin/main through PR 178</span>
+          <span class="chip">Active slice: Customer profile editing</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
@@ -498,8 +498,8 @@
                 route misses.
               </td>
               <td>
-                Finish customer accounting-history context, verify customer sync/payment rows, and
-                run live UAT scripts by role.
+                Finish standalone customer profile editing, verify saved contact/address changes,
+                and run live UAT scripts by role.
               </td>
             </tr>
             <tr>
@@ -666,11 +666,12 @@
             </header>
             <div class="bar warn"><span style="width: 55%"></span></div>
             <p>
-              Customer/cart profile editing now exists inside work orders. PR #177 added a
-              standalone customer workspace for profile, cart assets, work orders, opportunities,
-              quotes, and activity. This branch adds customer-level QuickBooks sync and payment-sync
-              history. Deeper warranty/service history and dealer relationship mutation workflows
-              still need more complete surfaces.
+              Customer/cart profile editing exists inside work orders. PR #177 added a standalone
+              customer workspace for profile, cart assets, work orders, opportunities, quotes, and
+              activity. PR #178 added customer-level QuickBooks sync and payment-sync history. This
+              branch adds standalone profile editing from the customer workspace. Deeper
+              warranty/service history and dealer relationship mutation workflows still need more
+              complete surfaces.
             </p>
           </div>
 
@@ -744,19 +745,20 @@
               <td>Latest production baseline</td>
               <td><span class="pill done">Merged</span></td>
               <td>
-                <code>origin/main</code> is through PR 177 after the customer workspace drill-in
-                deployed through CI, QA, CD, and Pages. This branch adds accounting history to that
-                customer workspace.
+                <code>origin/main</code> is through PR 178 after customer accounting history
+                deployed through CI, QA smoke, QA coverage, and Pages. This branch adds standalone
+                customer profile editing to that workspace.
               </td>
             </tr>
             <tr>
               <td>Recent pipeline health</td>
               <td><span class="pill done">Green</span></td>
               <td>
-                Latest main CI, QA smoke, QA coverage, CD, and Pages completed successfully after PR
-                177 merged. PR #174 previously deployed the accounting snapshot tables and updated
-                close-package reads, and live smoke proved the close-package route still reaches the
-                protected API authorizer path.
+                Latest main CI, QA smoke, QA coverage, and Pages completed successfully after PR 178
+                merged; latest CD remains green from PR 177 because PR 178 was web-only. PR #174
+                previously deployed the accounting snapshot tables and updated close-package reads,
+                and live smoke proved the close-package route still reaches the protected API
+                authorizer path.
               </td>
             </tr>
             <tr>
@@ -814,9 +816,9 @@
             work-order provenance, and version diff workflows need a heavier change-control gate.
           </li>
           <li>
-            <strong>Deepen customer workspaces:</strong> finish customer accounting history, verify
-            profile/cart/sales/work-order/accounting reads, and then tackle dealer assignment
-            mutations once relationship ownership rules are finalized.
+            <strong>Deepen customer workspaces:</strong> finish standalone profile editing, verify
+            profile/cart/sales/work-order/accounting reads and writes, and then tackle dealer
+            assignment mutations once relationship ownership rules are finalized.
           </li>
         </ol>
       </section>

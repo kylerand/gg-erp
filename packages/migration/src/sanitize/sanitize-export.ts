@@ -18,6 +18,7 @@ import type {
   SmInventoryPart,
   SmPurchaseOrder,
   ShopMonkeyExport,
+  ShopMonkeySourceCoverage,
 } from '../connectors/shopmonkey-api.connector.js';
 
 // ─── Sanitized entity types ───────────────────────────────────────────────────
@@ -121,6 +122,7 @@ export interface SanitizedUser {
 export interface SanitizationReport {
   sanitizedAt: string;
   sourceFile: string;
+  sourceCoverage?: Record<string, ShopMonkeySourceCoverage>;
   counts: {
     customers: { total: number; valid: number; warned: number; skipped: number };
     vehicles: { total: number; valid: number; warned: number; skipped: number };
@@ -396,6 +398,7 @@ export function sanitizeExport(data: ShopMonkeyExport, sourceFile: string): Sani
   return {
     sanitizedAt: new Date().toISOString(),
     sourceFile,
+    sourceCoverage: data.sourceCoverage,
     counts: {
       customers: countResults(customers),
       vehicles: countResults(vehicles),

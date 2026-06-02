@@ -251,9 +251,10 @@
           timeline, derived next actions, writable profile, writable cart, inline activity logging,
           work-order, quote, opportunity, warranty claim, and accounting context. ShopMonkey
           preflight now has parts and purchase orders present, groups warning review into one
-          unknown-customer row and 68 work orders missing customer IDs, and the isolated rehearsal
-          passes with zero migration errors; remaining work is warning sign-off, full parts
-          coverage reconciliation, and shared staging cutover UAT.
+          unknown-customer row and 68 work orders missing customer IDs, carries Source Coverage for
+          the 48-part API reported-total gap, and the isolated rehearsal passes with zero migration
+          errors; remaining work is warning sign-off, parts gap reconciliation, and shared staging
+          cutover UAT.
         </p>
         <div class="progress" aria-label="98 percent complete"><div style="width: 98%"></div></div>
       </section>
@@ -637,9 +638,10 @@
                 customers, parts, work orders, and accounting sync for imported-domain inspection.
                 `validate:shopmonkey-cutover` now produces counts-only JSON/HTML preflight evidence;
                 the latest report is WARN, with parts and purchase orders passing after read-only
-                ShopMonkey enrichment and a hashed Warning Review for the one unknown-customer row
-                and 68 work orders missing customer IDs. `rehearse:shopmonkey-cutover` runs the
-                loader against a disposable PostgreSQL database and writes counts-only evidence to
+                ShopMonkey enrichment, a hashed Warning Review for the one unknown-customer row and
+                68 work orders missing customer IDs, and Source Coverage for the 48-part
+                API-reported gap. `rehearse:shopmonkey-cutover` runs the loader against a
+                disposable PostgreSQL database and writes counts-only evidence to
                 `docs/operations/shopmonkey-isolated-rehearsal.html`; the current rehearsal passes
                 with zero migration errors after loading 28 employees, 447 customers, 56 vehicles,
                 465 work orders, 25 vendors, 189 parts, and 11 purchase orders. Inventory-part
@@ -648,8 +650,8 @@
               </td>
               <td>
                 Sign off or repair the one unknown-customer row, 68 work orders missing customer
-                IDs, absent line-item assignments, and the remaining 48-part reported-total coverage
-                gap before shared staging cutover UAT.
+                IDs, absent line-item assignments, and the remaining 48-part source coverage gap
+                before shared staging cutover UAT.
               </td>
             </tr>
             <tr>

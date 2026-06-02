@@ -559,7 +559,7 @@ export async function fetchOrderServices(
  * skip/take sweep captures the stable unique row set exposed by the API while
  * making any remaining reported-total gap visible in logs/evidence.
  */
-export async function fetchInventoryParts(session: ShopMonkeySession): Promise<SmInventoryPart[]> {
+export async function fetchInventoryPartsWithCoverage(session: ShopMonkeySession): Promise<InventoryPartsFetchResult> {
   const results: SmInventoryPart[] = [];
   const seenIds = new Set<string>();
   let totalKnown: number | null = null;
@@ -619,7 +619,37 @@ export async function fetchInventoryParts(session: ShopMonkeySession): Promise<S
     );
   }
   console.log(`[shopmonkey] /inventory_part: done — ${results.length} total unique records`);
-  return results;
+
+  const missingFromReportedTotal = totalKnown !== null ? Math.max(0, totalKnown - results.length) : undefined;
+  const status =
+    totalKnown === null
+      ? 'UNKNOWN'
+      : missingFromReportedTotal && missingFromReportedTotal > 0
+        ? 'WARN'
+        : 'PASS';
+
+  return {
+    records: results,
+    coverage: {
+      entityKey: 'parts',
+      label: 'Parts',
+      source: 'GET /v3/inventory_part?take=&skip=',
+      collected: results.length,
+      reportedTotal: totalKnown ?? undefined,
+      missingFromReportedTotal,
+      status,
+      detail:
+        totalKnown === null
+          ? 'ShopMonkey did not return a reported total for inventory parts.'
+          : missingFromReportedTotal && missingFromReportedTotal > 0
+            ? `ShopMonkey reported ${totalKnown} inventory parts, but the API sweep exposed ${results.length} unique rows.`
+            : 'Collected inventory parts match the ShopMonkey reported total.',
+    },
+  };
+}
+
+export async function fetchInventoryParts(session: ShopMonkeySession): Promise<SmInventoryPart[]> {
+  return (await fetchInventoryPartsWithCoverage(session)).records;
 }
 
 /** @deprecated Use fetchInventoryParts(). Returns empty for backward-compat. */
@@ -872,6 +902,23 @@ export interface ShopMonkeyExport {
   purchaseOrders: SmPurchaseOrder[];
   timesheets: SmTimesheet[];
   counts: Record<string, number>;
+  sourceCoverage?: Record<string, ShopMonkeySourceCoverage>;
+}
+
+export interface ShopMonkeySourceCoverage {
+  entityKey: string;
+  label: string;
+  source: string;
+  collected: number;
+  reportedTotal?: number;
+  missingFromReportedTotal?: number;
+  status: 'PASS' | 'WARN' | 'UNKNOWN';
+  detail: string;
+}
+
+interface InventoryPartsFetchResult {
+  records: SmInventoryPart[];
+  coverage: ShopMonkeySourceCoverage;
 }
 
 export interface ExportOptions {
@@ -900,7 +947,8 @@ export async function exportAll(session: ShopMonkeySession, options: ExportOptio
   console.log(`[shopmonkey]   → ${orders.length} orders`);
 
   console.log('[shopmonkey] Fetching inventory parts...');
-  const inventoryParts = await fetchInventoryParts(session);
+  const inventoryPartFetch = await fetchInventoryPartsWithCoverage(session);
+  const inventoryParts = inventoryPartFetch.records;
   console.log(`[shopmonkey]   → ${inventoryParts.length} inventory parts`);
 
   console.log('[shopmonkey] Fetching users...');
@@ -941,6 +989,9 @@ export async function exportAll(session: ShopMonkeySession, options: ExportOptio
       vendors: vendors.length,
       purchaseOrders: purchaseOrders.length,
       timesheets: timesheets.length,
+    },
+    sourceCoverage: {
+      inventoryParts: inventoryPartFetch.coverage,
     },
   };
 }

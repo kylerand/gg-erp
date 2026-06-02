@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { Fragment, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import type { FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -8,6 +8,7 @@ import { PageHeader, LoadingSkeleton, EmptyState, StatusBadge } from '@gg-erp/ui
 import {
   createPart,
   listParts,
+  updatePart,
   type CreatePartInput,
   type InstallStage,
   type LifecycleLevel,
@@ -15,6 +16,7 @@ import {
   type PartCategory,
   type PartState,
   type PartStockFilter,
+  type UpdatePartInput,
 } from '@/lib/api-client';
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 import { downloadCsv, normalizeCsvHeader, parseCsv, type CsvColumn } from '@/lib/csv-client';
@@ -66,6 +68,17 @@ interface PartImportRow extends CreatePartInput {
   rowNumber: number;
   status: PartImportStatus;
   message?: string;
+}
+
+interface PartEditDraft {
+  name: string;
+  description: string;
+  unitOfMeasure: string;
+  reorderPoint: string;
+  partState: PartState;
+  category: PartCategory | '';
+  installStage: InstallStage | '';
+  lifecycleLevel: LifecycleLevel;
 }
 
 const PART_EXPORT_COLUMNS: CsvColumn<Part>[] = [
@@ -147,6 +160,19 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Request failed.';
 }
 
+function buildPartEditDraft(part: Part): PartEditDraft {
+  return {
+    name: part.name,
+    description: part.description ?? '',
+    unitOfMeasure: part.unitOfMeasure,
+    reorderPoint: String(part.reorderPoint ?? 0),
+    partState: part.partState,
+    category: part.category ?? '',
+    installStage: part.installStage ?? '',
+    lifecycleLevel: part.lifecycleLevel ?? 'RAW_COMPONENT',
+  };
+}
+
 function importValue(headers: Map<string, number>, row: string[], key: string): string {
   const index = headers.get(normalizeCsvHeader(key));
   return index === undefined ? '' : (row[index] ?? '').trim();
@@ -207,6 +233,10 @@ export default function PartsPage() {
   const [importRows, setImportRows] = useState<PartImportRow[]>([]);
   const [importing, setImporting] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [editingPartId, setEditingPartId] = useState<string | null>(null);
+  const [partEdit, setPartEdit] = useState<PartEditDraft | null>(null);
+  const [savingPartId, setSavingPartId] = useState<string | null>(null);
+  const [partEditError, setPartEditError] = useState<string | null>(null);
 
   const load = useCallback(
     async (
@@ -257,6 +287,9 @@ export default function PartsPage() {
 
   useEffect(() => {
     setSelectedPartIds([]);
+    setEditingPartId(null);
+    setPartEdit(null);
+    setPartEditError(null);
   }, [
     activeSearch,
     activePartState,
@@ -465,6 +498,64 @@ export default function PartsPage() {
       }
     } finally {
       setImporting(false);
+    }
+  }
+
+  function beginPartEdit(part: Part) {
+    setEditingPartId(part.id);
+    setPartEdit(buildPartEditDraft(part));
+    setPartEditError(null);
+    setActionMessage(null);
+  }
+
+  function cancelPartEdit() {
+    setEditingPartId(null);
+    setPartEdit(null);
+    setPartEditError(null);
+  }
+
+  async function savePartEdit(part: Part) {
+    if (!partEdit) return;
+    const name = partEdit.name.trim();
+    const unitOfMeasure = partEdit.unitOfMeasure.trim().toUpperCase();
+    const reorderPoint = Number(partEdit.reorderPoint);
+    if (!name) {
+      setPartEditError('Part name is required.');
+      return;
+    }
+    if (!unitOfMeasure) {
+      setPartEditError('Unit of measure is required.');
+      return;
+    }
+    if (!Number.isFinite(reorderPoint) || reorderPoint < 0) {
+      setPartEditError('Minimum stock must be zero or greater.');
+      return;
+    }
+
+    const payload: UpdatePartInput = {
+      name,
+      description: partEdit.description.trim() || null,
+      unitOfMeasure,
+      reorderPoint,
+      partState: partEdit.partState,
+      category: partEdit.category || null,
+      installStage: partEdit.installStage || null,
+      lifecycleLevel: partEdit.lifecycleLevel,
+    };
+
+    setSavingPartId(part.id);
+    setPartEditError(null);
+    try {
+      const updated = await updatePart(part.id, payload, { allowMockFallback: false });
+      setParts((current) =>
+        current.map((candidate) => (candidate.id === part.id ? updated : candidate)),
+      );
+      setActionMessage(`Saved ${updated.sku}.`);
+      cancelPartEdit();
+    } catch (err) {
+      setPartEditError(errorMessage(err));
+    } finally {
+      setSavingPartId(null);
     }
   }
 
@@ -724,59 +815,268 @@ export default function PartsPage() {
                   <th className="px-4 py-3 text-left font-medium text-gray-600">On Hand</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Location</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
+                  <th className="px-4 py-3 text-right font-medium text-gray-600">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {parts.map((p) => (
-                  <tr key={p.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <input
-                        type="checkbox"
-                        aria-label={`Select ${p.sku}`}
-                        checked={selectedPartIds.includes(p.id)}
-                        onChange={() => togglePartSelection(p.id)}
-                        className="h-4 w-4 rounded border-gray-300"
-                      />
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-gray-700 font-medium">
-                      <Link href={erpRecordRoute('part', p.id)} className="hover:underline">
-                        {p.sku}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-gray-900">
-                      <div>{p.name}</div>
-                      {p.variant && <div className="text-xs text-gray-500">{p.variant}</div>}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">{formatEnum(p.lifecycleLevel)}</td>
-                    <td className="px-4 py-3 text-gray-600">{formatEnum(p.category)}</td>
-                    <td className="px-4 py-3 text-gray-600">{formatEnum(p.installStage)}</td>
-                    <td className="px-4 py-3 text-gray-600">{p.manufacturerName ?? '—'}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-gray-500">
-                      {p.manufacturerPartNumber ?? '—'}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">{p.defaultVendorName ?? '—'}</td>
-                    <td className="px-4 py-3 text-gray-600">{p.reorderPoint}</td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`font-semibold ${
-                          p.quantityOnHand === 0
-                            ? 'text-red-600'
-                            : (p.quantityOnHand ?? 0) < p.reorderPoint
-                              ? 'text-amber-600'
-                              : 'text-gray-900'
-                        }`}
-                      >
-                        {p.quantityOnHand === 0 ? '⚠️ 0' : (p.quantityOnHand ?? '—')}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-500">
-                      {p.defaultLocationName ?? p.location ?? '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={p.partState} />
-                    </td>
-                  </tr>
-                ))}
+                {parts.map((p) => {
+                  const isEditing = editingPartId === p.id && partEdit;
+                  return (
+                    <Fragment key={p.id}>
+                      <tr className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${p.sku}`}
+                            checked={selectedPartIds.includes(p.id)}
+                            onChange={() => togglePartSelection(p.id)}
+                            className="h-4 w-4 rounded border-gray-300"
+                          />
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs font-medium text-gray-700">
+                          <Link href={erpRecordRoute('part', p.id)} className="hover:underline">
+                            {p.sku}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3 text-gray-900">
+                          <div>{p.name}</div>
+                          {p.variant && <div className="text-xs text-gray-500">{p.variant}</div>}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">{formatEnum(p.lifecycleLevel)}</td>
+                        <td className="px-4 py-3 text-gray-600">{formatEnum(p.category)}</td>
+                        <td className="px-4 py-3 text-gray-600">{formatEnum(p.installStage)}</td>
+                        <td className="px-4 py-3 text-gray-600">{p.manufacturerName ?? '—'}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-gray-500">
+                          {p.manufacturerPartNumber ?? '—'}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">{p.defaultVendorName ?? '—'}</td>
+                        <td className="px-4 py-3 text-gray-600">{p.reorderPoint}</td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`font-semibold ${
+                              p.quantityOnHand === 0
+                                ? 'text-red-600'
+                                : (p.quantityOnHand ?? 0) < p.reorderPoint
+                                  ? 'text-amber-600'
+                                  : 'text-gray-900'
+                            }`}
+                          >
+                            {p.quantityOnHand === 0 ? '0' : (p.quantityOnHand ?? '—')}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-500">
+                          {p.defaultLocationName ?? p.location ?? '—'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <StatusBadge status={p.partState} />
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={isEditing ? 'default' : 'outline'}
+                            onClick={() => beginPartEdit(p)}
+                          >
+                            Edit
+                          </Button>
+                        </td>
+                      </tr>
+                      {isEditing && (
+                        <tr>
+                          <td colSpan={14} className="bg-yellow-50/40 px-4 py-4">
+                            <div className="grid gap-3 lg:grid-cols-[1.2fr_0.7fr_0.6fr_0.7fr_0.9fr_0.9fr_1fr]">
+                              <label className="space-y-1">
+                                <span className="text-xs font-semibold uppercase text-gray-500">
+                                  Name
+                                </span>
+                                <Input
+                                  value={partEdit.name}
+                                  onChange={(event) =>
+                                    setPartEdit((current) =>
+                                      current ? { ...current, name: event.target.value } : current,
+                                    )
+                                  }
+                                />
+                              </label>
+                              <label className="space-y-1">
+                                <span className="text-xs font-semibold uppercase text-gray-500">
+                                  UOM
+                                </span>
+                                <Input
+                                  value={partEdit.unitOfMeasure}
+                                  onChange={(event) =>
+                                    setPartEdit((current) =>
+                                      current
+                                        ? { ...current, unitOfMeasure: event.target.value }
+                                        : current,
+                                    )
+                                  }
+                                />
+                              </label>
+                              <label className="space-y-1">
+                                <span className="text-xs font-semibold uppercase text-gray-500">
+                                  Min
+                                </span>
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={partEdit.reorderPoint}
+                                  onChange={(event) =>
+                                    setPartEdit((current) =>
+                                      current
+                                        ? { ...current, reorderPoint: event.target.value }
+                                        : current,
+                                    )
+                                  }
+                                />
+                              </label>
+                              <label className="space-y-1">
+                                <span className="text-xs font-semibold uppercase text-gray-500">
+                                  State
+                                </span>
+                                <select
+                                  className="h-10 w-full rounded-md border border-gray-300 bg-white px-2 text-sm"
+                                  value={partEdit.partState}
+                                  onChange={(event) =>
+                                    setPartEdit((current) =>
+                                      current
+                                        ? {
+                                            ...current,
+                                            partState: event.target.value as PartState,
+                                          }
+                                        : current,
+                                    )
+                                  }
+                                >
+                                  {PART_STATE_OPTIONS.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="space-y-1">
+                                <span className="text-xs font-semibold uppercase text-gray-500">
+                                  Category
+                                </span>
+                                <select
+                                  className="h-10 w-full rounded-md border border-gray-300 bg-white px-2 text-sm"
+                                  value={partEdit.category}
+                                  onChange={(event) =>
+                                    setPartEdit((current) =>
+                                      current
+                                        ? {
+                                            ...current,
+                                            category: event.target.value as PartCategory | '',
+                                          }
+                                        : current,
+                                    )
+                                  }
+                                >
+                                  <option value="">None</option>
+                                  {CATEGORY_OPTIONS.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="space-y-1">
+                                <span className="text-xs font-semibold uppercase text-gray-500">
+                                  Stage
+                                </span>
+                                <select
+                                  className="h-10 w-full rounded-md border border-gray-300 bg-white px-2 text-sm"
+                                  value={partEdit.installStage}
+                                  onChange={(event) =>
+                                    setPartEdit((current) =>
+                                      current
+                                        ? {
+                                            ...current,
+                                            installStage: event.target.value as InstallStage | '',
+                                          }
+                                        : current,
+                                    )
+                                  }
+                                >
+                                  <option value="">None</option>
+                                  {STAGE_OPTIONS.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="space-y-1">
+                                <span className="text-xs font-semibold uppercase text-gray-500">
+                                  Lifecycle
+                                </span>
+                                <select
+                                  className="h-10 w-full rounded-md border border-gray-300 bg-white px-2 text-sm"
+                                  value={partEdit.lifecycleLevel}
+                                  onChange={(event) =>
+                                    setPartEdit((current) =>
+                                      current
+                                        ? {
+                                            ...current,
+                                            lifecycleLevel: event.target.value as LifecycleLevel,
+                                          }
+                                        : current,
+                                    )
+                                  }
+                                >
+                                  {LIFECYCLE_OPTIONS.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                            </div>
+                            <label className="mt-3 block space-y-1">
+                              <span className="text-xs font-semibold uppercase text-gray-500">
+                                Description
+                              </span>
+                              <Input
+                                value={partEdit.description}
+                                onChange={(event) =>
+                                  setPartEdit((current) =>
+                                    current
+                                      ? { ...current, description: event.target.value }
+                                      : current,
+                                  )
+                                }
+                              />
+                            </label>
+                            {partEditError && (
+                              <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+                                {partEditError}
+                              </div>
+                            )}
+                            <div className="mt-3 flex justify-end gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                disabled={savingPartId === p.id}
+                                onClick={cancelPartEdit}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                type="button"
+                                disabled={savingPartId === p.id}
+                                onClick={() => void savePartEdit(p)}
+                              >
+                                {savingPartId === p.id ? 'Saving...' : 'Save Part'}
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>

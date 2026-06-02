@@ -1819,6 +1819,14 @@ export interface CreatePartInput {
 }
 
 export interface UpdatePartInput {
+  name?: string;
+  description?: string | null;
+  unitOfMeasure?: string;
+  reorderPoint?: number;
+  partState?: PartState;
+  category?: PartCategory | null;
+  installStage?: InstallStage | null;
+  lifecycleLevel?: LifecycleLevel;
   defaultVendorId?: string | null;
 }
 

@@ -241,8 +241,8 @@
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: connecting warranty claim provider evidence into the attachment lifecycle
-          after deploying reimbursement follow-through through the accounting operational ledger and
+          Current focus: adding row-level inventory part editing after deploying warranty provider
+          evidence and reimbursement follow-through through the accounting operational ledger and
           immutable journal posting flow. Customer records now show QuickBooks customer-sync and
           payment-sync activity alongside a combined timeline, derived next actions, writable
           profile, writable cart, inline activity logging, work-order, quote, opportunity, warranty
@@ -419,8 +419,8 @@
                 claim intake, and reimbursement follow-up actions. PR #192 removed the deployed
                 warranty route allowlist. PR #193 added approved warranty claims as live
                 <code>WARRANTY_REIMBURSEMENT</code> accounting ledger entries with filtered
-                dashboard links, review status, and immutable journal posting support. This branch
-                adds provider document evidence to warranty claims through protected attachment
+                dashboard links, review status, and immutable journal posting support. PR #194 added
+                provider document evidence to warranty claims through protected attachment
                 list/download routes, local UAT route wiring, and claim-specific upload/open
                 actions.
               </td>
@@ -584,8 +584,10 @@
                 transfers, and cycle-count variance postings.
               </td>
               <td>
-                Expand broader item editing, routing integration, and cost rollups when those
-                mutation APIs are stable.
+                This branch expands the part update API and part lookup table with row-level item
+                editing for name, description, UOM, minimum stock, status, category, install stage,
+                and lifecycle level. Add accounting valuation rollups after UAT confirms the item
+                review shape.
               </td>
             </tr>
             <tr>

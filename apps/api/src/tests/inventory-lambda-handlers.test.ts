@@ -25,7 +25,21 @@ const TEST_PART_ID = '00000000-0000-4000-8000-000000000005';
 const TEST_LOCATION_ID = '00000000-0000-4000-8000-000000000006';
 const TEST_DESTINATION_LOCATION_ID = '00000000-0000-4000-8000-000000000007';
 
-function partValuationRows(partId = TEST_PART_ID) {
+function partValuationRows(
+  partId = TEST_PART_ID,
+  overrides: Partial<{
+    quantityOnHand: string;
+    quantityReserved: string;
+    quantityAllocated: string;
+    quantityConsumed: string;
+    quantityAvailable: string;
+    estimatedUnitCost: string;
+    inventoryValue: string;
+    shortfallQuantity: string;
+    shortfallValue: string;
+    valuationSource: 'LOT_LEDGER' | 'LATEST_PO' | 'NO_COST';
+  }> = {},
+) {
   return [
     {
       partId,
@@ -39,6 +53,7 @@ function partValuationRows(partId = TEST_PART_ID) {
       shortfallQuantity: '0.000',
       shortfallValue: '0.0000',
       valuationSource: 'LOT_LEDGER',
+      ...overrides,
     },
   ];
 }
@@ -513,6 +528,22 @@ test('listPartsHandler returns 422 for invalid stock filter', async () => {
   assert.match(response.body, /Invalid stock filter/);
 });
 
+test('listPartsHandler returns 422 for invalid valuation filters', async () => {
+  const issueResponse = await listPartsHandler({
+    httpMethod: 'GET',
+    queryStringParameters: { valuationIssue: 'STALE_COST' },
+  });
+  const sourceResponse = await listPartsHandler({
+    httpMethod: 'GET',
+    queryStringParameters: { valuationSource: 'AVERAGE_COST' },
+  });
+
+  assert.equal(issueResponse.statusCode, 422);
+  assert.match(issueResponse.body, /Invalid valuationIssue filter/);
+  assert.equal(sourceResponse.statusCode, 422);
+  assert.match(sourceResponse.body, /Invalid valuationSource filter/);
+});
+
 test('listPartsHandler returns balance-backed valuation rollups', async () => {
   const partId = TEST_PART_ID;
   const part = {
@@ -568,6 +599,149 @@ test('listPartsHandler returns balance-backed valuation rollups', async () => {
     assert.equal(payload.items[0].valuationSource, 'LOT_LEDGER');
     assert.equal(payload.valuationSummary.totalInventoryValue, 127.5);
     assert.equal(payload.valuationSummary.missingCostPartCount, 0);
+  } finally {
+    setInventoryHandlerPrismaForTests(undefined);
+  }
+});
+
+test('listPartsHandler applies valuation exception filters before pagination', async () => {
+  const costedPartId = '00000000-0000-4000-8000-000000000051';
+  const missingCostPartId = '00000000-0000-4000-8000-000000000052';
+  const shortPartId = '00000000-0000-4000-8000-000000000053';
+  const partById = new Map(
+    [
+      [costedPartId, 'AA-COSTED'],
+      [missingCostPartId, 'BB-MISSING-COST'],
+      [shortPartId, 'CC-SHORT'],
+    ].map(([id, sku]) => [
+      id,
+      {
+        id,
+        sku,
+        name: sku,
+        description: null,
+        unitOfMeasure: 'EA',
+        partState: 'ACTIVE',
+        reorderPoint: 2,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+        stockLots: [],
+      },
+    ]),
+  );
+  const findMany = mock.fn(
+    async (args: { select?: { id?: boolean }; where?: { id?: { in?: string[] } } }) => {
+      if (args.select) {
+        return [{ id: costedPartId }, { id: missingCostPartId }, { id: shortPartId }];
+      }
+      return (args.where?.id?.in ?? []).map((id) => partById.get(id));
+    },
+  );
+  const queryRaw = mock.fn(async () => [
+    ...partValuationRows(costedPartId),
+    ...partValuationRows(missingCostPartId, {
+      quantityOnHand: '2.000',
+      quantityAvailable: '2.000',
+      estimatedUnitCost: '0.0000',
+      inventoryValue: '0.0000',
+      valuationSource: 'NO_COST',
+    }),
+    ...partValuationRows(shortPartId, {
+      quantityOnHand: '0.000',
+      quantityAvailable: '0.000',
+      estimatedUnitCost: '10.0000',
+      inventoryValue: '0.0000',
+      shortfallQuantity: '3.000',
+      shortfallValue: '30.0000',
+      valuationSource: 'LATEST_PO',
+    }),
+  ]);
+  const prisma = {
+    part: { findMany },
+    $queryRaw: queryRaw,
+  };
+  setInventoryHandlerPrismaForTests(prisma as never);
+
+  try {
+    const response = await listPartsHandler({
+      httpMethod: 'GET',
+      queryStringParameters: { valuationIssue: 'MISSING_COST', limit: '1' },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(findMany.mock.calls.length, 2);
+    const pageArgs = findMany.mock.calls[1]!.arguments[0] as { where: { id: { in: string[] } } };
+    assert.deepEqual(pageArgs.where.id.in, [missingCostPartId]);
+
+    const payload = JSON.parse(response.body) as {
+      items: Array<{ id: string; valuationSource: string }>;
+      total: number;
+      valuationSummary: { missingCostPartCount: number; totalShortfallQuantity: number };
+    };
+    assert.equal(payload.total, 1);
+    assert.equal(payload.items.length, 1);
+    assert.equal(payload.items[0].id, missingCostPartId);
+    assert.equal(payload.items[0].valuationSource, 'NO_COST');
+    assert.equal(payload.valuationSummary.missingCostPartCount, 1);
+    assert.equal(payload.valuationSummary.totalShortfallQuantity, 0);
+  } finally {
+    setInventoryHandlerPrismaForTests(undefined);
+  }
+});
+
+test('listPartsHandler applies valuation source filters', async () => {
+  const noCostPartId = '00000000-0000-4000-8000-000000000061';
+  const latestPoPartId = '00000000-0000-4000-8000-000000000062';
+  const partById = new Map(
+    [
+      [noCostPartId, 'NO-COST'],
+      [latestPoPartId, 'LATEST-PO'],
+    ].map(([id, sku]) => [
+      id,
+      {
+        id,
+        sku,
+        name: sku,
+        description: null,
+        unitOfMeasure: 'EA',
+        partState: 'ACTIVE',
+        reorderPoint: 0,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+        stockLots: [],
+      },
+    ]),
+  );
+  const findMany = mock.fn(
+    async (args: { select?: { id?: boolean }; where?: { id?: { in?: string[] } } }) => {
+      if (args.select) return [{ id: noCostPartId }, { id: latestPoPartId }];
+      return (args.where?.id?.in ?? []).map((id) => partById.get(id));
+    },
+  );
+  const queryRaw = mock.fn(async () => [
+    ...partValuationRows(noCostPartId, { valuationSource: 'NO_COST' }),
+    ...partValuationRows(latestPoPartId, { valuationSource: 'LATEST_PO' }),
+  ]);
+  const prisma = {
+    part: { findMany },
+    $queryRaw: queryRaw,
+  };
+  setInventoryHandlerPrismaForTests(prisma as never);
+
+  try {
+    const response = await listPartsHandler({
+      httpMethod: 'GET',
+      queryStringParameters: { valuationSource: 'LATEST_PO' },
+    });
+
+    assert.equal(response.statusCode, 200);
+    const payload = JSON.parse(response.body) as {
+      items: Array<{ id: string; valuationSource: string }>;
+      total: number;
+    };
+    assert.equal(payload.total, 1);
+    assert.equal(payload.items[0].id, latestPoPartId);
+    assert.equal(payload.items[0].valuationSource, 'LATEST_PO');
   } finally {
     setInventoryHandlerPrismaForTests(undefined);
   }

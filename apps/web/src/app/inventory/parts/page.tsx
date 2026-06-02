@@ -8,6 +8,7 @@ import {
   CheckSquare,
   ClipboardCheck,
   Clipboard,
+  ClipboardList,
   Download,
   FileUp,
   History,
@@ -111,6 +112,23 @@ interface PartEditDraft {
   lifecycleLevel: LifecycleLevel;
 }
 
+interface PartExceptionHandoffRow {
+  sku: string;
+  name: string;
+  issues: string;
+  quantityOnHand: number | string;
+  quantityAvailable: number | string;
+  reorderPoint: number | string;
+  shortfallQuantity: number | string;
+  estimatedUnitCost: number | string;
+  valuationSource: string;
+  partUrl: string;
+  ledgerUrl: string;
+  cycleCountUrl: string;
+  stockAdjustmentUrl: string;
+  purchaseOrderUrl: string;
+}
+
 const PART_EXPORT_COLUMNS: CsvColumn<Part>[] = [
   { header: 'sku', value: (part) => part.sku },
   { header: 'name', value: (part) => part.name },
@@ -151,6 +169,23 @@ const PART_IMPORT_TEMPLATE: CreatePartInput[] = [
     unitOfMeasure: 'EA',
     reorderPoint: 0,
   },
+];
+
+const PART_EXCEPTION_HANDOFF_COLUMNS: CsvColumn<PartExceptionHandoffRow>[] = [
+  { header: 'sku', value: (row) => row.sku },
+  { header: 'name', value: (row) => row.name },
+  { header: 'issues', value: (row) => row.issues },
+  { header: 'quantityOnHand', value: (row) => row.quantityOnHand },
+  { header: 'quantityAvailable', value: (row) => row.quantityAvailable },
+  { header: 'reorderPoint', value: (row) => row.reorderPoint },
+  { header: 'shortfallQuantity', value: (row) => row.shortfallQuantity },
+  { header: 'estimatedUnitCost', value: (row) => row.estimatedUnitCost },
+  { header: 'valuationSource', value: (row) => row.valuationSource },
+  { header: 'partUrl', value: (row) => row.partUrl },
+  { header: 'ledgerUrl', value: (row) => row.ledgerUrl },
+  { header: 'cycleCountUrl', value: (row) => row.cycleCountUrl },
+  { header: 'stockAdjustmentUrl', value: (row) => row.stockAdjustmentUrl },
+  { header: 'purchaseOrderUrl', value: (row) => row.purchaseOrderUrl },
 ];
 
 const EMPTY_VALUATION_SUMMARY: PartValuationSummary = {
@@ -195,6 +230,76 @@ function formatValuationSource(value: Part['valuationSource']): string {
 function formatHandoffQuantity(value: number | undefined): string {
   const quantity = Math.max(value ?? 0, 1);
   return String(Number(quantity.toFixed(3)));
+}
+
+function partNeedsCostEvidence(part: Part): boolean {
+  return (
+    part.valuationSource === 'NO_COST' ||
+    ((part.quantityOnHand ?? 0) > 0 && !part.estimatedUnitCost)
+  );
+}
+
+function partNeedsReorder(part: Part): boolean {
+  return (part.shortfallQuantity ?? 0) > 0;
+}
+
+function partCanStockAudit(part: Part): boolean {
+  return (part.quantityOnHand ?? 0) > 0;
+}
+
+function buildPartIssueLabels(part: Part): string[] {
+  const issues: string[] = [];
+  if (partNeedsCostEvidence(part)) issues.push('Missing cost evidence');
+  if (partNeedsReorder(part)) issues.push('Below minimum stock');
+  if (part.valuationSource === 'LOT_LEDGER') issues.push('Lot cost backed');
+  if (part.valuationSource === 'LATEST_PO') issues.push('PO cost backed');
+  return issues.length ? issues : ['Review'];
+}
+
+function buildPartActionHrefs(part: Part) {
+  return {
+    partUrl: erpRecordRoute('part', part.id),
+    ledgerUrl: erpRoute('inventory-ledger', { partId: part.id }),
+    cycleCountUrl: partCanStockAudit(part)
+      ? erpRoute('cycle-count', {
+          partId: part.id,
+          notes: `Count ${part.sku} from valuation review.`,
+        })
+      : '',
+    stockAdjustmentUrl: partCanStockAudit(part)
+      ? erpRoute('inventory-adjustment', {
+          partId: part.id,
+          reasonCode: 'CORRECTION',
+          notes: `Valuation review for ${part.sku}.`,
+        })
+      : '',
+    purchaseOrderUrl: partNeedsReorder(part)
+      ? erpRoute('purchase-order', {
+          new: '1',
+          createPartId: part.id,
+          createPartSku: part.sku,
+          quantity: formatHandoffQuantity(part.shortfallQuantity),
+          unitCost: String(part.estimatedUnitCost ?? 0),
+          notes: `Replenish ${part.sku} from inventory exception queue.`,
+        })
+      : '',
+  };
+}
+
+function buildPartExceptionHandoffRow(part: Part): PartExceptionHandoffRow {
+  const hrefs = buildPartActionHrefs(part);
+  return {
+    sku: part.sku,
+    name: part.name,
+    issues: buildPartIssueLabels(part).join('; '),
+    quantityOnHand: part.quantityOnHand ?? '',
+    quantityAvailable: part.quantityAvailable ?? '',
+    reorderPoint: part.reorderPoint ?? '',
+    shortfallQuantity: part.shortfallQuantity ?? '',
+    estimatedUnitCost: part.estimatedUnitCost ?? '',
+    valuationSource: formatValuationSource(part.valuationSource),
+    ...hrefs,
+  };
 }
 
 function isOptionValue<T extends string>(
@@ -488,6 +593,32 @@ export default function PartsPage() {
     () => parts.filter((part) => selectedPartIds.includes(part.id)),
     [parts, selectedPartIds],
   );
+  const selectedMissingCostCount = useMemo(
+    () => selectedParts.filter(partNeedsCostEvidence).length,
+    [selectedParts],
+  );
+  const selectedReorderCount = useMemo(
+    () => selectedParts.filter(partNeedsReorder).length,
+    [selectedParts],
+  );
+  const selectedStockAuditCount = useMemo(
+    () => selectedParts.filter(partCanStockAudit).length,
+    [selectedParts],
+  );
+  const selectedExceptionHandoffRows = useMemo(
+    () => selectedParts.map(buildPartExceptionHandoffRow),
+    [selectedParts],
+  );
+  const firstSelectedPart = selectedParts[0];
+  const firstSelectedHrefs = firstSelectedPart ? buildPartActionHrefs(firstSelectedPart) : null;
+  const firstReorderPart = selectedParts.find(partNeedsReorder);
+  const firstReorderHref = firstReorderPart
+    ? buildPartActionHrefs(firstReorderPart).purchaseOrderUrl
+    : '';
+  const firstStockAuditPart = selectedParts.find(partCanStockAudit);
+  const firstStockAuditHrefs = firstStockAuditPart
+    ? buildPartActionHrefs(firstStockAuditPart)
+    : null;
   const visibleInventoryValue = useMemo(
     () => parts.reduce((sum, part) => sum + (part.inventoryValue ?? 0), 0),
     [parts],
@@ -535,6 +666,64 @@ export default function PartsPage() {
       await navigator.clipboard.writeText(selectedParts.map((part) => part.sku).join('\n'));
       setActionMessage(
         `Copied ${selectedParts.length} SKU${selectedParts.length === 1 ? '' : 's'}.`,
+      );
+    } catch (err) {
+      setActionMessage(`Copy failed: ${errorMessage(err)}`);
+    }
+  }
+
+  function exportSelectedExceptionHandoffs() {
+    if (selectedExceptionHandoffRows.length === 0) {
+      setActionMessage('Select part rows before exporting handoffs.');
+      return;
+    }
+    downloadCsv(
+      `gg-inventory-exception-handoffs-${nowStamp()}.csv`,
+      selectedExceptionHandoffRows,
+      PART_EXCEPTION_HANDOFF_COLUMNS,
+    );
+    setActionMessage(
+      `Exported ${selectedExceptionHandoffRows.length} exception handoff row${
+        selectedExceptionHandoffRows.length === 1 ? '' : 's'
+      }.`,
+    );
+  }
+
+  async function copySelectedActionBrief() {
+    if (selectedParts.length === 0) {
+      setActionMessage('Select part rows before copying an action brief.');
+      return;
+    }
+
+    const brief = selectedParts
+      .map((part) => {
+        const hrefs = buildPartActionHrefs(part);
+        return [
+          `${part.sku} — ${part.name}`,
+          `Issues: ${buildPartIssueLabels(part).join(', ')}`,
+          `On hand: ${formatQuantity(part.quantityOnHand)} | Min: ${formatQuantity(
+            part.reorderPoint,
+          )} | Shortfall: ${formatQuantity(part.shortfallQuantity)}`,
+          `Cost: ${formatMoney(part.estimatedUnitCost)} (${formatValuationSource(
+            part.valuationSource,
+          )})`,
+          `Part: ${hrefs.partUrl}`,
+          `Ledger: ${hrefs.ledgerUrl}`,
+          hrefs.cycleCountUrl ? `Cycle count: ${hrefs.cycleCountUrl}` : '',
+          hrefs.stockAdjustmentUrl ? `Adjustment: ${hrefs.stockAdjustmentUrl}` : '',
+          hrefs.purchaseOrderUrl ? `Purchase order: ${hrefs.purchaseOrderUrl}` : '',
+        ]
+          .filter(Boolean)
+          .join('\n');
+      })
+      .join('\n\n');
+
+    try {
+      await navigator.clipboard.writeText(brief);
+      setActionMessage(
+        `Copied action brief for ${selectedParts.length} selected part${
+          selectedParts.length === 1 ? '' : 's'
+        }.`,
       );
     } catch (err) {
       setActionMessage(`Copy failed: ${errorMessage(err)}`);
@@ -962,18 +1151,102 @@ export default function PartsPage() {
         </div>
       </div>
       {selectedParts.length > 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
-          <span className="text-sm font-semibold text-amber-900">
-            {selectedParts.length} selected
-          </span>
-          <Button type="button" size="sm" variant="outline" onClick={() => void copySelectedSkus()}>
-            <Clipboard data-icon="inline-start" />
-            Copy SKUs
-          </Button>
-          <Button type="button" size="sm" variant="ghost" onClick={() => setSelectedPartIds([])}>
-            <X data-icon="inline-start" />
-            Clear
-          </Button>
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-amber-950">Selected Exception Workbench</h2>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold text-amber-900">
+                <span className="rounded-md border border-amber-200 bg-white px-2 py-1">
+                  {selectedParts.length} selected
+                </span>
+                <span className="rounded-md border border-amber-200 bg-white px-2 py-1">
+                  {selectedMissingCostCount} cost
+                </span>
+                <span className="rounded-md border border-amber-200 bg-white px-2 py-1">
+                  {selectedReorderCount} reorder
+                </span>
+                <span className="rounded-md border border-amber-200 bg-white px-2 py-1">
+                  {selectedStockAuditCount} stock audit
+                </span>
+              </div>
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void copySelectedSkus()}
+              >
+                <Clipboard data-icon="inline-start" />
+                Copy SKUs
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void copySelectedActionBrief()}
+              >
+                <ClipboardList data-icon="inline-start" />
+                Copy action brief
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={exportSelectedExceptionHandoffs}
+              >
+                <Download data-icon="inline-start" />
+                Export handoffs
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setSelectedPartIds([])}
+              >
+                <X data-icon="inline-start" />
+                Clear
+              </Button>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {firstSelectedHrefs && (
+              <Link
+                href={firstSelectedHrefs.ledgerUrl}
+                className="inline-flex h-8 items-center rounded-md border border-amber-200 bg-white px-2 text-xs font-semibold text-gray-700 hover:border-yellow-400"
+              >
+                <History className="mr-1 h-3.5 w-3.5" />
+                First ledger
+              </Link>
+            )}
+            {firstStockAuditHrefs?.cycleCountUrl && (
+              <Link
+                href={firstStockAuditHrefs.cycleCountUrl}
+                className="inline-flex h-8 items-center rounded-md border border-amber-200 bg-white px-2 text-xs font-semibold text-gray-700 hover:border-yellow-400"
+              >
+                <ClipboardCheck className="mr-1 h-3.5 w-3.5" />
+                First count
+              </Link>
+            )}
+            {firstStockAuditHrefs?.stockAdjustmentUrl && (
+              <Link
+                href={firstStockAuditHrefs.stockAdjustmentUrl}
+                className="inline-flex h-8 items-center rounded-md border border-amber-200 bg-white px-2 text-xs font-semibold text-gray-700 hover:border-yellow-400"
+              >
+                <SlidersHorizontal className="mr-1 h-3.5 w-3.5" />
+                First adjust
+              </Link>
+            )}
+            {firstReorderHref && (
+              <Link
+                href={firstReorderHref}
+                className="inline-flex h-8 items-center rounded-md border border-amber-200 bg-white px-2 text-xs font-semibold text-gray-700 hover:border-yellow-400"
+              >
+                <ShoppingCart className="mr-1 h-3.5 w-3.5" />
+                First PO
+              </Link>
+            )}
+          </div>
         </div>
       )}
       {importRows.length > 0 && (

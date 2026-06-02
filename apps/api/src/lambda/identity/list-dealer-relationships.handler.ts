@@ -1,5 +1,5 @@
-import { PrismaClient } from '@prisma/client';
-import { wrapHandler, jsonResponse } from '../../shared/lambda/index.js';
+import { Prisma, PrismaClient } from '@prisma/client';
+import { wrapHandler, parseBody, jsonResponse } from '../../shared/lambda/index.js';
 
 let prisma: PrismaClient | undefined;
 
@@ -64,6 +64,13 @@ const RELATIONSHIP_TYPES = new Set([
   'WARRANTY_PROVIDER',
 ]);
 const RELATIONSHIP_STATES = new Set(['ACTIVE', 'INACTIVE', 'ENDED']);
+const UPDATEABLE_RELATIONSHIP_STATES = new Set(['ACTIVE', 'INACTIVE', 'ENDED']);
+
+interface UpdateDealerRelationshipBody {
+  relationshipState?: string;
+  escalationOwner?: string | null;
+  notes?: string | null;
+}
 
 function parsePositiveInteger(value: string | undefined, fallback: number): number {
   if (!value) return fallback;
@@ -193,6 +200,84 @@ export const handler = wrapHandler(
       limit,
       offset,
     });
+  },
+  { requireAuth: false },
+);
+
+export const updateDealerRelationshipHandler = wrapHandler(
+  async (ctx) => {
+    const id = ctx.event.pathParameters?.id;
+    if (!id) return jsonResponse(400, { message: 'Dealer relationship ID is required.' });
+
+    const body = parseBody<UpdateDealerRelationshipBody>(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
+
+    const existing = await getPrisma().dealerRelationship.findUnique({
+      where: { id },
+      include: {
+        dealerAccount: { include: { customer: true } },
+        customer: true,
+        cartVehicle: true,
+      },
+    });
+    if (!existing) return jsonResponse(404, { message: `Dealer relationship not found: ${id}` });
+
+    const patch: Record<string, unknown> = {};
+    const now = new Date();
+
+    if ('relationshipState' in body.value) {
+      const state = body.value.relationshipState?.trim().toUpperCase();
+      if (!state || !UPDATEABLE_RELATIONSHIP_STATES.has(state)) {
+        return jsonResponse(422, {
+          message: 'relationshipState must be ACTIVE, INACTIVE, or ENDED.',
+        });
+      }
+      patch.relationshipState = state;
+      patch.endedAt = state === 'ENDED' ? now : null;
+    }
+
+    if ('escalationOwner' in body.value) {
+      const owner = body.value.escalationOwner?.trim();
+      patch.escalationOwner = owner || null;
+    }
+
+    if ('notes' in body.value) {
+      const notes = body.value.notes?.trim();
+      patch.notes = notes || null;
+    }
+
+    if (Object.keys(patch).length === 0) {
+      return jsonResponse(422, {
+        message: 'At least one relationship field is required.',
+      });
+    }
+
+    try {
+      const updated = await getPrisma().dealerRelationship.update({
+        where: { id },
+        data: {
+          ...patch,
+          updatedAt: now,
+          version: { increment: 1 },
+        },
+        include: {
+          dealerAccount: { include: { customer: true } },
+          customer: true,
+          cartVehicle: true,
+        },
+      });
+
+      return jsonResponse(200, {
+        relationship: toRelationshipResponse(updated as DealerRelationshipRecord),
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        return jsonResponse(409, {
+          message: 'An active dealer relationship already exists for this dealer, customer, cart, and type.',
+        });
+      }
+      throw err;
+    }
   },
   { requireAuth: false },
 );

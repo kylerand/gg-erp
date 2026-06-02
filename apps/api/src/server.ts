@@ -125,7 +125,10 @@ import { adminCreateUserHandler } from './lambda/identity/admin-create-user.hand
 import { adminUpdateUserHandler } from './lambda/identity/admin-update-user.handler.js';
 import { adminDeleteUserHandler } from './lambda/identity/admin-delete-user.handler.js';
 import { handler as listDealersHandler } from './lambda/identity/list-dealers.handler.js';
-import { handler as listDealerRelationshipsHandler } from './lambda/identity/list-dealer-relationships.handler.js';
+import {
+  handler as listDealerRelationshipsHandler,
+  updateDealerRelationshipHandler,
+} from './lambda/identity/list-dealer-relationships.handler.js';
 import {
   listChannelsHandler,
   createChannelHandler,
@@ -294,6 +297,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   // ── Path parameter extraction helpers ────────────────────────────────────
   const migrationBatchMatch = pathname.match(/^\/migration\/batches\/([^/]+)/);
   const customerMatch = pathname.match(/^\/identity\/customers\/([^/]+)/);
+  const dealerRelationshipMatch = pathname.match(/^\/identity\/dealer-relationships\/([^/]+)$/);
   const vehicleMatch = pathname.match(/^\/planning\/vehicles\/([^/]+)$/);
   const partMatch = pathname.match(/^\/inventory\/parts\/([^/]+)(?:\/([^/]+))?/);
   const purchaseOrderMatch = pathname.match(/^\/inventory\/purchase-orders\/([^/]+)$/);
@@ -440,6 +444,11 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     result = await listDealersHandler(event);
   } else if (pathname === '/identity/dealer-relationships' && method === 'GET') {
     result = await listDealerRelationshipsHandler(event);
+  } else if (dealerRelationshipMatch && method === 'PATCH') {
+    result = await updateDealerRelationshipHandler({
+      ...event,
+      pathParameters: { id: dealerRelationshipMatch[1] },
+    });
   } else if (pathname === '/identity/customers' && method === 'POST') {
     result = await createCustomerHandler(event);
   } else if (customerMatch && method === 'GET') {

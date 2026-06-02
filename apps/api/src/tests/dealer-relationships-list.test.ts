@@ -5,6 +5,7 @@ import {
   disconnectListDealerRelationshipsHandlerDependencies,
   handler as listDealerRelationshipsHandler,
   setListDealerRelationshipsPrismaForTests,
+  updateDealerRelationshipHandler,
 } from '../lambda/identity/list-dealer-relationships.handler.js';
 
 test('listDealerRelationshipsHandler returns dealer relationship rows with customer and cart context', async () => {
@@ -132,6 +133,160 @@ test('listDealerRelationshipsHandler returns dealer relationship rows with custo
     assert.ok(JSON.stringify(findManyArgs).includes('dealerAccount'));
     assert.ok(JSON.stringify(findManyArgs).includes('cartVehicle'));
     assert.ok(JSON.stringify(countArgs).includes('ACTIVE'));
+  } finally {
+    await disconnectListDealerRelationshipsHandlerDependencies();
+  }
+});
+
+test('updateDealerRelationshipHandler patches relationship state, owner, and notes', async () => {
+  const now = new Date('2026-06-01T12:00:00Z');
+  const relationship = {
+    id: 'relationship-1',
+    relationshipType: 'SERVICING_DEALER',
+    relationshipState: 'ACTIVE',
+    escalationOwner: null,
+    notes: null,
+    startedAt: now,
+    endedAt: null,
+    updatedAt: now,
+    dealerAccount: {
+      id: 'dealer-1',
+      dealerCode: 'DEALER-RIVER',
+      territory: 'Central Florida',
+      serviceRelationship: 'ACTIVE',
+      customer: {
+        id: 'dealer-customer-1',
+        fullName: 'Jordan Manager',
+        companyName: 'Riverside Golf Club',
+        email: 'ops@riverside.example',
+        phone: '555-0100',
+        state: 'ACTIVE',
+      },
+    },
+    customer: {
+      id: 'customer-1',
+      fullName: 'Avery Customer',
+      companyName: null,
+      email: 'avery@example.com',
+      phone: '555-0199',
+      state: 'ACTIVE',
+    },
+    cartVehicle: null,
+  };
+  let updateArgs: unknown;
+
+  setListDealerRelationshipsPrismaForTests({
+    dealerRelationship: {
+      findUnique: async () => relationship,
+      update: async (args: { data: Record<string, unknown> }) => {
+        updateArgs = args;
+        return {
+          ...relationship,
+          relationshipState: args.data.relationshipState,
+          escalationOwner: args.data.escalationOwner,
+          notes: args.data.notes,
+          endedAt: args.data.endedAt,
+          updatedAt: args.data.updatedAt,
+        };
+      },
+    },
+    $disconnect: async () => undefined,
+  } as unknown as PrismaClient);
+
+  try {
+    const response = await updateDealerRelationshipHandler({
+      pathParameters: { id: 'relationship-1' },
+      body: JSON.stringify({
+        relationshipState: 'ended',
+        escalationOwner: '  Jordan Manager  ',
+        notes: '  Warranty handoff complete  ',
+      }),
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(
+      (updateArgs as { data: Record<string, unknown> }).data,
+      {
+        relationshipState: 'ENDED',
+        endedAt: (updateArgs as { data: { endedAt: Date } }).data.endedAt,
+        escalationOwner: 'Jordan Manager',
+        notes: 'Warranty handoff complete',
+        updatedAt: (updateArgs as { data: { updatedAt: Date } }).data.updatedAt,
+        version: { increment: 1 },
+      },
+    );
+
+    const payload = JSON.parse(response.body) as {
+      relationship: {
+        id: string;
+        relationshipState: string;
+        escalationOwner: string;
+        notes: string;
+        endedAt: string;
+      };
+    };
+    assert.equal(payload.relationship.id, 'relationship-1');
+    assert.equal(payload.relationship.relationshipState, 'ENDED');
+    assert.equal(payload.relationship.escalationOwner, 'Jordan Manager');
+    assert.equal(payload.relationship.notes, 'Warranty handoff complete');
+    assert.ok(payload.relationship.endedAt);
+  } finally {
+    await disconnectListDealerRelationshipsHandlerDependencies();
+  }
+});
+
+test('updateDealerRelationshipHandler validates relationship state before writing', async () => {
+  const now = new Date('2026-06-01T12:00:00Z');
+
+  setListDealerRelationshipsPrismaForTests({
+    dealerRelationship: {
+      findUnique: async () => ({
+        id: 'relationship-1',
+        relationshipType: 'SERVICING_DEALER',
+        relationshipState: 'ACTIVE',
+        escalationOwner: null,
+        notes: null,
+        startedAt: now,
+        endedAt: null,
+        updatedAt: now,
+        dealerAccount: {
+          id: 'dealer-1',
+          dealerCode: null,
+          territory: null,
+          serviceRelationship: 'ACTIVE',
+          customer: {
+            id: 'dealer-customer-1',
+            fullName: 'Dealer',
+            companyName: null,
+            email: 'dealer@example.com',
+            phone: null,
+            state: 'ACTIVE',
+          },
+        },
+        customer: {
+          id: 'customer-1',
+          fullName: 'Customer',
+          companyName: null,
+          email: 'customer@example.com',
+          phone: null,
+          state: 'ACTIVE',
+        },
+        cartVehicle: null,
+      }),
+      update: async () => {
+        throw new Error('update should not be called');
+      },
+    },
+    $disconnect: async () => undefined,
+  } as unknown as PrismaClient);
+
+  try {
+    const response = await updateDealerRelationshipHandler({
+      pathParameters: { id: 'relationship-1' },
+      body: JSON.stringify({ relationshipState: 'paused' }),
+    });
+
+    assert.equal(response.statusCode, 422);
   } finally {
     await disconnectListDealerRelationshipsHandlerDependencies();
   }

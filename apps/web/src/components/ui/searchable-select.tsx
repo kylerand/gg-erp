@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { type ReactNode, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,7 +24,7 @@ interface SearchableSelectProps {
   loading?: boolean;
   error?: string;
   placeholder: string;
-  emptyText: string;
+  emptyText: ReactNode;
   onSearchChange: (value: string) => void;
   onChange: (value: string) => void;
 }

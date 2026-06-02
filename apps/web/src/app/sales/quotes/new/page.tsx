@@ -5,9 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   createQuote,
-  getCustomer,
   getWoOrder,
-  listCustomers,
   listOpportunities,
   listParts,
   type Customer,
@@ -18,6 +16,8 @@ import {
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 import { PageHeader } from '@gg-erp/ui';
 import PricingIntelligence from '@/components/sales/PricingIntelligence';
+import { CustomerSelector } from '@/components/customers/CustomerSelector';
+import { quoteCustomerSubmitError } from '@/components/customers/customer-selector.helpers';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -42,15 +42,6 @@ const emptyLine = (key: string): LineItem => ({
   unitPrice: 0,
   discountPercent: 0,
 });
-
-function customerOption(customer: Customer): SearchableSelectOption {
-  return {
-    id: customer.id,
-    label: customer.companyName ?? customer.fullName,
-    description: [customer.fullName, customer.email, customer.phone].filter(Boolean).join(' · '),
-    meta: customer.state,
-  };
-}
 
 function opportunityOption(opportunity: SalesOpportunity): SearchableSelectOption {
   const estimatedValue = opportunity.estimatedValue ?? 0;
@@ -108,7 +99,8 @@ export default function NewQuotePage() {
   const initialOpportunityId = searchParams.get('opportunityId') ?? '';
   const sourceWorkOrderId = searchParams.get('workOrderId') ?? '';
   const [customerId, setCustomerId] = useState(initialCustomerId);
-  const [customerSearch, setCustomerSearch] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | undefined>();
+  const [customerLoading, setCustomerLoading] = useState(Boolean(initialCustomerId));
   const [opportunityId, setOpportunityId] = useState(initialOpportunityId);
   const [opportunitySearch, setOpportunitySearch] = useState('');
   const [notes, setNotes] = useState(sourceWorkOrderId ? SOURCE_WORK_ORDER_NOTE : '');
@@ -116,7 +108,6 @@ export default function NewQuotePage() {
   const [lines, setLines] = useState<LineItem[]>(() => [emptyLine('quote-line-1')]);
   const [nextLineNumber, setNextLineNumber] = useState(2);
   const [partSearches, setPartSearches] = useState<Record<string, string>>({});
-  const [customers, setCustomers] = useState<Customer[]>([]);
   const [opportunities, setOpportunities] = useState<SalesOpportunity[]>([]);
   const [parts, setParts] = useState<Part[]>([]);
   const [sourceWorkOrder, setSourceWorkOrder] = useState<WoOrderDetail | null>(null);
@@ -131,19 +122,7 @@ export default function NewQuotePage() {
     setReferenceLoading(true);
     setReferenceError(undefined);
 
-    const customerRequest =
-      customerId && !customerSearch
-        ? getCustomer(customerId, { allowMockFallback: false }).then((customer) => ({
-            items: [customer],
-            total: 1,
-          }))
-        : listCustomers(
-            { search: customerSearch || undefined, state: 'ACTIVE', limit: 25 },
-            { allowMockFallback: false },
-          );
-
     Promise.all([
-      customerRequest,
       listOpportunities(
         {
           customerId: customerId || undefined,
@@ -154,15 +133,13 @@ export default function NewQuotePage() {
       ),
       listParts({ partState: 'ACTIVE', limit: 100 }, { allowMockFallback: false }),
     ])
-      .then(([customerResult, opportunityResult, partResult]) => {
+      .then(([opportunityResult, partResult]) => {
         if (!active) return;
-        setCustomers(customerResult.items);
         setOpportunities(opportunityResult.items);
         setParts(partResult.items);
       })
       .catch((err: unknown) => {
         if (!active) return;
-        setCustomers([]);
         setOpportunities([]);
         setParts([]);
         setReferenceError(err instanceof Error ? err.message : 'Failed to load selector data.');
@@ -174,7 +151,7 @@ export default function NewQuotePage() {
     return () => {
       active = false;
     };
-  }, [customerId, customerSearch, opportunitySearch]);
+  }, [customerId, opportunitySearch]);
 
   useEffect(() => {
     if (!sourceWorkOrderId) {
@@ -214,10 +191,8 @@ export default function NewQuotePage() {
     };
   }, [sourceWorkOrderId]);
 
-  const customerOptions = useMemo(() => customers.map(customerOption), [customers]);
   const opportunityOptions = useMemo(() => opportunities.map(opportunityOption), [opportunities]);
   const partOptions = useMemo(() => parts.map(partOption), [parts]);
-  const selectedCustomer = customerOptions.find((option) => option.id === customerId);
   const selectedOpportunity = opportunityOptions.find((option) => option.id === opportunityId);
 
   const updateLine = (key: string, field: keyof LineItem, value: string | number) => {
@@ -261,8 +236,11 @@ export default function NewQuotePage() {
   const quoteTotal = lines.reduce((sum, line) => sum + lineTotal(line), 0);
 
   const handleSubmit = async () => {
-    if (!customerId.trim()) {
-      setError('Customer is required.');
+    const customerError = quoteCustomerSubmitError(customerId, selectedCustomer);
+    if (customerError || !selectedCustomer) {
+      setError(
+        customerError ?? 'Choose a customer from the catalog results before creating the quote.',
+      );
       return;
     }
     if (lines.length === 0 || lines.every((line) => !line.description.trim())) {
@@ -274,7 +252,7 @@ export default function NewQuotePage() {
     setError(null);
     try {
       const quote = await createQuote({
-        customerId,
+        customerId: selectedCustomer.id,
         opportunityId: opportunityId || undefined,
         notes: notes.trim() || undefined,
         validUntil: validUntil || undefined,
@@ -320,21 +298,17 @@ export default function NewQuotePage() {
 
       <div className="mb-6 space-y-4 rounded-lg border border-gray-200 bg-white p-6">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <SearchableSelect
+          <CustomerSelector
             id="quote-customer"
             label="Customer"
             required
             value={customerId}
-            selectedOption={selectedCustomer}
-            searchValue={customerSearch}
-            options={customerOptions}
-            loading={referenceLoading}
-            error={referenceError}
-            placeholder="Search customers"
-            emptyText="No active customers matched this search."
-            onSearchChange={setCustomerSearch}
-            onChange={(nextCustomerId) => {
+            placeholder="Search active customers"
+            onLoadingChange={setCustomerLoading}
+            onResolvedCustomer={setSelectedCustomer}
+            onChange={(nextCustomerId, customer) => {
               setCustomerId(nextCustomerId);
+              setSelectedCustomer(customer);
               setOpportunityId('');
             }}
           />
@@ -544,7 +518,7 @@ export default function NewQuotePage() {
         <div className="mb-6">
           <PricingIntelligence
             customerId={customerId || undefined}
-            customerName={selectedCustomer?.label}
+            customerName={selectedCustomer?.companyName ?? selectedCustomer?.fullName}
             opportunityId={opportunityId || undefined}
             items={lines
               .filter((line) => line.description.trim())
@@ -561,7 +535,11 @@ export default function NewQuotePage() {
         <Button
           type="button"
           onClick={() => void handleSubmit()}
-          disabled={submitting || !customerId}
+          disabled={
+            submitting ||
+            customerLoading ||
+            Boolean(quoteCustomerSubmitError(customerId, selectedCustomer))
+          }
           className="bg-yellow-400 font-semibold text-gray-900 hover:bg-yellow-500 disabled:opacity-50"
         >
           {submitting ? 'Creating...' : 'Create Quote'}

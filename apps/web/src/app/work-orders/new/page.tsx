@@ -7,7 +7,6 @@ import {
   createExecutionWorkOrder,
   listBuildPackages,
   listCartVehicles,
-  listCustomers,
   listRoutingTemplates,
   type CartVehicle,
   type Customer,
@@ -16,6 +15,8 @@ import {
 } from '@/lib/api-client';
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 import { PageHeader } from '@gg-erp/ui';
+import { CustomerSelector } from '@/components/customers/CustomerSelector';
+import { isActiveSelectedCustomer } from '@/components/customers/customer-selector.helpers';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,15 +34,6 @@ interface BuildPackageOption extends SearchableSelectOption {
 interface RoutingTemplateOption extends SearchableSelectOption {
   stepCount: number;
   estimatedMinutes: number;
-}
-
-function customerOption(customer: Customer): SearchableSelectOption {
-  return {
-    id: customer.id,
-    label: customer.companyName ?? customer.fullName,
-    description: [customer.fullName, customer.email, customer.phone].filter(Boolean).join(' · '),
-    meta: customer.state,
-  };
 }
 
 function vehicleOption(vehicle: CartVehicle): SearchableSelectOption {
@@ -98,18 +90,20 @@ export default function NewWorkOrderPage() {
   const [referenceError, setReferenceError] = useState<string | undefined>();
   const [workOrderNumber, setWorkOrderNumber] = useState('');
   const [customerId, setCustomerId] = useState(searchParams.get('customerId') ?? '');
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | undefined>();
+  const [customerLoading, setCustomerLoading] = useState(Boolean(searchParams.get('customerId')));
   const [vehicleId, setVehicleId] = useState(searchParams.get('vehicleId') ?? '');
   const [buildPackageId, setBuildPackageId] = useState(searchParams.get('buildPackageId') ?? '');
-  const [routingTemplateId, setRoutingTemplateId] = useState(searchParams.get('routingTemplateId') ?? '');
+  const [routingTemplateId, setRoutingTemplateId] = useState(
+    searchParams.get('routingTemplateId') ?? '',
+  );
   const [manualBuildConfigurationId, setManualBuildConfigurationId] = useState('');
   const [manualBomId, setManualBomId] = useState('');
   const [scheduledDate, setScheduledDate] = useState('');
   const [description, setDescription] = useState('');
-  const [customerSearch, setCustomerSearch] = useState('');
   const [vehicleSearch, setVehicleSearch] = useState('');
   const [buildPackageSearch, setBuildPackageSearch] = useState('');
   const [routingTemplateSearch, setRoutingTemplateSearch] = useState('');
-  const [customers, setCustomers] = useState<Customer[]>([]);
   const [vehicles, setVehicles] = useState<CartVehicle[]>([]);
   const [buildPackages, setBuildPackages] = useState<WorkOrderBuildPackage[]>([]);
   const [routingTemplates, setRoutingTemplates] = useState<RoutingTemplate[]>([]);
@@ -120,10 +114,6 @@ export default function NewWorkOrderPage() {
     setReferenceError(undefined);
 
     Promise.all([
-      listCustomers(
-        { search: customerSearch || undefined, state: 'ACTIVE', limit: 25 },
-        { allowMockFallback: false },
-      ),
       listCartVehicles(
         {
           customerId: customerId || undefined,
@@ -146,16 +136,14 @@ export default function NewWorkOrderPage() {
         { allowMockFallback: false },
       ),
     ])
-      .then(([customerResult, vehicleResult, buildPackageResult, routingTemplateResult]) => {
+      .then(([vehicleResult, buildPackageResult, routingTemplateResult]) => {
         if (!active) return;
-        setCustomers(customerResult.items);
         setVehicles(vehicleResult.items);
         setBuildPackages(buildPackageResult.items);
         setRoutingTemplates(routingTemplateResult.items);
       })
       .catch((err: unknown) => {
         if (!active) return;
-        setCustomers([]);
         setVehicles([]);
         setBuildPackages([]);
         setRoutingTemplates([]);
@@ -168,15 +156,8 @@ export default function NewWorkOrderPage() {
     return () => {
       active = false;
     };
-  }, [
-    buildPackageSearch,
-    customerId,
-    customerSearch,
-    routingTemplateSearch,
-    vehicleSearch,
-  ]);
+  }, [buildPackageSearch, customerId, routingTemplateSearch, vehicleSearch]);
 
-  const customerOptions = useMemo(() => customers.map(customerOption), [customers]);
   const vehicleOptions = useMemo(() => vehicles.map(vehicleOption), [vehicles]);
   const packageOptions = useMemo(() => buildPackages.map(buildPackageOption), [buildPackages]);
   const routingTemplateOptions = useMemo(
@@ -193,14 +174,17 @@ export default function NewWorkOrderPage() {
     );
   }, [buildPackageSearch, packageOptions]);
 
-  const selectedCustomer = customerOptions.find((option) => option.id === customerId);
   const selectedVehicle = vehicleOptions.find((option) => option.id === vehicleId);
   const selectedBuildPackage = packageOptions.find((option) => option.id === buildPackageId);
-  const selectedRoutingTemplate = routingTemplateOptions.find((option) => option.id === routingTemplateId);
+  const selectedRoutingTemplate = routingTemplateOptions.find(
+    (option) => option.id === routingTemplateId,
+  );
   const resolvedBuildConfigurationId =
     selectedBuildPackage?.buildConfigurationId ?? manualBuildConfigurationId.trim();
   const resolvedBomId = selectedBuildPackage?.bomId ?? manualBomId.trim();
   const hasBuildPackage = Boolean(resolvedBuildConfigurationId && resolvedBomId);
+  const selectedCustomerIsValid =
+    !customerId || isActiveSelectedCustomer(customerId, selectedCustomer);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -213,6 +197,10 @@ export default function NewWorkOrderPage() {
       toast.error('Select a cart before creating the work order.');
       return;
     }
+    if (!selectedCustomerIsValid) {
+      toast.error('Select an active customer from the catalog or clear the customer field.');
+      return;
+    }
     if (!hasBuildPackage) {
       toast.error('Select a build package or enter released build references.');
       return;
@@ -223,7 +211,7 @@ export default function NewWorkOrderPage() {
       const created = await createExecutionWorkOrder({
         workOrderNumber: workOrderNumber.trim(),
         vehicleId,
-        customerId: customerId || undefined,
+        customerId: selectedCustomer?.id,
         buildConfigurationId: resolvedBuildConfigurationId,
         bomId: resolvedBomId,
         routingTemplateId: routingTemplateId || undefined,
@@ -280,20 +268,16 @@ export default function NewWorkOrderPage() {
               </div>
             </div>
 
-            <SearchableSelect
+            <CustomerSelector
               id="customer"
               label="Customer"
               value={customerId}
-              selectedOption={selectedCustomer}
-              searchValue={customerSearch}
-              options={customerOptions}
-              loading={referenceLoading}
-              error={referenceError}
               placeholder="Search customers by name, company, or email"
-              emptyText="No active customers matched this search."
-              onSearchChange={setCustomerSearch}
-              onChange={(nextCustomerId) => {
+              onLoadingChange={setCustomerLoading}
+              onResolvedCustomer={setSelectedCustomer}
+              onChange={(nextCustomerId, customer) => {
                 setCustomerId(nextCustomerId);
+                setSelectedCustomer(customer);
                 setVehicleId('');
               }}
             />
@@ -404,7 +388,13 @@ export default function NewWorkOrderPage() {
             <div className="flex gap-3 pt-2">
               <Button
                 type="submit"
-                disabled={loading || !vehicleId || !hasBuildPackage}
+                disabled={
+                  loading ||
+                  customerLoading ||
+                  !vehicleId ||
+                  !hasBuildPackage ||
+                  !selectedCustomerIsValid
+                }
                 className="bg-yellow-400 text-gray-900 hover:bg-yellow-300"
               >
                 {loading ? 'Creating...' : 'Create Work Order'}

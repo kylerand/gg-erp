@@ -347,38 +347,39 @@
         <p class="lede">
           High-level status after the planning review-pack, accounting operational-ledger,
           journal-posting, trial-balance close-readiness, period-control deploy, close-package
-          deploy, QA allowlist cleanup, and active accounting document-snapshot slice. The app has moved past polished static screens into a usable
-          shop-ops ERP foundation, but ShopMonkey cutover remains blocked until complete parts and
-          purchase-order source exports are captured.
+          deploy, accounting document-snapshot deploy, and active customer-selector hardening slice.
+          The app has moved past polished static screens into a usable shop-ops ERP foundation, but
+          ShopMonkey cutover remains blocked until complete parts and purchase-order source exports
+          are captured.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 1, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 173</span>
-          <span class="chip">Active slice: Accounting document snapshots</span>
+          <span class="chip">Baseline: origin/main through PR 174</span>
+          <span class="chip">Active slice: Customer selector hardening</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
 
       <div class="summary">
         <div class="metric">
-          <strong>80%</strong>
-          <span>Estimated production readiness for an internal ERP rollout.</span>
-          <div class="bar warn"><span style="width: 80%"></span></div>
-        </div>
-        <div class="metric">
-          <strong>93%</strong>
-          <span>Actionability remediation from the UAT plan.</span>
-          <div class="bar good"><span style="width: 93%"></span></div>
-        </div>
-        <div class="metric">
           <strong>81%</strong>
-          <span>Live workflow/API contract completeness.</span>
+          <span>Estimated production readiness for an internal ERP rollout.</span>
           <div class="bar warn"><span style="width: 81%"></span></div>
         </div>
         <div class="metric">
-          <strong>65%</strong>
+          <strong>94%</strong>
+          <span>Actionability remediation from the UAT plan.</span>
+          <div class="bar good"><span style="width: 94%"></span></div>
+        </div>
+        <div class="metric">
+          <strong>82%</strong>
+          <span>Live workflow/API contract completeness.</span>
+          <div class="bar warn"><span style="width: 82%"></span></div>
+        </div>
+        <div class="metric">
+          <strong>66%</strong>
           <span>ERPNext-style breadth: ledgers, lifecycle, setup, reports.</span>
-          <div class="bar risk"><span style="width: 65%"></span></div>
+          <div class="bar risk"><span style="width: 66%"></span></div>
         </div>
       </div>
 
@@ -441,22 +442,22 @@
               <li>
                 Planning now has routing/job-card, build-configuration, and BOM masters with
                 effective windows, costing metadata, QC/evidence seeding, and approval history.
-                Work-order execution now links back to the source configuration, BOM, route template,
-                and ECO history, and released packages now expose a live ECO review pack. Stateful
-                package-level sign-off is the remaining manufacturing-depth gap if change volume
-                grows.
+                Work-order execution now links back to the source configuration, BOM, route
+                template, and ECO history, and released packages now expose a live ECO review pack.
+                Stateful package-level sign-off is the remaining manufacturing-depth gap if change
+                volume grows.
               </li>
               <li>
                 Accounting is still integration-first, but ready operational ledger entries now
                 promote into first-party immutable journals and those journals feed deployed close
-                readiness, reversals, period locks, and close-package export. This branch adds
-                append-only invoice/payment document snapshots so period evidence is persisted
-                instead of reconstructed only from sync rows.
+                readiness, reversals, period locks, close-package export, and persisted
+                invoice/payment document snapshots instead of reconstructing period evidence only
+                from sync rows.
               </li>
               <li>
                 API smoke route exceptions are back to zero after live smoke proved
-                <code>GET /accounting/reports/close-package</code> reaches the protected
-                authorizer path.
+                <code>GET /accounting/reports/close-package</code> reaches the protected authorizer
+                path.
               </li>
             </ul>
           </div>
@@ -496,8 +497,8 @@
                 route misses.
               </td>
               <td>
-                Deploy persisted invoice/payment document snapshots, verify close-package evidence
-                from snapshots, and run live UAT scripts by role.
+                Finish catalog-backed customer selector hardening, verify quote/work-order intake
+                behavior, and run live UAT scripts by role.
               </td>
             </tr>
             <tr>
@@ -551,8 +552,8 @@
                 workspaces are consistent across the ERP.
               </td>
               <td>
-                Standardize document lifecycle, financial reports, close controls,
-                warranty/support flows, and setup masters.
+                Standardize document lifecycle, financial reports, close controls, warranty/support
+                flows, and setup masters.
               </td>
             </tr>
           </tbody>
@@ -650,10 +651,10 @@
             <p>
               QuickBooks integration, sync status, reconciliation, payable review, mapping admin,
               reference views, an operational ledger, guarded journal posting, and a trial-balance
-              close-readiness report now exist. Period locks, locked posting enforcement, and
-              journal reversals are deployed. This branch adds a close-package report, evidence
-              panel, and JSON export. Full ERP accounting still needs richer persisted invoice and
-              payment documents plus a clean webhook error path.
+              close-readiness report now exist. Period locks, locked posting enforcement, journal
+              reversals, the close-package report, JSON export, and persisted invoice/payment
+              document snapshots are deployed. Full ERP accounting still needs external close
+              delivery and a clean webhook error path.
             </p>
           </div>
 
@@ -740,9 +741,8 @@
               <td>Latest production baseline</td>
               <td><span class="pill done">Merged</span></td>
               <td>
-                <code>origin/main</code> is through PR 173 after the accounting close-package
-                deploy and route-allowlist cleanup. This branch adds accounting document snapshots
-                and close-package evidence reads from persisted snapshots.
+                <code>origin/main</code> is through PR 174 after the accounting document-snapshot
+                deploy. This branch hardens customer selection for quote and work-order creation.
               </td>
             </tr>
             <tr>
@@ -750,8 +750,9 @@
               <td><span class="pill done">Green</span></td>
               <td>
                 Latest main CI, QA smoke, QA coverage, Pages, and CD completed successfully after PR
-                173 merged. CD deployed the close-package Lambda/Terraform route, and live smoke
-                proved it reaches the protected API authorizer path.
+                174 merged. CD deployed the accounting snapshot tables and updated close-package
+                reads, and live smoke proved the close-package route still reaches the protected API
+                authorizer path.
               </td>
             </tr>
             <tr>
@@ -809,9 +810,9 @@
             work-order provenance, and version diff workflows need a heavier change-control gate.
           </li>
           <li>
-            <strong>Persist accounting documents:</strong> land append-only invoice/payment
-            snapshots, backfill current QuickBooks sync rows, and verify close packages read from
-            persisted document evidence.
+            <strong>Harden customer-bound intake:</strong> deploy the shared active-customer
+            selector, verify quote/work-order creation payloads, and reuse the selector where other
+            customer-bound forms still duplicate lookup logic.
           </li>
         </ol>
       </section>

@@ -200,10 +200,10 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
   const opportunitySource = readSource('app/sales/opportunities/new/page.tsx');
   const quoteSource = readSource('app/sales/quotes/new/page.tsx');
   const reservationsSource = readSource('app/inventory/reservations/page.tsx');
+  const customerSelectorSource = readSource('components/customers/CustomerSelector.tsx');
 
   assert.deepEqual(
     [
-      'listCustomers',
       'listCartVehicles',
       'listBuildPackages',
       'listRoutingTemplates',
@@ -213,6 +213,7 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
       'manualBuildConfigurationId',
       'manualBomId',
       'SearchableSelect',
+      'CustomerSelector',
       'allowMockFallback: false',
     ].filter((call) => !workOrderSource.includes(call)),
     [],
@@ -261,9 +262,24 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
   assert.equal(workOrderSource.includes('createWorkOrder'), false);
   assert.equal(workOrderSource.includes('listWorkOrderBuildPackages'), false);
   assert.deepEqual(
-    ['listCustomers', 'getCustomer', 'listOpportunities', 'listParts', 'SearchableSelect'].filter(
-      (call) => !quoteSource.includes(call),
-    ),
+    [
+      'CustomerSelector',
+      'quoteCustomerSubmitError',
+      'listOpportunities',
+      'listParts',
+      'SearchableSelect',
+    ].filter((call) => !quoteSource.includes(call)),
+    [],
+  );
+  assert.deepEqual(
+    [
+      'listCustomers',
+      'getCustomer',
+      "state: 'ACTIVE'",
+      'allowMockFallback: false',
+      "erpRoute('create-customer')",
+      'customerSelectorEmptyMessage',
+    ].filter((call) => !customerSelectorSource.includes(call)),
     [],
   );
   assert.deepEqual(

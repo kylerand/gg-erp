@@ -232,8 +232,8 @@
       </header>
 
       <div class="summary">
-        <div class="metric"><strong>24</strong><span>Tracked delivery slices</span></div>
-        <div class="metric"><strong>22</strong><span>Done</span></div>
+        <div class="metric"><strong>25</strong><span>Tracked delivery slices</span></div>
+        <div class="metric"><strong>23</strong><span>Done</span></div>
         <div class="metric"><strong>1</strong><span>In progress</span></div>
         <div class="metric"><strong>1</strong><span>Blocked</span></div>
       </div>
@@ -241,12 +241,12 @@
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: accounting document snapshots now build on deployed close packages,
-          journals, trial balance, reversals, and period locks with no live API route exceptions.
-          ShopMonkey cutover readiness remains blocked on missing parts and purchase-order source
-          exports.
+          Current focus: catalog-backed customer selector hardening for quote and work-order
+          creation. Accounting document snapshots are deployed on main with no live API route
+          exceptions. ShopMonkey cutover readiness remains blocked on missing parts and
+          purchase-order source exports.
         </p>
-        <div class="progress" aria-label="96 percent complete"><div style="width: 96%"></div></div>
+        <div class="progress" aria-label="97 percent complete"><div style="width: 97%"></div></div>
       </section>
 
       <section>
@@ -329,8 +329,8 @@
                 engineering-approved references when no package is reusable. The submit path filters
                 routing/job-card templates to active currently effective routes, creates executable
                 work orders from those references, and can use the selected template for operation
-                rows instead of leaving records stranded in planning-only storage.
-                Work-order list selectors resolve cart and customer context instead of rendering
+                rows instead of leaving records stranded in planning-only storage. Work-order list
+                selectors resolve cart and customer context instead of rendering
                 vehicle/configuration IDs, and Planning exposes the build package catalog as an
                 operator page. The catalog now includes authored build-configuration and
                 approved-BOM packages in addition to reusable history.
@@ -341,19 +341,34 @@
               </td>
             </tr>
             <tr>
+              <td>Catalog-backed customer selector hardening</td>
+              <td><span class="pill doing">In progress</span></td>
+              <td>
+                This branch replaces duplicated customer selector wiring on quote and work-order
+                creation with a shared active-customer selector, preserves selected customer context
+                from URL-driven forms, routes empty states to customer creation, and blocks quote
+                submission until a real active customer is selected from the catalog.
+              </td>
+              <td>
+                Pass full CI/QA, merge, deploy, and then reuse the shared selector on the remaining
+                customer-bound forms where it reduces duplicate logic.
+              </td>
+            </tr>
+            <tr>
               <td>Planning masters and build packages</td>
               <td><span class="pill done">Done</span></td>
               <td>
                 `/planning/build-packages` now reads strict live packages, build configurations,
                 BOMs, routing templates, cart vehicles, and active parts. Operators can create build
                 configurations, lock and release them with approval notes, author BOM revisions from
-                live parts, approve BOMs with approval notes, publish approved configuration/BOM pairs into the build-package catalog, create
-                ordered route/job-card templates with effective windows, labor rates, QC gates, and
-                evidence requirements, activate or retire route versions with an approval note, and
-                view the latest route, configuration, and BOM approval/change events inline. The
-                page now also compares live configuration/BOM/route versions, rolls those events into
-                an ECO report, and preloads new revisions from existing master records. Engineering
-                changes also have a dedicated live history route backed by
+                live parts, approve BOMs with approval notes, publish approved configuration/BOM
+                pairs into the build-package catalog, create ordered route/job-card templates with
+                effective windows, labor rates, QC gates, and evidence requirements, activate or
+                retire route versions with an approval note, and view the latest route,
+                configuration, and BOM approval/change events inline. The page now also compares
+                live configuration/BOM/route versions, rolls those events into an ECO report, and
+                preloads new revisions from existing master records. Engineering changes also have a
+                dedicated live history route backed by
                 <code>GET /planning/change-events</code>, and execution work orders now link back to
                 their source configuration, BOM, route template, and filtered ECO history. Released
                 configuration/approved-BOM packages now open a live ECO review pack with BOM lines,
@@ -407,8 +422,8 @@
               </td>
               <td>
                 Operational ledger, immutable journal posting, trial balance, and period-close
-                readiness are live; period controls are now tracked as their own accounting
-                maturity slice.
+                readiness are live; period controls are now tracked as their own accounting maturity
+                slice.
               </td>
             </tr>
             <tr>
@@ -434,9 +449,9 @@
                 Persisted accounting period locks, close-readiness-gated period locking,
                 locked-period enforcement for journal posting, and live journal reversals are
                 deployed. <code>/accounting/ledger</code> has period inputs, recent locks, a
-                lock-period action, and row-level reverse actions for eligible posted journals.
-                Live smoke confirms the three protected routes reach the API authorizer, and API
-                smoke has no deployed-route exception for them.
+                lock-period action, and row-level reverse actions for eligible posted journals. Live
+                smoke confirms the three protected routes reach the API authorizer, and API smoke
+                has no deployed-route exception for them.
               </td>
               <td>
                 Add richer invoice/payment document lifecycle and close-package export delivery
@@ -448,28 +463,23 @@
               <td><span class="pill done">Done</span></td>
               <td>
                 <code>GET /accounting/reports/close-package</code> is deployed and live-smoked,
-                assembling the
-                live trial balance, close checks, posted journals, period lock evidence, invoice
-                sync documents, and payment sync documents into one period-close package.
-                <code>/accounting/ledger</code> now has a Close package panel with blocker counts,
-                evidence links, document summaries, a registry-backed package link, and JSON export.
+                assembling the live trial balance, close checks, posted journals, period lock
+                evidence, invoice sync documents, and payment sync documents into one period-close
+                package. <code>/accounting/ledger</code> now has a Close package panel with blocker
+                counts, evidence links, document summaries, a registry-backed package link, and JSON
+                export.
               </td>
-              <td>
-                Keep package evidence aligned as richer document snapshots land.
-              </td>
+              <td>Keep package evidence aligned as richer document snapshots land.</td>
             </tr>
             <tr>
               <td>Accounting document snapshots</td>
-              <td><span class="pill doing">In progress</span></td>
+              <td><span class="pill done">Done</span></td>
               <td>
-                This branch adds append-only invoice/payment snapshot tables, backfills them from
-                existing QuickBooks sync rows, captures snapshots during sync transitions, and moves
-                close-package document evidence to the latest persisted snapshot per sync record.
+                Append-only invoice/payment snapshot tables are deployed, backfilled from existing
+                QuickBooks sync rows, captured during sync transitions, and now feed close-package
+                document evidence from the latest persisted snapshot per sync record.
               </td>
-              <td>
-                Pass migration checks, API tests, PR CI/QA, deploy the snapshot tables, then run
-                close-package QA against persisted document evidence.
-              </td>
+              <td>Extend external close-package delivery after close policy is chosen.</td>
             </tr>
             <tr>
               <td>Communication actionability</td>

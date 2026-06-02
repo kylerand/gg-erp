@@ -1,8 +1,15 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import { PageHeader, LoadingSkeleton, EmptyState, StatusBadge } from '@gg-erp/ui';
-import { listCustomers, createCustomer, transitionCustomerState, type Customer } from '@/lib/api-client';
+import {
+  listCustomers,
+  createCustomer,
+  transitionCustomerState,
+  type Customer,
+} from '@/lib/api-client';
+import { erpRecordRoute } from '@/lib/erp-routes';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -24,7 +31,10 @@ export default function CustomersPage() {
   const load = useCallback(async (s: string, p: number, ps: number) => {
     setLoading(true);
     try {
-      const { items, total: t } = await listCustomers({ search: s || undefined, limit: ps, offset: (p - 1) * ps });
+      const { items, total: t } = await listCustomers(
+        { search: s || undefined, limit: ps, offset: (p - 1) * ps },
+        { allowMockFallback: false },
+      );
       setCustomers(items);
       setTotal(t);
     } finally {
@@ -45,7 +55,7 @@ export default function CustomersPage() {
   async function handleTransition(id: string, toState: Customer['state']) {
     try {
       const updated = await transitionCustomerState(id, toState);
-      setCustomers(prev => prev.map(c => c.id === id ? updated : c));
+      setCustomers((prev) => prev.map((c) => (c.id === id ? updated : c)));
       toast.success(`Customer updated to ${toState}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Transition failed');
@@ -65,8 +75,8 @@ export default function CustomersPage() {
         email: email.trim(),
         phone: (form.get('phone') as string) || undefined,
       });
-      setCustomers(prev => [customer, ...prev]);
-      setTotal(prev => prev + 1);
+      setCustomers((prev) => [customer, ...prev]);
+      setTotal((prev) => prev + 1);
       setShowCreate(false);
       toast.success(`Customer ${customer.fullName} created`);
       (e.target as HTMLFormElement).reset();
@@ -85,7 +95,7 @@ export default function CustomersPage() {
         action={
           <Button
             className="bg-yellow-400 hover:bg-yellow-300 text-gray-900"
-            onClick={() => setShowCreate(v => !v)}
+            onClick={() => setShowCreate((v) => !v)}
           >
             {showCreate ? 'Cancel' : '+ New Customer'}
           </Button>
@@ -94,28 +104,40 @@ export default function CustomersPage() {
 
       {showCreate && (
         <Card className="mb-6 max-w-lg">
-          <CardHeader><CardTitle className="text-base">New Customer</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="text-base">New Customer</CardTitle>
+          </CardHeader>
           <CardContent>
             <form onSubmit={handleCreate} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label htmlFor="firstName">First Name <span className="text-red-500">*</span></Label>
+                  <Label htmlFor="firstName">
+                    First Name <span className="text-red-500">*</span>
+                  </Label>
                   <Input id="firstName" name="firstName" required />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="lastName">Last Name <span className="text-red-500">*</span></Label>
+                  <Label htmlFor="lastName">
+                    Last Name <span className="text-red-500">*</span>
+                  </Label>
                   <Input id="lastName" name="lastName" required />
                 </div>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="email">Email <span className="text-red-500">*</span></Label>
+                <Label htmlFor="email">
+                  Email <span className="text-red-500">*</span>
+                </Label>
                 <Input id="email" name="email" type="email" required />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="phone">Phone</Label>
                 <Input id="phone" name="phone" type="tel" />
               </div>
-              <Button type="submit" disabled={creating} className="bg-yellow-400 hover:bg-yellow-300 text-gray-900 w-full">
+              <Button
+                type="submit"
+                disabled={creating}
+                className="bg-yellow-400 hover:bg-yellow-300 text-gray-900 w-full"
+              >
                 {creating ? 'Creating…' : 'Create Customer'}
               </Button>
             </form>
@@ -127,7 +149,7 @@ export default function CustomersPage() {
         <Input
           placeholder="Search name or email…"
           value={search}
-          onChange={e => handleSearch(e.target.value)}
+          onChange={(e) => handleSearch(e.target.value)}
           className="max-w-sm"
         />
       </div>
@@ -138,7 +160,9 @@ export default function CustomersPage() {
         <EmptyState
           icon="👥"
           title={search ? 'No matches' : 'No customers yet'}
-          description={search ? `No customer matches "${search}"` : 'Create your first customer above.'}
+          description={
+            search ? `No customer matches "${search}"` : 'Create your first customer above.'
+          }
         />
       ) : (
         <>
@@ -154,25 +178,47 @@ export default function CustomersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {customers.map(c => (
+                {customers.map((c) => (
                   <tr key={c.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-900">{c.fullName}</td>
+                    <td className="px-4 py-3">
+                      <Link
+                        href={erpRecordRoute('customer', c.id)}
+                        className="font-medium text-gray-900 hover:underline"
+                      >
+                        {c.companyName ?? c.fullName}
+                      </Link>
+                      {c.companyName && <div className="text-xs text-gray-500">{c.fullName}</div>}
+                    </td>
                     <td className="px-4 py-3 text-gray-500">{c.email ?? '—'}</td>
                     <td className="px-4 py-3 text-gray-500">{c.phone ?? '—'}</td>
-                    <td className="px-4 py-3"><StatusBadge status={c.state} /></td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={c.state} />
+                    </td>
                     <td className="px-4 py-3">
                       {c.state === 'LEAD' && (
-                        <Button size="sm" variant="outline" onClick={() => handleTransition(c.id, 'ACTIVE')}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleTransition(c.id, 'ACTIVE')}
+                        >
                           Activate
                         </Button>
                       )}
                       {c.state === 'ACTIVE' && (
-                        <Button size="sm" variant="outline" onClick={() => handleTransition(c.id, 'INACTIVE')}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleTransition(c.id, 'INACTIVE')}
+                        >
                           Deactivate
                         </Button>
                       )}
                       {c.state === 'INACTIVE' && (
-                        <Button size="sm" variant="outline" onClick={() => handleTransition(c.id, 'ACTIVE')}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleTransition(c.id, 'ACTIVE')}
+                        >
                           Re-activate
                         </Button>
                       )}
@@ -182,7 +228,16 @@ export default function CustomersPage() {
               </tbody>
             </table>
           </div>
-          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={ps => { setPageSize(ps); setPage(1); }} />
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+            onPageSizeChange={(ps) => {
+              setPageSize(ps);
+              setPage(1);
+            }}
+          />
         </>
       )}
     </div>

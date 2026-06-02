@@ -8,6 +8,7 @@ import {
   createWoOrderHandler,
   deleteTimeEntryHandler,
   disconnectTicketHandlerDependencies,
+  listAllWorkOrdersHandler,
   listTasksHandler,
   setTicketHandlerPrismaForTests,
   setTicketHandlerTimeEntryServiceForTests,
@@ -33,6 +34,57 @@ test('createWoOrderHandler validates required released build package input', asy
     (JSON.parse(response.body) as { message: string }).message,
     'workOrderNumber is required.',
   );
+});
+
+test('listAllWorkOrdersHandler filters execution work by customer reference', async () => {
+  const CUSTOMER_ID = '00000000-0000-4000-8000-000000000103';
+  let findManyWhere: unknown;
+  let countWhere: unknown;
+
+  setTicketHandlerPrismaForTests({
+    woOrder: {
+      async findMany(args: { where: unknown }) {
+        findManyWhere = args.where;
+        return [
+          {
+            id: 'work-order-1',
+            workOrderNumber: 'WO-TEST-001',
+            title: 'Customer build',
+            description: null,
+            customerReference: CUSTOMER_ID,
+            assetReference: null,
+            status: 'READY',
+            priority: 3,
+            stockLocationId: null,
+            stockLocation: null,
+            openedAt: new Date('2026-06-01T00:00:00.000Z'),
+            dueAt: null,
+            completedAt: null,
+            createdAt: new Date('2026-06-01T00:00:00.000Z'),
+            updatedAt: new Date('2026-06-01T00:00:00.000Z'),
+          },
+        ];
+      },
+      async count(args: { where: unknown }) {
+        countWhere = args.where;
+        return 1;
+      },
+    },
+  } as unknown as Partial<PrismaClient>);
+
+  try {
+    const response = await listAllWorkOrdersHandler({
+      queryStringParameters: { customerId: CUSTOMER_ID, limit: '10' },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(findManyWhere, { customerReference: { equals: CUSTOMER_ID } });
+    assert.deepEqual(countWhere, { customerReference: { equals: CUSTOMER_ID } });
+    const body = JSON.parse(response.body) as { items: Array<{ customerReference: string }> };
+    assert.equal(body.items[0]?.customerReference, CUSTOMER_ID);
+  } finally {
+    setTicketHandlerPrismaForTests(undefined);
+  }
 });
 
 test('createWoOrderHandler creates execution work order operations and BOM part demand', async () => {

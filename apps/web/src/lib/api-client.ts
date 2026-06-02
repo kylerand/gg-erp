@@ -1305,6 +1305,7 @@ export const MOCK_WO_ORDER_DETAIL: WoOrderDetail = {
 export async function listWoOrders(
   params?: {
     status?: string;
+    customerId?: string;
     search?: string;
     limit?: number;
     offset?: number;
@@ -1313,6 +1314,7 @@ export async function listWoOrders(
 ): Promise<{ items: WoOrder[]; total: number }> {
   const qs = new URLSearchParams();
   if (params?.status) qs.set('status', params.status);
+  if (params?.customerId) qs.set('customerId', params.customerId);
   if (params?.search) qs.set('search', params.search);
   if (params?.limit) qs.set('limit', String(params.limit));
   if (params?.offset) qs.set('offset', String(params.offset));
@@ -5613,23 +5615,31 @@ export async function rejectQuote(id: string, reason?: string): Promise<Quote> {
   return data.quote;
 }
 
-export async function listActivities(params?: {
-  opportunityId?: string;
-  customerId?: string;
-  activityType?: string;
-  limit?: number;
-  offset?: number;
-}): Promise<{ items: SalesActivity[]; total: number }> {
+export async function listActivities(
+  params?: {
+    opportunityId?: string;
+    customerId?: string;
+    activityType?: string;
+    limit?: number;
+    offset?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<{ items: SalesActivity[]; total: number }> {
   const qs = new URLSearchParams();
   if (params?.opportunityId) qs.set('opportunityId', params.opportunityId);
   if (params?.customerId) qs.set('customerId', params.customerId);
   if (params?.activityType) qs.set('activityType', params.activityType);
   if (params?.limit) qs.set('limit', String(params.limit));
   if (params?.offset) qs.set('offset', String(params.offset));
-  return apiFetch(`/sales/activities${qs.size ? `?${qs}` : ''}`, undefined, {
-    items: [],
-    total: 0,
-  });
+  return apiFetch(
+    `/sales/activities${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    {
+      items: [],
+      total: 0,
+    },
+    options,
+  );
 }
 
 export async function createActivity(input: {

@@ -2349,12 +2349,14 @@ export const listAllWorkOrdersHandler = wrapHandler(
   async (ctx) => {
     const qs = ctx.event.queryStringParameters ?? {};
     const status = qs.status as WoStatus | undefined;
+    const customerId = qs.customerId?.trim();
     const search = qs.search?.trim();
     const limit = Math.min(parseInt(qs.limit ?? '100', 10), 500);
     const offset = parseInt(qs.offset ?? '0', 10);
 
     const where = {
       ...(status ? { status: { equals: status } } : {}),
+      ...(customerId ? { customerReference: { equals: customerId } } : {}),
       ...(search
         ? {
             OR: [

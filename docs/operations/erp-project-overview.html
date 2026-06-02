@@ -347,15 +347,15 @@
         <p class="lede">
           High-level status after the planning review-pack, accounting operational-ledger,
           journal-posting, trial-balance close-readiness, period-control deploy, close-package
-          deploy, accounting document-snapshot deploy, and active customer-selector hardening slice.
-          The app has moved past polished static screens into a usable shop-ops ERP foundation, but
-          ShopMonkey cutover remains blocked until complete parts and purchase-order source exports
-          are captured.
+          deploy, accounting document-snapshot deploy, completed customer-selector hardening, and
+          active customer workspace slice. The app has moved past polished static screens into a
+          usable shop-ops ERP foundation, but ShopMonkey cutover remains blocked until complete
+          parts and purchase-order source exports are captured.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 1, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 175</span>
-          <span class="chip">Active slice: Opportunity customer selector reuse</span>
+          <span class="chip">Baseline: origin/main through PR 176</span>
+          <span class="chip">Active slice: Customer workspace drill-in</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
@@ -497,7 +497,7 @@
                 route misses.
               </td>
               <td>
-                Finish opportunity customer-selector reuse, verify sales intake behavior, and run
+                Finish the customer workspace drill-in, verify customer-context actions, and run
                 live UAT scripts by role.
               </td>
             </tr>
@@ -665,9 +665,10 @@
             </header>
             <div class="bar warn"><span style="width: 55%"></span></div>
             <p>
-              Customer/cart profile editing now exists inside work orders. Standalone CRM depth,
-              cart asset history, warranty/service history, and dealer relationship workflows still
-              need more complete surfaces.
+              Customer/cart profile editing now exists inside work orders. This branch adds a
+              standalone customer workspace for profile, cart assets, work orders, opportunities,
+              quotes, and activity. Deeper warranty/service history and dealer relationship mutation
+              workflows still need more complete surfaces.
             </p>
           </div>
 
@@ -741,16 +742,16 @@
               <td>Latest production baseline</td>
               <td><span class="pill done">Merged</span></td>
               <td>
-                <code>origin/main</code> is through PR 175 after the shared selector deploy for
-                quote and work-order creation. This branch reuses that selector on sales opportunity
-                creation.
+                <code>origin/main</code> is through PR 176 after the shared selector deploy for
+                quote, work-order, and opportunity creation. This branch adds a customer workspace
+                drill-in from the live customer list.
               </td>
             </tr>
             <tr>
               <td>Recent pipeline health</td>
               <td><span class="pill done">Green</span></td>
               <td>
-                Latest main CI, QA smoke, QA coverage, and Pages completed successfully after PR 175
+                Latest main CI, QA smoke, QA coverage, and Pages completed successfully after PR 176
                 merged. PR #174 previously deployed the accounting snapshot tables and updated
                 close-package reads, and live smoke proved the close-package route still reaches the
                 protected API authorizer path.
@@ -811,9 +812,9 @@
             work-order provenance, and version diff workflows need a heavier change-control gate.
           </li>
           <li>
-            <strong>Harden customer-bound intake:</strong> deploy the shared active-customer
-            selector, verify opportunity creation payloads, and reuse the selector where other
-            customer-bound forms still duplicate lookup logic.
+            <strong>Deepen customer workspaces:</strong> finish the customer drill-in, verify
+            profile/cart/sales/work-order reads, and then tackle dealer assignment mutations once
+            relationship ownership rules are finalized.
           </li>
         </ol>
       </section>

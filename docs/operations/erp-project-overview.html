@@ -663,16 +663,18 @@
           <div class="module-card">
             <header>
               <h3>Customers, Dealers, Assets</h3>
-              <span class="pill doing">55%</span>
+              <span class="pill doing">58%</span>
             </header>
-            <div class="bar warn"><span style="width: 55%"></span></div>
+            <div class="bar warn"><span style="width: 58%"></span></div>
             <p>
               Customer/cart profile editing exists inside work orders. PR #177 added a standalone
               customer workspace for profile, cart assets, work orders, opportunities, quotes, and
               activity. PR #178 added customer-level QuickBooks sync and payment-sync history. PR
               #179 added standalone profile editing from the customer workspace. PR #180 added
-              row-level cart asset editing from the same workspace. This branch adds a combined
-              service, sales, asset, and accounting timeline. Deeper warranty and dealer
+              row-level cart asset editing from the same workspace. PR #181 added a combined
+              service, sales, asset, and accounting timeline. This branch adds derived customer next
+              actions for accounting failures, blocked work, overdue follow-up, accepted or expiring
+              quotes, stale opportunities, and missing intake context. Deeper warranty and dealer
               relationship mutation workflows still need more complete surfaces.
             </p>
           </div>
@@ -818,7 +820,7 @@
             work-order provenance, and version diff workflows need a heavier change-control gate.
           </li>
           <li>
-            <strong>Deepen customer workspaces:</strong> finish the combined customer timeline,
+            <strong>Deepen customer workspaces:</strong> finish the customer next-action queue,
             verify profile/cart/sales/work-order/accounting reads and writes, and then tackle dealer
             assignment mutations once relationship ownership rules are finalized.
           </li>

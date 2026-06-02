@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-02T12:01:15.206Z",
+  "generatedAt": "2026-06-02T12:45:11.308Z",
   "sourceFile": "gg-erp-shopmonkey-enriched-sanitized.json",
   "sourceChecksum": "7ee9fe260bed8c645ccc0249c8f06ce9d015f7d3f763b171bc57c669431eefbd",
   "overallStatus": "WARN",
@@ -100,8 +100,37 @@
       "detail": "Line Item Assignments data was not included; confirm this is intentional for this rehearsal."
     }
   ],
+  "warningReview": {
+    "totalRowsWithWarnings": 69,
+    "totalWarningReasons": 69,
+    "items": [
+      {
+        "entityKey": "customers",
+        "entityLabel": "Customers",
+        "warning": "No name or company — will be imported as \"Unknown Customer\"",
+        "count": 1,
+        "sampleRowKeys": [
+          "c4c565aee753"
+        ]
+      },
+      {
+        "entityKey": "orders",
+        "entityLabel": "Work Orders",
+        "warning": "No customerId",
+        "count": 68,
+        "sampleRowKeys": [
+          "f833c39695bc",
+          "725d66c53e4f",
+          "67b240c5378b",
+          "7e6fe4d9f0bb",
+          "69d525edfbbf"
+        ]
+      }
+    ]
+  },
   "nextActions": [
     "Review warning gates: Customers, Work Orders, Line Item Assignments.",
+    "Review 69 warned source rows in the Warning Review section and sign off or repair each warning reason before staging cutover.",
     "Run the loader against an isolated staging database and capture row-count reconciliation.",
     "Compare imported customers, carts, work orders, parts, vendors, and accounting sync queues in the ERP UI."
   ]

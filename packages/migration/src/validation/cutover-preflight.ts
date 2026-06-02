@@ -35,7 +35,22 @@ export interface CutoverPreflightReport {
     skippedRows: number;
   };
   gates: EntityGate[];
+  warningReview: WarningReview;
   nextActions: string[];
+}
+
+export interface WarningReview {
+  totalRowsWithWarnings: number;
+  totalWarningReasons: number;
+  items: WarningReviewItem[];
+}
+
+export interface WarningReviewItem {
+  entityKey: string;
+  entityLabel: string;
+  warning: string;
+  count: number;
+  sampleRowKeys: string[];
 }
 
 interface EntityRule {
@@ -140,6 +155,79 @@ function getEntityCount(source: Record<string, unknown>, key: string): EntityCou
   return candidates[0];
 }
 
+function getEntityArray(source: Record<string, unknown>, key: string): unknown[] {
+  const aliases = SOURCE_KEY_ALIASES[key] ?? [key];
+  for (const alias of aliases) {
+    const candidate = source[alias];
+    if (Array.isArray(candidate)) return candidate;
+  }
+  return [];
+}
+
+function warningsFromItem(value: unknown): string[] {
+  if (!isRecord(value) || !Array.isArray(value.validationWarnings)) return [];
+  return value.validationWarnings.filter((warning): warning is string => typeof warning === 'string' && warning.length > 0);
+}
+
+function rowReviewKey(entityKey: string, value: unknown, index: number): string {
+  const rawId =
+    isRecord(value) && typeof value.smId === 'string'
+      ? value.smId
+      : isRecord(value) && typeof value.id === 'string'
+        ? value.id
+        : `row-${index + 1}`;
+  return createHash('sha256').update(`${entityKey}:${rawId}`).digest('hex').slice(0, 12);
+}
+
+function buildWarningReview(source: Record<string, unknown>): WarningReview {
+  const groups = new Map<string, WarningReviewItem>();
+  const warnedRows = new Set<string>();
+  let totalWarningReasons = 0;
+
+  ENTITY_RULES.forEach((rule) => {
+    getEntityArray(source, rule.key).forEach((item, index) => {
+      const warnings = warningsFromItem(item);
+      if (warnings.length === 0) return;
+
+      const rowKey = rowReviewKey(rule.key, item, index);
+      warnedRows.add(`${rule.key}:${rowKey}`);
+
+      warnings.forEach((warning) => {
+        totalWarningReasons += 1;
+        const groupKey = `${rule.key}\0${warning}`;
+        const existing =
+          groups.get(groupKey) ??
+          ({
+            entityKey: rule.key,
+            entityLabel: rule.label,
+            warning,
+            count: 0,
+            sampleRowKeys: [],
+          } satisfies WarningReviewItem);
+        existing.count += 1;
+        if (existing.sampleRowKeys.length < 5 && !existing.sampleRowKeys.includes(rowKey)) {
+          existing.sampleRowKeys.push(rowKey);
+        }
+        groups.set(groupKey, existing);
+      });
+    });
+  });
+
+  const entityOrder = new Map(ENTITY_RULES.map((rule, index) => [rule.key, index]));
+  const items = Array.from(groups.values()).sort((a, b) => {
+    const entityCompare = (entityOrder.get(a.entityKey) ?? 999) - (entityOrder.get(b.entityKey) ?? 999);
+    if (entityCompare !== 0) return entityCompare;
+    if (a.count !== b.count) return b.count - a.count;
+    return a.warning.localeCompare(b.warning);
+  });
+
+  return {
+    totalRowsWithWarnings: warnedRows.size,
+    totalWarningReasons,
+    items,
+  };
+}
+
 function evaluateGate(rule: EntityRule, count: EntityCount | undefined): EntityGate {
   if (!count) {
     return {
@@ -210,7 +298,7 @@ function overallStatus(gates: readonly EntityGate[]): CutoverPreflightStatus {
   return 'PASS';
 }
 
-function buildNextActions(gates: readonly EntityGate[]): string[] {
+function buildNextActions(gates: readonly EntityGate[], warningReview: WarningReview): string[] {
   const actions: string[] = [];
   const failed = gates.filter((gate) => gate.status === 'FAIL');
   const warned = gates.filter((gate) => gate.status === 'WARN');
@@ -229,6 +317,11 @@ function buildNextActions(gates: readonly EntityGate[]): string[] {
   if (warned.length > 0) {
     actions.push(`Review warning gates: ${warned.map((gate) => gate.label).join(', ')}.`);
   }
+  if (warningReview.totalRowsWithWarnings > 0) {
+    actions.push(
+      `Review ${warningReview.totalRowsWithWarnings.toLocaleString()} warned source rows in the Warning Review section and sign off or repair each warning reason before staging cutover.`,
+    );
+  }
   actions.push('Run the loader against an isolated staging database and capture row-count reconciliation.');
   actions.push('Compare imported customers, carts, work orders, parts, vendors, and accounting sync queues in the ERP UI.');
   return actions;
@@ -240,6 +333,7 @@ export function buildCutoverPreflightReport(
 ): CutoverPreflightReport {
   const sourceText = JSON.stringify(source);
   const gates = ENTITY_RULES.map((rule) => evaluateGate(rule, getEntityCount(source, rule.key)));
+  const warningReview = buildWarningReview(source);
   const totals = gates.reduce(
     (acc, gate) => ({
       entitiesPresent: acc.entitiesPresent + (gate.total > 0 ? 1 : 0),
@@ -258,7 +352,8 @@ export function buildCutoverPreflightReport(
     overallStatus: overallStatus(gates),
     totals,
     gates,
-    nextActions: buildNextActions(gates),
+    warningReview,
+    nextActions: buildNextActions(gates, warningReview),
   };
 }
 
@@ -297,6 +392,24 @@ export function renderCutoverPreflightHtml(report: CutoverPreflightReport): stri
   const actions = report.nextActions
     .map((action) => `<li>${escapeHtml(action)}</li>`)
     .join('');
+
+  const warningRows =
+    report.warningReview.items.length > 0
+      ? report.warningReview.items
+          .map(
+            (item) => `
+        <tr>
+          <td>${escapeHtml(item.entityLabel)}</td>
+          <td>${escapeHtml(item.warning)}</td>
+          <td>${item.count.toLocaleString()}</td>
+          <td class="sample-keys">${item.sampleRowKeys.map((key) => `<code>${escapeHtml(key)}</code>`).join(' ')}</td>
+        </tr>`,
+          )
+          .join('')
+      : `
+        <tr>
+          <td colspan="4" class="muted">No row-level warning details were found in this source.</td>
+        </tr>`;
 
   return `<!doctype html>
 <html lang="en">
@@ -389,6 +502,16 @@ export function renderCutoverPreflightHtml(report: CutoverPreflightReport): stri
         border-collapse: collapse;
         font-size: 14px;
       }
+      code {
+        display: inline-block;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        background: #f7f4ed;
+        padding: 2px 5px;
+        color: var(--ink);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        font-size: 12px;
+      }
       th,
       td {
         border-bottom: 1px solid var(--line);
@@ -428,6 +551,9 @@ export function renderCutoverPreflightHtml(report: CutoverPreflightReport): stri
       }
       li + li {
         margin-top: 8px;
+      }
+      .sample-keys {
+        white-space: normal;
       }
       @media (max-width: 780px) {
         header,
@@ -481,6 +607,22 @@ export function renderCutoverPreflightHtml(report: CutoverPreflightReport): stri
             </tr>
           </thead>
           <tbody>${gateRows}</tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Warning Review</h2>
+        <p class="muted">${report.warningReview.totalRowsWithWarnings.toLocaleString()} warned rows, ${report.warningReview.totalWarningReasons.toLocaleString()} warning reasons. Sample row keys are hashed source identifiers for review without exposing raw customer or work-order IDs.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Entity</th>
+              <th>Warning reason</th>
+              <th>Rows</th>
+              <th>Sample row keys</th>
+            </tr>
+          </thead>
+          <tbody>${warningRows}</tbody>
         </table>
       </section>
 

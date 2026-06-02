@@ -74,4 +74,54 @@ describe('ShopMonkey cutover preflight', () => {
     expect(report.gates.find((gate) => gate.key === 'purchaseOrders')?.status).toBe('PASS');
     expect(report.gates.find((gate) => gate.key === 'lineItemAssignments')?.status).toBe('WARN');
   });
+
+  it('builds a hashed warning review without exposing raw source IDs', () => {
+    const report = buildCutoverPreflightReport(
+      {
+        customers: [
+          {
+            smId: 'raw-customer-id-1',
+            fullName: 'Unknown Customer',
+            validationWarnings: ['No name or company — will be imported as "Unknown Customer"'],
+          },
+        ],
+        orders: [
+          {
+            smId: 'raw-work-order-id-1',
+            customerId: '',
+            validationWarnings: ['No customerId'],
+          },
+          {
+            smId: 'raw-work-order-id-2',
+            customerId: '',
+            validationWarnings: ['No customerId'],
+          },
+        ],
+        counts: {
+          customers: { total: 447, valid: 446, warned: 1, skipped: 0 },
+          vehicles: { total: 56, valid: 56, warned: 0, skipped: 0 },
+          orders: { total: 465, valid: 397, warned: 68, skipped: 0 },
+          users: { total: 28, valid: 28, warned: 0, skipped: 0 },
+          vendors: { total: 25, valid: 25, warned: 0, skipped: 0 },
+          parts: { total: 189, valid: 189, warned: 0, skipped: 0 },
+          purchaseOrders: { total: 11, valid: 11, warned: 0, skipped: 0 },
+        },
+      },
+      { sourceFile: 'sample.json', generatedAt: '2026-06-01T00:00:00.000Z' },
+    );
+
+    expect(report.warningReview.totalRowsWithWarnings).toBe(3);
+    expect(report.warningReview.totalWarningReasons).toBe(3);
+    expect(report.warningReview.items.find((item) => item.warning === 'No customerId')?.count).toBe(2);
+    expect(report.warningReview.items.flatMap((item) => item.sampleRowKeys)).not.toContain('raw-work-order-id-1');
+    expect(report.nextActions).toContain(
+      'Review 3 warned source rows in the Warning Review section and sign off or repair each warning reason before staging cutover.',
+    );
+
+    const html = renderCutoverPreflightHtml(report);
+    expect(html).toContain('Warning Review');
+    expect(html).toContain('No customerId');
+    expect(html).not.toContain('raw-customer-id-1');
+    expect(html).not.toContain('raw-work-order-id-1');
+  });
 });

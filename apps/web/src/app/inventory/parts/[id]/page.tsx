@@ -145,6 +145,44 @@ export default function PartDetailPage() {
         >
           Movement History
         </Link>
+        {(part.quantityOnHand ?? 0) > 0 && (
+          <Link
+            href={erpRoute('cycle-count', {
+              partId: part.id,
+              notes: `Count ${part.sku} from part detail.`,
+            })}
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:border-yellow-400"
+          >
+            Cycle Count
+          </Link>
+        )}
+        {(part.quantityOnHand ?? 0) > 0 && (
+          <Link
+            href={erpRoute('inventory-adjustment', {
+              partId: part.id,
+              reasonCode: 'CORRECTION',
+              notes: `Stock correction for ${part.sku}.`,
+            })}
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:border-yellow-400"
+          >
+            Stock Adjustment
+          </Link>
+        )}
+        {(part.shortfallQuantity ?? 0) > 0 && (
+          <Link
+            href={erpRoute('purchase-order', {
+              new: '1',
+              createPartId: part.id,
+              createPartSku: part.sku,
+              quantity: String(Math.max(part.shortfallQuantity ?? 0, 1)),
+              unitCost: String(part.estimatedUnitCost ?? 0),
+              notes: `Replenish ${part.sku} from part detail.`,
+            })}
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:border-yellow-400"
+          >
+            New PO
+          </Link>
+        )}
       </div>
       {chain.ancestors.length === 0 && chain.descendants.length === 0 ? (
         <EmptyState

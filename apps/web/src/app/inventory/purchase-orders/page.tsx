@@ -87,6 +87,16 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Request failed.';
 }
 
+function positiveNumberText(value: string | null, fallback: string): string {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? String(parsed) : fallback;
+}
+
+function nonNegativeNumberText(value: string | null, fallback: string): string {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? String(parsed) : fallback;
+}
+
 function vendorOption(vendor: Vendor): SearchableSelectOption {
   return {
     id: vendor.id,
@@ -122,24 +132,30 @@ export default function PurchaseOrdersPage() {
   const searchParams = useSearchParams();
   const status = searchParams.get('status') ?? 'ALL';
   const vendorId = searchParams.get('vendorId') ?? 'ALL';
+  const newPoRequested = searchParams.get('new') === '1';
+  const createPartIdParam = searchParams.get('createPartId') ?? '';
+  const createPartSkuParam = searchParams.get('createPartSku') ?? '';
+  const createQuantityParam = positiveNumberText(searchParams.get('quantity'), '1');
+  const createUnitCostParam = nonNegativeNumberText(searchParams.get('unitCost'), '0');
+  const createNotesParam = searchParams.get('notes') ?? '';
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [parts, setParts] = useState<Part[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [showCreate, setShowCreate] = useState(false);
+  const [showCreate, setShowCreate] = useState(newPoRequested || Boolean(createPartIdParam));
   const [error, setError] = useState<string | null>(null);
   const [selectedPurchaseOrderIds, setSelectedPurchaseOrderIds] = useState<string[]>([]);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [createVendorSearch, setCreateVendorSearch] = useState('');
-  const [createPartSearch, setCreatePartSearch] = useState('');
+  const [createPartSearch, setCreatePartSearch] = useState(createPartSkuParam);
   const [createDraft, setCreateDraft] = useState({
     vendorId: '',
-    partId: '',
+    partId: createPartIdParam,
     expectedAt: '',
-    quantity: '1',
-    unitCost: '0',
-    notes: '',
+    quantity: createQuantityParam,
+    unitCost: createUnitCostParam,
+    notes: createNotesParam,
   });
 
   const load = useCallback(async () => {
@@ -156,7 +172,14 @@ export default function PurchaseOrdersPage() {
           { allowMockFallback: false },
         ),
         listVendors({ limit: 200 }, { allowMockFallback: false }),
-        listParts({ partState: 'ACTIVE', limit: 200 }, { allowMockFallback: false }),
+        listParts(
+          {
+            partState: 'ACTIVE',
+            search: createPartSkuParam || undefined,
+            limit: createPartSkuParam ? 50 : 200,
+          },
+          { allowMockFallback: false },
+        ),
       ]);
       setPurchaseOrders(poResult.items);
       setVendors(vendorResult.items);
@@ -169,7 +192,7 @@ export default function PurchaseOrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, [status, vendorId]);
+  }, [createPartSkuParam, status, vendorId]);
 
   useEffect(() => {
     void load();
@@ -207,6 +230,7 @@ export default function PurchaseOrdersPage() {
   );
   const selectedVendor = vendorOptions.find((option) => option.id === createDraft.vendorId);
   const selectedPart = partOptions.find((option) => option.id === createDraft.partId);
+  const prefilledPart = parts.find((part) => part.id === createPartIdParam);
   const selectedPurchaseOrders = useMemo(
     () => purchaseOrders.filter((po) => selectedPurchaseOrderIds.includes(po.id)),
     [purchaseOrders, selectedPurchaseOrderIds],
@@ -217,10 +241,30 @@ export default function PurchaseOrdersPage() {
   useEffect(() => {
     setCreateDraft((current) => ({
       ...current,
-      vendorId: current.vendorId || activeVendors[0]?.id || '',
-      partId: current.partId || parts[0]?.id || '',
+      vendorId: current.vendorId || prefilledPart?.defaultVendorId || activeVendors[0]?.id || '',
+      partId: current.partId || createPartIdParam || parts[0]?.id || '',
     }));
-  }, [activeVendors, parts]);
+  }, [activeVendors, createPartIdParam, parts, prefilledPart]);
+
+  useEffect(() => {
+    if (!newPoRequested && !createPartIdParam) return;
+    setShowCreate(true);
+    setCreateDraft((current) => ({
+      ...current,
+      partId: createPartIdParam || current.partId,
+      quantity: createQuantityParam,
+      unitCost: createUnitCostParam,
+      notes: createNotesParam || current.notes,
+    }));
+    setCreatePartSearch(createPartSkuParam);
+  }, [
+    createNotesParam,
+    createPartIdParam,
+    createPartSkuParam,
+    createQuantityParam,
+    createUnitCostParam,
+    newPoRequested,
+  ]);
 
   function updateFilters(nextStatus: string, nextVendorId: string) {
     router.push(buildPurchaseOrderHref(nextStatus, nextVendorId));
@@ -377,6 +421,19 @@ export default function PurchaseOrdersPage() {
       </div>
       {actionMessage && (
         <div className="mb-4 text-sm font-medium text-gray-600">{actionMessage}</div>
+      )}
+      {createPartIdParam && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
+          <span className="font-medium text-amber-950">
+            New PO is prefilled from the inventory exception queue.
+          </span>
+          <Link
+            href={erpRecordRoute('part', createPartIdParam)}
+            className="font-semibold text-[#B1581B] hover:underline"
+          >
+            Review part
+          </Link>
+        </div>
       )}
       {selectedPurchaseOrders.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">

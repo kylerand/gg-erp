@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { AlertTriangle, CheckCircle2, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import { EmptyState, LoadingSkeleton, PageHeader } from '@gg-erp/ui';
 import { Button } from '@/components/ui/button';
@@ -14,7 +15,7 @@ import {
   type InventoryAdjustment,
   type InventoryLot,
 } from '@/lib/api-client';
-import { erpRoute } from '@/lib/erp-routes';
+import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 
 const REASON_OPTIONS = [
   { value: 'CYCLE_COUNT', label: 'Cycle count' },
@@ -23,6 +24,8 @@ const REASON_OPTIONS = [
   { value: 'FOUND', label: 'Found stock' },
   { value: 'CORRECTION', label: 'Correction' },
 ];
+
+const REASON_VALUES = new Set(REASON_OPTIONS.map((reason) => reason.value));
 
 function formatQuantity(value: number): string {
   return value.toLocaleString(undefined, { maximumFractionDigits: 3 });
@@ -41,15 +44,24 @@ function lotOption(lot: InventoryLot): SearchableSelectOption {
   };
 }
 
+function parseReasonCode(value: string | null): string {
+  return value && REASON_VALUES.has(value) ? value : 'CYCLE_COUNT';
+}
+
 export default function InventoryAdjustmentsPage() {
+  const searchParams = useSearchParams();
+  const activePartId = searchParams.get('partId') ?? '';
+  const activeStockLotId = searchParams.get('stockLotId') ?? '';
+  const requestedReasonCode = parseReasonCode(searchParams.get('reasonCode'));
+  const requestedNotes = searchParams.get('notes') ?? '';
   const [lots, setLots] = useState<InventoryLot[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedLotId, setSelectedLotId] = useState('');
   const [lotSearch, setLotSearch] = useState('');
   const [quantityDelta, setQuantityDelta] = useState('');
-  const [reasonCode, setReasonCode] = useState('CYCLE_COUNT');
-  const [notes, setNotes] = useState('');
+  const [reasonCode, setReasonCode] = useState(requestedReasonCode);
+  const [notes, setNotes] = useState(requestedNotes);
   const [posting, setPosting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [postedAdjustment, setPostedAdjustment] = useState<InventoryAdjustment | null>(null);
@@ -59,20 +71,32 @@ export default function InventoryAdjustmentsPage() {
     setLoadError(null);
     try {
       const response = await listInventoryLots(
-        { status: 'AVAILABLE', pageSize: 100 },
+        { partId: activePartId || undefined, status: 'AVAILABLE', pageSize: 100 },
         { allowMockFallback: false },
       );
       setLots(response.items);
+      setSelectedLotId((current) => {
+        if (current && response.items.some((lot) => lot.id === current)) return current;
+        if (activeStockLotId && response.items.some((lot) => lot.id === activeStockLotId)) {
+          return activeStockLotId;
+        }
+        return response.items.length === 1 ? response.items[0].id : '';
+      });
     } catch (error) {
       setLoadError(errorMessage(error));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activePartId, activeStockLotId]);
 
   useEffect(() => {
     void loadLots();
   }, [loadLots]);
+
+  useEffect(() => {
+    setReasonCode(requestedReasonCode);
+    setNotes(requestedNotes);
+  }, [requestedNotes, requestedReasonCode]);
 
   const lotOptions = useMemo(() => {
     const query = lotSearch.trim().toLowerCase();
@@ -153,6 +177,28 @@ export default function InventoryAdjustmentsPage() {
           Refresh Lots
         </Button>
       </div>
+
+      {activePartId && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
+          <span className="font-medium text-amber-950">
+            Filtered to available lots for the selected part.
+          </span>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href={erpRecordRoute('part', activePartId)}
+              className="font-semibold text-[#B1581B] hover:underline"
+            >
+              Review part
+            </Link>
+            <Link
+              href={erpRoute('inventory-ledger', { partId: activePartId })}
+              className="font-semibold text-[#B1581B] hover:underline"
+            >
+              Movement history
+            </Link>
+          </div>
+        </div>
+      )}
 
       {loadError && (
         <div className="mb-6 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">

@@ -43,6 +43,7 @@ export const inventoryLotQueries = {
   },
 
   async listLots(filters?: {
+    partId?: string;
     partNumber?: string;
     warehouseId?: string;
     status?: string;
@@ -53,6 +54,7 @@ export const inventoryLotQueries = {
     const pageSize = Math.min(Math.max(filters?.pageSize ?? 50, 1), 200);
 
     const where = {
+      ...(filters?.partId ? { partId: filters.partId } : {}),
       ...(filters?.partNumber
         ? { part: { sku: { contains: filters.partNumber, mode: 'insensitive' as const } } }
         : {}),
@@ -4023,10 +4025,13 @@ export const createManufacturerHandler = wrapHandler(
 export const listLotsHandler = wrapHandler(
   async (ctx) => {
     const qs = ctx.event.queryStringParameters ?? {};
+    const partId = parseOptionalUuid(qs.partId, 'partId');
+    if (partId.error) return jsonResponse(422, { message: partId.error });
     const page = parseInt(qs.page ?? '1', 10);
     const pageSize = parseInt(qs.pageSize ?? '50', 10);
 
     const result = await inventoryLotQueries.listLots({
+      partId: partId.value,
       partNumber: qs.partNumber,
       warehouseId: qs.warehouseId,
       status: qs.status,

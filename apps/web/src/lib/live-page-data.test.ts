@@ -462,12 +462,16 @@ test('customer dealer ops views are backed by live customer and cart data', () =
   assert.deepEqual(
     [
       'listDealerRelationships(',
+      'updateDealerRelationship(',
       'STRICT_LIVE_DATA',
       'dealerLookupHref',
       'workOrderHref',
       "erpRoute('create-work-order'",
       'customerLookupHref',
       'Start work order',
+      'Update relationship',
+      'Save Relationship',
+      'setRelationships((current) =>',
     ].filter((snippet) => !relationshipsSource.includes(snippet)),
     [],
   );
@@ -481,9 +485,11 @@ test('customer dealer ops views are backed by live customer and cart data', () =
     [
       'export async function listDealers',
       'export async function listDealerRelationships',
+      'export async function updateDealerRelationship',
       'params?:',
       '/identity/dealers',
       '/identity/dealer-relationships',
+      '/identity/dealer-relationships/${id}',
       'total: res.total',
       "if (params?.customerId) qs.set('customerId', params.customerId);",
     ].filter((snippet) => !apiClientSource.includes(snippet)),
@@ -502,9 +508,12 @@ test('customer dealer ops views are backed by live customer and cart data', () =
   assert.deepEqual(
     [
       'getPrisma().dealerRelationship.findMany',
+      'export const updateDealerRelationshipHandler',
+      'getPrisma().dealerRelationship.update',
       'dealerAccount: { include: { customer: true } }',
       'cartVehicle: true',
       "source: 'dealer-relationship'",
+      'version: { increment: 1 }',
       'total',
     ].filter((snippet) => !dealerRelationshipHandlerSource.includes(snippet)),
     [],

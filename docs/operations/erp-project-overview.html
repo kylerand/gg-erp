@@ -349,15 +349,16 @@
           journal-posting, trial-balance close-readiness, period-control deploy, close-package
           deploy, accounting document-snapshot deploy, completed customer-selector hardening,
           deployed customer workspace drill-in, deployed customer accounting-history context,
-          deployed standalone customer profile editing, deployed standalone cart asset editing, and
-          active customer timeline work. The app has moved past polished static screens into a
+          deployed standalone customer profile editing, deployed standalone cart asset editing,
+          deployed customer timeline, deployed next actions, deployed customer activity logging, and
+          active dealer relationship update work. The app has moved past polished static screens into a
           usable shop-ops ERP foundation, but ShopMonkey cutover remains blocked until complete
           parts and purchase-order source exports are captured.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 2, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 180</span>
-          <span class="chip">Active slice: Customer timeline</span>
+          <span class="chip">Baseline: origin/main through PR 183</span>
+          <span class="chip">Active slice: Dealer relationship updates</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
@@ -499,7 +500,7 @@
                 route misses.
               </td>
               <td>
-                Finish the customer timeline, verify live service/sales/accounting history
+                Finish dealer relationship updates, verify live service/sales/accounting history
                 drill-ins, and run live UAT scripts by role.
               </td>
             </tr>
@@ -663,9 +664,9 @@
           <div class="module-card">
             <header>
               <h3>Customers, Dealers, Assets</h3>
-              <span class="pill doing">61%</span>
+              <span class="pill doing">63%</span>
             </header>
-            <div class="bar warn"><span style="width: 61%"></span></div>
+            <div class="bar warn"><span style="width: 63%"></span></div>
             <p>
               Customer/cart profile editing exists inside work orders. PR #177 added a standalone
               customer workspace for profile, cart assets, work orders, opportunities, quotes, and
@@ -674,9 +675,11 @@
               row-level cart asset editing from the same workspace. PR #181 added a combined
               service, sales, asset, and accounting timeline. PR #182 added derived customer next
               actions for accounting failures, blocked work, overdue follow-up, accepted or expiring
-              quotes, stale opportunities, and missing intake context. This branch adds inline
-              customer activity logging through the live sales activity API. Deeper warranty and
-              dealer relationship mutation workflows still need more complete surfaces.
+              quotes, stale opportunities, and missing intake context. PR #183 added inline customer
+              activity logging through the live sales activity API. This branch adds row-level
+              dealer relationship state, escalation owner, and notes editing through the live
+              identity relationship API. Deeper warranty and dealer create/rebind workflows still
+              need more complete surfaces.
             </p>
           </div>
 
@@ -750,17 +753,17 @@
               <td>Latest production baseline</td>
               <td><span class="pill done">Merged</span></td>
               <td>
-                <code>origin/main</code> is through PR 180 after standalone cart asset editing
-                deployed through CI, QA smoke, QA coverage, and Pages. This branch adds the combined
-                customer timeline to that workspace.
+                <code>origin/main</code> is through PR 183 after customer activity logging deployed
+                through CI, QA smoke, QA coverage, and Pages. This branch adds row-level dealer
+                relationship state, owner, and notes updates.
               </td>
             </tr>
             <tr>
               <td>Recent pipeline health</td>
               <td><span class="pill done">Green</span></td>
               <td>
-                Latest main CI, QA smoke, QA coverage, and Pages completed successfully after PR 178
-                merged; latest CD remains green from PR 177 because PR 178 was web-only. PR #174
+                Latest main CI, QA smoke, QA coverage, and Pages completed successfully after PR 183
+                merged. PR #174
                 previously deployed the accounting snapshot tables and updated close-package reads,
                 and live smoke proved the close-package route still reaches the protected API
                 authorizer path.
@@ -821,9 +824,10 @@
             work-order provenance, and version diff workflows need a heavier change-control gate.
           </li>
           <li>
-            <strong>Deepen customer workspaces:</strong> finish customer activity logging,
-            verify profile/cart/sales/work-order/accounting reads and writes, and then tackle dealer
-            assignment mutations once relationship ownership rules are finalized.
+            <strong>Deepen customer workspaces:</strong> finish dealer relationship state, owner,
+            and notes mutation, verify profile/cart/sales/work-order/accounting reads and writes,
+            and then tackle dealer assignment create/rebind mutations once relationship ownership
+            rules are finalized.
           </li>
         </ol>
       </section>

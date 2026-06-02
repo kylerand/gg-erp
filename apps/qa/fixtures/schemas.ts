@@ -1075,6 +1075,11 @@ const ROUTES: RouteEntry[] = [
   { method: 'GET', template: '/identity/customers', schema: paginated(customer) },
   { method: 'GET', template: '/identity/dealers', schema: paginated(dealer) },
   { method: 'GET', template: '/identity/dealer-relationships', schema: paginated(dealerRelationship) },
+  {
+    method: 'PATCH',
+    template: '/identity/dealer-relationships/{id}',
+    schema: z.object({ relationship: dealerRelationship }),
+  },
 
   // Accounting
   { method: 'GET', template: '/accounting/status', schema: accountingStatus },

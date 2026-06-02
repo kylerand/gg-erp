@@ -4147,6 +4147,26 @@ export async function listDealerRelationships(
     : { items: res.items ?? [], total: res.total ?? res.items?.length ?? 0 };
 }
 
+export interface UpdateDealerRelationshipInput {
+  relationshipState?: DealerRelationship['relationshipState'];
+  escalationOwner?: string | null;
+  notes?: string | null;
+}
+
+export async function updateDealerRelationship(
+  id: string,
+  input: UpdateDealerRelationshipInput,
+): Promise<DealerRelationship> {
+  const data = await apiFetch<{ relationship: DealerRelationship }>(
+    `/identity/dealer-relationships/${id}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    },
+  );
+  return data.relationship;
+}
+
 // ─── SOP Documents ────────────────────────────────────────────────────────────
 
 export interface SopDocument {

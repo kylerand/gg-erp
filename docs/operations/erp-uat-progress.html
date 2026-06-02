@@ -241,11 +241,11 @@
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: making the registry-backed customer workspace easier to operate by adding a
-          customer-level activity logging workflow backed by the live sales activity API.
+          Current focus: making dealer relationship rows writable by adding a row-level state,
+          escalation owner, and notes workflow backed by the live identity relationship API.
           Customer records now show QuickBooks customer-sync and payment-sync activity alongside a
-          combined timeline, derived next actions, writable profile, writable cart, work-order,
-          quote, opportunity, and activity context.
+          combined timeline, derived next actions, writable profile, writable cart, inline activity
+          logging, work-order, quote, opportunity, and activity context.
           Accounting document snapshots are deployed on main with no live API route exceptions.
           ShopMonkey cutover readiness remains blocked on missing parts and purchase-order source
           exports.
@@ -398,12 +398,17 @@
                 and sales activity plus context-aware create actions. PR #178 extended the workspace
                 with strict-live QuickBooks customer-sync and payment-sync history. PR #179 added
                 standalone profile editing through the live customer update API. PR #180 added
-                row-level cart asset editing through the live vehicle update API. This branch adds a
+                row-level cart asset editing through the live vehicle update API. PR #181 added a
                 combined customer timeline from live asset, service, sales, and accounting records.
+                PR #182 added derived customer next actions, and PR #183 added customer-level
+                activity logging through the live sales activity API. This branch adds relationship
+                state, escalation owner, and notes editing through
+                <code>PATCH /identity/dealer-relationships/{id}</code>.
               </td>
               <td>
-                Finish CI/QA for the customer timeline, then add create/update dealer assignment
-                workflows once relationship ownership mutation rules are finalized.
+                Finish CI/QA for dealer relationship updates, then add create/rebind dealer,
+                customer, and cart assignment workflows once relationship ownership mutation rules
+                are finalized.
               </td>
             </tr>
             <tr>

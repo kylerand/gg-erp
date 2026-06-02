@@ -520,8 +520,12 @@ test('customer dealer ops views are backed by live customer and cart data', () =
   assert.deepEqual(
     [
       'listWarrantyClaims(',
+      'listAttachments(',
       'createWarrantyClaim(',
       'updateWarrantyClaim(',
+      'uploadAttachment({',
+      'getAttachmentDownloadUrl',
+      'WARRANTY_CLAIM_ATTACHMENT_ENTITY',
       'listDealerRelationships(',
       "state: 'ACTIVE'",
       'listCartVehicles({ customerId: createDraft.customerId, limit: 100 }, STRICT_LIVE_DATA)',
@@ -532,6 +536,8 @@ test('customer dealer ops views are backed by live customer and cart data', () =
       'Create Claim',
       'Update Claim',
       'Save Claim',
+      'Provider Evidence',
+      'Attach Document',
       'Provider Links',
       "erpRoute('customer-relationship'",
       "erpRecordRoute('work-order'",
@@ -557,6 +563,8 @@ test('customer dealer ops views are backed by live customer and cart data', () =
       'export async function listWarrantyClaims',
       'export async function createWarrantyClaim',
       'export async function updateWarrantyClaim',
+      'export async function listAttachments',
+      '/attachments?${qs}',
       'params?:',
       '/identity/dealers',
       '/identity/dealers/${id}',
@@ -674,6 +682,40 @@ test('messages attach files through saved communication attachments', () => {
   assert.equal(source.includes('Avatar placeholder'), false);
   assert.equal(source.includes('todo.assigneeId.slice'), false);
   assert.equal(source.includes('message.authorId.slice'), false);
+});
+
+test('attachment routes are local-UAT wired and protected for document reads', () => {
+  const serverSource = readFileSync(
+    path.resolve(WEB_SRC_DIR, '../../../apps/api/src/server.ts'),
+    'utf8',
+  );
+  const terraformSource = readFileSync(
+    path.resolve(WEB_SRC_DIR, '../../../infra/terraform/modules/api-gateway-lambda/main.tf'),
+    'utf8',
+  );
+
+  assert.deepEqual(
+    [
+      'presignUploadHandler',
+      'confirmUploadHandler',
+      'listAttachmentsHandler',
+      'presignDownloadHandler',
+      "pathname === '/attachments/presign'",
+      "pathname === '/attachments'",
+      'attachmentConfirmMatch',
+      'attachmentDownloadMatch',
+    ].filter((snippet) => !serverSource.includes(snippet)),
+    [],
+  );
+  assert.deepEqual(
+    [
+      'resource "aws_apigatewayv2_route" "attachments_list"',
+      'resource "aws_apigatewayv2_route" "attachments_presign_download"',
+      'authorizer_id      = local.authorizer_id',
+      'authorization_type = local.authorizer_id != null ? "JWT" : "NONE"',
+    ].filter((snippet) => !terraformSource.includes(snippet)),
+    [],
+  );
 });
 
 test('quote detail exposes live conversion into shop execution', () => {

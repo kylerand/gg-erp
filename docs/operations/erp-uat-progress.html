@@ -241,13 +241,14 @@
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: connecting warranty claim reimbursement follow-through into the accounting
-          operational ledger and immutable journal posting flow. Customer records now show
-          QuickBooks customer-sync and payment-sync activity alongside a combined timeline, derived
-          next actions, writable profile, writable cart, inline activity logging, work-order, quote,
-          opportunity, warranty claim, and accounting context. Warranty claim routes are deployed
-          with no live API route exceptions. ShopMonkey cutover readiness remains blocked on missing
-          parts and purchase-order source exports.
+          Current focus: connecting warranty claim provider evidence into the attachment lifecycle
+          after deploying reimbursement follow-through through the accounting operational ledger and
+          immutable journal posting flow. Customer records now show QuickBooks customer-sync and
+          payment-sync activity alongside a combined timeline, derived next actions, writable
+          profile, writable cart, inline activity logging, work-order, quote, opportunity, warranty
+          claim, and accounting context. Warranty claim routes are deployed with no live API route
+          exceptions. ShopMonkey cutover readiness remains blocked on missing parts and
+          purchase-order source exports.
         </p>
         <div class="progress" aria-label="97 percent complete"><div style="width: 97%"></div></div>
       </section>
@@ -416,13 +417,16 @@
                 storage, live <code>GET/POST/PATCH /identity/warranty-claims</code>, a warranty
                 claims queue, customer workspace claim counts, claim timeline events, prefilled
                 claim intake, and reimbursement follow-up actions. PR #192 removed the deployed
-                warranty route allowlist. This branch adds approved warranty claims as live
+                warranty route allowlist. PR #193 added approved warranty claims as live
                 <code>WARRANTY_REIMBURSEMENT</code> accounting ledger entries with filtered
-                dashboard links, review status, and immutable journal posting support.
+                dashboard links, review status, and immutable journal posting support. This branch
+                adds provider document evidence to warranty claims through protected attachment
+                list/download routes, local UAT route wiring, and claim-specific upload/open
+                actions.
               </td>
               <td>
-                Use UAT to decide whether provider document attachments or policy-specific
-                QuickBooks reimbursement posting needs a separate slice.
+                Use UAT to decide whether policy-specific QuickBooks reimbursement posting needs a
+                separate slice after provider evidence is usable.
               </td>
             </tr>
             <tr>

@@ -140,6 +140,12 @@ import {
   updateWarrantyClaimHandler,
 } from './lambda/identity/list-warranty-claims.handler.js';
 import {
+  confirmUploadHandler,
+  listAttachmentsHandler,
+  presignDownloadHandler,
+  presignUploadHandler,
+} from './lambda/attachments/handlers.js';
+import {
   listChannelsHandler,
   createChannelHandler,
   listMessagesHandler,
@@ -310,6 +316,8 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const dealerMatch = pathname.match(/^\/identity\/dealers\/([^/]+)$/);
   const dealerRelationshipMatch = pathname.match(/^\/identity\/dealer-relationships\/([^/]+)$/);
   const warrantyClaimMatch = pathname.match(/^\/identity\/warranty-claims\/([^/]+)$/);
+  const attachmentConfirmMatch = pathname.match(/^\/attachments\/([^/]+)\/confirm$/);
+  const attachmentDownloadMatch = pathname.match(/^\/attachments\/([^/]+)\/download$/);
   const vehicleMatch = pathname.match(/^\/planning\/vehicles\/([^/]+)$/);
   const partMatch = pathname.match(/^\/inventory\/parts\/([^/]+)(?:\/([^/]+))?/);
   const purchaseOrderMatch = pathname.match(/^\/inventory\/purchase-orders\/([^/]+)$/);
@@ -478,6 +486,20 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     result = await updateWarrantyClaimHandler({
       ...event,
       pathParameters: { id: warrantyClaimMatch[1] },
+    });
+  } else if (pathname === '/attachments/presign' && method === 'POST') {
+    result = await presignUploadHandler(event);
+  } else if (attachmentConfirmMatch && method === 'PUT') {
+    result = await confirmUploadHandler({
+      ...event,
+      pathParameters: { id: attachmentConfirmMatch[1] },
+    });
+  } else if (pathname === '/attachments' && method === 'GET') {
+    result = await listAttachmentsHandler(event);
+  } else if (attachmentDownloadMatch && method === 'GET') {
+    result = await presignDownloadHandler({
+      ...event,
+      pathParameters: { id: attachmentDownloadMatch[1] },
     });
   } else if (pathname === '/identity/customers' && method === 'POST') {
     result = await createCustomerHandler(event);

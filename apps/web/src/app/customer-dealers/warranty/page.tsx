@@ -6,16 +6,20 @@ import { useSearchParams } from 'next/navigation';
 import { EmptyState, LoadingSkeleton, PageHeader, StatusBadge } from '@gg-erp/ui';
 import {
   createWarrantyClaim,
+  getAttachmentDownloadUrl,
   listCartVehicles,
   listDealerRelationships,
+  listAttachments,
   listWarrantyClaims,
   listWoOrders,
   updateWarrantyClaim,
   type CartVehicle,
   type Customer,
   type DealerRelationship,
+  type FileAttachment,
   type WarrantyClaim,
   type WoOrder,
+  uploadAttachment,
 } from '@/lib/api-client';
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 import { CustomerSelector } from '@/components/customers/CustomerSelector';
@@ -26,6 +30,7 @@ import { Textarea } from '@/components/ui/textarea';
 
 const STRICT_LIVE_DATA = { allowMockFallback: false } as const;
 const CLAIM_LIMIT = 100;
+const WARRANTY_CLAIM_ATTACHMENT_ENTITY = 'warranty-claim';
 const CLAIM_STATUSES: WarrantyClaim['claimStatus'][] = [
   'DRAFT',
   'SUBMITTED',
@@ -132,6 +137,12 @@ function formatDate(value?: string | null): string {
     day: 'numeric',
     year: 'numeric',
   }).format(date);
+}
+
+function formatFileSize(value?: number): string {
+  if (!value || value <= 0) return '0 KB';
+  if (value < 1024 * 1024) return `${Math.max(1, Math.round(value / 1024))} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function normalizeStatus(value: string): string {
@@ -248,6 +259,50 @@ export default function WarrantyClaimsPage() {
   const [claimEdit, setClaimEdit] = useState<ClaimEditDraft | undefined>();
   const [savingClaimId, setSavingClaimId] = useState<string | undefined>();
   const [claimSaveError, setClaimSaveError] = useState<string | undefined>();
+  const [claimAttachments, setClaimAttachments] = useState<Record<string, FileAttachment[]>>({});
+  const [attachmentLoadingClaimId, setAttachmentLoadingClaimId] = useState<string | undefined>();
+  const [attachmentUploadClaimId, setAttachmentUploadClaimId] = useState<string | undefined>();
+  const [attachmentError, setAttachmentError] = useState<string | undefined>();
+
+  const reloadClaimAttachments = useCallback(async (claimId: string) => {
+    const result = await listAttachments(
+      { entityType: WARRANTY_CLAIM_ATTACHMENT_ENTITY, entityId: claimId },
+      STRICT_LIVE_DATA,
+    );
+    setClaimAttachments((current) => ({ ...current, [claimId]: result.items }));
+    return result.items;
+  }, []);
+
+  const loadClaimAttachments = useCallback(
+    async (claimRows: WarrantyClaim[]) => {
+      if (claimRows.length === 0) {
+        setClaimAttachments({});
+        setAttachmentError(undefined);
+        return;
+      }
+
+      const results = await Promise.allSettled(
+        claimRows.map(async (claim) => [claim.id, await reloadClaimAttachments(claim.id)] as const),
+      );
+      const next: Record<string, FileAttachment[]> = {};
+      let failed = false;
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          const [claimId, attachments] = result.value;
+          next[claimId] = attachments;
+        } else {
+          failed = true;
+        }
+      }
+      setClaimAttachments((current) => ({ ...current, ...next }));
+      setAttachmentError(
+        failed
+          ? 'Some provider documents could not be loaded from the attachment service.'
+          : undefined,
+      );
+    },
+    [reloadClaimAttachments],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -262,8 +317,10 @@ export default function WarrantyClaimsPage() {
         },
         STRICT_LIVE_DATA,
       );
-      setClaims(result.items);
+      const nextClaims = result.items;
+      setClaims(nextClaims);
       setTotal(result.total);
+      await loadClaimAttachments(nextClaims);
     } catch (err) {
       setClaims([]);
       setTotal(0);
@@ -271,7 +328,7 @@ export default function WarrantyClaimsPage() {
     } finally {
       setLoading(false);
     }
-  }, [filterCustomerId, search, statusFilter]);
+  }, [filterCustomerId, loadClaimAttachments, search, statusFilter]);
 
   useEffect(() => {
     void load();
@@ -453,6 +510,41 @@ export default function WarrantyClaimsPage() {
       setClaimSaveError(err instanceof Error ? err.message : 'Failed to update warranty claim.');
     } finally {
       setSavingClaimId(undefined);
+    }
+  }
+
+  async function uploadClaimDocument(claim: WarrantyClaim, fileList?: FileList | null) {
+    const file = fileList?.[0];
+    if (!file) return;
+
+    setAttachmentUploadClaimId(claim.id);
+    setAttachmentError(undefined);
+    try {
+      await uploadAttachment({
+        entityType: WARRANTY_CLAIM_ATTACHMENT_ENTITY,
+        entityId: claim.id,
+        file,
+      });
+      await reloadClaimAttachments(claim.id);
+    } catch (err) {
+      setAttachmentError(
+        err instanceof Error ? err.message : `Failed to attach document to ${claim.claimNumber}.`,
+      );
+    } finally {
+      setAttachmentUploadClaimId(undefined);
+    }
+  }
+
+  async function openClaimDocument(attachment: FileAttachment) {
+    setAttachmentLoadingClaimId(attachment.entityId);
+    setAttachmentError(undefined);
+    try {
+      const { downloadUrl } = await getAttachmentDownloadUrl(attachment.id);
+      window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      setAttachmentError(err instanceof Error ? err.message : 'Failed to open provider document.');
+    } finally {
+      setAttachmentLoadingClaimId(undefined);
     }
   }
 
@@ -782,9 +874,17 @@ export default function WarrantyClaimsPage() {
               {claimSaveError}
             </div>
           )}
+          {attachmentError && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+              {attachmentError}
+            </div>
+          )}
           {filteredClaims.map((claim) => {
             const isEditing = editingClaimId === claim.id && claimEdit;
             const tone = claimTone(claim);
+            const attachments = claimAttachments[claim.id] ?? [];
+            const uploadingDocument = attachmentUploadClaimId === claim.id;
+            const openingDocument = attachmentLoadingClaimId === claim.id;
             return (
               <section key={claim.id} className="rounded-lg border border-gray-200 bg-white p-4">
                 <div className="flex flex-wrap items-start justify-between gap-4">
@@ -975,6 +1075,65 @@ export default function WarrantyClaimsPage() {
                     </div>
                   </div>
                 )}
+
+                <div className="mt-4 border-t border-gray-100 pt-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-semibold uppercase text-gray-500">
+                        Provider Evidence
+                      </div>
+                      <div className="text-sm text-gray-700">
+                        {attachments.length === 1
+                          ? '1 document'
+                          : `${attachments.length} documents`}
+                      </div>
+                    </div>
+                    <label
+                      className={`inline-flex h-9 cursor-pointer items-center rounded-lg border px-3 text-sm font-semibold ${
+                        uploadingDocument
+                          ? 'border-gray-200 bg-gray-100 text-gray-400'
+                          : 'border-gray-300 text-gray-700 hover:border-yellow-400'
+                      }`}
+                    >
+                      {uploadingDocument ? 'Uploading...' : 'Attach Document'}
+                      <input
+                        type="file"
+                        className="sr-only"
+                        disabled={uploadingDocument}
+                        onChange={(event) => {
+                          void uploadClaimDocument(claim, event.currentTarget.files);
+                          event.currentTarget.value = '';
+                        }}
+                      />
+                    </label>
+                  </div>
+                  {attachments.length > 0 ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {attachments.map((attachment) => (
+                        <button
+                          key={attachment.id}
+                          type="button"
+                          disabled={openingDocument}
+                          className="max-w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-left text-sm text-gray-700 hover:border-yellow-400 disabled:cursor-wait disabled:opacity-60"
+                          onClick={() => void openClaimDocument(attachment)}
+                          title={attachment.fileName}
+                        >
+                          <span className="block truncate font-semibold text-gray-900">
+                            {attachment.fileName}
+                          </span>
+                          <span className="block text-xs text-gray-500">
+                            {formatFileSize(attachment.sizeBytes)} ·{' '}
+                            {formatDate(attachment.createdAt)}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-sm text-gray-500">
+                      No provider documents attached.
+                    </div>
+                  )}
+                </div>
 
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-3">
                   <div className="flex flex-wrap items-center gap-3 text-sm">

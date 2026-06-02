@@ -89,6 +89,16 @@
         border-collapse: collapse;
         font-size: 14px;
       }
+      code {
+        display: inline-block;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        background: #f7f4ed;
+        padding: 2px 5px;
+        color: var(--ink);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        font-size: 12px;
+      }
       th,
       td {
         border-bottom: 1px solid var(--line);
@@ -129,6 +139,9 @@
       li + li {
         margin-top: 8px;
       }
+      .sample-keys {
+        white-space: normal;
+      }
       @media (max-width: 780px) {
         header,
         .summary {
@@ -154,7 +167,7 @@
           <h1>ShopMonkey Cutover Preflight</h1>
           <p class="muted">Source: gg-erp-shopmonkey-enriched-sanitized.json</p>
         </div>
-        <div class="stamp">Generated: 2026-06-02T12:01:15.206Z</div>
+        <div class="stamp">Generated: 2026-06-02T12:45:11.308Z</div>
       </header>
 
       <div class="summary">
@@ -265,8 +278,36 @@
       </section>
 
       <section>
+        <h2>Warning Review</h2>
+        <p class="muted">69 warned rows, 69 warning reasons. Sample row keys are hashed source identifiers for review without exposing raw customer or work-order IDs.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Entity</th>
+              <th>Warning reason</th>
+              <th>Rows</th>
+              <th>Sample row keys</th>
+            </tr>
+          </thead>
+          <tbody>
+        <tr>
+          <td>Customers</td>
+          <td>No name or company — will be imported as &quot;Unknown Customer&quot;</td>
+          <td>1</td>
+          <td class="sample-keys"><code>c4c565aee753</code></td>
+        </tr>
+        <tr>
+          <td>Work Orders</td>
+          <td>No customerId</td>
+          <td>68</td>
+          <td class="sample-keys"><code>f833c39695bc</code> <code>725d66c53e4f</code> <code>67b240c5378b</code> <code>7e6fe4d9f0bb</code> <code>69d525edfbbf</code></td>
+        </tr></tbody>
+        </table>
+      </section>
+
+      <section>
         <h2>Next Actions</h2>
-        <ul><li>Review warning gates: Customers, Work Orders, Line Item Assignments.</li><li>Run the loader against an isolated staging database and capture row-count reconciliation.</li><li>Compare imported customers, carts, work orders, parts, vendors, and accounting sync queues in the ERP UI.</li></ul>
+        <ul><li>Review warning gates: Customers, Work Orders, Line Item Assignments.</li><li>Review 69 warned source rows in the Warning Review section and sign off or repair each warning reason before staging cutover.</li><li>Run the loader against an isolated staging database and capture row-count reconciliation.</li><li>Compare imported customers, carts, work orders, parts, vendors, and accounting sync queues in the ERP UI.</li></ul>
       </section>
     </main>
   </body>

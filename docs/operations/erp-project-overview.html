@@ -365,8 +365,8 @@
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 2, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 202</span>
-          <span class="chip">Active slice: ShopMonkey cutover source evidence</span>
+          <span class="chip">Baseline: origin/main through PR 204</span>
+          <span class="chip">Active slice: ShopMonkey warning review</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
@@ -450,8 +450,10 @@
                 orders: read-only source enrichment produced 189 valid parts and 11 valid purchase
                 orders, the preflight moved to WARN, and the isolated loader rehearsal passed. The
                 connector now uses a dense ShopMonkey inventory-part sweep instead of stopping at
-                the first 100 search rows. Remaining cutover confidence depends on warning-row
-                review, the 48-part reported-total coverage gap, and shared staging UAT.
+                the first 100 search rows. The preflight now groups warning review into one
+                unknown-customer row and 68 work orders missing customer IDs. Remaining cutover
+                confidence depends on sign-off or repair for those buckets, the 48-part
+                reported-total coverage gap, and shared staging UAT.
               </li>
               <li>
                 Planning now has routing/job-card, build-configuration, and BOM masters with
@@ -749,8 +751,9 @@
               ShopMonkey migration framework and reference seed gates exist. Read-only source
               enrichment moved parts and purchase orders through preflight, and the disposable
               rehearsal now passes with zero migration errors after importing 189 parts and 11
-              purchase orders. Warning-row review, the 48-part reported-total coverage gap, and
-              shared staging UAT are still required.
+              purchase orders. Warning review is now grouped into one unknown-customer row and 68
+              work orders missing customer IDs; the 48-part reported-total coverage gap and shared
+              staging UAT are still required.
             </p>
           </div>
 
@@ -840,9 +843,10 @@
         <h2>Recommended Next Slice</h2>
         <ol>
           <li>
-            <strong>Run shared ShopMonkey staging cutover UAT:</strong> reconcile the one customer
-            warning, 68 work-order warnings, absent line-item assignments, and the remaining
-            48-part reported-total coverage gap before production cutover.
+            <strong>Run shared ShopMonkey staging cutover UAT:</strong> sign off or repair the one
+            unknown-customer row, 68 work orders missing customer IDs, absent line-item
+            assignments, and the remaining 48-part reported-total coverage gap before production
+            cutover.
           </li>
           <li>
             <strong>Keep production blockers closed:</strong> continue verifying

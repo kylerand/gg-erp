@@ -15,6 +15,7 @@ import {
   listOpportunities,
   listPaymentSyncRecords,
   listQuotes,
+  listWarrantyClaims,
   listWoOrders,
   paymentSyncWorkOrderDisplayName,
   salesUserDisplayName,
@@ -31,6 +32,7 @@ import {
   type SalesOpportunity,
   type UpdateCartVehicleInput,
   type UpdateCustomerInput,
+  type WarrantyClaim,
   type WoOrder,
 } from '@/lib/api-client';
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
@@ -123,6 +125,7 @@ interface WarrantyHandoffSummary {
   uncoveredVehicles: CartVehicle[];
   openServiceOrders: WoOrder[];
   paymentIssues: PaymentSyncRecord[];
+  warrantyClaims: WarrantyClaim[];
   actions: WarrantyHandoffAction[];
 }
 
@@ -224,6 +227,7 @@ function buildCustomerNextActions({
   activities,
   customerSyncs,
   paymentSyncs,
+  warrantyClaims,
 }: {
   customerId: string;
   vehicles: CartVehicle[];
@@ -233,6 +237,7 @@ function buildCustomerNextActions({
   activities: SalesActivity[];
   customerSyncs: CustomerSyncRecord[];
   paymentSyncs: PaymentSyncRecord[];
+  warrantyClaims: WarrantyClaim[];
 }): CustomerNextActionItem[] {
   const actions: CustomerNextActionItem[] = [];
   const openOpportunityStages = new Set(['PROSPECT', 'QUALIFIED', 'PROPOSAL', 'NEGOTIATION']);
@@ -269,6 +274,28 @@ function buildCustomerNextActions({
       actionLabel: 'Open Payments',
       status: record.state,
       sortOrder: 20,
+    });
+  }
+
+  for (const claim of warrantyClaims
+    .filter(
+      (item) => item.claimStatus === 'APPROVED' || item.claimStatus === 'REIMBURSEMENT_PENDING',
+    )
+    .slice(0, 2)) {
+    actions.push({
+      id: `warranty-claim-${claim.id}`,
+      priority: 'High',
+      category: 'Warranty',
+      title: 'Follow warranty reimbursement',
+      detail: `${claim.claimNumber} is ${normalizeStatus(
+        claim.claimStatus,
+      ).toLowerCase()} for ${formatCurrency(
+        (claim.approvedAmountCents ?? claim.requestedAmountCents) / 100,
+      )}.`,
+      href: erpRoute('warranty-claim', { customerId, status: claim.claimStatus }),
+      actionLabel: 'Open Claims',
+      status: claim.claimStatus,
+      sortOrder: 25,
     });
   }
 
@@ -451,6 +478,7 @@ function buildWarrantyHandoff({
   quotes,
   dealerRelationships,
   paymentSyncs,
+  warrantyClaims,
 }: {
   customerId: string;
   vehicles: CartVehicle[];
@@ -458,6 +486,7 @@ function buildWarrantyHandoff({
   quotes: Quote[];
   dealerRelationships: DealerRelationship[];
   paymentSyncs: PaymentSyncRecord[];
+  warrantyClaims: WarrantyClaim[];
 }): WarrantyHandoffSummary {
   const activeRelationships = dealerRelationships.filter(
     (relationship) => relationship.relationshipState === 'ACTIVE',
@@ -489,6 +518,15 @@ function buildWarrantyHandoff({
   );
   const paymentIssues = paymentSyncs.filter(
     (record) => record.state === 'FAILED' || record.state === 'MISMATCH',
+  );
+  const openWarrantyClaims = warrantyClaims.filter(
+    (claim) =>
+      claim.claimStatus !== 'REIMBURSED' &&
+      claim.claimStatus !== 'DENIED' &&
+      claim.claimStatus !== 'CLOSED',
+  );
+  const reimbursementClaims = warrantyClaims.filter(
+    (claim) => claim.claimStatus === 'APPROVED' || claim.claimStatus === 'REIMBURSEMENT_PENDING',
   );
   const acceptedQuotes = quotes.filter(
     (quote) => quote.status === 'ACCEPTED' && !quote.convertedWoId,
@@ -530,7 +568,10 @@ function buildWarrantyHandoff({
     actions.push({
       id: 'open-service-work',
       priority: blockedServiceOrders.length > 0 ? 'High' : 'Normal',
-      title: blockedServiceOrders.length > 0 ? 'Resolve blocked warranty work' : 'Review open service work',
+      title:
+        blockedServiceOrders.length > 0
+          ? 'Resolve blocked warranty work'
+          : 'Review open service work',
       detail: `${openServiceOrders.length} open work order${
         openServiceOrders.length === 1 ? '' : 's'
       } tied to this customer.`,
@@ -551,6 +592,45 @@ function buildWarrantyHandoff({
         vehicleId: primaryVehicle?.id,
       }),
       actionLabel: 'New Work Order',
+    });
+  }
+
+  if (
+    warrantyRelationships.length > 0 &&
+    openServiceOrders.length > 0 &&
+    openWarrantyClaims.length === 0
+  ) {
+    actions.push({
+      id: 'open-warranty-claim',
+      priority: 'High',
+      title: 'Open warranty claim',
+      detail: `${openServiceOrders[0].workOrderNumber} has warranty provider context but no claim record.`,
+      href: erpRoute('warranty-claim', {
+        customerId,
+        create: 'claim',
+        dealerRelationshipId: warrantyRelationships[0].id,
+        vehicleId: primaryVehicle?.id,
+        workOrderId: openServiceOrders[0].id,
+      }),
+      actionLabel: 'New Claim',
+      status: 'MISSING',
+    });
+  }
+
+  if (reimbursementClaims.length > 0) {
+    const claim = reimbursementClaims[0];
+    actions.push({
+      id: `warranty-reimbursement-${claim.id}`,
+      priority: 'High',
+      title: 'Follow warranty reimbursement',
+      detail: `${claim.claimNumber} is ${normalizeStatus(
+        claim.claimStatus,
+      ).toLowerCase()} for ${formatCurrency(
+        (claim.approvedAmountCents ?? claim.requestedAmountCents) / 100,
+      )}.`,
+      href: erpRoute('warranty-claim', { customerId, status: claim.claimStatus }),
+      actionLabel: 'Open Claims',
+      status: claim.claimStatus,
     });
   }
 
@@ -596,6 +676,11 @@ function buildWarrantyHandoff({
     status = 'Service Blocked';
     tone = 'critical';
     detail = 'Warranty coverage exists, but active service work is blocked.';
+  } else if (reimbursementClaims.length > 0) {
+    status = 'Reimbursement Pending';
+    tone = 'warning';
+    detail =
+      'Warranty coverage and service context exist, but reimbursement follow-through is still open.';
   } else if (paymentIssues.length > 0) {
     status = 'Billing Review Needed';
     tone = 'warning';
@@ -625,6 +710,7 @@ function buildWarrantyHandoff({
     uncoveredVehicles,
     openServiceOrders,
     paymentIssues,
+    warrantyClaims,
     actions: actions.slice(0, 5),
   };
 }
@@ -638,6 +724,7 @@ function buildCustomerTimeline({
   activities,
   customerSyncs,
   paymentSyncs,
+  warrantyClaims,
 }: {
   customerId: string;
   vehicles: CartVehicle[];
@@ -647,6 +734,7 @@ function buildCustomerTimeline({
   activities: SalesActivity[];
   customerSyncs: CustomerSyncRecord[];
   paymentSyncs: PaymentSyncRecord[];
+  warrantyClaims: WarrantyClaim[];
 }): CustomerTimelineItem[] {
   const items: CustomerTimelineItem[] = [];
 
@@ -764,6 +852,25 @@ function buildCustomerTimeline({
     });
   }
 
+  for (const claim of warrantyClaims) {
+    items.push({
+      id: `warranty-claim-${claim.id}`,
+      category: 'Warranty',
+      title: claim.claimNumber,
+      detail: [
+        claim.dealerName ?? 'No provider',
+        formatCurrency(claim.requestedAmountCents / 100),
+        claim.workOrderNumber,
+      ]
+        .filter(Boolean)
+        .join(' · '),
+      occurredAt: claim.updatedAt ?? claim.createdAt,
+      status: claim.claimStatus,
+      href: erpRoute('warranty-claim', { customerId, search: claim.claimNumber }),
+      actionLabel: 'Open Claim',
+    });
+  }
+
   return items
     .filter((item) => timelineSortValue(item.occurredAt) > 0)
     .sort((a, b) => timelineSortValue(b.occurredAt) - timelineSortValue(a.occurredAt))
@@ -835,9 +942,11 @@ export default function CustomerDetailPage() {
     items: [],
     total: 0,
   });
-  const [dealerRelationships, setDealerRelationships] = useState<
-    RelatedLoad<DealerRelationship>
-  >({
+  const [dealerRelationships, setDealerRelationships] = useState<RelatedLoad<DealerRelationship>>({
+    items: [],
+    total: 0,
+  });
+  const [warrantyClaims, setWarrantyClaims] = useState<RelatedLoad<WarrantyClaim>>({
     items: [],
     total: 0,
   });
@@ -872,6 +981,7 @@ export default function CustomerDetailPage() {
       customerSyncResult,
       paymentSyncResult,
       dealerRelationshipResult,
+      warrantyClaimResult,
     ] = await Promise.allSettled([
       getCustomer(customerId, STRICT_LIVE_DATA),
       listCartVehicles({ customerId, limit: 50 }, STRICT_LIVE_DATA),
@@ -882,6 +992,7 @@ export default function CustomerDetailPage() {
       listCustomerSyncs({ customerId, limit: 10 }, STRICT_LIVE_DATA),
       listPaymentSyncRecords({ customerId, limit: 10 }, STRICT_LIVE_DATA),
       listDealerRelationships({ customerId, state: 'ACTIVE', limit: 50 }, STRICT_LIVE_DATA),
+      listWarrantyClaims({ customerId, limit: 25 }, STRICT_LIVE_DATA),
     ]);
 
     const nextErrors: string[] = [];
@@ -950,6 +1061,13 @@ export default function CustomerDetailPage() {
     } else {
       setDealerRelationships({ items: [], total: 0 });
       nextErrors.push('Dealer warranty relationships failed to load.');
+    }
+
+    if (warrantyClaimResult.status === 'fulfilled') {
+      setWarrantyClaims(warrantyClaimResult.value);
+    } else {
+      setWarrantyClaims({ items: [], total: 0 });
+      nextErrors.push('Warranty claims failed to load.');
     }
 
     setErrors(nextErrors);
@@ -1133,6 +1251,7 @@ export default function CustomerDetailPage() {
     activities: activities.items,
     customerSyncs: customerSyncs.items,
     paymentSyncs: paymentSyncs.items,
+    warrantyClaims: warrantyClaims.items,
   });
   const timelineItems = buildCustomerTimeline({
     customerId,
@@ -1143,6 +1262,7 @@ export default function CustomerDetailPage() {
     activities: activities.items,
     customerSyncs: customerSyncs.items,
     paymentSyncs: paymentSyncs.items,
+    warrantyClaims: warrantyClaims.items,
   });
   const warrantyHandoff = buildWarrantyHandoff({
     customerId,
@@ -1151,6 +1271,7 @@ export default function CustomerDetailPage() {
     quotes: quotes.items,
     dealerRelationships: dealerRelationships.items,
     paymentSyncs: paymentSyncs.items,
+    warrantyClaims: warrantyClaims.items,
   });
 
   return (
@@ -1186,6 +1307,9 @@ export default function CustomerDetailPage() {
             >
               New Work Order
             </ActionLink>
+            <ActionLink href={erpRoute('warranty-claim', { customerId, create: 'claim' })}>
+              New Warranty Claim
+            </ActionLink>
           </div>
         }
       />
@@ -1196,13 +1320,14 @@ export default function CustomerDetailPage() {
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-7">
         <MetricTile label="Cart Assets" value={vehicles.total} />
         <MetricTile label="Work Orders" value={workOrders.total} />
         <MetricTile label="Opportunities" value={opportunities.total} />
         <MetricTile label="Quotes" value={quotes.total} />
         <MetricTile label="Activities" value={activities.total} />
         <MetricTile label="Dealer Links" value={dealerRelationships.total} />
+        <MetricTile label="Warranty Claims" value={warrantyClaims.total} />
         <MetricTile label="Accounting Sync" value={customerSyncs.total + paymentSyncs.total} />
       </div>
 
@@ -1343,6 +1468,9 @@ export default function CustomerDetailPage() {
             >
               New Warranty Work
             </ActionLink>
+            <ActionLink href={erpRoute('warranty-claim', { customerId, create: 'claim' })}>
+              Warranty Claims
+            </ActionLink>
           </div>
         }
       >
@@ -1362,9 +1490,7 @@ export default function CustomerDetailPage() {
           </div>
           <div className="rounded-md border border-gray-200 px-3 py-2">
             <div className="text-xs font-semibold uppercase text-gray-500">Warranty Provider</div>
-            <div className="mt-1 font-semibold text-gray-900">
-              {warrantyHandoff.providerLabel}
-            </div>
+            <div className="mt-1 font-semibold text-gray-900">{warrantyHandoff.providerLabel}</div>
             <div className="mt-1 text-sm text-gray-600">{warrantyHandoff.coverageDetail}</div>
           </div>
           <div className="rounded-md border border-gray-200 px-3 py-2">
@@ -1376,6 +1502,8 @@ export default function CustomerDetailPage() {
             <div className="mt-1 text-sm text-gray-600">
               {warrantyHandoff.paymentIssues.length} payment issue
               {warrantyHandoff.paymentIssues.length === 1 ? '' : 's'} ·{' '}
+              {warrantyHandoff.warrantyClaims.length} claim
+              {warrantyHandoff.warrantyClaims.length === 1 ? '' : 's'} ·{' '}
               {warrantyHandoff.uncoveredVehicles.length} uncovered cart
               {warrantyHandoff.uncoveredVehicles.length === 1 ? '' : 's'}
             </div>
@@ -1405,12 +1533,13 @@ export default function CustomerDetailPage() {
             ) : (
               <div className="space-y-2">
                 {warrantyHandoff.relationships.slice(0, 4).map((relationship) => (
-                  <div key={relationship.id} className="rounded-md border border-gray-200 px-3 py-2">
+                  <div
+                    key={relationship.id}
+                    className="rounded-md border border-gray-200 px-3 py-2"
+                  >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
-                        <div className="font-semibold text-gray-900">
-                          {relationship.dealerName}
-                        </div>
+                        <div className="font-semibold text-gray-900">{relationship.dealerName}</div>
                         <div className="text-xs text-gray-500">
                           {normalizeStatus(relationship.relationshipType)} ·{' '}
                           {relationship.cartDisplayName ?? 'Customer account'}

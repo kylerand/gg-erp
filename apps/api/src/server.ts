@@ -135,6 +135,11 @@ import {
   updateDealerRelationshipHandler,
 } from './lambda/identity/list-dealer-relationships.handler.js';
 import {
+  createWarrantyClaimHandler,
+  handler as listWarrantyClaimsHandler,
+  updateWarrantyClaimHandler,
+} from './lambda/identity/list-warranty-claims.handler.js';
+import {
   listChannelsHandler,
   createChannelHandler,
   listMessagesHandler,
@@ -304,6 +309,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const customerMatch = pathname.match(/^\/identity\/customers\/([^/]+)/);
   const dealerMatch = pathname.match(/^\/identity\/dealers\/([^/]+)$/);
   const dealerRelationshipMatch = pathname.match(/^\/identity\/dealer-relationships\/([^/]+)$/);
+  const warrantyClaimMatch = pathname.match(/^\/identity\/warranty-claims\/([^/]+)$/);
   const vehicleMatch = pathname.match(/^\/planning\/vehicles\/([^/]+)$/);
   const partMatch = pathname.match(/^\/inventory\/parts\/([^/]+)(?:\/([^/]+))?/);
   const purchaseOrderMatch = pathname.match(/^\/inventory\/purchase-orders\/([^/]+)$/);
@@ -463,6 +469,15 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     result = await updateDealerRelationshipHandler({
       ...event,
       pathParameters: { id: dealerRelationshipMatch[1] },
+    });
+  } else if (pathname === '/identity/warranty-claims' && method === 'GET') {
+    result = await listWarrantyClaimsHandler(event);
+  } else if (pathname === '/identity/warranty-claims' && method === 'POST') {
+    result = await createWarrantyClaimHandler(event);
+  } else if (warrantyClaimMatch && method === 'PATCH') {
+    result = await updateWarrantyClaimHandler({
+      ...event,
+      pathParameters: { id: warrantyClaimMatch[1] },
     });
   } else if (pathname === '/identity/customers' && method === 'POST') {
     result = await createCustomerHandler(event);
@@ -1120,7 +1135,9 @@ server.listen(PORT, () => {
   console.log(
     `   Reporting   GET /reporting/snapshot|blocked-alerts|subscriptions|exports, POST /reporting/subscriptions|exports/run-now`,
   );
-  console.log(`   Customers   GET|POST /identity/customers, GET|POST /:id/transition`);
+  console.log(
+    `   Customers   GET|POST /identity/customers|dealers|dealer-relationships|warranty-claims`,
+  );
   console.log(
     `   Inventory   GET|POST /inventory/parts, PATCH /inventory/parts/:id, GET /inventory/vendors, GET /inventory/ledger, POST /inventory/adjustments, POST /inventory/transfers, POST /inventory/cycle-counts`,
   );

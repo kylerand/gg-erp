@@ -4111,32 +4111,21 @@ export interface UpdateDealerInput {
   notes?: string | null;
 }
 
-export async function createDealer(
-  input: CreateDealerInput,
-): Promise<Dealer> {
-  const data = await apiFetch<{ dealer: Dealer }>(
-    '/identity/dealers',
-    {
-      method: 'POST',
-      headers: mutationHeaders(),
-      body: JSON.stringify(input),
-    },
-  );
+export async function createDealer(input: CreateDealerInput): Promise<Dealer> {
+  const data = await apiFetch<{ dealer: Dealer }>('/identity/dealers', {
+    method: 'POST',
+    headers: mutationHeaders(),
+    body: JSON.stringify(input),
+  });
   return data.dealer;
 }
 
-export async function updateDealer(
-  id: string,
-  input: UpdateDealerInput,
-): Promise<Dealer> {
-  const data = await apiFetch<{ dealer: Dealer }>(
-    `/identity/dealers/${id}`,
-    {
-      method: 'PATCH',
-      headers: mutationHeaders(),
-      body: JSON.stringify(input),
-    },
-  );
+export async function updateDealer(id: string, input: UpdateDealerInput): Promise<Dealer> {
+  const data = await apiFetch<{ dealer: Dealer }>(`/identity/dealers/${id}`, {
+    method: 'PATCH',
+    headers: mutationHeaders(),
+    body: JSON.stringify(input),
+  });
   return data.dealer;
 }
 
@@ -4238,6 +4227,133 @@ export async function updateDealerRelationship(
     },
   );
   return data.relationship;
+}
+
+export interface WarrantyClaim {
+  id: string;
+  claimNumber: string;
+  customerId: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone?: string;
+  dealerId?: string;
+  dealerCode?: string;
+  dealerName?: string;
+  dealerRelationshipId?: string;
+  relationshipType?: DealerRelationship['relationshipType'];
+  relationshipState?: DealerRelationship['relationshipState'];
+  escalationOwner?: string;
+  cartVehicleId?: string;
+  cartDisplayName?: string;
+  vin?: string;
+  serialNumber?: string;
+  cartState?: string;
+  workOrderId?: string;
+  workOrderNumber?: string;
+  workOrderTitle?: string;
+  workOrderStatus?: WoOrder['status'];
+  claimStatus:
+    | 'DRAFT'
+    | 'SUBMITTED'
+    | 'APPROVED'
+    | 'REIMBURSEMENT_PENDING'
+    | 'REIMBURSED'
+    | 'DENIED'
+    | 'CLOSED';
+  requestedAmountCents: number;
+  approvedAmountCents?: number;
+  reimbursedAmountCents?: number;
+  externalReference?: string;
+  claimReason: string;
+  ownerUserId?: string;
+  notes?: string;
+  source?: string;
+  submittedAt?: string;
+  approvedAt?: string;
+  reimbursedAt?: string;
+  closedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+}
+
+export async function listWarrantyClaims(
+  params?: {
+    search?: string;
+    customerId?: string;
+    dealerId?: string;
+    workOrderId?: string;
+    status?: WarrantyClaim['claimStatus'];
+    limit?: number;
+    offset?: number;
+  },
+  options?: ApiDataOptions,
+): Promise<{ items: WarrantyClaim[]; total: number; limit?: number; offset?: number }> {
+  const qs = new URLSearchParams();
+  if (params?.search) qs.set('search', params.search);
+  if (params?.customerId) qs.set('customerId', params.customerId);
+  if (params?.dealerId) qs.set('dealerId', params.dealerId);
+  if (params?.workOrderId) qs.set('workOrderId', params.workOrderId);
+  if (params?.status) qs.set('status', params.status);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  const res = await apiFetch<{ items: WarrantyClaim[]; total: number } | WarrantyClaim[]>(
+    `/identity/warranty-claims${qs.size ? `?${qs}` : ''}`,
+    undefined,
+    { items: [], total: 0 },
+    options,
+  );
+  return Array.isArray(res)
+    ? { items: res, total: res.length }
+    : { items: res.items ?? [], total: res.total ?? res.items?.length ?? 0 };
+}
+
+export interface CreateWarrantyClaimInput {
+  customerId: string;
+  dealerId?: string | null;
+  dealerRelationshipId?: string | null;
+  cartVehicleId?: string | null;
+  workOrderId?: string | null;
+  claimStatus?: WarrantyClaim['claimStatus'];
+  requestedAmountCents?: number;
+  approvedAmountCents?: number | null;
+  reimbursedAmountCents?: number | null;
+  externalReference?: string | null;
+  claimReason?: string | null;
+  ownerUserId?: string | null;
+  notes?: string | null;
+}
+
+export interface UpdateWarrantyClaimInput {
+  claimStatus?: WarrantyClaim['claimStatus'];
+  requestedAmountCents?: number;
+  approvedAmountCents?: number | null;
+  reimbursedAmountCents?: number | null;
+  externalReference?: string | null;
+  claimReason?: string | null;
+  ownerUserId?: string | null;
+  notes?: string | null;
+}
+
+export async function createWarrantyClaim(input: CreateWarrantyClaimInput): Promise<WarrantyClaim> {
+  const data = await apiFetch<{ claim: WarrantyClaim }>('/identity/warranty-claims', {
+    method: 'POST',
+    headers: mutationHeaders(),
+    body: JSON.stringify(input),
+  });
+  return data.claim;
+}
+
+export async function updateWarrantyClaim(
+  id: string,
+  input: UpdateWarrantyClaimInput,
+): Promise<WarrantyClaim> {
+  const data = await apiFetch<{ claim: WarrantyClaim }>(`/identity/warranty-claims/${id}`, {
+    method: 'PATCH',
+    headers: mutationHeaders(),
+    body: JSON.stringify(input),
+  });
+  return data.claim;
 }
 
 // ─── SOP Documents ────────────────────────────────────────────────────────────

@@ -56,6 +56,7 @@ const ICON_BY_ITEM_KEY: Partial<Record<string, LucideIcon>> = {
   customer: Users,
   dealer: Users,
   'customer-relationship': GitBranch,
+  'warranty-claim': ShieldCheck,
   'my-ojt': BookOpen,
   'training-assignment': ClipboardList,
   'sop-library': BookOpen,

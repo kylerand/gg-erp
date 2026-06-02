@@ -13,7 +13,8 @@ const migrationArtifactsPromise = (async () => {
     prismaStockBinSchema,
     prismaStockBinSeed,
     prismaDealerRelationshipSchema,
-    prismaDealerRelationshipSeed
+    prismaDealerRelationshipSeed,
+    prismaWarrantyClaimSchema
   ] = await Promise.all([
     readFile(new URL('../../../apps/api/src/migrations/0002_canonical_erp_domain.sql', import.meta.url), 'utf8'),
     readFile(new URL('../../../packages/db/prisma/migrations/0001_init/migration.sql', import.meta.url), 'utf8'),
@@ -66,6 +67,13 @@ const migrationArtifactsPromise = (async () => {
         import.meta.url
       ),
       'utf8'
+    ),
+    readFile(
+      new URL(
+        '../../../packages/db/prisma/migrations/20260602061000_add_warranty_claims/migration.sql',
+        import.meta.url
+      ),
+      'utf8'
     )
   ]);
 
@@ -79,7 +87,8 @@ const migrationArtifactsPromise = (async () => {
     prismaStockBinSchema,
     prismaStockBinSeed,
     prismaDealerRelationshipSchema,
-    prismaDealerRelationshipSeed
+    prismaDealerRelationshipSeed,
+    prismaWarrantyClaimSchema
   };
 })();
 
@@ -244,6 +253,30 @@ test('deploy migrations include dedicated customer dealer relationship storage',
   );
   assert.match(prismaDealerRelationshipSchema, /dealer_accounts_customer_active_uk/i);
   assert.match(prismaDealerRelationshipSchema, /customer_dealer_relationships_active_vehicle_uk/i);
+});
+
+test('deploy migrations include warranty claim reimbursement storage', async () => {
+  const { prismaWarrantyClaimSchema } = await migrationArtifactsPromise;
+
+  assert.match(prismaWarrantyClaimSchema, /CREATE TYPE "customers"\."WarrantyClaimStatus" AS ENUM/i);
+  const claims = findTableDefinition(prismaWarrantyClaimSchema, 'customers.warranty_claims');
+  assert.match(claims, /claim_number\s+text\s+not null/i);
+  assert.match(claims, /customer_id\s+uuid\s+not null\s+references customers\.customers\(id\)/i);
+  assert.match(claims, /dealer_account_id\s+uuid\s+references customers\.dealer_accounts\(id\)/i);
+  assert.match(
+    claims,
+    /dealer_relationship_id\s+uuid\s+references customers\.customer_dealer_relationships\(id\)/i
+  );
+  assert.match(claims, /cart_vehicle_id\s+uuid\s+references planning\.cart_vehicles\(id\)/i);
+  assert.match(claims, /work_order_id\s+uuid\s+references work_orders\.work_orders\(id\)/i);
+  assert.match(
+    claims,
+    /claim_status\s+customers\."WarrantyClaimStatus"\s+not null\s+default 'DRAFT'/i
+  );
+  assert.match(claims, /requested_amount_cents\s+integer\s+not null\s+default\s+0/i);
+  assert.match(prismaWarrantyClaimSchema, /warranty_claims_claim_number_uk/i);
+  assert.match(prismaWarrantyClaimSchema, /warranty_claims_customer_status_idx/i);
+  assert.match(prismaWarrantyClaimSchema, /warranty_claims_status_updated_idx/i);
 });
 
 test('audit tables are present for traceability', async () => {

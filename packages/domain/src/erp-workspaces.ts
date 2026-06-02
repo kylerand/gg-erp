@@ -287,6 +287,15 @@ export const ERP_WORKSPACES = [
         objectKey: 'customer-relationship',
         keywords: ['relationship', 'link', 'account'],
       },
+      {
+        key: 'warranty-claim',
+        label: 'Warranty Claims',
+        description: 'Warranty provider claims and reimbursement follow-through.',
+        route: '/customer-dealers/warranty',
+        status: 'live',
+        objectKey: 'warranty-claim',
+        keywords: ['warranty', 'claim', 'reimbursement', 'dealer'],
+      },
     ],
   },
   {

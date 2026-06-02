@@ -1,4 +1,26 @@
 {
   "_doc": "Routes with an expected non-healthy API smoke status in the currently deployed QA API. Smoke fails when this list drifts in EITHER direction — a new bug joins, OR an existing bug gets fixed/deployed (so we know to remove the entry). File a Linear ticket when adding long-lived handler bugs; remove deployment-staged entries after the route is live. Use expectRouteMiss for pending Terraform routes that are not deployed yet.",
-  "broken": []
+  "broken": [
+    {
+      "method": "GET",
+      "path": "/identity/warranty-claims",
+      "expectStatus": 404,
+      "expectRouteMiss": true,
+      "note": "Pending CD deploy for new warranty claim list route added in feat/warranty-claim-reimbursement-workflow."
+    },
+    {
+      "method": "POST",
+      "path": "/identity/warranty-claims",
+      "expectStatus": 404,
+      "expectRouteMiss": true,
+      "note": "Pending CD deploy for new warranty claim create route added in feat/warranty-claim-reimbursement-workflow."
+    },
+    {
+      "method": "PATCH",
+      "path": "/identity/warranty-claims/{id}",
+      "expectStatus": 404,
+      "expectRouteMiss": true,
+      "note": "Pending CD deploy for new warranty claim update route added in feat/warranty-claim-reimbursement-workflow."
+    }
+  ]
 }

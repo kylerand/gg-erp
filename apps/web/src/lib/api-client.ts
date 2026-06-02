@@ -3212,12 +3212,14 @@ export interface CustomerSyncRecord {
 export async function listCustomerSyncs(
   params?: {
     state?: string;
+    customerId?: string;
     limit?: number;
   },
   options?: ApiDataOptions,
 ): Promise<{ items: CustomerSyncRecord[]; total: number }> {
   const qs = new URLSearchParams();
   if (params?.state) qs.set('state', params.state);
+  if (params?.customerId) qs.set('customerId', params.customerId);
   if (params?.limit) qs.set('limit', String(params.limit));
   return apiFetch(
     `/accounting/customers${qs.size ? `?${qs}` : ''}`,

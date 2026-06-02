@@ -241,11 +241,11 @@
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: adding a registry-backed customer workspace that turns customer rows into
-          operational drill-ins for profile, cart assets, work orders, opportunities, quotes, and
-          recent sales activity. Accounting document snapshots are deployed on main with no live API
-          route exceptions. ShopMonkey cutover readiness remains blocked on missing parts and
-          purchase-order source exports.
+          Current focus: extending the registry-backed customer workspace with accounting sync
+          history, so customer records show QuickBooks customer-sync state and payment-sync activity
+          alongside profile, cart, work-order, quote, opportunity, and activity context. Accounting
+          document snapshots are deployed on main with no live API route exceptions. ShopMonkey
+          cutover readiness remains blocked on missing parts and purchase-order source exports.
         </p>
         <div class="progress" aria-label="97 percent complete"><div style="width: 97%"></div></div>
       </section>
@@ -390,13 +390,14 @@
                 accounts, and explicit dealer relationship rows. Dealer accounts read the
                 `customers.dealer_accounts` model with customer profile context, and relationship
                 rows read `customers.customer_dealer_relationships` with dealer, customer, cart,
-                status, and action-link context. This branch adds a registry-backed customer detail
+                status, and action-link context. PR #177 added a registry-backed customer detail
                 workspace with strict-live profile, cart assets, work orders, opportunities, quotes,
-                and sales activity plus context-aware create actions.
+                and sales activity plus context-aware create actions. This branch extends the
+                workspace with strict-live QuickBooks customer-sync and payment-sync history.
               </td>
               <td>
-                Finish CI/QA for the customer workspace, then add create/update dealer assignment
-                workflows once relationship ownership mutation rules are finalized.
+                Finish CI/QA for customer accounting history, then add create/update dealer
+                assignment workflows once relationship ownership mutation rules are finalized.
               </td>
             </tr>
             <tr>

@@ -91,7 +91,7 @@ def tf_import(address: str, resource_id: str) -> bool:
 # Resource-specific reconcilers
 # ─────────────────────────────────────────────────────────────────────────────
 
-def reconcile_lambdas(state: set[str]) -> tuple[int, int, int]:
+def reconcile_lambdas(state: set[str], declared_lambdas: set[str]) -> tuple[int, int, int]:
     """Import any AWS Lambda function matching NAME_PREFIX- that's not in state."""
     print(f"→ Reconciling Lambda functions (prefix='{NAME_PREFIX}-')")
     data = aws(["lambda", "list-functions", "--max-items", "500"])
@@ -100,9 +100,12 @@ def reconcile_lambdas(state: set[str]) -> tuple[int, int, int]:
         f["FunctionName"] for f in functions
         if f.get("FunctionName", "").startswith(f"{NAME_PREFIX}-")
     )
-    imported = skipped = failed = 0
+    imported = skipped = failed = not_declared = 0
     for aws_name in names:
         tf_key = aws_name.removeprefix(f"{NAME_PREFIX}-").replace("-", "_")
+        if tf_key not in declared_lambdas:
+            not_declared += 1
+            continue
         address = f"{TF_MODULE_PREFIX}.aws_lambda_function.{tf_key}"
         if address in state:
             skipped += 1
@@ -112,7 +115,7 @@ def reconcile_lambdas(state: set[str]) -> tuple[int, int, int]:
             state.add(address)
         else:
             failed += 1
-    print(f"  imported={imported} skipped={skipped} warnings={failed}")
+    print(f"  imported={imported} skipped={skipped} not_declared={not_declared} warnings={failed}")
     return imported, skipped, failed
 
 
@@ -126,6 +129,14 @@ def find_api_id() -> str | None:
             return api["ApiId"]
     return None
 
+
+# Matches declarations of the form:
+#   resource "aws_lambda_function" "<key>" {
+# across whitespace/newlines. Captures the Terraform resource key.
+LAMBDA_RE = re.compile(
+    r'resource\s+"aws_lambda_function"\s+"(?P<key>\w+)"\s*\{',
+    re.DOTALL,
+)
 
 # Matches declarations of the form:
 #   resource "aws_apigatewayv2_route" "<key>" {
@@ -145,19 +156,21 @@ INTEGRATION_RE = re.compile(
 )
 
 
-def parse_tf_config() -> tuple[dict[str, str], dict[str, str]]:
+def parse_tf_config() -> tuple[dict[str, str], dict[str, str], set[str]]:
     """
-    Parse main.tf and return two mappings:
+    Parse main.tf and return mappings plus declared Lambda resource keys:
       routes:       route_key → terraform resource key
       integrations: lambda_name → terraform integration resource key
+      lambdas:      terraform aws_lambda_function resource keys
     """
     if not TF_MODULE_PATH.exists():
         print(f"  ↳ WARN: module file not found at {TF_MODULE_PATH}")
-        return {}, {}
+        return {}, {}, set()
     src = TF_MODULE_PATH.read_text()
     routes = {m.group("route_key"): m.group("key") for m in ROUTE_RE.finditer(src)}
     integrations = {m.group("lambda"): m.group("key") for m in INTEGRATION_RE.finditer(src)}
-    return routes, integrations
+    lambdas = {m.group("key") for m in LAMBDA_RE.finditer(src)}
+    return routes, integrations, lambdas
 
 
 def reconcile_routes(api_id: str, state: set[str], route_key_to_tf_key: dict[str, str]) -> tuple[int, int, int]:
@@ -301,11 +314,14 @@ def main() -> int:
     state = tf_state_list()
     print(f"  terraform state has {len(state)} addresses")
 
-    route_keys, integration_lambdas = parse_tf_config()
-    print(f"  parsed config: {len(route_keys)} routes, {len(integration_lambdas)} integrations")
+    route_keys, integration_lambdas, declared_lambdas = parse_tf_config()
+    print(
+        f"  parsed config: {len(route_keys)} routes, "
+        f"{len(integration_lambdas)} integrations, {len(declared_lambdas)} lambdas"
+    )
 
     # 1. Lambdas
-    reconcile_lambdas(state)
+    reconcile_lambdas(state, declared_lambdas)
 
     # 2. API Gateway (routes + integrations)
     api_id = find_api_id()
@@ -315,12 +331,10 @@ def main() -> int:
     else:
         print(f"  ↳ No API Gateway v2 found with name starting with '{NAME_PREFIX}', skipping routes/integrations.")
 
-    # 3. CloudWatch log groups — reuse the current AWS Lambda list.
-    data = aws(["lambda", "list-functions", "--max-items", "500"])
-    functions = data.get("Functions", []) if isinstance(data, dict) else []
+    # 3. CloudWatch log groups — only for Lambda functions declared in Terraform.
     lambda_names = [
-        f["FunctionName"] for f in functions
-        if f.get("FunctionName", "").startswith(f"{NAME_PREFIX}-")
+        f"{NAME_PREFIX}-{lambda_key.replace('_', '-')}"
+        for lambda_key in sorted(declared_lambdas)
     ]
     reconcile_log_groups(state, lambda_names)
 

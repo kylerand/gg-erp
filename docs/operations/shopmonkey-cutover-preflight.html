@@ -165,9 +165,9 @@
         <div>
           <p class="muted">Sanitized readiness report</p>
           <h1>ShopMonkey Cutover Preflight</h1>
-          <p class="muted">Source: gg-erp-shopmonkey-enriched-sanitized.json</p>
+          <p class="muted">Source: gg-erp-shopmonkey-enriched-sanitized-coverage.json</p>
         </div>
-        <div class="stamp">Generated: 2026-06-02T12:45:11.308Z</div>
+        <div class="stamp">Generated: 2026-06-02T13:12:59.664Z</div>
       </header>
 
       <div class="summary">
@@ -278,6 +278,33 @@
       </section>
 
       <section>
+        <h2>Source Coverage</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Entity</th>
+              <th>Status</th>
+              <th>Source</th>
+              <th>Collected</th>
+              <th>Reported</th>
+              <th>Gap</th>
+              <th>Detail</th>
+            </tr>
+          </thead>
+          <tbody>
+        <tr>
+          <td>Parts</td>
+          <td><span class="pill warn">WARN</span></td>
+          <td>GET /v3/inventory_part?take=&amp;skip=</td>
+          <td>189</td>
+          <td>237</td>
+          <td>48</td>
+          <td>ShopMonkey reported 237 inventory parts, but the API sweep exposed 189 unique rows.</td>
+        </tr></tbody>
+        </table>
+      </section>
+
+      <section>
         <h2>Warning Review</h2>
         <p class="muted">69 warned rows, 69 warning reasons. Sample row keys are hashed source identifiers for review without exposing raw customer or work-order IDs.</p>
         <table>
@@ -307,7 +334,7 @@
 
       <section>
         <h2>Next Actions</h2>
-        <ul><li>Review warning gates: Customers, Work Orders, Line Item Assignments.</li><li>Review 69 warned source rows in the Warning Review section and sign off or repair each warning reason before staging cutover.</li><li>Run the loader against an isolated staging database and capture row-count reconciliation.</li><li>Compare imported customers, carts, work orders, parts, vendors, and accounting sync queues in the ERP UI.</li></ul>
+        <ul><li>Review warning gates: Customers, Work Orders, Line Item Assignments.</li><li>Review 69 warned source rows in the Warning Review section and sign off or repair each warning reason before staging cutover.</li><li>Review source coverage gaps: Parts missing 48 of 237 reported rows.</li><li>Run the loader against an isolated staging database and capture row-count reconciliation.</li><li>Compare imported customers, carts, work orders, parts, vendors, and accounting sync queues in the ERP UI.</li></ul>
       </section>
     </main>
   </body>

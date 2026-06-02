@@ -51,4 +51,32 @@ describe('ShopMonkey export sanitization', () => {
       skipped: 0,
     });
   });
+
+  it('preserves ShopMonkey source coverage metadata', () => {
+    const report = sanitizeExport(
+      baseExport({
+        sourceCoverage: {
+          inventoryParts: {
+            entityKey: 'parts',
+            label: 'Parts',
+            source: 'GET /v3/inventory_part?take=&skip=',
+            collected: 189,
+            reportedTotal: 237,
+            missingFromReportedTotal: 48,
+            status: 'WARN',
+            detail: 'ShopMonkey reported 237 inventory parts, but the API sweep exposed 189 unique rows.',
+          },
+        },
+      }),
+      'shopmonkey-export.json',
+    );
+
+    expect(report.sourceCoverage?.inventoryParts).toMatchObject({
+      entityKey: 'parts',
+      collected: 189,
+      reportedTotal: 237,
+      missingFromReportedTotal: 48,
+      status: 'WARN',
+    });
+  });
 });

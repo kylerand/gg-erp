@@ -35,8 +35,24 @@ export interface CutoverPreflightReport {
     skippedRows: number;
   };
   gates: EntityGate[];
+  sourceCoverage: SourceCoverageReview;
   warningReview: WarningReview;
   nextActions: string[];
+}
+
+export interface SourceCoverageReview {
+  items: SourceCoverageItem[];
+}
+
+export interface SourceCoverageItem {
+  entityKey: string;
+  entityLabel: string;
+  source: string;
+  status: CutoverPreflightStatus;
+  collected: number;
+  reportedTotal?: number;
+  missingFromReportedTotal?: number;
+  detail: string;
 }
 
 export interface WarningReview {
@@ -94,6 +110,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function toNumber(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
+}
+
+function toOptionalNumber(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+  return Math.max(0, Math.trunc(value));
 }
 
 function countFromArray(value: unknown): EntityCount | undefined {
@@ -228,6 +249,58 @@ function buildWarningReview(source: Record<string, unknown>): WarningReview {
   };
 }
 
+function toCoverageStatus(value: unknown): CutoverPreflightStatus {
+  if (value === 'PASS' || value === 'FAIL' || value === 'WARN') return value;
+  if (value === 'UNKNOWN') return 'WARN';
+  return 'WARN';
+}
+
+function buildSourceCoverage(source: Record<string, unknown>): SourceCoverageReview {
+  const coverage = isRecord(source.sourceCoverage) ? source.sourceCoverage : {};
+  const items = Object.entries(coverage)
+    .filter(([, value]) => isRecord(value))
+    .map(([fallbackKey, value]) => {
+      const record = value as Record<string, unknown>;
+      const collected = toNumber(record.collected);
+      const reportedTotal = toOptionalNumber(record.reportedTotal);
+      const missingFromReportedTotal =
+        toOptionalNumber(record.missingFromReportedTotal) ??
+        (reportedTotal !== undefined ? Math.max(0, reportedTotal - collected) : undefined);
+      const entityKey = typeof record.entityKey === 'string' ? record.entityKey : fallbackKey;
+      const entityLabel = typeof record.label === 'string' ? record.label : entityKey;
+      const sourceName = typeof record.source === 'string' ? record.source : 'Unknown source';
+      const status = toCoverageStatus(record.status);
+
+      return {
+        entityKey,
+        entityLabel,
+        source: sourceName,
+        status,
+        collected,
+        reportedTotal,
+        missingFromReportedTotal,
+        detail:
+          typeof record.detail === 'string'
+            ? record.detail
+            : reportedTotal !== undefined
+              ? `${entityLabel} collected ${collected.toLocaleString()} of ${reportedTotal.toLocaleString()} reported rows.`
+              : `${entityLabel} collected ${collected.toLocaleString()} rows; no reported total was available.`,
+      } satisfies SourceCoverageItem;
+    })
+    .sort((a, b) => {
+      if (a.status !== b.status) return statusRank(a.status) - statusRank(b.status);
+      return a.entityLabel.localeCompare(b.entityLabel);
+    });
+
+  return { items };
+}
+
+function statusRank(status: CutoverPreflightStatus): number {
+  if (status === 'FAIL') return 0;
+  if (status === 'WARN') return 1;
+  return 2;
+}
+
 function evaluateGate(rule: EntityRule, count: EntityCount | undefined): EntityGate {
   if (!count) {
     return {
@@ -292,13 +365,22 @@ function evaluateGate(rule: EntityRule, count: EntityCount | undefined): EntityG
   };
 }
 
-function overallStatus(gates: readonly EntityGate[]): CutoverPreflightStatus {
+function overallStatus(
+  gates: readonly EntityGate[],
+  sourceCoverage: SourceCoverageReview,
+): CutoverPreflightStatus {
   if (gates.some((gate) => gate.status === 'FAIL')) return 'FAIL';
+  if (sourceCoverage.items.some((item) => item.status === 'FAIL')) return 'FAIL';
   if (gates.some((gate) => gate.status === 'WARN')) return 'WARN';
+  if (sourceCoverage.items.some((item) => item.status === 'WARN')) return 'WARN';
   return 'PASS';
 }
 
-function buildNextActions(gates: readonly EntityGate[], warningReview: WarningReview): string[] {
+function buildNextActions(
+  gates: readonly EntityGate[],
+  warningReview: WarningReview,
+  sourceCoverage: SourceCoverageReview,
+): string[] {
   const actions: string[] = [];
   const failed = gates.filter((gate) => gate.status === 'FAIL');
   const warned = gates.filter((gate) => gate.status === 'WARN');
@@ -322,6 +404,18 @@ function buildNextActions(gates: readonly EntityGate[], warningReview: WarningRe
       `Review ${warningReview.totalRowsWithWarnings.toLocaleString()} warned source rows in the Warning Review section and sign off or repair each warning reason before staging cutover.`,
     );
   }
+  const sourceCoverageWarnings = sourceCoverage.items.filter((item) => item.status !== 'PASS');
+  if (sourceCoverageWarnings.length > 0) {
+    actions.push(
+      `Review source coverage gaps: ${sourceCoverageWarnings.map((item) => {
+        const gap =
+          item.missingFromReportedTotal !== undefined && item.reportedTotal !== undefined
+            ? `${item.entityLabel} missing ${item.missingFromReportedTotal.toLocaleString()} of ${item.reportedTotal.toLocaleString()} reported rows`
+            : `${item.entityLabel} reported-total coverage unknown`;
+        return gap;
+      }).join('; ')}.`,
+    );
+  }
   actions.push('Run the loader against an isolated staging database and capture row-count reconciliation.');
   actions.push('Compare imported customers, carts, work orders, parts, vendors, and accounting sync queues in the ERP UI.');
   return actions;
@@ -333,6 +427,7 @@ export function buildCutoverPreflightReport(
 ): CutoverPreflightReport {
   const sourceText = JSON.stringify(source);
   const gates = ENTITY_RULES.map((rule) => evaluateGate(rule, getEntityCount(source, rule.key)));
+  const sourceCoverage = buildSourceCoverage(source);
   const warningReview = buildWarningReview(source);
   const totals = gates.reduce(
     (acc, gate) => ({
@@ -349,11 +444,12 @@ export function buildCutoverPreflightReport(
     generatedAt: options.generatedAt ?? new Date().toISOString(),
     sourceFile: basename(options.sourceFile),
     sourceChecksum: createHash('sha256').update(sourceText).digest('hex'),
-    overallStatus: overallStatus(gates),
+    overallStatus: overallStatus(gates, sourceCoverage),
     totals,
     gates,
+    sourceCoverage,
     warningReview,
-    nextActions: buildNextActions(gates, warningReview),
+    nextActions: buildNextActions(gates, warningReview, sourceCoverage),
   };
 }
 
@@ -392,6 +488,27 @@ export function renderCutoverPreflightHtml(report: CutoverPreflightReport): stri
   const actions = report.nextActions
     .map((action) => `<li>${escapeHtml(action)}</li>`)
     .join('');
+
+  const sourceCoverageRows =
+    report.sourceCoverage.items.length > 0
+      ? report.sourceCoverage.items
+          .map(
+            (item) => `
+        <tr>
+          <td>${escapeHtml(item.entityLabel)}</td>
+          <td><span class="pill ${statusClass(item.status)}">${item.status}</span></td>
+          <td>${escapeHtml(item.source)}</td>
+          <td>${item.collected.toLocaleString()}</td>
+          <td>${item.reportedTotal === undefined ? 'n/a' : item.reportedTotal.toLocaleString()}</td>
+          <td>${item.missingFromReportedTotal === undefined ? 'n/a' : item.missingFromReportedTotal.toLocaleString()}</td>
+          <td>${escapeHtml(item.detail)}</td>
+        </tr>`,
+          )
+          .join('')
+      : `
+        <tr>
+          <td colspan="7" class="muted">No source coverage metadata was found in this source.</td>
+        </tr>`;
 
   const warningRows =
     report.warningReview.items.length > 0
@@ -607,6 +724,24 @@ export function renderCutoverPreflightHtml(report: CutoverPreflightReport): stri
             </tr>
           </thead>
           <tbody>${gateRows}</tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Source Coverage</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Entity</th>
+              <th>Status</th>
+              <th>Source</th>
+              <th>Collected</th>
+              <th>Reported</th>
+              <th>Gap</th>
+              <th>Detail</th>
+            </tr>
+          </thead>
+          <tbody>${sourceCoverageRows}</tbody>
         </table>
       </section>
 

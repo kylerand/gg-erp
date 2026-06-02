@@ -124,4 +124,50 @@ describe('ShopMonkey cutover preflight', () => {
     expect(html).not.toContain('raw-customer-id-1');
     expect(html).not.toContain('raw-work-order-id-1');
   });
+
+  it('renders ShopMonkey source coverage gaps as cutover actions', () => {
+    const report = buildCutoverPreflightReport(
+      {
+        counts: {
+          customers: { total: 447, valid: 447, warned: 0, skipped: 0 },
+          vehicles: { total: 56, valid: 56, warned: 0, skipped: 0 },
+          orders: { total: 465, valid: 465, warned: 0, skipped: 0 },
+          users: { total: 28, valid: 28, warned: 0, skipped: 0 },
+          vendors: { total: 25, valid: 25, warned: 0, skipped: 0 },
+          parts: { total: 189, valid: 189, warned: 0, skipped: 0 },
+          purchaseOrders: { total: 11, valid: 11, warned: 0, skipped: 0 },
+        },
+        sourceCoverage: {
+          inventoryParts: {
+            entityKey: 'parts',
+            label: 'Parts',
+            source: 'GET /v3/inventory_part?take=&skip=',
+            collected: 189,
+            reportedTotal: 237,
+            missingFromReportedTotal: 48,
+            status: 'WARN',
+            detail: 'ShopMonkey reported 237 inventory parts, but the API sweep exposed 189 unique rows.',
+          },
+        },
+      },
+      { sourceFile: 'sample.json', generatedAt: '2026-06-01T00:00:00.000Z' },
+    );
+
+    expect(report.overallStatus).toBe('WARN');
+    expect(report.sourceCoverage.items[0]).toMatchObject({
+      entityKey: 'parts',
+      collected: 189,
+      reportedTotal: 237,
+      missingFromReportedTotal: 48,
+      status: 'WARN',
+    });
+    expect(report.nextActions).toContain(
+      'Review source coverage gaps: Parts missing 48 of 237 reported rows.',
+    );
+
+    const html = renderCutoverPreflightHtml(report);
+    expect(html).toContain('Source Coverage');
+    expect(html).toContain('GET /v3/inventory_part?take=&amp;skip=');
+    expect(html).toContain('48');
+  });
 });

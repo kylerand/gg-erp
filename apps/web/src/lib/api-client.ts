@@ -3454,7 +3454,8 @@ export async function getFailureSummary(options?: ApiDataOptions): Promise<Failu
 export type OperationalLedgerSourceType =
   | 'PAYABLE_RECEIPT'
   | 'CUSTOMER_PAYMENT'
-  | 'RECONCILIATION_VARIANCE';
+  | 'RECONCILIATION_VARIANCE'
+  | 'WARRANTY_REIMBURSEMENT';
 export type OperationalLedgerStatus =
   | 'READY_FOR_REVIEW'
   | 'NEEDS_REVIEW'
@@ -3479,7 +3480,7 @@ export interface OperationalLedgerEntry {
   currency: 'USD';
   status: OperationalLedgerStatus;
   memo: string;
-  relatedRecordType: 'purchase-order' | 'payment-sync' | 'reconciliation-record';
+  relatedRecordType: 'purchase-order' | 'payment-sync' | 'reconciliation-record' | 'warranty-claim';
   relatedRecordId: string;
 }
 
@@ -3546,6 +3547,7 @@ export async function listOperationalLedger(
           PAYABLE_RECEIPT: { count: 0, amountCents: 0 },
           CUSTOMER_PAYMENT: { count: 0, amountCents: 0 },
           RECONCILIATION_VARIANCE: { count: 0, amountCents: 0 },
+          WARRANTY_REIMBURSEMENT: { count: 0, amountCents: 0 },
         },
         statusTotals: {
           READY_FOR_REVIEW: { count: 0, amountCents: 0 },
@@ -3832,6 +3834,7 @@ const emptyAccountingJournalSummary: AccountingJournalResponse['summary'] = {
     PAYABLE_RECEIPT: { count: 0, amountCents: 0 },
     CUSTOMER_PAYMENT: { count: 0, amountCents: 0 },
     RECONCILIATION_VARIANCE: { count: 0, amountCents: 0 },
+    WARRANTY_REIMBURSEMENT: { count: 0, amountCents: 0 },
   },
 };
 

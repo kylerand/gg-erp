@@ -18,9 +18,8 @@ function parseBody(response: { body: string }): Record<string, unknown> {
 }
 
 test('listOperationalLedgerHandler builds operational ledger entries from live source records', async () => {
-  const { listOperationalLedgerHandler, operationalLedgerQueries } = await import(
-    '../lambda/accounting/handlers.js'
-  );
+  const { listOperationalLedgerHandler, operationalLedgerQueries } =
+    await import('../lambda/accounting/handlers.js');
 
   const listPayablesMock = mock.method(
     operationalLedgerQueries,
@@ -117,6 +116,72 @@ test('listOperationalLedgerHandler builds operational ledger entries from live s
         ReturnType<typeof operationalLedgerQueries.listReconciliationRecords>
       >,
   );
+  const listWarrantyClaimsMock = mock.method(
+    operationalLedgerQueries,
+    'listWarrantyClaims',
+    async () =>
+      [
+        {
+          id: 'claim-1',
+          claimNumber: 'WCLM-20260602-ABC123',
+          customerId: 'cust-1',
+          dealerAccountId: 'dealer-1',
+          dealerRelationshipId: null,
+          cartVehicleId: 'cart-1',
+          workOrderId: 'wo-1',
+          claimStatus: 'APPROVED',
+          requestedAmountCents: 35000,
+          approvedAmountCents: 30000,
+          reimbursedAmountCents: null,
+          externalReference: 'WR-EXT-1',
+          claimReason: 'Warranty service',
+          ownerUserId: null,
+          notes: null,
+          submittedAt: new Date('2026-06-01T12:00:00.000Z'),
+          approvedAt: new Date('2026-06-02T12:00:00.000Z'),
+          reimbursedAt: null,
+          closedAt: null,
+          correlationId: 'corr-warranty',
+          createdAt: new Date('2026-06-01T12:00:00.000Z'),
+          updatedAt: new Date('2026-06-02T12:00:00.000Z'),
+          version: 0,
+          customer: {
+            fullName: 'Customer One',
+            companyName: null,
+            email: 'customer@example.com',
+          },
+          dealerAccount: {
+            id: 'dealer-1',
+            customerId: 'dealer-customer-1',
+            dealerCode: 'DLR',
+            territory: 'Southeast',
+            serviceRelationship: 'ACTIVE',
+            accountOwner: null,
+            notes: null,
+            createdAt: new Date('2026-05-01T12:00:00.000Z'),
+            updatedAt: new Date('2026-05-01T12:00:00.000Z'),
+            archivedAt: null,
+            version: 0,
+            customer: {
+              fullName: 'Dealer One',
+              companyName: 'Dealer One LLC',
+              email: 'dealer@example.com',
+            },
+          },
+          dealerRelationship: null,
+          cartVehicle: {
+            serialNumber: 'GG-1001',
+            modelCode: 'GT',
+            modelYear: 2026,
+          },
+          workOrder: {
+            workOrderNumber: 'WO-1001',
+            status: 'IN_PROGRESS',
+            dueAt: new Date('2026-06-05T12:00:00.000Z'),
+          },
+        },
+      ] as unknown as Awaited<ReturnType<typeof operationalLedgerQueries.listWarrantyClaims>>,
+  );
   const invoiceFailuresMock = mock.method(
     operationalLedgerQueries,
     'countInvoiceFailures',
@@ -145,32 +210,35 @@ test('listOperationalLedgerHandler builds operational ledger entries from live s
     assert.equal(response.statusCode, 200);
 
     const body = parseBody(response);
-    assert.equal(body.total, 3);
+    assert.equal(body.total, 4);
     assert.equal(body.limit, 10);
 
     const items = body.items as Array<Record<string, unknown>>;
     assert.deepEqual(
       items.map((item) => item.sourceType),
-      ['RECONCILIATION_VARIANCE', 'CUSTOMER_PAYMENT', 'PAYABLE_RECEIPT'],
+      ['WARRANTY_REIMBURSEMENT', 'RECONCILIATION_VARIANCE', 'CUSTOMER_PAYMENT', 'PAYABLE_RECEIPT'],
     );
-    assert.equal(items[0].status, 'MISMATCH');
-    assert.equal(items[1].status, 'POSTED');
-    assert.equal(items[2].documentNumber, 'PO-1001');
+    assert.equal(items[0].status, 'READY_FOR_REVIEW');
+    assert.equal(items[0].documentNumber, 'WCLM-20260602-ABC123');
+    assert.equal(items[1].status, 'MISMATCH');
+    assert.equal(items[2].status, 'POSTED');
+    assert.equal(items[3].documentNumber, 'PO-1001');
 
     const summary = body.summary as Record<string, unknown>;
-    assert.equal(summary.totalDebitCents, 80000);
-    assert.equal(summary.totalCreditCents, 80000);
+    assert.equal(summary.totalDebitCents, 110000);
+    assert.equal(summary.totalCreditCents, 110000);
     assert.deepEqual(summary.exceptions, {
       invoice: 1,
       customer: 0,
       payment: 2,
       reconciliation: 1,
     });
-    assert.equal((body.postingRules as unknown[]).length, 3);
+    assert.equal((body.postingRules as unknown[]).length, 4);
   } finally {
     listPayablesMock.mock.restore();
     listPaymentsMock.mock.restore();
     listReconciliationMock.mock.restore();
+    listWarrantyClaimsMock.mock.restore();
     invoiceFailuresMock.mock.restore();
     customerFailuresMock.mock.restore();
     paymentFailuresMock.mock.restore();
@@ -195,9 +263,8 @@ test('listOperationalLedgerHandler validates source and status filters', async (
 });
 
 test('listAccountingJournalsHandler returns posted immutable journals', async () => {
-  const { listAccountingJournalsHandler, accountingJournalQueries } = await import(
-    '../lambda/accounting/handlers.js'
-  );
+  const { listAccountingJournalsHandler, accountingJournalQueries } =
+    await import('../lambda/accounting/handlers.js');
 
   const journal = {
     id: '00000000-0000-4000-8000-000000000101',
@@ -256,7 +323,10 @@ test('listAccountingJournalsHandler returns posted immutable journals', async ()
     assert.equal(response.statusCode, 200);
     const body = parseBody(response);
     assert.equal(body.total, 1);
-    assert.equal((body.items as Array<Record<string, unknown>>)[0]?.journalNumber, journal.journalNumber);
+    assert.equal(
+      (body.items as Array<Record<string, unknown>>)[0]?.journalNumber,
+      journal.journalNumber,
+    );
     assert.equal((body.summary as Record<string, unknown>).totalDebitCents, 50000);
   } finally {
     listMock.mock.restore();
@@ -265,11 +335,8 @@ test('listAccountingJournalsHandler returns posted immutable journals', async ()
 });
 
 test('getAccountingTrialBalanceHandler groups posted journal lines and close checks', async () => {
-  const {
-    getAccountingTrialBalanceHandler,
-    accountingReportQueries,
-    operationalLedgerQueries,
-  } = await import('../lambda/accounting/handlers.js');
+  const { getAccountingTrialBalanceHandler, accountingReportQueries, operationalLedgerQueries } =
+    await import('../lambda/accounting/handlers.js');
 
   const journal = {
     id: '00000000-0000-4000-8000-000000000301',
@@ -325,7 +392,11 @@ test('getAccountingTrialBalanceHandler groups posted journal lines and close che
     'listPostedJournals',
     async () => [journal] as never,
   );
-  const reportCountMock = mock.method(accountingReportQueries, 'countPostedJournals', async () => 1);
+  const reportCountMock = mock.method(
+    accountingReportQueries,
+    'countPostedJournals',
+    async () => 1,
+  );
   const listPayablesMock = mock.method(
     operationalLedgerQueries,
     'listPayablePurchaseOrders',
@@ -379,9 +450,26 @@ test('getAccountingTrialBalanceHandler groups posted journal lines and close che
     'listReconciliationRecords',
     async () => [],
   );
-  const invoiceFailuresMock = mock.method(operationalLedgerQueries, 'countInvoiceFailures', async () => 0);
-  const customerFailuresMock = mock.method(operationalLedgerQueries, 'countCustomerFailures', async () => 0);
-  const paymentFailuresMock = mock.method(operationalLedgerQueries, 'countPaymentFailures', async () => 1);
+  const listWarrantyClaimsMock = mock.method(
+    operationalLedgerQueries,
+    'listWarrantyClaims',
+    async () => [],
+  );
+  const invoiceFailuresMock = mock.method(
+    operationalLedgerQueries,
+    'countInvoiceFailures',
+    async () => 0,
+  );
+  const customerFailuresMock = mock.method(
+    operationalLedgerQueries,
+    'countCustomerFailures',
+    async () => 0,
+  );
+  const paymentFailuresMock = mock.method(
+    operationalLedgerQueries,
+    'countPaymentFailures',
+    async () => 1,
+  );
   const mismatchMock = mock.method(
     operationalLedgerQueries,
     'countReconciliationMismatches',
@@ -404,10 +492,10 @@ test('getAccountingTrialBalanceHandler groups posted journal lines and close che
     assert.equal(summary.closeStatus, 'BLOCKED');
 
     const lines = body.accountLines as Array<Record<string, unknown>>;
-    assert.deepEqual(
-      lines.map((line) => line.accountCode).sort(),
-      ['ACCOUNTS_RECEIVABLE', 'UNDEPOSITED_FUNDS_BANK_CLEARING'],
-    );
+    assert.deepEqual(lines.map((line) => line.accountCode).sort(), [
+      'ACCOUNTS_RECEIVABLE',
+      'UNDEPOSITED_FUNDS_BANK_CLEARING',
+    ]);
     assert.equal((body.closeChecks as Array<Record<string, unknown>>).length, 5);
   } finally {
     reportJournalsMock.mock.restore();
@@ -415,6 +503,7 @@ test('getAccountingTrialBalanceHandler groups posted journal lines and close che
     listPayablesMock.mock.restore();
     listPaymentsMock.mock.restore();
     listReconciliationMock.mock.restore();
+    listWarrantyClaimsMock.mock.restore();
     invoiceFailuresMock.mock.restore();
     customerFailuresMock.mock.restore();
     paymentFailuresMock.mock.restore();
@@ -508,92 +597,144 @@ test('getAccountingClosePackageHandler assembles period evidence from live accou
     'listPostedJournals',
     async () => [journal] as never,
   );
-  const reportCountMock = mock.method(accountingReportQueries, 'countPostedJournals', async () => 1);
-  const listPayablesMock = mock.method(operationalLedgerQueries, 'listPayablePurchaseOrders', async () => []);
-  const listPaymentsMock = mock.method(operationalLedgerQueries, 'listPaymentSyncRecords', async () => []);
+  const reportCountMock = mock.method(
+    accountingReportQueries,
+    'countPostedJournals',
+    async () => 1,
+  );
+  const listPayablesMock = mock.method(
+    operationalLedgerQueries,
+    'listPayablePurchaseOrders',
+    async () => [],
+  );
+  const listPaymentsMock = mock.method(
+    operationalLedgerQueries,
+    'listPaymentSyncRecords',
+    async () => [],
+  );
   const listReconciliationMock = mock.method(
     operationalLedgerQueries,
     'listReconciliationRecords',
     async () => [],
   );
-  const invoiceFailuresMock = mock.method(operationalLedgerQueries, 'countInvoiceFailures', async () => 0);
-  const customerFailuresMock = mock.method(operationalLedgerQueries, 'countCustomerFailures', async () => 0);
-  const paymentFailuresMock = mock.method(operationalLedgerQueries, 'countPaymentFailures', async () => 0);
+  const listWarrantyClaimsMock = mock.method(
+    operationalLedgerQueries,
+    'listWarrantyClaims',
+    async () => [],
+  );
+  const invoiceFailuresMock = mock.method(
+    operationalLedgerQueries,
+    'countInvoiceFailures',
+    async () => 0,
+  );
+  const customerFailuresMock = mock.method(
+    operationalLedgerQueries,
+    'countCustomerFailures',
+    async () => 0,
+  );
+  const paymentFailuresMock = mock.method(
+    operationalLedgerQueries,
+    'countPaymentFailures',
+    async () => 0,
+  );
   const mismatchMock = mock.method(
     operationalLedgerQueries,
     'countReconciliationMismatches',
     async () => 0,
   );
-  const lockMock = mock.method(accountingPeriodLockQueries, 'listOverlapping', async () => [
-    {
-      id: '00000000-0000-4000-8000-000000000606',
-      periodStart: new Date('2026-05-01T00:00:00.000Z'),
-      periodEnd: new Date('2026-05-31T23:59:59.999Z'),
-      status: 'LOCKED',
-      reason: 'May close reviewed.',
-      lockedAt: new Date('2026-06-01T00:00:00.000Z'),
-      lockedBy: 'accounting-user',
-      correlationId: 'corr-lock',
-      createdAt: new Date('2026-06-01T00:00:00.000Z'),
-      version: 0,
-    },
-  ] as never);
-  const invoiceDocsMock = mock.method(accountingClosePackageQueries, 'listInvoiceDocuments', async () => [
-    {
-      id: '00000000-0000-4000-8000-000000000707',
-      invoiceSyncId: '00000000-0000-4000-8000-000000000607',
-      workOrderId,
-      customerId: null,
-      provider: 'QUICKBOOKS',
-      documentNumber: 'INV-1001',
-      externalReference: 'QB-INV-1001',
-      documentStatus: 'EXPORTED',
-      documentDate: new Date('2026-05-05T12:00:00.000Z'),
-      currencyCode: 'USD',
-      amountCents: null,
-      workOrderNumber: 'WO-1001',
-      customerName: null,
-      syncState: 'SYNCED',
-      attemptCount: 1,
-      errorCode: null,
-      errorMessage: null,
-      documentSummary: {},
-      documentPayload: {},
-      capturedAt: new Date('2026-05-05T12:00:00.000Z'),
-      correlationId: 'corr-inv',
-      createdAt: new Date('2026-05-05T12:00:00.000Z'),
-    },
-  ] as never);
-  const invoiceCountMock = mock.method(accountingClosePackageQueries, 'countInvoiceDocuments', async () => 1);
-  const paymentDocsMock = mock.method(accountingClosePackageQueries, 'listPaymentDocuments', async () => [
-    {
-      id: '00000000-0000-4000-8000-000000000708',
-      paymentSyncId: '00000000-0000-4000-8000-000000000608',
-      invoiceSyncId: '00000000-0000-4000-8000-000000000607',
-      workOrderId,
-      customerId,
-      provider: 'QUICKBOOKS',
-      documentNumber: 'QB-PAY-1001',
-      externalReference: 'QB-PAY-1001',
-      qbInvoiceId: 'QB-INV-1001',
-      documentStatus: 'RECONCILED',
-      documentDate: new Date('2026-05-06T00:00:00.000Z'),
-      currencyCode: 'USD',
-      amountCents: 50000,
-      paymentMethod: 'Card',
-      workOrderNumber: 'WO-1001',
-      customerName: 'Customer One',
-      syncState: 'RECONCILED',
-      attemptCount: 1,
-      errorMessage: null,
-      documentSummary: {},
-      documentPayload: {},
-      capturedAt: new Date('2026-05-06T12:00:00.000Z'),
-      correlationId: 'corr-pay',
-      createdAt: new Date('2026-05-06T12:00:00.000Z'),
-    },
-  ] as never);
-  const paymentCountMock = mock.method(accountingClosePackageQueries, 'countPaymentDocuments', async () => 1);
+  const lockMock = mock.method(
+    accountingPeriodLockQueries,
+    'listOverlapping',
+    async () =>
+      [
+        {
+          id: '00000000-0000-4000-8000-000000000606',
+          periodStart: new Date('2026-05-01T00:00:00.000Z'),
+          periodEnd: new Date('2026-05-31T23:59:59.999Z'),
+          status: 'LOCKED',
+          reason: 'May close reviewed.',
+          lockedAt: new Date('2026-06-01T00:00:00.000Z'),
+          lockedBy: 'accounting-user',
+          correlationId: 'corr-lock',
+          createdAt: new Date('2026-06-01T00:00:00.000Z'),
+          version: 0,
+        },
+      ] as never,
+  );
+  const invoiceDocsMock = mock.method(
+    accountingClosePackageQueries,
+    'listInvoiceDocuments',
+    async () =>
+      [
+        {
+          id: '00000000-0000-4000-8000-000000000707',
+          invoiceSyncId: '00000000-0000-4000-8000-000000000607',
+          workOrderId,
+          customerId: null,
+          provider: 'QUICKBOOKS',
+          documentNumber: 'INV-1001',
+          externalReference: 'QB-INV-1001',
+          documentStatus: 'EXPORTED',
+          documentDate: new Date('2026-05-05T12:00:00.000Z'),
+          currencyCode: 'USD',
+          amountCents: null,
+          workOrderNumber: 'WO-1001',
+          customerName: null,
+          syncState: 'SYNCED',
+          attemptCount: 1,
+          errorCode: null,
+          errorMessage: null,
+          documentSummary: {},
+          documentPayload: {},
+          capturedAt: new Date('2026-05-05T12:00:00.000Z'),
+          correlationId: 'corr-inv',
+          createdAt: new Date('2026-05-05T12:00:00.000Z'),
+        },
+      ] as never,
+  );
+  const invoiceCountMock = mock.method(
+    accountingClosePackageQueries,
+    'countInvoiceDocuments',
+    async () => 1,
+  );
+  const paymentDocsMock = mock.method(
+    accountingClosePackageQueries,
+    'listPaymentDocuments',
+    async () =>
+      [
+        {
+          id: '00000000-0000-4000-8000-000000000708',
+          paymentSyncId: '00000000-0000-4000-8000-000000000608',
+          invoiceSyncId: '00000000-0000-4000-8000-000000000607',
+          workOrderId,
+          customerId,
+          provider: 'QUICKBOOKS',
+          documentNumber: 'QB-PAY-1001',
+          externalReference: 'QB-PAY-1001',
+          qbInvoiceId: 'QB-INV-1001',
+          documentStatus: 'RECONCILED',
+          documentDate: new Date('2026-05-06T00:00:00.000Z'),
+          currencyCode: 'USD',
+          amountCents: 50000,
+          paymentMethod: 'Card',
+          workOrderNumber: 'WO-1001',
+          customerName: 'Customer One',
+          syncState: 'RECONCILED',
+          attemptCount: 1,
+          errorMessage: null,
+          documentSummary: {},
+          documentPayload: {},
+          capturedAt: new Date('2026-05-06T12:00:00.000Z'),
+          correlationId: 'corr-pay',
+          createdAt: new Date('2026-05-06T12:00:00.000Z'),
+        },
+      ] as never,
+  );
+  const paymentCountMock = mock.method(
+    accountingClosePackageQueries,
+    'countPaymentDocuments',
+    async () => 1,
+  );
   const workOrderMock = mock.method(accountingSyncContextQueries, 'findWorkOrders', async () => [
     {
       id: workOrderId,
@@ -643,6 +784,7 @@ test('getAccountingClosePackageHandler assembles period evidence from live accou
     listPayablesMock.mock.restore();
     listPaymentsMock.mock.restore();
     listReconciliationMock.mock.restore();
+    listWarrantyClaimsMock.mock.restore();
     invoiceFailuresMock.mock.restore();
     customerFailuresMock.mock.restore();
     paymentFailuresMock.mock.restore();
@@ -721,73 +863,99 @@ test('postOperationalLedgerJournalsHandler posts eligible operational entries id
         ReturnType<typeof operationalLedgerQueries.listPayablePurchaseOrders>
       >,
   );
-  const listPaymentsMock = mock.method(operationalLedgerQueries, 'listPaymentSyncRecords', async () => []);
+  const listPaymentsMock = mock.method(
+    operationalLedgerQueries,
+    'listPaymentSyncRecords',
+    async () => [],
+  );
   const listReconciliationMock = mock.method(
     operationalLedgerQueries,
     'listReconciliationRecords',
     async () => [],
   );
-  const invoiceFailuresMock = mock.method(operationalLedgerQueries, 'countInvoiceFailures', async () => 0);
-  const customerFailuresMock = mock.method(operationalLedgerQueries, 'countCustomerFailures', async () => 0);
-  const paymentFailuresMock = mock.method(operationalLedgerQueries, 'countPaymentFailures', async () => 0);
+  const listWarrantyClaimsMock = mock.method(
+    operationalLedgerQueries,
+    'listWarrantyClaims',
+    async () => [],
+  );
+  const invoiceFailuresMock = mock.method(
+    operationalLedgerQueries,
+    'countInvoiceFailures',
+    async () => 0,
+  );
+  const customerFailuresMock = mock.method(
+    operationalLedgerQueries,
+    'countCustomerFailures',
+    async () => 0,
+  );
+  const paymentFailuresMock = mock.method(
+    operationalLedgerQueries,
+    'countPaymentFailures',
+    async () => 0,
+  );
   const mismatchMock = mock.method(
     operationalLedgerQueries,
     'countReconciliationMismatches',
     async () => 0,
   );
   const findMock = mock.method(accountingJournalQueries, 'findBySource', async () => null);
-  const periodLocksMock = mock.method(accountingPeriodLockQueries, 'listOverlapping', async () => []);
+  const periodLocksMock = mock.method(
+    accountingPeriodLockQueries,
+    'listOverlapping',
+    async () => [],
+  );
   const createMock = mock.method(
     accountingJournalQueries,
     'createFromOperationalEntry',
-    async (entry: Parameters<typeof accountingJournalQueries.createFromOperationalEntry>[0]) => ({
-    id: '00000000-0000-4000-8000-000000000201',
-    journalNumber: 'GJ-AP-20260504-PO1',
-    sourceType: entry.sourceType,
-    sourceId: entry.sourceId,
-    sourceLedgerEntryId: entry.id,
-    sourceDocumentNumber: entry.documentNumber,
-    counterparty: entry.counterparty,
-    ledgerDate: new Date(entry.ledgerDate),
-    currencyCode: 'USD',
-    status: 'POSTED',
-    totalDebitCents: entry.debitCents,
-    totalCreditCents: entry.creditCents,
-    memo: entry.memo,
-    postedAt: new Date('2026-05-04T12:00:00.000Z'),
-    postedBy: 'system',
-    correlationId: 'corr-post',
-    createdAt: new Date('2026-05-04T12:00:00.000Z'),
-    version: 0,
-    lines: [
-      {
-        id: '00000000-0000-4000-8000-000000000202',
-        journalEntryId: '00000000-0000-4000-8000-000000000201',
-        lineNumber: 1,
-        accountName: entry.accountDebit,
-        accountCode: 'INVENTORY_RECEIVED_NOT_BILLED',
-        debitCents: entry.debitCents,
-        creditCents: 0,
+    async (entry: Parameters<typeof accountingJournalQueries.createFromOperationalEntry>[0]) =>
+      ({
+        id: '00000000-0000-4000-8000-000000000201',
+        journalNumber: 'GJ-AP-20260504-PO1',
+        sourceType: entry.sourceType,
+        sourceId: entry.sourceId,
+        sourceLedgerEntryId: entry.id,
+        sourceDocumentNumber: entry.documentNumber,
+        counterparty: entry.counterparty,
+        ledgerDate: new Date(entry.ledgerDate),
+        currencyCode: 'USD',
+        status: 'POSTED',
+        totalDebitCents: entry.debitCents,
+        totalCreditCents: entry.creditCents,
         memo: entry.memo,
-        dimensionType: entry.relatedRecordType,
-        dimensionId: entry.relatedRecordId,
+        postedAt: new Date('2026-05-04T12:00:00.000Z'),
+        postedBy: 'system',
+        correlationId: 'corr-post',
         createdAt: new Date('2026-05-04T12:00:00.000Z'),
-      },
-      {
-        id: '00000000-0000-4000-8000-000000000203',
-        journalEntryId: '00000000-0000-4000-8000-000000000201',
-        lineNumber: 2,
-        accountName: entry.accountCredit,
-        accountCode: 'ACCOUNTS_PAYABLE_UNBILLED',
-        debitCents: 0,
-        creditCents: entry.creditCents,
-        memo: entry.memo,
-        dimensionType: entry.relatedRecordType,
-        dimensionId: entry.relatedRecordId,
-        createdAt: new Date('2026-05-04T12:00:00.000Z'),
-      },
-    ],
-    }) as never,
+        version: 0,
+        lines: [
+          {
+            id: '00000000-0000-4000-8000-000000000202',
+            journalEntryId: '00000000-0000-4000-8000-000000000201',
+            lineNumber: 1,
+            accountName: entry.accountDebit,
+            accountCode: 'INVENTORY_RECEIVED_NOT_BILLED',
+            debitCents: entry.debitCents,
+            creditCents: 0,
+            memo: entry.memo,
+            dimensionType: entry.relatedRecordType,
+            dimensionId: entry.relatedRecordId,
+            createdAt: new Date('2026-05-04T12:00:00.000Z'),
+          },
+          {
+            id: '00000000-0000-4000-8000-000000000203',
+            journalEntryId: '00000000-0000-4000-8000-000000000201',
+            lineNumber: 2,
+            accountName: entry.accountCredit,
+            accountCode: 'ACCOUNTS_PAYABLE_UNBILLED',
+            debitCents: 0,
+            creditCents: entry.creditCents,
+            memo: entry.memo,
+            dimensionType: entry.relatedRecordType,
+            dimensionId: entry.relatedRecordId,
+            createdAt: new Date('2026-05-04T12:00:00.000Z'),
+          },
+        ],
+      }) as never,
   );
 
   try {
@@ -800,13 +968,211 @@ test('postOperationalLedgerJournalsHandler posts eligible operational entries id
     assert.equal(response.statusCode, 201);
     const body = parseBody(response);
     assert.equal(body.postedCount, 1);
-    assert.equal((body.posted as Array<Record<string, unknown>>)[0]?.sourceLedgerEntryId, 'payable-po-1');
+    assert.equal(
+      (body.posted as Array<Record<string, unknown>>)[0]?.sourceLedgerEntryId,
+      'payable-po-1',
+    );
     assert.equal((body.skipped as Record<string, unknown>).existing, 0);
     assert.equal((body.skipped as Record<string, unknown>).lockedPeriod, 0);
   } finally {
     listPayablesMock.mock.restore();
     listPaymentsMock.mock.restore();
     listReconciliationMock.mock.restore();
+    listWarrantyClaimsMock.mock.restore();
+    invoiceFailuresMock.mock.restore();
+    customerFailuresMock.mock.restore();
+    paymentFailuresMock.mock.restore();
+    mismatchMock.mock.restore();
+    findMock.mock.restore();
+    periodLocksMock.mock.restore();
+    createMock.mock.restore();
+  }
+});
+
+test('postOperationalLedgerJournalsHandler posts warranty reimbursement entries', async () => {
+  const {
+    postOperationalLedgerJournalsHandler,
+    operationalLedgerQueries,
+    accountingJournalQueries,
+    accountingPeriodLockQueries,
+  } = await import('../lambda/accounting/handlers.js');
+
+  const listPayablesMock = mock.method(
+    operationalLedgerQueries,
+    'listPayablePurchaseOrders',
+    async () => [],
+  );
+  const listPaymentsMock = mock.method(
+    operationalLedgerQueries,
+    'listPaymentSyncRecords',
+    async () => [],
+  );
+  const listReconciliationMock = mock.method(
+    operationalLedgerQueries,
+    'listReconciliationRecords',
+    async () => [],
+  );
+  const listWarrantyClaimsMock = mock.method(
+    operationalLedgerQueries,
+    'listWarrantyClaims',
+    async () =>
+      [
+        {
+          id: 'claim-post-1',
+          claimNumber: 'WCLM-20260602-POST',
+          customerId: 'cust-1',
+          dealerAccountId: 'dealer-1',
+          dealerRelationshipId: null,
+          cartVehicleId: null,
+          workOrderId: 'wo-1',
+          claimStatus: 'REIMBURSEMENT_PENDING',
+          requestedAmountCents: 27500,
+          approvedAmountCents: 25000,
+          reimbursedAmountCents: null,
+          externalReference: null,
+          claimReason: 'Warranty service',
+          ownerUserId: null,
+          notes: null,
+          submittedAt: new Date('2026-06-01T12:00:00.000Z'),
+          approvedAt: new Date('2026-06-02T12:00:00.000Z'),
+          reimbursedAt: null,
+          closedAt: null,
+          correlationId: 'corr-warranty-post',
+          createdAt: new Date('2026-06-01T12:00:00.000Z'),
+          updatedAt: new Date('2026-06-02T12:00:00.000Z'),
+          version: 0,
+          customer: {
+            fullName: 'Customer One',
+            companyName: null,
+            email: 'customer@example.com',
+          },
+          dealerAccount: {
+            id: 'dealer-1',
+            customerId: 'dealer-customer-1',
+            dealerCode: 'DLR',
+            territory: 'Southeast',
+            serviceRelationship: 'ACTIVE',
+            accountOwner: null,
+            notes: null,
+            createdAt: new Date('2026-05-01T12:00:00.000Z'),
+            updatedAt: new Date('2026-05-01T12:00:00.000Z'),
+            archivedAt: null,
+            version: 0,
+            customer: {
+              fullName: 'Dealer One',
+              companyName: 'Dealer One LLC',
+              email: 'dealer@example.com',
+            },
+          },
+          dealerRelationship: null,
+          cartVehicle: null,
+          workOrder: {
+            workOrderNumber: 'WO-1001',
+            status: 'IN_PROGRESS',
+            dueAt: null,
+          },
+        },
+      ] as unknown as Awaited<ReturnType<typeof operationalLedgerQueries.listWarrantyClaims>>,
+  );
+  const invoiceFailuresMock = mock.method(
+    operationalLedgerQueries,
+    'countInvoiceFailures',
+    async () => 0,
+  );
+  const customerFailuresMock = mock.method(
+    operationalLedgerQueries,
+    'countCustomerFailures',
+    async () => 0,
+  );
+  const paymentFailuresMock = mock.method(
+    operationalLedgerQueries,
+    'countPaymentFailures',
+    async () => 0,
+  );
+  const mismatchMock = mock.method(
+    operationalLedgerQueries,
+    'countReconciliationMismatches',
+    async () => 0,
+  );
+  const findMock = mock.method(accountingJournalQueries, 'findBySource', async () => null);
+  const periodLocksMock = mock.method(
+    accountingPeriodLockQueries,
+    'listOverlapping',
+    async () => [],
+  );
+  const createMock = mock.method(
+    accountingJournalQueries,
+    'createFromOperationalEntry',
+    async (entry: Parameters<typeof accountingJournalQueries.createFromOperationalEntry>[0]) =>
+      ({
+        id: '00000000-0000-4000-8000-000000000901',
+        journalNumber: 'GJ-WR-20260602-CLAIMPOST1',
+        sourceType: entry.sourceType,
+        sourceId: entry.sourceId,
+        sourceLedgerEntryId: entry.id,
+        sourceDocumentNumber: entry.documentNumber,
+        counterparty: entry.counterparty,
+        ledgerDate: new Date(entry.ledgerDate),
+        currencyCode: 'USD',
+        status: 'POSTED',
+        totalDebitCents: entry.debitCents,
+        totalCreditCents: entry.creditCents,
+        memo: entry.memo,
+        postedAt: new Date('2026-06-02T12:00:00.000Z'),
+        postedBy: 'system',
+        correlationId: 'corr-post',
+        createdAt: new Date('2026-06-02T12:00:00.000Z'),
+        version: 0,
+        lines: [
+          {
+            id: '00000000-0000-4000-8000-000000000902',
+            journalEntryId: '00000000-0000-4000-8000-000000000901',
+            lineNumber: 1,
+            accountName: entry.accountDebit,
+            accountCode: 'WARRANTY_REIMBURSEMENT_RECEIVABLE',
+            debitCents: entry.debitCents,
+            creditCents: 0,
+            memo: entry.memo,
+            dimensionType: entry.relatedRecordType,
+            dimensionId: entry.relatedRecordId,
+            createdAt: new Date('2026-06-02T12:00:00.000Z'),
+          },
+          {
+            id: '00000000-0000-4000-8000-000000000903',
+            journalEntryId: '00000000-0000-4000-8000-000000000901',
+            lineNumber: 2,
+            accountName: entry.accountCredit,
+            accountCode: 'WARRANTY_REIMBURSEMENT_INCOME',
+            debitCents: 0,
+            creditCents: entry.creditCents,
+            memo: entry.memo,
+            dimensionType: entry.relatedRecordType,
+            dimensionId: entry.relatedRecordId,
+            createdAt: new Date('2026-06-02T12:00:00.000Z'),
+          },
+        ],
+      }) as never,
+  );
+
+  try {
+    const response = await postOperationalLedgerJournalsHandler(
+      makeEvent({
+        httpMethod: 'POST',
+        body: JSON.stringify({ confirm: true, sourceType: 'WARRANTY_REIMBURSEMENT' }),
+      }),
+    );
+    assert.equal(response.statusCode, 201);
+    const body = parseBody(response);
+    assert.equal(body.postedCount, 1);
+    const posted = (body.posted as Array<Record<string, unknown>>)[0];
+    assert.equal(posted?.sourceType, 'WARRANTY_REIMBURSEMENT');
+    assert.equal(posted?.sourceLedgerEntryId, 'warranty-claim-post-1');
+    assert.equal(posted?.totalDebitCents, 25000);
+  } finally {
+    listPayablesMock.mock.restore();
+    listPaymentsMock.mock.restore();
+    listReconciliationMock.mock.restore();
+    listWarrantyClaimsMock.mock.restore();
     invoiceFailuresMock.mock.restore();
     customerFailuresMock.mock.restore();
     paymentFailuresMock.mock.restore();
@@ -826,18 +1192,51 @@ test('lockAccountingPeriodHandler creates a lock when close readiness is clear',
   } = await import('../lambda/accounting/handlers.js');
 
   const overlapMock = mock.method(accountingPeriodLockQueries, 'listOverlapping', async () => []);
-  const reportJournalsMock = mock.method(accountingReportQueries, 'listPostedJournals', async () => []);
-  const reportCountMock = mock.method(accountingReportQueries, 'countPostedJournals', async () => 0);
-  const listPayablesMock = mock.method(operationalLedgerQueries, 'listPayablePurchaseOrders', async () => []);
-  const listPaymentsMock = mock.method(operationalLedgerQueries, 'listPaymentSyncRecords', async () => []);
+  const reportJournalsMock = mock.method(
+    accountingReportQueries,
+    'listPostedJournals',
+    async () => [],
+  );
+  const reportCountMock = mock.method(
+    accountingReportQueries,
+    'countPostedJournals',
+    async () => 0,
+  );
+  const listPayablesMock = mock.method(
+    operationalLedgerQueries,
+    'listPayablePurchaseOrders',
+    async () => [],
+  );
+  const listPaymentsMock = mock.method(
+    operationalLedgerQueries,
+    'listPaymentSyncRecords',
+    async () => [],
+  );
   const listReconciliationMock = mock.method(
     operationalLedgerQueries,
     'listReconciliationRecords',
     async () => [],
   );
-  const invoiceFailuresMock = mock.method(operationalLedgerQueries, 'countInvoiceFailures', async () => 0);
-  const customerFailuresMock = mock.method(operationalLedgerQueries, 'countCustomerFailures', async () => 0);
-  const paymentFailuresMock = mock.method(operationalLedgerQueries, 'countPaymentFailures', async () => 0);
+  const listWarrantyClaimsMock = mock.method(
+    operationalLedgerQueries,
+    'listWarrantyClaims',
+    async () => [],
+  );
+  const invoiceFailuresMock = mock.method(
+    operationalLedgerQueries,
+    'countInvoiceFailures',
+    async () => 0,
+  );
+  const customerFailuresMock = mock.method(
+    operationalLedgerQueries,
+    'countCustomerFailures',
+    async () => 0,
+  );
+  const paymentFailuresMock = mock.method(
+    operationalLedgerQueries,
+    'countPaymentFailures',
+    async () => 0,
+  );
   const mismatchMock = mock.method(
     operationalLedgerQueries,
     'countReconciliationMismatches',
@@ -846,18 +1245,19 @@ test('lockAccountingPeriodHandler creates a lock when close readiness is clear',
   const createMock = mock.method(
     accountingPeriodLockQueries,
     'create',
-    async (params: Parameters<typeof accountingPeriodLockQueries.create>[0]) => ({
-    id: '00000000-0000-4000-8000-000000000401',
-    periodStart: params.from,
-    periodEnd: params.to,
-    status: 'LOCKED',
-    reason: params.reason,
-    lockedAt: new Date('2026-05-31T23:59:59.000Z'),
-    lockedBy: params.actorId,
-    correlationId: params.correlationId,
-    createdAt: new Date('2026-05-31T23:59:59.000Z'),
-    version: 0,
-  }) as never,
+    async (params: Parameters<typeof accountingPeriodLockQueries.create>[0]) =>
+      ({
+        id: '00000000-0000-4000-8000-000000000401',
+        periodStart: params.from,
+        periodEnd: params.to,
+        status: 'LOCKED',
+        reason: params.reason,
+        lockedAt: new Date('2026-05-31T23:59:59.000Z'),
+        lockedBy: params.actorId,
+        correlationId: params.correlationId,
+        createdAt: new Date('2026-05-31T23:59:59.000Z'),
+        version: 0,
+      }) as never,
   );
 
   try {
@@ -884,6 +1284,7 @@ test('lockAccountingPeriodHandler creates a lock when close readiness is clear',
     listPayablesMock.mock.restore();
     listPaymentsMock.mock.restore();
     listReconciliationMock.mock.restore();
+    listWarrantyClaimsMock.mock.restore();
     invoiceFailuresMock.mock.restore();
     customerFailuresMock.mock.restore();
     paymentFailuresMock.mock.restore();
@@ -893,11 +1294,8 @@ test('lockAccountingPeriodHandler creates a lock when close readiness is clear',
 });
 
 test('reverseAccountingJournalHandler creates a reversing journal when period is open', async () => {
-  const {
-    reverseAccountingJournalHandler,
-    accountingJournalQueries,
-    accountingPeriodLockQueries,
-  } = await import('../lambda/accounting/handlers.js');
+  const { reverseAccountingJournalHandler, accountingJournalQueries, accountingPeriodLockQueries } =
+    await import('../lambda/accounting/handlers.js');
 
   const original = {
     id: '00000000-0000-4000-8000-000000000501',
@@ -976,11 +1374,20 @@ test('reverseAccountingJournalHandler creates a reversing journal when period is
   };
 
   const findMock = mock.method(accountingJournalQueries, 'findById', async () => original as never);
-  const periodLocksMock = mock.method(accountingPeriodLockQueries, 'listOverlapping', async () => []);
-  const reverseMock = mock.method(accountingJournalQueries, 'reverseJournal', async () => ({
-    original: reversedOriginal,
-    reversal,
-  }) as never);
+  const periodLocksMock = mock.method(
+    accountingPeriodLockQueries,
+    'listOverlapping',
+    async () => [],
+  );
+  const reverseMock = mock.method(
+    accountingJournalQueries,
+    'reverseJournal',
+    async () =>
+      ({
+        original: reversedOriginal,
+        reversal,
+      }) as never,
+  );
 
   try {
     const response = await reverseAccountingJournalHandler(
@@ -1003,11 +1410,8 @@ test('reverseAccountingJournalHandler creates a reversing journal when period is
 });
 
 test('reverseAccountingJournalHandler rejects journals in locked periods', async () => {
-  const {
-    reverseAccountingJournalHandler,
-    accountingJournalQueries,
-    accountingPeriodLockQueries,
-  } = await import('../lambda/accounting/handlers.js');
+  const { reverseAccountingJournalHandler, accountingJournalQueries, accountingPeriodLockQueries } =
+    await import('../lambda/accounting/handlers.js');
 
   const original = {
     id: '00000000-0000-4000-8000-000000000601',
@@ -1035,20 +1439,25 @@ test('reverseAccountingJournalHandler rejects journals in locked periods', async
     lines: [],
   };
   const findMock = mock.method(accountingJournalQueries, 'findById', async () => original as never);
-  const periodLocksMock = mock.method(accountingPeriodLockQueries, 'listOverlapping', async () => [
-    {
-      id: '00000000-0000-4000-8000-000000000602',
-      periodStart: new Date('2026-05-01T00:00:00.000Z'),
-      periodEnd: new Date('2026-05-31T23:59:59.999Z'),
-      status: 'LOCKED',
-      reason: 'May close.',
-      lockedAt: new Date('2026-06-01T00:00:00.000Z'),
-      lockedBy: 'system',
-      correlationId: 'corr-lock',
-      createdAt: new Date('2026-06-01T00:00:00.000Z'),
-      version: 0,
-    },
-  ] as never);
+  const periodLocksMock = mock.method(
+    accountingPeriodLockQueries,
+    'listOverlapping',
+    async () =>
+      [
+        {
+          id: '00000000-0000-4000-8000-000000000602',
+          periodStart: new Date('2026-05-01T00:00:00.000Z'),
+          periodEnd: new Date('2026-05-31T23:59:59.999Z'),
+          status: 'LOCKED',
+          reason: 'May close.',
+          lockedAt: new Date('2026-06-01T00:00:00.000Z'),
+          lockedBy: 'system',
+          correlationId: 'corr-lock',
+          createdAt: new Date('2026-06-01T00:00:00.000Z'),
+          version: 0,
+        },
+      ] as never,
+  );
 
   try {
     const response = await reverseAccountingJournalHandler(

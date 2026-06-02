@@ -2194,6 +2194,7 @@ enum AccountingJournalSourceType {
   PAYABLE_RECEIPT
   CUSTOMER_PAYMENT
   RECONCILIATION_VARIANCE
+  WARRANTY_REIMBURSEMENT
 
   @@schema("accounting")
 }

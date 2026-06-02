@@ -14,67 +14,84 @@ const migrationArtifactsPromise = (async () => {
     prismaStockBinSeed,
     prismaDealerRelationshipSchema,
     prismaDealerRelationshipSeed,
-    prismaWarrantyClaimSchema
+    prismaWarrantyClaimSchema,
+    prismaWarrantyReimbursementJournalSource,
   ] = await Promise.all([
-    readFile(new URL('../../../apps/api/src/migrations/0002_canonical_erp_domain.sql', import.meta.url), 'utf8'),
-    readFile(new URL('../../../packages/db/prisma/migrations/0001_init/migration.sql', import.meta.url), 'utf8'),
     readFile(
-      new URL('../../../apps/api/src/migrations/0003_identity_authn_authz_rbac.sql', import.meta.url),
-      'utf8'
+      new URL('../../../apps/api/src/migrations/0002_canonical_erp_domain.sql', import.meta.url),
+      'utf8',
+    ),
+    readFile(
+      new URL('../../../packages/db/prisma/migrations/0001_init/migration.sql', import.meta.url),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        '../../../apps/api/src/migrations/0003_identity_authn_authz_rbac.sql',
+        import.meta.url,
+      ),
+      'utf8',
     ),
     readFile(
       new URL(
         '../../../packages/db/prisma/migrations/20260504020000_add_inventory_reservation_storage/migration.sql',
-        import.meta.url
+        import.meta.url,
       ),
-      'utf8'
+      'utf8',
     ),
     readFile(
       new URL('../../../apps/api/src/migrations/0005_seed_reference_data.sql', import.meta.url),
-      'utf8'
+      'utf8',
     ),
     readFile(
       new URL(
         '../../../packages/db/prisma/migrations/20260601030000_seed_reference_data/migration.sql',
-        import.meta.url
+        import.meta.url,
       ),
-      'utf8'
+      'utf8',
     ),
     readFile(
       new URL(
         '../../../packages/db/prisma/migrations/20260601031000_add_inventory_stock_bins/migration.sql',
-        import.meta.url
+        import.meta.url,
       ),
-      'utf8'
+      'utf8',
     ),
     readFile(
       new URL(
         '../../../packages/db/prisma/migrations/20260601032000_seed_stock_bins/migration.sql',
-        import.meta.url
+        import.meta.url,
       ),
-      'utf8'
+      'utf8',
     ),
     readFile(
       new URL(
         '../../../packages/db/prisma/migrations/20260601033000_add_customer_dealer_relationships/migration.sql',
-        import.meta.url
+        import.meta.url,
       ),
-      'utf8'
+      'utf8',
     ),
     readFile(
       new URL(
         '../../../packages/db/prisma/migrations/20260601034000_seed_customer_dealer_relationships/migration.sql',
-        import.meta.url
+        import.meta.url,
       ),
-      'utf8'
+      'utf8',
     ),
     readFile(
       new URL(
         '../../../packages/db/prisma/migrations/20260602061000_add_warranty_claims/migration.sql',
-        import.meta.url
+        import.meta.url,
       ),
-      'utf8'
-    )
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        '../../../packages/db/prisma/migrations/20260602073500_add_warranty_reimbursement_journal_source/migration.sql',
+        import.meta.url,
+      ),
+      'utf8',
+    ),
   ]);
 
   return {
@@ -88,7 +105,8 @@ const migrationArtifactsPromise = (async () => {
     prismaStockBinSeed,
     prismaDealerRelationshipSchema,
     prismaDealerRelationshipSeed,
-    prismaWarrantyClaimSchema
+    prismaWarrantyClaimSchema,
+    prismaWarrantyReimbursementJournalSource,
   };
 })();
 
@@ -99,7 +117,7 @@ function escapeRegex(value) {
 function findTableDefinition(sql, tableName) {
   const pattern = new RegExp(
     `create table if not exists\\s+${escapeRegex(tableName)}\\s*\\((?<columns>[\\s\\S]*?)\\n\\);`,
-    'i'
+    'i',
   );
   const match = sql.match(pattern);
   assert.ok(match?.groups?.columns, `Expected table ${tableName} to be defined in migration SQL`);
@@ -112,8 +130,12 @@ test('uuid primary keys keep gen_random_uuid defaults', async () => {
   assert.match(canonical, /id\s+uuid\s+primary\s+key\s+default\s+gen_random_uuid\(\)/i);
   assert.match(prismaInit, /id\s+uuid\s+primary\s+key\s+default\s+gen_random_uuid\(\)/i);
 
-  const canonicalMatches = canonical.match(/id\s+uuid\s+primary\s+key\s+default\s+gen_random_uuid\(\)/gi) ?? [];
-  assert.ok(canonicalMatches.length >= 30, 'Expected canonical migration to define many UUID PK defaults');
+  const canonicalMatches =
+    canonical.match(/id\s+uuid\s+primary\s+key\s+default\s+gen_random_uuid\(\)/gi) ?? [];
+  assert.ok(
+    canonicalMatches.length >= 30,
+    'Expected canonical migration to define many UUID PK defaults',
+  );
 });
 
 test('mutable core tables include created_at and updated_at timestamps', async () => {
@@ -124,7 +146,7 @@ test('mutable core tables include created_at and updated_at timestamps', async (
     'inventory.inventory_reservations',
     'work_orders.work_orders',
     'planning.planning_scenarios',
-    'events.outbox_events'
+    'events.outbox_events',
   ];
 
   for (const tableName of mutableTables) {
@@ -132,12 +154,12 @@ test('mutable core tables include created_at and updated_at timestamps', async (
     assert.match(
       definition,
       /created_at\s+timestamptz\s+not null\s+default\s+now\(\)/i,
-      `Expected ${tableName} to include created_at timestamp`
+      `Expected ${tableName} to include created_at timestamp`,
     );
     assert.match(
       definition,
       /updated_at\s+timestamptz\s+not null\s+default\s+now\(\)/i,
-      `Expected ${tableName} to include updated_at timestamp`
+      `Expected ${tableName} to include updated_at timestamp`,
     );
   }
 });
@@ -150,13 +172,21 @@ test('soft-delete tables preserve deleted_at metadata', async () => {
     'inventory.parts',
     'planning.planning_scenarios',
     'sop_ojt.sop_documents',
-    'integrations.integration_accounts'
+    'integrations.integration_accounts',
   ];
 
   for (const tableName of softDeleteTables) {
     const definition = findTableDefinition(canonical, tableName);
-    assert.match(definition, /deleted_at\s+timestamptz/i, `Expected ${tableName} to include deleted_at`);
-    assert.match(definition, /delete_reason\s+text/i, `Expected ${tableName} to include delete_reason`);
+    assert.match(
+      definition,
+      /deleted_at\s+timestamptz/i,
+      `Expected ${tableName} to include deleted_at`,
+    );
+    assert.match(
+      definition,
+      /delete_reason\s+text/i,
+      `Expected ${tableName} to include delete_reason`,
+    );
   }
 });
 
@@ -169,7 +199,7 @@ test('optimistic locking version columns remain on mutable aggregates', async ()
     'inventory.inventory_balances',
     'work_orders.work_orders',
     'planning.planning_scenarios',
-    'events.outbox_events'
+    'events.outbox_events',
   ];
 
   for (const tableName of versionedTables) {
@@ -177,7 +207,7 @@ test('optimistic locking version columns remain on mutable aggregates', async ()
     assert.match(
       definition,
       /version\s+integer\s+not null\s+default\s+0\s+check\s+\(version\s+>=\s+0\)/i,
-      `Expected ${tableName} to include optimistic locking version column`
+      `Expected ${tableName} to include optimistic locking version column`,
     );
   }
 });
@@ -192,11 +222,11 @@ test('inventory ledger remains immutable append-only', async () => {
 
   assert.match(
     canonical,
-    /create or replace function\s+ops\.prevent_append_only_mutation\(\)[\s\S]*?raise exception 'Table %\.% is append-only; write a compensating record instead'/i
+    /create or replace function\s+ops\.prevent_append_only_mutation\(\)[\s\S]*?raise exception 'Table %\.% is append-only; write a compensating record instead'/i,
   );
   assert.match(
     canonical,
-    /create trigger\s+trg_inventory_ledger_entries_immutable\s+before update or delete on inventory\.inventory_ledger_entries\s+for each row execute function ops\.prevent_append_only_mutation\(\);/i
+    /create trigger\s+trg_inventory_ledger_entries_immutable\s+before update or delete on inventory\.inventory_ledger_entries\s+for each row execute function ops\.prevent_append_only_mutation\(\);/i,
   );
 });
 
@@ -206,7 +236,7 @@ test('deploy migrations include inventory reservation storage used by runtime ha
   for (const tableName of [
     'inventory.inventory_reservations',
     'inventory.inventory_ledger_entries',
-    'inventory.inventory_balances'
+    'inventory.inventory_balances',
   ]) {
     findTableDefinition(reservationStorage, tableName);
   }
@@ -220,7 +250,10 @@ test('deploy migrations include inventory reservation storage used by runtime ha
   assert.match(balances, /quantity_consumed\s+numeric\(14,3\)\s+not null\s+default\s+0/i);
 
   const stockBins = findTableDefinition(prismaStockBinSchema, 'inventory.stock_bins');
-  assert.match(stockBins, /stock_location_id\s+uuid\s+not null\s+references inventory\.stock_locations\(id\)/i);
+  assert.match(
+    stockBins,
+    /stock_location_id\s+uuid\s+not null\s+references inventory\.stock_locations\(id\)/i,
+  );
   assert.match(stockBins, /bin_code\s+text\s+not null/i);
   assert.match(stockBins, /bin_type\s+text\s+not null\s+default 'STORAGE'/i);
   assert.match(prismaStockBinSchema, /stock_bins_location_code_active_uk/i);
@@ -229,27 +262,39 @@ test('deploy migrations include inventory reservation storage used by runtime ha
 test('deploy migrations include dedicated customer dealer relationship storage', async () => {
   const { prismaDealerRelationshipSchema } = await migrationArtifactsPromise;
 
-  const dealerAccounts = findTableDefinition(prismaDealerRelationshipSchema, 'customers.dealer_accounts');
-  assert.match(dealerAccounts, /customer_id\s+uuid\s+not null\s+references customers\.customers\(id\)/i);
+  const dealerAccounts = findTableDefinition(
+    prismaDealerRelationshipSchema,
+    'customers.dealer_accounts',
+  );
   assert.match(
     dealerAccounts,
-    /service_relationship\s+customers\."DealerAccountState"\s+not null\s+default 'ACTIVE'/i
+    /customer_id\s+uuid\s+not null\s+references customers\.customers\(id\)/i,
   );
-  assert.match(dealerAccounts, /version\s+integer\s+not null\s+default\s+0\s+check\s+\(version\s+>=\s+0\)/i);
+  assert.match(
+    dealerAccounts,
+    /service_relationship\s+customers\."DealerAccountState"\s+not null\s+default 'ACTIVE'/i,
+  );
+  assert.match(
+    dealerAccounts,
+    /version\s+integer\s+not null\s+default\s+0\s+check\s+\(version\s+>=\s+0\)/i,
+  );
 
   const relationships = findTableDefinition(
     prismaDealerRelationshipSchema,
-    'customers.customer_dealer_relationships'
+    'customers.customer_dealer_relationships',
   );
   assert.match(
     relationships,
-    /dealer_account_id\s+uuid\s+not null\s+references customers\.dealer_accounts\(id\)/i
+    /dealer_account_id\s+uuid\s+not null\s+references customers\.dealer_accounts\(id\)/i,
   );
-  assert.match(relationships, /customer_id\s+uuid\s+not null\s+references customers\.customers\(id\)/i);
+  assert.match(
+    relationships,
+    /customer_id\s+uuid\s+not null\s+references customers\.customers\(id\)/i,
+  );
   assert.match(relationships, /cart_vehicle_id\s+uuid\s+references planning\.cart_vehicles\(id\)/i);
   assert.match(
     relationships,
-    /relationship_type\s+customers\."DealerRelationshipType"\s+not null\s+default 'SERVICING_DEALER'/i
+    /relationship_type\s+customers\."DealerRelationshipType"\s+not null\s+default 'SERVICING_DEALER'/i,
   );
   assert.match(prismaDealerRelationshipSchema, /dealer_accounts_customer_active_uk/i);
   assert.match(prismaDealerRelationshipSchema, /customer_dealer_relationships_active_vehicle_uk/i);
@@ -258,20 +303,23 @@ test('deploy migrations include dedicated customer dealer relationship storage',
 test('deploy migrations include warranty claim reimbursement storage', async () => {
   const { prismaWarrantyClaimSchema } = await migrationArtifactsPromise;
 
-  assert.match(prismaWarrantyClaimSchema, /CREATE TYPE "customers"\."WarrantyClaimStatus" AS ENUM/i);
+  assert.match(
+    prismaWarrantyClaimSchema,
+    /CREATE TYPE "customers"\."WarrantyClaimStatus" AS ENUM/i,
+  );
   const claims = findTableDefinition(prismaWarrantyClaimSchema, 'customers.warranty_claims');
   assert.match(claims, /claim_number\s+text\s+not null/i);
   assert.match(claims, /customer_id\s+uuid\s+not null\s+references customers\.customers\(id\)/i);
   assert.match(claims, /dealer_account_id\s+uuid\s+references customers\.dealer_accounts\(id\)/i);
   assert.match(
     claims,
-    /dealer_relationship_id\s+uuid\s+references customers\.customer_dealer_relationships\(id\)/i
+    /dealer_relationship_id\s+uuid\s+references customers\.customer_dealer_relationships\(id\)/i,
   );
   assert.match(claims, /cart_vehicle_id\s+uuid\s+references planning\.cart_vehicles\(id\)/i);
   assert.match(claims, /work_order_id\s+uuid\s+references work_orders\.work_orders\(id\)/i);
   assert.match(
     claims,
-    /claim_status\s+customers\."WarrantyClaimStatus"\s+not null\s+default 'DRAFT'/i
+    /claim_status\s+customers\."WarrantyClaimStatus"\s+not null\s+default 'DRAFT'/i,
   );
   assert.match(claims, /requested_amount_cents\s+integer\s+not null\s+default\s+0/i);
   assert.match(prismaWarrantyClaimSchema, /warranty_claims_claim_number_uk/i);
@@ -279,9 +327,22 @@ test('deploy migrations include warranty claim reimbursement storage', async () 
   assert.match(prismaWarrantyClaimSchema, /warranty_claims_status_updated_idx/i);
 });
 
+test('deploy migrations register warranty reimbursements as journal sources', async () => {
+  const { prismaWarrantyReimbursementJournalSource } = await migrationArtifactsPromise;
+
+  assert.match(
+    prismaWarrantyReimbursementJournalSource,
+    /ALTER TYPE accounting\."AccountingJournalSourceType"\s+ADD VALUE IF NOT EXISTS 'WARRANTY_REIMBURSEMENT'/i,
+  );
+});
+
 test('audit tables are present for traceability', async () => {
   const { canonical } = await migrationArtifactsPromise;
-  const auditTables = ['audit.audit_events', 'audit.entity_change_sets', 'audit.access_audit_events'];
+  const auditTables = [
+    'audit.audit_events',
+    'audit.entity_change_sets',
+    'audit.access_audit_events',
+  ];
 
   for (const tableName of auditTables) {
     findTableDefinition(canonical, tableName);
@@ -306,7 +367,7 @@ test('identity authz migration defines org/shop/team scope hierarchy tables', as
     'identity.shops',
     'identity.teams',
     'identity.role_scope_grants',
-    'identity.user_scope_assignments'
+    'identity.user_scope_assignments',
   ];
 
   for (const tableName of requiredTables) {
@@ -316,35 +377,47 @@ test('identity authz migration defines org/shop/team scope hierarchy tables', as
 
 test('identity authz migration enforces grant and assignment invariants', async () => {
   const { identityAuthz } = await migrationArtifactsPromise;
-  const roleScopeGrantsDefinition = findTableDefinition(identityAuthz, 'identity.role_scope_grants');
-  const userScopeAssignmentsDefinition = findTableDefinition(identityAuthz, 'identity.user_scope_assignments');
+  const roleScopeGrantsDefinition = findTableDefinition(
+    identityAuthz,
+    'identity.role_scope_grants',
+  );
+  const userScopeAssignmentsDefinition = findTableDefinition(
+    identityAuthz,
+    'identity.user_scope_assignments',
+  );
 
   assert.match(
     roleScopeGrantsDefinition,
-    /scope_level\s+text\s+not null\s+check\s+\(scope_level in \('ORG', 'SHOP', 'TEAM'\)\)/i
+    /scope_level\s+text\s+not null\s+check\s+\(scope_level in \('ORG', 'SHOP', 'TEAM'\)\)/i,
   );
   assert.match(roleScopeGrantsDefinition, /constraint role_scope_grants_dimension_ck/i);
   assert.match(
     roleScopeGrantsDefinition,
-    /foreign key \(shop_id, organization_id\)\s+references identity\.shops\(id, organization_id\)/i
+    /foreign key \(shop_id, organization_id\)\s+references identity\.shops\(id, organization_id\)/i,
   );
   assert.match(
     roleScopeGrantsDefinition,
-    /foreign key \(team_id, shop_id, organization_id\)\s+references identity\.teams\(id, shop_id, organization_id\)/i
+    /foreign key \(team_id, shop_id, organization_id\)\s+references identity\.teams\(id, shop_id, organization_id\)/i,
   );
 
   assert.match(
     userScopeAssignmentsDefinition,
-    /assignment_status\s+text\s+not null\s+default\s+'ACTIVE'\s+check \(assignment_status in \('ACTIVE', 'REVOKED', 'EXPIRED'\)\)/i
+    /assignment_status\s+text\s+not null\s+default\s+'ACTIVE'\s+check \(assignment_status in \('ACTIVE', 'REVOKED', 'EXPIRED'\)\)/i,
   );
-  assert.match(userScopeAssignmentsDefinition, /constraint user_scope_assignments_effective_window_ck/i);
   assert.match(
     userScopeAssignmentsDefinition,
-    /check \(effective_to is null or effective_to > effective_from\)/i
+    /constraint user_scope_assignments_effective_window_ck/i,
+  );
+  assert.match(
+    userScopeAssignmentsDefinition,
+    /check \(effective_to is null or effective_to > effective_from\)/i,
   );
 
   assert.match(identityAuthz, /create unique index if not exists role_scope_grants_active_uk/i);
-  assert.match(identityAuthz, /create unique index if not exists user_scope_assignments_active_uk/i);
+  assert.match(
+    identityAuthz,
+    /create unique index if not exists user_scope_assignments_active_uk/i,
+  );
 });
 
 test('identity authz migration remains coherent with canonical identity entities', async () => {
@@ -352,17 +425,19 @@ test('identity authz migration remains coherent with canonical identity entities
 
   assert.match(canonical, /create table if not exists identity\.users/i);
   assert.match(canonical, /create table if not exists identity\.roles/i);
-  assert.match(identityAuthz, /role_id uuid not null references identity\.roles\(id\) on delete cascade/i);
-  assert.match(identityAuthz, /user_id uuid not null references identity\.users\(id\) on delete cascade/i);
+  assert.match(
+    identityAuthz,
+    /role_id uuid not null references identity\.roles\(id\) on delete cascade/i,
+  );
+  assert.match(
+    identityAuthz,
+    /user_id uuid not null references identity\.users\(id\) on delete cascade/i,
+  );
 });
 
 test('reference data seed is idempotent and avoids transaction-like rows', async () => {
-  const {
-    referenceSeed,
-    prismaReferenceSeed,
-    prismaStockBinSeed,
-    prismaDealerRelationshipSeed
-  } = await migrationArtifactsPromise;
+  const { referenceSeed, prismaReferenceSeed, prismaStockBinSeed, prismaDealerRelationshipSeed } =
+    await migrationArtifactsPromise;
 
   assert.match(referenceSeed, /insert into identity\.roles/i);
   assert.match(referenceSeed, /insert into identity\.permissions/i);
@@ -399,7 +474,10 @@ test('reference data seed is idempotent and avoids transaction-like rows', async
   assert.doesNotMatch(prismaStockBinSeed, /\bDO\s+\$\$/i);
 
   assert.match(prismaDealerRelationshipSeed, /insert into customers\.dealer_accounts/i);
-  assert.match(prismaDealerRelationshipSeed, /insert into customers\.customer_dealer_relationships/i);
+  assert.match(
+    prismaDealerRelationshipSeed,
+    /insert into customers\.customer_dealer_relationships/i,
+  );
   assert.match(prismaDealerRelationshipSeed, /where not exists\s*\(/i);
   assert.doesNotMatch(prismaDealerRelationshipSeed, /on conflict/i);
   assert.doesNotMatch(prismaDealerRelationshipSeed, /\bDO\s+\$\$/i);
@@ -412,7 +490,7 @@ test('reference data seed is idempotent and avoids transaction-like rows', async
     'PARTS_COORDINATOR',
     'TRAINING_COORDINATOR',
     'ACCOUNTING_OPERATOR',
-    'INTEGRATION_OPERATOR'
+    'INTEGRATION_OPERATOR',
   ]) {
     assert.match(referenceSeed, new RegExp(`'${roleCode}'`));
     assert.match(prismaReferenceSeed, new RegExp(`'${roleCode}'`));
@@ -427,19 +505,31 @@ test('reference data seed is idempotent and avoids transaction-like rows', async
     "'accounting.sync.manage'",
     "'HQ-WH'",
     "'MVP_BASELINE'",
-    "'MATERIAL_READY_REQUIRED'"
+    "'MATERIAL_READY_REQUIRED'",
   ]) {
     assert.ok(referenceSeed.includes(requiredSeed), `Expected seed to include ${requiredSeed}`);
-    assert.ok(prismaReferenceSeed.includes(requiredSeed), `Expected Prisma seed to include ${requiredSeed}`);
+    assert.ok(
+      prismaReferenceSeed.includes(requiredSeed),
+      `Expected Prisma seed to include ${requiredSeed}`,
+    );
   }
 
   assert.ok(referenceSeed.includes("'WIP'"), 'Expected architecture seed to include bay bins');
-  assert.ok(prismaStockBinSeed.includes("'GENERAL'"), 'Expected Prisma stock-bin seed to include pick face bin');
-  assert.ok(prismaStockBinSeed.includes("'INBOUND'"), 'Expected Prisma stock-bin seed to include receiving bin');
-  assert.ok(prismaStockBinSeed.includes("'WIP'"), 'Expected Prisma stock-bin seed to include bay WIP bins');
+  assert.ok(
+    prismaStockBinSeed.includes("'GENERAL'"),
+    'Expected Prisma stock-bin seed to include pick face bin',
+  );
+  assert.ok(
+    prismaStockBinSeed.includes("'INBOUND'"),
+    'Expected Prisma stock-bin seed to include receiving bin',
+  );
+  assert.ok(
+    prismaStockBinSeed.includes("'WIP'"),
+    'Expected Prisma stock-bin seed to include bay WIP bins',
+  );
   assert.ok(
     prismaDealerRelationshipSeed.includes("'ACCOUNT_OWNER'"),
-    'Expected dealer relationship seed to include account-owner links'
+    'Expected dealer relationship seed to include account-owner links',
   );
   assert.ok(prismaReferenceSeed.includes('inventory."StockLocationType"'));
 });

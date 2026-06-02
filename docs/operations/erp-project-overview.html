@@ -356,14 +356,15 @@
           claim/reimbursement storage, deployed warranty route cleanup, deployed warranty
           reimbursement accounting ledger work, deployed provider document evidence work, deployed
           inventory part editing work, deployed inventory valuation rollups, deployed valuation
-          exception drilldown work, and active valuation exception handoff work. The app has moved past polished static screens into a usable
+          exception drilldown work, deployed valuation exception handoff work, and active selected-row
+          exception workbench work. The app has moved past polished static screens into a usable
           shop-ops ERP foundation, but ShopMonkey cutover remains blocked until complete parts and
           purchase-order source exports are captured.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 2, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 197</span>
-          <span class="chip">Active slice: Inventory valuation exception handoffs</span>
+          <span class="chip">Baseline: origin/main through PR 198</span>
+          <span class="chip">Active slice: Inventory exception bulk workbench</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
@@ -624,9 +625,10 @@
               drill-through are live. Reservation, release, issue, adjustment, transfer, and
               cycle-count variance writes now append immutable ledger consequences. Build BOM
               authoring and route-step standard labor costing now live in Planning. Row-level part
-              editing for core item attributes, balance-backed accounting valuation rollups, and
-              URL-backed exception drilldowns are deployed; this branch makes valuation exceptions
-              actionable with part-filtered ledger, stock correction, cycle-count, and PO handoffs.
+              editing for core item attributes, balance-backed accounting valuation rollups,
+              URL-backed exception drilldowns, and row-level valuation handoffs are deployed; this
+              branch adds selected-row action briefs, handoff CSV export, and focused first-row
+              actions for exception triage.
             </p>
           </div>
 

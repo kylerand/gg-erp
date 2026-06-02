@@ -232,8 +232,8 @@
       </header>
 
       <div class="summary">
-        <div class="metric"><strong>27</strong><span>Tracked delivery slices</span></div>
-        <div class="metric"><strong>25</strong><span>Done</span></div>
+        <div class="metric"><strong>28</strong><span>Tracked delivery slices</span></div>
+        <div class="metric"><strong>26</strong><span>Done</span></div>
         <div class="metric"><strong>1</strong><span>In progress</span></div>
         <div class="metric"><strong>1</strong><span>Blocked</span></div>
       </div>
@@ -241,9 +241,10 @@
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: turning deployed inventory valuation exception drilldowns into row-level
-          action handoffs for movement evidence, stock corrections, cycle counts, and replenishment
-          purchase orders after deploying row-level inventory part editing, warranty provider
+          Current focus: turning deployed inventory valuation exception handoffs into a selected-row
+          exception workbench with action briefs, handoff export, and focused first-row actions after
+          deploying row-level movement evidence, stock corrections, cycle counts, replenishment
+          purchase orders, inventory part editing, warranty provider
           evidence, and reimbursement follow-through through the accounting operational ledger and
           immutable journal posting flow. Customer records now show QuickBooks customer-sync and payment-sync
           activity alongside a combined timeline, derived next actions, writable profile, writable
@@ -580,7 +581,8 @@
                 receiving rows avoid raw part/work-order ID fallbacks when display context is
                 missing, and live accounting payable review for received POs are wired to live
                 inventory APIs. Part lookup now supports CSV export, CSV import through the live
-                create-part endpoint, selected-row SKU copy, and purchase-order selected/visible CSV
+                create-part endpoint, selected-row SKU copy, selected-row exception action briefs
+                and handoff export, and purchase-order selected/visible CSV
                 export. Inventory now exposes a live movement ledger for stock receipts,
                 reservations, releases, work-order issues, posted stock adjustments, posted stock
                 transfers, and cycle-count variance postings.
@@ -589,9 +591,10 @@
                 Row-level item editing for name, description, UOM, minimum stock, status, category,
                 install stage, and lifecycle level is deployed. Balance-backed valuation summaries,
                 per-part stock value, cost evidence, URL-backed missing-cost, reorder-exposure,
-                and cost-source drilldowns, and the valuation action queue are deployed; this branch
-                adds row-level handoffs into part-filtered movement evidence, stock correction,
-                cycle-count, and replenishment PO workflows.
+                and cost-source drilldowns, the valuation action queue, and row-level handoffs into
+                part-filtered movement evidence, stock correction, cycle-count, and replenishment PO
+                workflows are deployed; this branch adds the selected-row exception workbench for
+                bulk action briefs, handoff CSV export, and focused first-row actions.
               </td>
             </tr>
             <tr>

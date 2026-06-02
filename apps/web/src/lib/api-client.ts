@@ -2097,6 +2097,7 @@ export interface InventoryLot {
 }
 
 export interface ListInventoryLotsParams {
+  partId?: string;
   partNumber?: string;
   warehouseId?: string;
   status?: InventoryLot['lotState'];
@@ -2109,6 +2110,7 @@ export async function listInventoryLots(
   options?: ApiDataOptions,
 ): Promise<{ items: InventoryLot[]; total: number; page: number; pageSize: number }> {
   const qs = new URLSearchParams();
+  if (params?.partId) qs.set('partId', params.partId);
   if (params?.partNumber) qs.set('partNumber', params.partNumber);
   if (params?.warehouseId) qs.set('warehouseId', params.warehouseId);
   if (params?.status) qs.set('status', params.status);

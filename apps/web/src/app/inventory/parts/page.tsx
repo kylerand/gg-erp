@@ -6,11 +6,14 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertTriangle,
   CheckSquare,
+  ClipboardCheck,
   Clipboard,
   Download,
   FileUp,
   History,
   PackageSearch,
+  SlidersHorizontal,
+  ShoppingCart,
   X,
 } from 'lucide-react';
 import { PageHeader, LoadingSkeleton, EmptyState, StatusBadge } from '@gg-erp/ui';
@@ -187,6 +190,11 @@ function formatValuationSource(value: Part['valuationSource']): string {
   if (value === 'LOT_LEDGER') return 'Lot cost';
   if (value === 'LATEST_PO') return 'Latest PO';
   return 'No cost';
+}
+
+function formatHandoffQuantity(value: number | undefined): string {
+  const quantity = Math.max(value ?? 0, 1);
+  return String(Number(quantity.toFixed(3)));
 }
 
 function isOptionValue<T extends string>(
@@ -1136,14 +1144,64 @@ export default function PartsPage() {
                           <StatusBadge status={p.partState} />
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={isEditing ? 'default' : 'outline'}
-                            onClick={() => beginPartEdit(p)}
-                          >
-                            Edit
-                          </Button>
+                          <div className="flex flex-wrap justify-end gap-1.5">
+                            <Link
+                              href={erpRoute('inventory-ledger', { partId: p.id })}
+                              className="inline-flex h-8 items-center rounded-md border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-700 hover:border-yellow-400"
+                            >
+                              <History className="mr-1 h-3.5 w-3.5" />
+                              Ledger
+                            </Link>
+                            {(p.quantityOnHand ?? 0) > 0 && (
+                              <Link
+                                href={erpRoute('cycle-count', {
+                                  partId: p.id,
+                                  notes: `Count ${p.sku} from valuation review.`,
+                                })}
+                                className="inline-flex h-8 items-center rounded-md border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-700 hover:border-yellow-400"
+                              >
+                                <ClipboardCheck className="mr-1 h-3.5 w-3.5" />
+                                Count
+                              </Link>
+                            )}
+                            {(p.quantityOnHand ?? 0) > 0 && (
+                              <Link
+                                href={erpRoute('inventory-adjustment', {
+                                  partId: p.id,
+                                  reasonCode: 'CORRECTION',
+                                  notes: `Valuation review for ${p.sku}.`,
+                                })}
+                                className="inline-flex h-8 items-center rounded-md border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-700 hover:border-yellow-400"
+                              >
+                                <SlidersHorizontal className="mr-1 h-3.5 w-3.5" />
+                                Adjust
+                              </Link>
+                            )}
+                            {(p.shortfallQuantity ?? 0) > 0 && (
+                              <Link
+                                href={erpRoute('purchase-order', {
+                                  new: '1',
+                                  createPartId: p.id,
+                                  createPartSku: p.sku,
+                                  quantity: formatHandoffQuantity(p.shortfallQuantity),
+                                  unitCost: String(p.estimatedUnitCost ?? 0),
+                                  notes: `Replenish ${p.sku} from inventory exception queue.`,
+                                })}
+                                className="inline-flex h-8 items-center rounded-md border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-700 hover:border-yellow-400"
+                              >
+                                <ShoppingCart className="mr-1 h-3.5 w-3.5" />
+                                PO
+                              </Link>
+                            )}
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={isEditing ? 'default' : 'outline'}
+                              onClick={() => beginPartEdit(p)}
+                            >
+                              Edit
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                       {isEditing && (

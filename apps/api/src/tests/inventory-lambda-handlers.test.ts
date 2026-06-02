@@ -92,10 +92,19 @@ test('listLotsHandler returns inventory lot details for the web contract', async
   }));
 
   try {
-    const response = await listLotsHandler({ httpMethod: 'GET' });
+    const response = await listLotsHandler({
+      httpMethod: 'GET',
+      queryStringParameters: { partId: TEST_PART_ID, status: 'AVAILABLE' },
+    });
 
     assert.equal(response.statusCode, 200);
     assert.equal(listLotsMock.mock.calls.length, 1);
+    const filters = listLotsMock.mock.calls[0].arguments[0] as {
+      partId?: string;
+      status?: string;
+    };
+    assert.equal(filters.partId, TEST_PART_ID);
+    assert.equal(filters.status, 'AVAILABLE');
 
     const payload = JSON.parse(response.body) as {
       items: Array<{
@@ -124,6 +133,16 @@ test('listLotsHandler returns inventory lot details for the web contract', async
   } finally {
     listLotsMock.mock.restore();
   }
+});
+
+test('listLotsHandler rejects invalid part handoff filters', async () => {
+  const response = await listLotsHandler({
+    httpMethod: 'GET',
+    queryStringParameters: { partId: 'not-a-uuid' },
+  });
+
+  assert.equal(response.statusCode, 422);
+  assert.match(response.body, /partId must be a UUID/);
 });
 
 test('listInventoryLedgerHandler forwards filters and returns movement history', async () => {

@@ -355,15 +355,15 @@
           dealer account maintenance work, deployed dealer account route cleanup, deployed warranty
           claim/reimbursement storage, deployed warranty route cleanup, deployed warranty
           reimbursement accounting ledger work, deployed provider document evidence work, deployed
-          inventory part editing work, deployed inventory valuation rollups, and active valuation
-          exception drilldown work. The app has moved past polished static screens into a usable
+          inventory part editing work, deployed inventory valuation rollups, deployed valuation
+          exception drilldown work, and active valuation exception handoff work. The app has moved past polished static screens into a usable
           shop-ops ERP foundation, but ShopMonkey cutover remains blocked until complete parts and
           purchase-order source exports are captured.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 2, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 196</span>
-          <span class="chip">Active slice: Inventory valuation exception drilldowns</span>
+          <span class="chip">Baseline: origin/main through PR 197</span>
+          <span class="chip">Active slice: Inventory valuation exception handoffs</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
@@ -624,9 +624,9 @@
               drill-through are live. Reservation, release, issue, adjustment, transfer, and
               cycle-count variance writes now append immutable ledger consequences. Build BOM
               authoring and route-step standard labor costing now live in Planning. Row-level part
-              editing for core item attributes and balance-backed accounting valuation rollups are
-              deployed; this branch makes valuation exceptions actionable with URL-backed filters,
-              summary-card drilldowns, and an operator action queue.
+              editing for core item attributes, balance-backed accounting valuation rollups, and
+              URL-backed exception drilldowns are deployed; this branch makes valuation exceptions
+              actionable with part-filtered ledger, stock correction, cycle-count, and PO handoffs.
             </p>
           </div>
 
@@ -845,9 +845,9 @@
             work-order provenance, and version diff workflows need a heavier change-control gate.
           </li>
           <li>
-            <strong>Deepen inventory master data:</strong> validate valuation exception drilldowns
-            in UAT, then decide whether lot-level costing needs FIFO/weighted-average accounting
-            policy before production close controls depend on it.
+            <strong>Deepen inventory master data:</strong> validate valuation exception handoffs in
+            UAT, then decide whether lot-level costing needs FIFO/weighted-average accounting policy
+            before production close controls depend on it.
           </li>
         </ol>
       </section>

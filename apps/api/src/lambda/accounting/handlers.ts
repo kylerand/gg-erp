@@ -1,7 +1,12 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import type { IntegrationAccountStatus, IntegrationProvider } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
-import { wrapHandler, parseBody, jsonResponse, type LambdaResult } from '../../shared/lambda/index.js';
+import {
+  wrapHandler,
+  parseBody,
+  jsonResponse,
+  type LambdaResult,
+} from '../../shared/lambda/index.js';
 import {
   buildAuthorizationUrl,
   exchangeCodeForTokens,
@@ -45,10 +50,7 @@ import {
   type UpsertTaxInput,
 } from '../../contexts/accounting/mapping.service.js';
 import { InMemoryAuditSink } from '../../audit/recorder.js';
-import {
-  InMemoryEventPublisher,
-  InMemoryOutbox,
-} from '../../events/index.js';
+import { InMemoryEventPublisher, InMemoryOutbox } from '../../events/index.js';
 import { ConsoleObservabilityHooks } from '../../observability/index.js';
 import { EntityMappingService } from '../../contexts/accounting/entityMapping.service.js';
 import { InvoiceSyncState } from '../../../../../packages/domain/src/model/index.js';
@@ -67,9 +69,27 @@ const ACCOUNTING_LEDGER_PURCHASE_ORDER_INCLUDE = Prisma.validator<Prisma.Purchas
     orderBy: { lineNumber: 'asc' },
   },
 });
+const ACCOUNTING_LEDGER_WARRANTY_CLAIM_INCLUDE = Prisma.validator<Prisma.WarrantyClaimInclude>()({
+  customer: { select: { fullName: true, companyName: true, email: true } },
+  dealerAccount: {
+    include: { customer: { select: { fullName: true, companyName: true, email: true } } },
+  },
+  dealerRelationship: {
+    include: {
+      dealerAccount: {
+        include: { customer: { select: { fullName: true, companyName: true, email: true } } },
+      },
+    },
+  },
+  cartVehicle: { select: { serialNumber: true, modelCode: true, modelYear: true } },
+  workOrder: { select: { workOrderNumber: true, status: true, dueAt: true } },
+});
 
 type LedgerPurchaseOrder = Prisma.PurchaseOrderGetPayload<{
   include: typeof ACCOUNTING_LEDGER_PURCHASE_ORDER_INCLUDE;
+}>;
+type LedgerWarrantyClaim = Prisma.WarrantyClaimGetPayload<{
+  include: typeof ACCOUNTING_LEDGER_WARRANTY_CLAIM_INCLUDE;
 }>;
 type LedgerPaymentSyncRecord = Awaited<
   ReturnType<typeof prisma.paymentSyncRecord.findMany>
@@ -93,7 +113,8 @@ type AccountingPeriodLockRow = Awaited<
 type OperationalLedgerSourceType =
   | 'PAYABLE_RECEIPT'
   | 'CUSTOMER_PAYMENT'
-  | 'RECONCILIATION_VARIANCE';
+  | 'RECONCILIATION_VARIANCE'
+  | 'WARRANTY_REIMBURSEMENT';
 type OperationalLedgerStatus =
   | 'READY_FOR_REVIEW'
   | 'NEEDS_REVIEW'
@@ -118,7 +139,7 @@ interface OperationalLedgerEntry {
   currency: 'USD';
   status: OperationalLedgerStatus;
   memo: string;
-  relatedRecordType: 'purchase-order' | 'payment-sync' | 'reconciliation-record';
+  relatedRecordType: 'purchase-order' | 'payment-sync' | 'reconciliation-record' | 'warranty-claim';
   relatedRecordId: string;
 }
 
@@ -377,6 +398,7 @@ const OPERATIONAL_LEDGER_SOURCE_TYPES = new Set<OperationalLedgerSourceType>([
   'PAYABLE_RECEIPT',
   'CUSTOMER_PAYMENT',
   'RECONCILIATION_VARIANCE',
+  'WARRANTY_REIMBURSEMENT',
 ]);
 const OPERATIONAL_LEDGER_STATUSES = new Set<OperationalLedgerStatus>([
   'READY_FOR_REVIEW',
@@ -389,10 +411,7 @@ const OPERATIONAL_LEDGER_STATUSES = new Set<OperationalLedgerStatus>([
 ]);
 const PAYABLE_LEDGER_STATES = ['PARTIALLY_RECEIVED', 'RECEIVED'] as const;
 const ACCOUNTING_JOURNAL_STATUSES = new Set<AccountingJournalStatus>(['POSTED', 'REVERSED']);
-const JOURNAL_POSTABLE_STATUSES = new Set<OperationalLedgerStatus>([
-  'READY_FOR_REVIEW',
-  'POSTED',
-]);
+const JOURNAL_POSTABLE_STATUSES = new Set<OperationalLedgerStatus>(['READY_FOR_REVIEW', 'POSTED']);
 const TRIAL_BALANCE_JOURNAL_LIMIT = 2000;
 
 const OPERATIONAL_LEDGER_POSTING_RULES: OperationalLedgerPostingRule[] = [
@@ -415,6 +434,13 @@ const OPERATIONAL_LEDGER_POSTING_RULES: OperationalLedgerPostingRule[] = [
     trigger: 'ERP and QuickBooks reconciliation detects an amount mismatch.',
     debitAccount: 'Reconciliation clearing',
     creditAccount: 'Suspense / review clearing',
+    status: 'active-preview',
+  },
+  {
+    sourceType: 'WARRANTY_REIMBURSEMENT',
+    trigger: 'Warranty provider approves a reimbursable customer claim.',
+    debitAccount: 'Warranty reimbursement receivable',
+    creditAccount: 'Warranty reimbursement income',
     status: 'active-preview',
   },
 ];
@@ -446,6 +472,18 @@ export const operationalLedgerQueries = {
     return prisma.reconciliationRecord.findMany({
       where: { status: { in: ['MISMATCH', 'RESOLVED'] } },
       orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+      take,
+    });
+  },
+
+  async listWarrantyClaims(take: number): Promise<LedgerWarrantyClaim[]> {
+    return prisma.warrantyClaim.findMany({
+      where: {
+        claimStatus: { in: ['APPROVED', 'REIMBURSEMENT_PENDING', 'REIMBURSED'] },
+        approvedAmountCents: { gt: 0 },
+      },
+      include: ACCOUNTING_LEDGER_WARRANTY_CLAIM_INCLUDE,
+      orderBy: [{ reimbursedAt: 'desc' }, { approvedAt: 'desc' }, { updatedAt: 'desc' }],
       take,
     });
   },
@@ -614,7 +652,76 @@ function buildReconciliationLedgerEntry(
   };
 }
 
-function summarizeLedgerEntries(entries: OperationalLedgerEntry[], exceptions: LedgerExceptionCounts) {
+function accountingCustomerDisplayName(
+  customer: Pick<LedgerWarrantyClaim['customer'], 'companyName' | 'fullName' | 'email'>,
+): string {
+  return customer.companyName?.trim() || customer.fullName?.trim() || customer.email;
+}
+
+function warrantyDealerDisplayName(claim: LedgerWarrantyClaim): string {
+  const dealerCustomer =
+    claim.dealerAccount?.customer ?? claim.dealerRelationship?.dealerAccount.customer;
+  return dealerCustomer
+    ? accountingCustomerDisplayName(dealerCustomer)
+    : 'Warranty provider unassigned';
+}
+
+function warrantyClaimLedgerDate(claim: LedgerWarrantyClaim): string {
+  return (
+    claim.reimbursedAt ??
+    claim.approvedAt ??
+    claim.submittedAt ??
+    claim.updatedAt
+  ).toISOString();
+}
+
+function warrantyClaimMemo(claim: LedgerWarrantyClaim): string {
+  const customerName = accountingCustomerDisplayName(claim.customer);
+  const dealerName = warrantyDealerDisplayName(claim);
+  const workOrder = claim.workOrder?.workOrderNumber;
+  const cart = claim.cartVehicle
+    ? `${claim.cartVehicle.modelYear} ${claim.cartVehicle.modelCode} ${claim.cartVehicle.serialNumber}`
+    : undefined;
+  const context = [customerName, workOrder, cart].filter(Boolean).join(' · ');
+  const reference = claim.externalReference ? ` · provider ref ${claim.externalReference}` : '';
+  return `Warranty reimbursement from ${dealerName} for ${claim.claimNumber}${
+    context ? ` · ${context}` : ''
+  }${reference}`;
+}
+
+function warrantyClaimLedgerStatus(claim: LedgerWarrantyClaim): OperationalLedgerStatus {
+  if (claim.claimStatus === 'REIMBURSED') return 'POSTED';
+  if (!claim.dealerAccount && !claim.dealerRelationship) return 'NEEDS_REVIEW';
+  if (!claim.approvedAmountCents || claim.approvedAmountCents <= 0) return 'NEEDS_REVIEW';
+  return 'READY_FOR_REVIEW';
+}
+
+function buildWarrantyClaimLedgerEntry(claim: LedgerWarrantyClaim): OperationalLedgerEntry {
+  const amountCents = claim.reimbursedAmountCents ?? claim.approvedAmountCents ?? 0;
+  return {
+    id: `warranty-${claim.id}`,
+    ledgerDate: warrantyClaimLedgerDate(claim),
+    sourceType: 'WARRANTY_REIMBURSEMENT',
+    sourceId: claim.id,
+    documentNumber: claim.claimNumber,
+    counterparty: warrantyDealerDisplayName(claim),
+    accountDebit: 'Warranty reimbursement receivable',
+    accountCredit: 'Warranty reimbursement income',
+    debitCents: amountCents,
+    creditCents: amountCents,
+    amountCents,
+    currency: 'USD',
+    status: warrantyClaimLedgerStatus(claim),
+    memo: warrantyClaimMemo(claim),
+    relatedRecordType: 'warranty-claim',
+    relatedRecordId: claim.id,
+  };
+}
+
+function summarizeLedgerEntries(
+  entries: OperationalLedgerEntry[],
+  exceptions: LedgerExceptionCounts,
+) {
   const sourceTotals = Object.fromEntries(
     [...OPERATIONAL_LEDGER_SOURCE_TYPES].map((sourceType) => [
       sourceType,
@@ -651,6 +758,7 @@ async function loadOperationalLedgerSnapshot(take: number): Promise<{
     payables,
     payments,
     reconciliationRecords,
+    warrantyClaims,
     invoiceFailures,
     customerFailures,
     paymentFailures,
@@ -659,6 +767,7 @@ async function loadOperationalLedgerSnapshot(take: number): Promise<{
     operationalLedgerQueries.listPayablePurchaseOrders(take),
     operationalLedgerQueries.listPaymentSyncRecords(take),
     operationalLedgerQueries.listReconciliationRecords(take),
+    operationalLedgerQueries.listWarrantyClaims(take),
     operationalLedgerQueries.countInvoiceFailures(),
     operationalLedgerQueries.countCustomerFailures(),
     operationalLedgerQueries.countPaymentFailures(),
@@ -666,9 +775,12 @@ async function loadOperationalLedgerSnapshot(take: number): Promise<{
   ]);
 
   const entries = [
-    ...payables.map(buildPayableLedgerEntry).filter((entry): entry is OperationalLedgerEntry => !!entry),
+    ...payables
+      .map(buildPayableLedgerEntry)
+      .filter((entry): entry is OperationalLedgerEntry => !!entry),
     ...payments.map(buildPaymentLedgerEntry),
     ...reconciliationRecords.map(buildReconciliationLedgerEntry),
+    ...warrantyClaims.map(buildWarrantyClaimLedgerEntry),
   ].sort((a, b) => Date.parse(b.ledgerDate) - Date.parse(a.ledgerDate));
 
   return {
@@ -708,9 +820,13 @@ function journalNumberForLedgerEntry(entry: OperationalLedgerEntry): string {
     PAYABLE_RECEIPT: 'AP',
     CUSTOMER_PAYMENT: 'PAY',
     RECONCILIATION_VARIANCE: 'REC',
+    WARRANTY_REIMBURSEMENT: 'WR',
   };
   const ledgerDate = entry.ledgerDate.slice(0, 10).replace(/-/g, '');
-  const sourceSuffix = entry.sourceId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 10).toUpperCase();
+  const sourceSuffix = entry.sourceId
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .slice(0, 10)
+    .toUpperCase();
   return `GJ-${sourcePrefix[entry.sourceType]}-${ledgerDate}-${sourceSuffix}`;
 }
 
@@ -778,7 +894,10 @@ function periodDateLabel(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-function dateFallsInPeriod(date: Date, lock: Pick<AccountingPeriodLockRow, 'periodStart' | 'periodEnd'>): boolean {
+function dateFallsInPeriod(
+  date: Date,
+  lock: Pick<AccountingPeriodLockRow, 'periodStart' | 'periodEnd'>,
+): boolean {
   return lock.periodStart <= date && lock.periodEnd >= date;
 }
 
@@ -790,7 +909,10 @@ function findLockForDate(
 }
 
 function reversalJournalNumber(original: AccountingJournalWithLines): string {
-  const suffix = original.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase();
+  const suffix = original.id
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .slice(0, 8)
+    .toUpperCase();
   return `REV-${original.journalNumber}-${suffix}`;
 }
 
@@ -872,16 +994,14 @@ function buildTrialBalanceReport(params: {
     for (const line of journal.lines) {
       const accountCode = line.accountCode ?? accountCodeFromName(line.accountName);
       const key = `${accountCode}:${line.accountName}`;
-      const existing =
-        accountMap.get(key) ??
-        {
-          accountName: line.accountName,
-          accountCode,
-          debitCents: 0,
-          creditCents: 0,
-          journalLineCount: 0,
-          latestLedgerDate: null,
-        };
+      const existing = accountMap.get(key) ?? {
+        accountName: line.accountName,
+        accountCode,
+        debitCents: 0,
+        creditCents: 0,
+        journalLineCount: 0,
+        latestLedgerDate: null,
+      };
       existing.debitCents += line.debitCents;
       existing.creditCents += line.creditCents;
       existing.journalLineCount += 1;
@@ -1004,7 +1124,9 @@ function buildTrialBalanceReport(params: {
     },
   ];
 
-  const hasCriticalBlocker = closeChecks.some((check) => !check.ok && check.severity === 'critical');
+  const hasCriticalBlocker = closeChecks.some(
+    (check) => !check.ok && check.severity === 'critical',
+  );
   const hasWarning = closeChecks.some((check) => !check.ok && check.severity === 'warning');
   const closeStatus: AccountingCloseStatus = hasCriticalBlocker
     ? 'BLOCKED'
@@ -1260,10 +1382,7 @@ export const accountingPeriodLockQueries = {
   async count(): Promise<number> {
     return prisma.accountingPeriodLock.count();
   },
-  async listOverlapping(params: {
-    from: Date;
-    to: Date;
-  }): Promise<AccountingPeriodLockRow[]> {
+  async listOverlapping(params: { from: Date; to: Date }): Promise<AccountingPeriodLockRow[]> {
     return prisma.accountingPeriodLock.findMany({
       where: {
         periodStart: { lte: params.to },
@@ -1292,10 +1411,7 @@ export const accountingPeriodLockQueries = {
   },
 };
 
-function dateRangeFilter(
-  from?: Date,
-  to?: Date,
-): { gte?: Date; lte?: Date } | undefined {
+function dateRangeFilter(from?: Date, to?: Date): { gte?: Date; lte?: Date } | undefined {
   if (!from && !to) return undefined;
   return {
     ...(from ? { gte: from } : {}),
@@ -1367,9 +1483,7 @@ export const accountingClosePackageQueries = {
   },
 };
 
-function latestInvoiceSnapshots(
-  snapshots: ClosePackageInvoiceRow[],
-): ClosePackageInvoiceRow[] {
+function latestInvoiceSnapshots(snapshots: ClosePackageInvoiceRow[]): ClosePackageInvoiceRow[] {
   const seen = new Set<string>();
   const latest: ClosePackageInvoiceRow[] = [];
   for (const snapshot of snapshots) {
@@ -1380,9 +1494,7 @@ function latestInvoiceSnapshots(
   return latest;
 }
 
-function latestPaymentSnapshots(
-  snapshots: ClosePackagePaymentRow[],
-): ClosePackagePaymentRow[] {
+function latestPaymentSnapshots(snapshots: ClosePackagePaymentRow[]): ClosePackagePaymentRow[] {
   const seen = new Set<string>();
   const latest: ClosePackagePaymentRow[] = [];
   for (const snapshot of snapshots) {
@@ -1577,7 +1689,8 @@ function buildClosePackageActions(params: {
     actions.push({
       key: 'package-ready',
       label: 'Package ready for review',
-      detail: 'Close checks are clear, documents have no review exceptions, and the period is locked.',
+      detail:
+        'Close checks are clear, documents have no review exceptions, and the period is locked.',
       href: '/accounting/ledger#close-package',
       status: 'DONE',
     });
@@ -1634,15 +1747,21 @@ function buildClosePackageEvidence(params: {
 
 // ─── OAuth: redirect to QB ────────────────────────────────────────────────────
 
-export const oauthConnectHandler = wrapHandler(async (_ctx) => {
-  const state = randomUUID();
-  const url = buildAuthorizationUrl(state);
-  return {
-    statusCode: 302,
-    headers: { Location: url, 'Set-Cookie': `qb_oauth_state=${state}; HttpOnly; SameSite=Lax; Path=/` },
-    body: '',
-  };
-}, { requireAuth: false });
+export const oauthConnectHandler = wrapHandler(
+  async (_ctx) => {
+    const state = randomUUID();
+    const url = buildAuthorizationUrl(state);
+    return {
+      statusCode: 302,
+      headers: {
+        Location: url,
+        'Set-Cookie': `qb_oauth_state=${state}; HttpOnly; SameSite=Lax; Path=/`,
+      },
+      body: '',
+    };
+  },
+  { requireAuth: false },
+);
 
 // ─── OAuth: callback from QB ──────────────────────────────────────────────────
 
@@ -1714,40 +1833,45 @@ async function upsertQbIntegrationAccount(db: PrismaClient, realmId: string): Pr
   }
 }
 
-export const oauthCallbackHandler = wrapHandler(async (ctx) => {
-  const qs = ctx.event.queryStringParameters ?? {};
-  const { code, realmId, error } = qs;
+export const oauthCallbackHandler = wrapHandler(
+  async (ctx) => {
+    const qs = ctx.event.queryStringParameters ?? {};
+    const { code, realmId, error } = qs;
 
-  if (error) {
-    return jsonResponse(400, { message: `QB OAuth error: ${error}` });
-  }
-  if (!code || !realmId) {
-    return jsonResponse(400, { message: 'Missing code or realmId from QB callback.' });
-  }
+    if (error) {
+      return jsonResponse(400, { message: `QB OAuth error: ${error}` });
+    }
+    if (!code || !realmId) {
+      return jsonResponse(400, { message: 'Missing code or realmId from QB callback.' });
+    }
 
-  return processOAuthCallback(
-    { code, realmId, frontendUrl: process.env.FRONTEND_URL },
-    {
-      exchangeCode: exchangeCodeForTokens,
-      storeTokens: (tokens) => tokenManager.storeTokens(tokens),
-      upsertIntegrationAccount: (realm) => upsertQbIntegrationAccount(prisma, realm),
-    },
-  );
-}, { requireAuth: false });
+    return processOAuthCallback(
+      { code, realmId, frontendUrl: process.env.FRONTEND_URL },
+      {
+        exchangeCode: exchangeCodeForTokens,
+        storeTokens: (tokens) => tokenManager.storeTokens(tokens),
+        upsertIntegrationAccount: (realm) => upsertQbIntegrationAccount(prisma, realm),
+      },
+    );
+  },
+  { requireAuth: false },
+);
 
 // ─── Get QB connection status ─────────────────────────────────────────────────
 
 /** Core status logic — extracted for testability. */
-export async function processQbStatus(
-  deps: {
-    getValidTokens: () => Promise<QbTokens>;
-    getCompanyInfo: (tokens: QbTokens) => Promise<{ companyName: string; realmId: string }>;
-  },
-): Promise<LambdaResult> {
+export async function processQbStatus(deps: {
+  getValidTokens: () => Promise<QbTokens>;
+  getCompanyInfo: (tokens: QbTokens) => Promise<{ companyName: string; realmId: string }>;
+}): Promise<LambdaResult> {
   try {
     const tokens = await deps.getValidTokens();
     const info = await deps.getCompanyInfo(tokens);
-    return jsonResponse(200, { connected: true, companyName: info.companyName, realmId: info.realmId });
+    return jsonResponse(200, {
+      connected: true,
+      companyName: info.companyName,
+      realmId: info.realmId,
+    });
   } catch (err) {
     return jsonResponse(200, {
       connected: false,
@@ -1756,155 +1880,171 @@ export async function processQbStatus(
   }
 }
 
-export const qbStatusHandler = wrapHandler(async (_ctx) => {
-  // Step 1: connection check (cheap; same response shape as before).
-  const baseRes = await processQbStatus({
-    getValidTokens: () => tokenManager.getValidTokens(),
-    getCompanyInfo: (tokens) => new QuickBooksClient(tokens).getCompanyInfo(),
-  });
-  const baseBody = JSON.parse(baseRes.body) as {
-    connected: boolean;
-    companyName?: string;
-    realmId?: string;
-    message?: string;
-  };
+export const qbStatusHandler = wrapHandler(
+  async (_ctx) => {
+    // Step 1: connection check (cheap; same response shape as before).
+    const baseRes = await processQbStatus({
+      getValidTokens: () => tokenManager.getValidTokens(),
+      getCompanyInfo: (tokens) => new QuickBooksClient(tokens).getCompanyInfo(),
+    });
+    const baseBody = JSON.parse(baseRes.body) as {
+      connected: boolean;
+      companyName?: string;
+      realmId?: string;
+      message?: string;
+    };
 
-  if (!baseBody.connected) {
-    return baseRes;
-  }
+    if (!baseBody.connected) {
+      return baseRes;
+    }
 
-  // Step 2: live QB read-side overview. Best-effort — any single failure is
-  // surfaced as an empty field rather than failing the whole status response,
-  // because the connection card itself should still render.
-  let overview: {
-    customerCount?: number;
-    customers?: ReturnType<QuickBooksClient['listCustomers']> extends Promise<infer R> ? R : never;
-    openInvoiceCount?: number;
-    openInvoiceBalance?: number;
-    recentInvoices?: ReturnType<QuickBooksClient['listRecentInvoices']> extends Promise<infer R> ? R : never;
-    accounts?: ReturnType<QuickBooksClient['listAccounts']> extends Promise<infer R> ? R : never;
-    accountsByType?: Record<string, number>;
-    accountsTotal?: number;
-    error?: string;
-  } = {};
-  try {
-    const tokens = await tokenManager.getValidTokens();
-    const qb = new QuickBooksClient(tokens);
-    const [customerCount, customerList, recent, ar, accounts] = await Promise.allSettled([
-      qb.countCustomers(),
-      qb.listCustomers(200),
-      qb.listRecentInvoices(5),
-      qb.getOpenInvoicesSummary(),
-      qb.listAccounts(),
-    ]);
-    if (customerCount.status === 'fulfilled') overview.customerCount = customerCount.value;
-    if (customerList.status === 'fulfilled') {
-      overview.customers = customerList.value;
-      overview.customerCount ??= customerList.value.length;
-    }
-    if (recent.status === 'fulfilled') overview.recentInvoices = recent.value;
-    if (ar.status === 'fulfilled') {
-      overview.openInvoiceCount = ar.value.openCount;
-      overview.openInvoiceBalance = ar.value.openBalance;
-    }
-    if (accounts.status === 'fulfilled') {
-      overview.accounts = accounts.value;
-      overview.accountsTotal = accounts.value.length;
-      overview.accountsByType = {};
-      for (const a of accounts.value) {
-        overview.accountsByType[a.accountType] = (overview.accountsByType[a.accountType] ?? 0) + 1;
+    // Step 2: live QB read-side overview. Best-effort — any single failure is
+    // surfaced as an empty field rather than failing the whole status response,
+    // because the connection card itself should still render.
+    let overview: {
+      customerCount?: number;
+      customers?: ReturnType<QuickBooksClient['listCustomers']> extends Promise<infer R>
+        ? R
+        : never;
+      openInvoiceCount?: number;
+      openInvoiceBalance?: number;
+      recentInvoices?: ReturnType<QuickBooksClient['listRecentInvoices']> extends Promise<infer R>
+        ? R
+        : never;
+      accounts?: ReturnType<QuickBooksClient['listAccounts']> extends Promise<infer R> ? R : never;
+      accountsByType?: Record<string, number>;
+      accountsTotal?: number;
+      error?: string;
+    } = {};
+    try {
+      const tokens = await tokenManager.getValidTokens();
+      const qb = new QuickBooksClient(tokens);
+      const [customerCount, customerList, recent, ar, accounts] = await Promise.allSettled([
+        qb.countCustomers(),
+        qb.listCustomers(200),
+        qb.listRecentInvoices(5),
+        qb.getOpenInvoicesSummary(),
+        qb.listAccounts(),
+      ]);
+      if (customerCount.status === 'fulfilled') overview.customerCount = customerCount.value;
+      if (customerList.status === 'fulfilled') {
+        overview.customers = customerList.value;
+        overview.customerCount ??= customerList.value.length;
       }
+      if (recent.status === 'fulfilled') overview.recentInvoices = recent.value;
+      if (ar.status === 'fulfilled') {
+        overview.openInvoiceCount = ar.value.openCount;
+        overview.openInvoiceBalance = ar.value.openBalance;
+      }
+      if (accounts.status === 'fulfilled') {
+        overview.accounts = accounts.value;
+        overview.accountsTotal = accounts.value.length;
+        overview.accountsByType = {};
+        for (const a of accounts.value) {
+          overview.accountsByType[a.accountType] =
+            (overview.accountsByType[a.accountType] ?? 0) + 1;
+        }
+      }
+      // Surface the first underlying QB error so it shows on the page —
+      // empty overview without an explanation is worse than showing the cause.
+      const firstFailure = [customerCount, customerList, recent, ar, accounts].find(
+        (r): r is PromiseRejectedResult => r.status === 'rejected',
+      );
+      if (firstFailure && Object.keys(overview).length === 0) {
+        overview.error =
+          firstFailure.reason instanceof Error
+            ? firstFailure.reason.message
+            : String(firstFailure.reason);
+      }
+    } catch (err) {
+      overview = { error: err instanceof Error ? err.message : 'overview fetch failed' };
     }
-    // Surface the first underlying QB error so it shows on the page —
-    // empty overview without an explanation is worse than showing the cause.
-    const firstFailure = [customerCount, customerList, recent, ar, accounts].find(
-      (r): r is PromiseRejectedResult => r.status === 'rejected',
-    );
-    if (firstFailure && Object.keys(overview).length === 0) {
-      overview.error =
-        firstFailure.reason instanceof Error
-          ? firstFailure.reason.message
-          : String(firstFailure.reason);
-    }
-  } catch (err) {
-    overview = { error: err instanceof Error ? err.message : 'overview fetch failed' };
-  }
 
-  return jsonResponse(200, { ...baseBody, overview });
-}, { requireAuth: false });
+    return jsonResponse(200, { ...baseBody, overview });
+  },
+  { requireAuth: false },
+);
 
 // ─── List invoice sync records ────────────────────────────────────────────────
 
-export const listInvoiceSyncHandler = wrapHandler(async (ctx) => {
-  const qs = ctx.event.queryStringParameters ?? {};
-  const state = qs.state;
-  const workOrderId = qs.workOrderId;
-  const limit = Math.min(parseInt(qs.limit ?? '100', 10), 200);
-  const offset = parseInt(qs.offset ?? '0', 10);
+export const listInvoiceSyncHandler = wrapHandler(
+  async (ctx) => {
+    const qs = ctx.event.queryStringParameters ?? {};
+    const state = qs.state;
+    const workOrderId = qs.workOrderId;
+    const limit = Math.min(parseInt(qs.limit ?? '100', 10), 200);
+    const offset = parseInt(qs.offset ?? '0', 10);
 
-  const where = {
-    ...(state ? { state: state as 'PENDING' | 'IN_PROGRESS' | 'SYNCED' | 'FAILED' | 'CANCELLED' } : {}),
-    ...(workOrderId ? { workOrderId } : {}),
-  };
+    const where = {
+      ...(state
+        ? { state: state as 'PENDING' | 'IN_PROGRESS' | 'SYNCED' | 'FAILED' | 'CANCELLED' }
+        : {}),
+      ...(workOrderId ? { workOrderId } : {}),
+    };
 
-  const [items, total] = await Promise.all([
-    prisma.invoiceSyncRecord.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      skip: offset,
-    }),
-    prisma.invoiceSyncRecord.count({ where }),
-  ]);
+    const [items, total] = await Promise.all([
+      prisma.invoiceSyncRecord.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+      prisma.invoiceSyncRecord.count({ where }),
+    ]);
 
-  return jsonResponse(200, {
-    items: items.map(r => ({
-      id: r.id,
-      invoiceNumber: r.invoiceNumber,
-      workOrderId: r.workOrderId,
-      provider: r.provider,
-      state: r.state,
-      attemptCount: r.attemptCount,
-      lastErrorCode: r.lastErrorCode,
-      lastErrorMessage: r.lastErrorMessage,
-      externalReference: r.externalReference,
-      createdAt: r.createdAt.toISOString(),
-      syncedAt: r.syncedAt?.toISOString(),
-    })),
-    total,
-    limit,
-    offset,
-  });
-}, { requireAuth: false });
+    return jsonResponse(200, {
+      items: items.map((r) => ({
+        id: r.id,
+        invoiceNumber: r.invoiceNumber,
+        workOrderId: r.workOrderId,
+        provider: r.provider,
+        state: r.state,
+        attemptCount: r.attemptCount,
+        lastErrorCode: r.lastErrorCode,
+        lastErrorMessage: r.lastErrorMessage,
+        externalReference: r.externalReference,
+        createdAt: r.createdAt.toISOString(),
+        syncedAt: r.syncedAt?.toISOString(),
+      })),
+      total,
+      limit,
+      offset,
+    });
+  },
+  { requireAuth: false },
+);
 
 // ─── Retry a failed sync record ───────────────────────────────────────────────
 
-export const retrySyncHandler = wrapHandler(async (ctx) => {
-  const id = ctx.event.pathParameters?.id;
-  if (!id) return jsonResponse(400, { message: 'Sync record ID is required.' });
+export const retrySyncHandler = wrapHandler(
+  async (ctx) => {
+    const id = ctx.event.pathParameters?.id;
+    if (!id) return jsonResponse(400, { message: 'Sync record ID is required.' });
 
-  const record = await prisma.invoiceSyncRecord.findUnique({ where: { id } });
-  if (!record) return jsonResponse(404, { message: `Sync record not found: ${id}` });
-  if (!['FAILED', 'CANCELLED'].includes(record.state)) {
-    return jsonResponse(409, { message: `Cannot retry a record in ${record.state} state.` });
-  }
+    const record = await prisma.invoiceSyncRecord.findUnique({ where: { id } });
+    if (!record) return jsonResponse(404, { message: `Sync record not found: ${id}` });
+    if (!['FAILED', 'CANCELLED'].includes(record.state)) {
+      return jsonResponse(409, { message: `Cannot retry a record in ${record.state} state.` });
+    }
 
-  const updated = await prisma.invoiceSyncRecord.update({
-    where: { id },
-    data: {
-      state: 'PENDING',
-      lastErrorCode: null,
-      lastErrorMessage: null,
-      updatedAt: new Date(),
-    },
-  });
+    const updated = await prisma.invoiceSyncRecord.update({
+      where: { id },
+      data: {
+        state: 'PENDING',
+        lastErrorCode: null,
+        lastErrorMessage: null,
+        updatedAt: new Date(),
+      },
+    });
 
-  return jsonResponse(200, {
-    id: updated.id,
-    state: updated.state,
-    message: 'Sync record queued for retry.',
-  });
-}, { requireAuth: false });
+    return jsonResponse(200, {
+      id: updated.id,
+      state: updated.state,
+      message: 'Sync record queued for retry.',
+    });
+  },
+  { requireAuth: false },
+);
 
 // ─── QB sync trigger (create invoice in QB) ───────────────────────────────────
 
@@ -1913,67 +2053,73 @@ interface TriggerSyncBody {
   invoiceNumber: string;
 }
 
-export const triggerSyncHandler = wrapHandler(async (ctx) => {
-  const body = parseBody<TriggerSyncBody>(ctx.event);
-  if (!body.ok) return jsonResponse(400, { message: body.error });
+export const triggerSyncHandler = wrapHandler(
+  async (ctx) => {
+    const body = parseBody<TriggerSyncBody>(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
 
-  const { workOrderId, invoiceNumber } = body.value;
-  if (!workOrderId || !invoiceNumber) {
-    return jsonResponse(422, { message: 'workOrderId and invoiceNumber are required.' });
-  }
+    const { workOrderId, invoiceNumber } = body.value;
+    if (!workOrderId || !invoiceNumber) {
+      return jsonResponse(422, { message: 'workOrderId and invoiceNumber are required.' });
+    }
 
-  const now = new Date();
-  const record = await prisma.invoiceSyncRecord.create({
-    data: {
-      id: randomUUID(),
-      invoiceNumber,
-      workOrderId,
-      provider: 'QUICKBOOKS',
-      state: 'PENDING',
-      attemptCount: 0,
-      correlationId: randomUUID(),
-      createdAt: now,
-      updatedAt: now,
-    },
-  });
+    const now = new Date();
+    const record = await prisma.invoiceSyncRecord.create({
+      data: {
+        id: randomUUID(),
+        invoiceNumber,
+        workOrderId,
+        provider: 'QUICKBOOKS',
+        state: 'PENDING',
+        attemptCount: 0,
+        correlationId: randomUUID(),
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
 
-  return jsonResponse(202, {
-    id: record.id,
-    state: record.state,
-    message: 'Invoice sync queued.',
-  });
-}, { requireAuth: false });
+    return jsonResponse(202, {
+      id: record.id,
+      state: record.state,
+      message: 'Invoice sync queued.',
+    });
+  },
+  { requireAuth: false },
+);
 
 // ─── List integration accounts ────────────────────────────────────────────────
 
 const VALID_PROVIDERS = new Set<string>(['QUICKBOOKS', 'SHOPMONKEY', 'GENERIC']);
 
-export const listAccountsHandler = wrapHandler(async (ctx) => {
-  const qs = ctx.event.queryStringParameters ?? {};
-  const providerParam = qs.provider?.toUpperCase();
+export const listAccountsHandler = wrapHandler(
+  async (ctx) => {
+    const qs = ctx.event.queryStringParameters ?? {};
+    const providerParam = qs.provider?.toUpperCase();
 
-  if (providerParam && !VALID_PROVIDERS.has(providerParam)) {
-    return jsonResponse(400, { message: `Invalid provider: ${qs.provider}` });
-  }
+    if (providerParam && !VALID_PROVIDERS.has(providerParam)) {
+      return jsonResponse(400, { message: `Invalid provider: ${qs.provider}` });
+    }
 
-  const provider = providerParam as IntegrationProvider | undefined;
-  const accounts = await integrationAccountService.listAccounts(provider);
+    const provider = providerParam as IntegrationProvider | undefined;
+    const accounts = await integrationAccountService.listAccounts(provider);
 
-  return jsonResponse(200, {
-    items: accounts.map((a) => ({
-      id: a.id,
-      provider: a.provider,
-      accountKey: a.accountKey,
-      displayName: a.displayName,
-      accountStatus: a.accountStatus,
-      configuration: a.configuration,
-      lastSyncedAt: a.lastSyncedAt?.toISOString() ?? null,
-      createdAt: a.createdAt.toISOString(),
-      updatedAt: a.updatedAt.toISOString(),
-    })),
-    total: accounts.length,
-  });
-}, { requireAuth: false });
+    return jsonResponse(200, {
+      items: accounts.map((a) => ({
+        id: a.id,
+        provider: a.provider,
+        accountKey: a.accountKey,
+        displayName: a.displayName,
+        accountStatus: a.accountStatus,
+        configuration: a.configuration,
+        lastSyncedAt: a.lastSyncedAt?.toISOString() ?? null,
+        createdAt: a.createdAt.toISOString(),
+        updatedAt: a.updatedAt.toISOString(),
+      })),
+      total: accounts.length,
+    });
+  },
+  { requireAuth: false },
+);
 
 // ─── Update integration account status ────────────────────────────────────────
 
@@ -1983,37 +2129,40 @@ interface UpdateStatusBody {
   status: string;
 }
 
-export const updateAccountStatusHandler = wrapHandler(async (ctx) => {
-  const id = ctx.event.pathParameters?.id;
-  if (!id) return jsonResponse(400, { message: 'Account ID is required.' });
+export const updateAccountStatusHandler = wrapHandler(
+  async (ctx) => {
+    const id = ctx.event.pathParameters?.id;
+    if (!id) return jsonResponse(400, { message: 'Account ID is required.' });
 
-  const body = parseBody<UpdateStatusBody>(ctx.event);
-  if (!body.ok) {
-    return jsonResponse(400, { message: body.error });
-  }
+    const body = parseBody<UpdateStatusBody>(ctx.event);
+    if (!body.ok) {
+      return jsonResponse(400, { message: body.error });
+    }
 
-  const { status } = body.value;
-  if (!status || !VALID_STATUSES.has(status)) {
-    return jsonResponse(422, {
-      message: `Invalid status. Must be one of: ${Array.from(VALID_STATUSES).join(', ')}`,
+    const { status } = body.value;
+    if (!status || !VALID_STATUSES.has(status)) {
+      return jsonResponse(422, {
+        message: `Invalid status. Must be one of: ${Array.from(VALID_STATUSES).join(', ')}`,
+      });
+    }
+
+    const updated = await integrationAccountService.updateAccountStatus(
+      id,
+      status as IntegrationAccountStatus,
+    );
+
+    if (!updated) {
+      return jsonResponse(404, { message: `Integration account not found: ${id}` });
+    }
+
+    return jsonResponse(200, {
+      id: updated.id,
+      accountStatus: updated.accountStatus,
+      updatedAt: updated.updatedAt.toISOString(),
     });
-  }
-
-  const updated = await integrationAccountService.updateAccountStatus(
-    id,
-    status as IntegrationAccountStatus,
-  );
-
-  if (!updated) {
-    return jsonResponse(404, { message: `Integration account not found: ${id}` });
-  }
-
-  return jsonResponse(200, {
-    id: updated.id,
-    accountStatus: updated.accountStatus,
-    updatedAt: updated.updatedAt.toISOString(),
-  });
-}, { requireAuth: false });
+  },
+  { requireAuth: false },
+);
 
 // ─── Service-backed invoice sync helpers ──────────────────────────────────────
 
@@ -2232,54 +2381,57 @@ async function loadCustomerSyncSummaries(
 
 // ─── List invoice syncs (service-backed) ──────────────────────────────────────
 
-export const listInvoiceSyncsHandler = wrapHandler(async (ctx) => {
-  const qs = ctx.event.queryStringParameters ?? {};
-  const stateParam = qs.state;
-  const workOrderId = qs.workOrderId;
-  const limit = Math.min(parseInt(qs.limit ?? '100', 10), 200);
-  const offset = parseInt(qs.offset ?? '0', 10);
+export const listInvoiceSyncsHandler = wrapHandler(
+  async (ctx) => {
+    const qs = ctx.event.queryStringParameters ?? {};
+    const stateParam = qs.state;
+    const workOrderId = qs.workOrderId;
+    const limit = Math.min(parseInt(qs.limit ?? '100', 10), 200);
+    const offset = parseInt(qs.offset ?? '0', 10);
 
-  if (stateParam && !VALID_INVOICE_SYNC_STATES.has(stateParam)) {
-    return jsonResponse(400, {
-      message: `Invalid state filter. Must be one of: ${Array.from(VALID_INVOICE_SYNC_STATES).join(', ')}`,
+    if (stateParam && !VALID_INVOICE_SYNC_STATES.has(stateParam)) {
+      return jsonResponse(400, {
+        message: `Invalid state filter. Must be one of: ${Array.from(VALID_INVOICE_SYNC_STATES).join(', ')}`,
+      });
+    }
+
+    const where = {
+      ...(stateParam
+        ? { state: stateParam as 'PENDING' | 'IN_PROGRESS' | 'SYNCED' | 'FAILED' | 'CANCELLED' }
+        : {}),
+      ...(workOrderId ? { workOrderId } : {}),
+    };
+
+    const [items, total] = await Promise.all([
+      invoiceSyncListQueries.findMany(where, { createdAt: 'desc' }, limit, offset),
+      invoiceSyncListQueries.count(where),
+    ]);
+    const workOrdersById = await loadInvoiceWorkOrderSummaries(
+      items.map((item) => item.workOrderId),
+    );
+
+    return jsonResponse(200, {
+      items: items.map((r) => ({
+        id: r.id,
+        invoiceNumber: r.invoiceNumber,
+        workOrderId: r.workOrderId,
+        workOrder: workOrdersById.get(r.workOrderId) ?? null,
+        provider: r.provider,
+        state: r.state,
+        attemptCount: r.attemptCount,
+        lastErrorCode: r.lastErrorCode,
+        lastErrorMessage: r.lastErrorMessage,
+        externalReference: r.externalReference,
+        createdAt: r.createdAt.toISOString(),
+        syncedAt: r.syncedAt?.toISOString() ?? null,
+      })),
+      total,
+      limit,
+      offset,
     });
-  }
-
-  const where = {
-    ...(stateParam
-      ? { state: stateParam as 'PENDING' | 'IN_PROGRESS' | 'SYNCED' | 'FAILED' | 'CANCELLED' }
-      : {}),
-    ...(workOrderId ? { workOrderId } : {}),
-  };
-
-  const [items, total] = await Promise.all([
-    invoiceSyncListQueries.findMany(where, { createdAt: 'desc' }, limit, offset),
-    invoiceSyncListQueries.count(where),
-  ]);
-  const workOrdersById = await loadInvoiceWorkOrderSummaries(
-    items.map((item) => item.workOrderId),
-  );
-
-  return jsonResponse(200, {
-    items: items.map((r) => ({
-      id: r.id,
-      invoiceNumber: r.invoiceNumber,
-      workOrderId: r.workOrderId,
-      workOrder: workOrdersById.get(r.workOrderId) ?? null,
-      provider: r.provider,
-      state: r.state,
-      attemptCount: r.attemptCount,
-      lastErrorCode: r.lastErrorCode,
-      lastErrorMessage: r.lastErrorMessage,
-      externalReference: r.externalReference,
-      createdAt: r.createdAt.toISOString(),
-      syncedAt: r.syncedAt?.toISOString() ?? null,
-    })),
-    total,
-    limit,
-    offset,
-  });
-}, { requireAuth: false });
+  },
+  { requireAuth: false },
+);
 
 // ─── Trigger invoice sync (service-backed) ────────────────────────────────────
 
@@ -2288,202 +2440,217 @@ interface TriggerInvoiceSyncBody {
   invoiceNumber: string;
 }
 
-export const triggerInvoiceSyncHandler = wrapHandler(async (ctx) => {
-  const body = parseBody<TriggerInvoiceSyncBody>(ctx.event);
-  if (!body.ok) return jsonResponse(400, { message: body.error });
+export const triggerInvoiceSyncHandler = wrapHandler(
+  async (ctx) => {
+    const body = parseBody<TriggerInvoiceSyncBody>(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
 
-  const { workOrderId, invoiceNumber } = body.value;
-  if (!workOrderId || !invoiceNumber) {
-    return jsonResponse(422, { message: 'workOrderId and invoiceNumber are required.' });
-  }
-
-  const service = createInvoiceSyncService();
-  const context = {
-    correlationId: ctx.correlationId,
-    actorId: ctx.actorUserId ?? 'system',
-    module: 'accounting',
-  };
-
-  try {
-    const record = await service.createRecord(
-      { invoiceNumber, workOrderId, provider: 'QUICKBOOKS' },
-      context,
-    );
-    return jsonResponse(202, {
-      id: record.id,
-      state: record.state,
-      message: 'Invoice sync queued.',
-    });
-  } catch (err) {
-    if (err instanceof Error && err.message.includes('already exists')) {
-      return jsonResponse(409, { message: err.message });
+    const { workOrderId, invoiceNumber } = body.value;
+    if (!workOrderId || !invoiceNumber) {
+      return jsonResponse(422, { message: 'workOrderId and invoiceNumber are required.' });
     }
-    throw err;
-  }
-}, { requireAuth: false });
+
+    const service = createInvoiceSyncService();
+    const context = {
+      correlationId: ctx.correlationId,
+      actorId: ctx.actorUserId ?? 'system',
+      module: 'accounting',
+    };
+
+    try {
+      const record = await service.createRecord(
+        { invoiceNumber, workOrderId, provider: 'QUICKBOOKS' },
+        context,
+      );
+      return jsonResponse(202, {
+        id: record.id,
+        state: record.state,
+        message: 'Invoice sync queued.',
+      });
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('already exists')) {
+        return jsonResponse(409, { message: err.message });
+      }
+      throw err;
+    }
+  },
+  { requireAuth: false },
+);
 
 // ─── Retry invoice sync (service-backed) ──────────────────────────────────────
 
-export const retryInvoiceSyncHandler = wrapHandler(async (ctx) => {
-  const id = ctx.event.pathParameters?.id;
-  if (!id) return jsonResponse(400, { message: 'Sync record ID is required.' });
+export const retryInvoiceSyncHandler = wrapHandler(
+  async (ctx) => {
+    const id = ctx.event.pathParameters?.id;
+    if (!id) return jsonResponse(400, { message: 'Sync record ID is required.' });
 
-  const service = createInvoiceSyncService();
-  const context = {
-    correlationId: ctx.correlationId,
-    actorId: ctx.actorUserId ?? 'system',
-    module: 'accounting',
-  };
+    const service = createInvoiceSyncService();
+    const context = {
+      correlationId: ctx.correlationId,
+      actorId: ctx.actorUserId ?? 'system',
+      module: 'accounting',
+    };
 
-  const record = await service.getRecord(id);
-  if (!record) return jsonResponse(404, { message: `Sync record not found: ${id}` });
+    const record = await service.getRecord(id);
+    if (!record) return jsonResponse(404, { message: `Sync record not found: ${id}` });
 
-  if (record.state !== InvoiceSyncState.FAILED && record.state !== InvoiceSyncState.CANCELLED) {
-    return jsonResponse(409, { message: `Cannot retry a record in ${record.state} state.` });
-  }
+    if (record.state !== InvoiceSyncState.FAILED && record.state !== InvoiceSyncState.CANCELLED) {
+      return jsonResponse(409, { message: `Cannot retry a record in ${record.state} state.` });
+    }
 
-  const updated = await service.startSync(id, context);
-  return jsonResponse(200, {
-    id: updated.id,
-    state: updated.state,
-    message: 'Sync record queued for retry.',
-  });
-}, { requireAuth: false });
+    const updated = await service.startSync(id, context);
+    return jsonResponse(200, {
+      id: updated.id,
+      state: updated.state,
+      message: 'Sync record queued for retry.',
+    });
+  },
+  { requireAuth: false },
+);
 
 // ─── List customer syncs ──────────────────────────────────────────────────────
 
-export const listCustomerSyncsHandler = wrapHandler(async (ctx) => {
-  const qs = ctx.event.queryStringParameters ?? {};
-  const stateParam = qs.state;
-  const customerId = qs.customerId;
-  const limit = Math.min(parseInt(qs.limit ?? '100', 10), 200);
-  const offset = parseInt(qs.offset ?? '0', 10);
+export const listCustomerSyncsHandler = wrapHandler(
+  async (ctx) => {
+    const qs = ctx.event.queryStringParameters ?? {};
+    const stateParam = qs.state;
+    const customerId = qs.customerId;
+    const limit = Math.min(parseInt(qs.limit ?? '100', 10), 200);
+    const offset = parseInt(qs.offset ?? '0', 10);
 
-  if (stateParam && !VALID_CUSTOMER_SYNC_STATES.has(stateParam)) {
-    return jsonResponse(400, {
-      message: `Invalid state filter. Must be one of: ${Array.from(VALID_CUSTOMER_SYNC_STATES).join(', ')}`,
+    if (stateParam && !VALID_CUSTOMER_SYNC_STATES.has(stateParam)) {
+      return jsonResponse(400, {
+        message: `Invalid state filter. Must be one of: ${Array.from(VALID_CUSTOMER_SYNC_STATES).join(', ')}`,
+      });
+    }
+
+    const where = {
+      ...(stateParam
+        ? { state: stateParam as 'PENDING' | 'IN_PROGRESS' | 'SYNCED' | 'FAILED' | 'SKIPPED' }
+        : {}),
+      ...(customerId ? { customerId } : {}),
+    };
+
+    const [items, total] = await Promise.all([
+      customerSyncListQueries.findMany(where, { createdAt: 'desc' }, limit, offset),
+      customerSyncListQueries.count(where),
+    ]);
+    const customersById = await loadCustomerSyncSummaries(items.map((item) => item.customerId));
+
+    return jsonResponse(200, {
+      items: items.map((r) => ({
+        id: r.id,
+        customerId: r.customerId,
+        customer: customersById.get(r.customerId) ?? null,
+        provider: r.provider,
+        state: r.state,
+        attemptCount: r.attemptCount,
+        lastErrorCode: r.lastErrorCode,
+        lastErrorMessage: r.lastErrorMessage,
+        externalReference: r.externalReference,
+        createdAt: r.createdAt.toISOString(),
+        syncedAt: r.syncedAt?.toISOString() ?? null,
+      })),
+      total,
+      limit,
+      offset,
     });
-  }
-
-  const where = {
-    ...(stateParam
-      ? { state: stateParam as 'PENDING' | 'IN_PROGRESS' | 'SYNCED' | 'FAILED' | 'SKIPPED' }
-      : {}),
-    ...(customerId ? { customerId } : {}),
-  };
-
-  const [items, total] = await Promise.all([
-    customerSyncListQueries.findMany(where, { createdAt: 'desc' }, limit, offset),
-    customerSyncListQueries.count(where),
-  ]);
-  const customersById = await loadCustomerSyncSummaries(items.map((item) => item.customerId));
-
-  return jsonResponse(200, {
-    items: items.map((r) => ({
-      id: r.id,
-      customerId: r.customerId,
-      customer: customersById.get(r.customerId) ?? null,
-      provider: r.provider,
-      state: r.state,
-      attemptCount: r.attemptCount,
-      lastErrorCode: r.lastErrorCode,
-      lastErrorMessage: r.lastErrorMessage,
-      externalReference: r.externalReference,
-      createdAt: r.createdAt.toISOString(),
-      syncedAt: r.syncedAt?.toISOString() ?? null,
-    })),
-    total,
-    limit,
-    offset,
-  });
-}, { requireAuth: false });
+  },
+  { requireAuth: false },
+);
 
 // ─── List payment syncs ──────────────────────────────────────────────────────
 
-export const listPaymentSyncsHandler = wrapHandler(async (ctx) => {
-  const qs = ctx.event.queryStringParameters ?? {};
-  const stateParam = qs.state;
-  const workOrderId = qs.workOrderId;
-  const customerId = qs.customerId;
-  const limit = Math.min(parseInt(qs.limit ?? '100', 10), 200);
-  const offset = parseInt(qs.offset ?? '0', 10);
+export const listPaymentSyncsHandler = wrapHandler(
+  async (ctx) => {
+    const qs = ctx.event.queryStringParameters ?? {};
+    const stateParam = qs.state;
+    const workOrderId = qs.workOrderId;
+    const customerId = qs.customerId;
+    const limit = Math.min(parseInt(qs.limit ?? '100', 10), 200);
+    const offset = parseInt(qs.offset ?? '0', 10);
 
-  if (stateParam && !VALID_PAYMENT_SYNC_STATES.has(stateParam)) {
-    return jsonResponse(400, {
-      message: `Invalid state filter. Must be one of: ${Array.from(VALID_PAYMENT_SYNC_STATES).join(', ')}`,
+    if (stateParam && !VALID_PAYMENT_SYNC_STATES.has(stateParam)) {
+      return jsonResponse(400, {
+        message: `Invalid state filter. Must be one of: ${Array.from(VALID_PAYMENT_SYNC_STATES).join(', ')}`,
+      });
+    }
+
+    const where = {
+      ...(stateParam ? { state: stateParam } : {}),
+      ...(workOrderId ? { workOrderId } : {}),
+      ...(customerId ? { customerId } : {}),
+    };
+
+    const [items, total] = await Promise.all([
+      paymentSyncListQueries.findMany(where, { updatedAt: 'desc' }, limit, offset),
+      paymentSyncListQueries.count(where),
+    ]);
+    const [workOrdersById, customersById] = await Promise.all([
+      loadInvoiceWorkOrderSummaries(items.map((item) => item.workOrderId)),
+      loadCustomerSyncSummaries(items.map((item) => item.customerId)),
+    ]);
+
+    return jsonResponse(200, {
+      items: items.map((r) => ({
+        id: r.id,
+        invoiceSyncId: r.invoiceSyncId,
+        workOrderId: r.workOrderId,
+        workOrder: workOrdersById.get(r.workOrderId) ?? null,
+        customerId: r.customerId,
+        customer: customersById.get(r.customerId) ?? null,
+        qbPaymentId: r.qbPaymentId,
+        qbInvoiceId: r.qbInvoiceId,
+        amountCents: r.amountCents,
+        paymentMethod: r.paymentMethod,
+        paymentDate: r.paymentDate?.toISOString().split('T')[0] ?? null,
+        state: r.state,
+        direction: r.direction,
+        errorMessage: r.errorMessage,
+        attemptCount: r.attemptCount,
+        lastAttemptAt: r.lastAttemptAt?.toISOString() ?? null,
+        createdAt: r.createdAt.toISOString(),
+        updatedAt: r.updatedAt.toISOString(),
+      })),
+      total,
+      limit,
+      offset,
     });
-  }
-
-  const where = {
-    ...(stateParam ? { state: stateParam } : {}),
-    ...(workOrderId ? { workOrderId } : {}),
-    ...(customerId ? { customerId } : {}),
-  };
-
-  const [items, total] = await Promise.all([
-    paymentSyncListQueries.findMany(where, { updatedAt: 'desc' }, limit, offset),
-    paymentSyncListQueries.count(where),
-  ]);
-  const [workOrdersById, customersById] = await Promise.all([
-    loadInvoiceWorkOrderSummaries(items.map((item) => item.workOrderId)),
-    loadCustomerSyncSummaries(items.map((item) => item.customerId)),
-  ]);
-
-  return jsonResponse(200, {
-    items: items.map((r) => ({
-      id: r.id,
-      invoiceSyncId: r.invoiceSyncId,
-      workOrderId: r.workOrderId,
-      workOrder: workOrdersById.get(r.workOrderId) ?? null,
-      customerId: r.customerId,
-      customer: customersById.get(r.customerId) ?? null,
-      qbPaymentId: r.qbPaymentId,
-      qbInvoiceId: r.qbInvoiceId,
-      amountCents: r.amountCents,
-      paymentMethod: r.paymentMethod,
-      paymentDate: r.paymentDate?.toISOString().split('T')[0] ?? null,
-      state: r.state,
-      direction: r.direction,
-      errorMessage: r.errorMessage,
-      attemptCount: r.attemptCount,
-      lastAttemptAt: r.lastAttemptAt?.toISOString() ?? null,
-      createdAt: r.createdAt.toISOString(),
-      updatedAt: r.updatedAt.toISOString(),
-    })),
-    total,
-    limit,
-    offset,
-  });
-}, { requireAuth: false });
+  },
+  { requireAuth: false },
+);
 
 // ─── Retry payment sync ──────────────────────────────────────────────────────
 
-export const retryPaymentSyncHandler = wrapHandler(async (ctx) => {
-  const id = ctx.event.pathParameters?.id;
-  if (!id) return jsonResponse(400, { message: 'Payment sync record ID is required.' });
+export const retryPaymentSyncHandler = wrapHandler(
+  async (ctx) => {
+    const id = ctx.event.pathParameters?.id;
+    if (!id) return jsonResponse(400, { message: 'Payment sync record ID is required.' });
 
-  const service = createPaymentSyncService();
-  const context = {
-    correlationId: ctx.correlationId,
-    actorId: ctx.actorUserId ?? 'system',
-    module: 'accounting',
-  };
+    const service = createPaymentSyncService();
+    const context = {
+      correlationId: ctx.correlationId,
+      actorId: ctx.actorUserId ?? 'system',
+      module: 'accounting',
+    };
 
-  const record = await service.getRecord(id);
-  if (!record) return jsonResponse(404, { message: `Payment sync record not found: ${id}` });
-  if (record.state !== PaymentSyncState.FAILED) {
-    return jsonResponse(409, {
-      message: `Cannot retry a payment record in ${record.state} state.`,
+    const record = await service.getRecord(id);
+    if (!record) return jsonResponse(404, { message: `Payment sync record not found: ${id}` });
+    if (record.state !== PaymentSyncState.FAILED) {
+      return jsonResponse(409, {
+        message: `Cannot retry a payment record in ${record.state} state.`,
+      });
+    }
+
+    const updated = await service.retryPayment(id, context);
+    return jsonResponse(200, {
+      id: updated.id,
+      state: updated.state,
+      message: 'Payment sync queued for retry.',
     });
-  }
-
-  const updated = await service.retryPayment(id, context);
-  return jsonResponse(200, {
-    id: updated.id,
-    state: updated.state,
-    message: 'Payment sync queued for retry.',
-  });
-}, { requireAuth: false });
+  },
+  { requireAuth: false },
+);
 
 // ─── Trigger customer sync ───────────────────────────────────────────────────
 
@@ -2494,40 +2661,43 @@ interface TriggerCustomerSyncBody {
   integrationAccountId: string;
 }
 
-export const triggerCustomerSyncHandler = wrapHandler(async (ctx) => {
-  const body = parseBody<TriggerCustomerSyncBody>(ctx.event);
-  if (!body.ok) return jsonResponse(400, { message: body.error });
+export const triggerCustomerSyncHandler = wrapHandler(
+  async (ctx) => {
+    const body = parseBody<TriggerCustomerSyncBody>(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
 
-  const { customerId, displayName, integrationAccountId } = body.value;
-  if (!customerId || !displayName || !integrationAccountId) {
-    return jsonResponse(422, {
-      message: 'customerId, displayName, and integrationAccountId are required.',
+    const { customerId, displayName, integrationAccountId } = body.value;
+    if (!customerId || !displayName || !integrationAccountId) {
+      return jsonResponse(422, {
+        message: 'customerId, displayName, and integrationAccountId are required.',
+      });
+    }
+
+    const service = createCustomerSyncService();
+    const context = {
+      correlationId: ctx.correlationId,
+      actorId: ctx.actorUserId ?? 'system',
+      module: 'accounting',
+    };
+
+    const record = await service.queueSync(
+      {
+        customerId,
+        displayName,
+        email: body.value.email,
+        integrationAccountId,
+      },
+      context,
+    );
+
+    return jsonResponse(202, {
+      id: record.id,
+      state: record.state,
+      message: 'Customer sync queued.',
     });
-  }
-
-  const service = createCustomerSyncService();
-  const context = {
-    correlationId: ctx.correlationId,
-    actorId: ctx.actorUserId ?? 'system',
-    module: 'accounting',
-  };
-
-  const record = await service.queueSync(
-    {
-      customerId,
-      displayName,
-      email: body.value.email,
-      integrationAccountId,
-    },
-    context,
-  );
-
-  return jsonResponse(202, {
-    id: record.id,
-    state: record.state,
-    message: 'Customer sync queued.',
-  });
-}, { requireAuth: false });
+  },
+  { requireAuth: false },
+);
 
 // ─── Reconciliation & Failure Queue service factories ─────────────────────────
 
@@ -2551,69 +2721,78 @@ const VALID_FAILURE_TYPES = new Set<string>(['invoice', 'customer', 'payment']);
 
 // ─── List reconciliation runs ────────────────────────────────────────────────
 
-export const listReconciliationRunsHandler = wrapHandler(async (ctx) => {
-  const limit = Math.min(
-    Number(ctx.event.queryStringParameters?.limit ?? 50),
-    200,
-  );
-  const offset = Number(ctx.event.queryStringParameters?.offset ?? 0);
+export const listReconciliationRunsHandler = wrapHandler(
+  async (ctx) => {
+    const limit = Math.min(Number(ctx.event.queryStringParameters?.limit ?? 50), 200);
+    const offset = Number(ctx.event.queryStringParameters?.offset ?? 0);
 
-  const service = createReconciliationService();
-  const runs = await service.listRuns(limit, offset);
+    const service = createReconciliationService();
+    const runs = await service.listRuns(limit, offset);
 
-  return jsonResponse(200, { items: runs, limit, offset });
-}, { requireAuth: false });
+    return jsonResponse(200, { items: runs, limit, offset });
+  },
+  { requireAuth: false },
+);
 
 // ─── Trigger reconciliation ──────────────────────────────────────────────────
 
-export const triggerReconciliationHandler = wrapHandler(async (ctx) => {
-  const service = createReconciliationService();
-  const context = {
-    correlationId: ctx.correlationId,
-    actorId: ctx.actorUserId ?? 'system',
-    module: 'accounting',
-  };
+export const triggerReconciliationHandler = wrapHandler(
+  async (ctx) => {
+    const service = createReconciliationService();
+    const context = {
+      correlationId: ctx.correlationId,
+      actorId: ctx.actorUserId ?? 'system',
+      module: 'accounting',
+    };
 
-  const run = await service.runReconciliation(context);
+    const run = await service.runReconciliation(context);
 
-  return jsonResponse(202, {
-    runId: run.id,
-    status: run.status,
-    totalRecords: run.totalRecords,
-    matchedCount: run.matchedCount,
-    mismatchCount: run.mismatchCount,
-    errorCount: run.errorCount,
-    message: 'Reconciliation completed.',
-  });
-}, { requireAuth: false });
+    return jsonResponse(202, {
+      runId: run.id,
+      status: run.status,
+      totalRecords: run.totalRecords,
+      matchedCount: run.matchedCount,
+      mismatchCount: run.mismatchCount,
+      errorCount: run.errorCount,
+      message: 'Reconciliation completed.',
+    });
+  },
+  { requireAuth: false },
+);
 
 // ─── Get reconciliation run ─────────────────────────────────────────────────
 
-export const getReconciliationRunHandler = wrapHandler(async (ctx) => {
-  const runId = ctx.event.pathParameters?.id;
-  if (!runId) {
-    return jsonResponse(400, { message: 'Run ID is required.' });
-  }
+export const getReconciliationRunHandler = wrapHandler(
+  async (ctx) => {
+    const runId = ctx.event.pathParameters?.id;
+    if (!runId) {
+      return jsonResponse(400, { message: 'Run ID is required.' });
+    }
 
-  const service = createReconciliationService();
-  const summary = await service.getRunSummary(runId);
-  if (!summary) {
-    return jsonResponse(404, { message: `Reconciliation run not found: ${runId}` });
-  }
+    const service = createReconciliationService();
+    const summary = await service.getRunSummary(runId);
+    if (!summary) {
+      return jsonResponse(404, { message: `Reconciliation run not found: ${runId}` });
+    }
 
-  return jsonResponse(200, summary);
-}, { requireAuth: false });
+    return jsonResponse(200, summary);
+  },
+  { requireAuth: false },
+);
 
 // ─── List mismatches ─────────────────────────────────────────────────────────
 
-export const listMismatchesHandler = wrapHandler(async (ctx) => {
-  const runId = ctx.event.queryStringParameters?.runId;
+export const listMismatchesHandler = wrapHandler(
+  async (ctx) => {
+    const runId = ctx.event.queryStringParameters?.runId;
 
-  const service = createReconciliationService();
-  const mismatches = await service.listMismatches(runId ?? undefined);
+    const service = createReconciliationService();
+    const mismatches = await service.listMismatches(runId ?? undefined);
 
-  return jsonResponse(200, { items: mismatches, count: mismatches.length });
-}, { requireAuth: false });
+    return jsonResponse(200, { items: mismatches, count: mismatches.length });
+  },
+  { requireAuth: false },
+);
 
 // ─── Resolve reconciliation record ──────────────────────────────────────────
 
@@ -2621,53 +2800,59 @@ interface ResolveReconciliationBody {
   notes: string;
 }
 
-export const resolveReconciliationHandler = wrapHandler(async (ctx) => {
-  const recordId = ctx.event.pathParameters?.id;
-  if (!recordId) {
-    return jsonResponse(400, { message: 'Record ID is required.' });
-  }
-
-  const body = parseBody<ResolveReconciliationBody>(ctx.event);
-  if (!body.ok) return jsonResponse(400, { message: body.error });
-
-  if (!body.value.notes) {
-    return jsonResponse(422, { message: 'notes field is required.' });
-  }
-
-  const service = createReconciliationService();
-  const context = {
-    correlationId: ctx.correlationId,
-    actorId: ctx.actorUserId ?? 'system',
-    module: 'accounting',
-  };
-
-  try {
-    const resolved = await service.resolveRecord(
-      recordId,
-      { resolvedBy: context.actorId, notes: body.value.notes },
-      context,
-    );
-    return jsonResponse(200, resolved);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    if (message.includes('not found')) {
-      return jsonResponse(404, { message });
+export const resolveReconciliationHandler = wrapHandler(
+  async (ctx) => {
+    const recordId = ctx.event.pathParameters?.id;
+    if (!recordId) {
+      return jsonResponse(400, { message: 'Record ID is required.' });
     }
-    if (message.includes('Can only resolve MISMATCH')) {
-      return jsonResponse(409, { message });
+
+    const body = parseBody<ResolveReconciliationBody>(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
+
+    if (!body.value.notes) {
+      return jsonResponse(422, { message: 'notes field is required.' });
     }
-    return jsonResponse(500, { message });
-  }
-}, { requireAuth: false });
+
+    const service = createReconciliationService();
+    const context = {
+      correlationId: ctx.correlationId,
+      actorId: ctx.actorUserId ?? 'system',
+      module: 'accounting',
+    };
+
+    try {
+      const resolved = await service.resolveRecord(
+        recordId,
+        { resolvedBy: context.actorId, notes: body.value.notes },
+        context,
+      );
+      return jsonResponse(200, resolved);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      if (message.includes('not found')) {
+        return jsonResponse(404, { message });
+      }
+      if (message.includes('Can only resolve MISMATCH')) {
+        return jsonResponse(409, { message });
+      }
+      return jsonResponse(500, { message });
+    }
+  },
+  { requireAuth: false },
+);
 
 // ─── Get failure summary ─────────────────────────────────────────────────────
 
-export const getFailureSummaryHandler = wrapHandler(async (_ctx) => {
-  const service = createFailureQueueService();
-  const summary = await service.getFailureSummary();
+export const getFailureSummaryHandler = wrapHandler(
+  async (_ctx) => {
+    const service = createFailureQueueService();
+    const summary = await service.getFailureSummary();
 
-  return jsonResponse(200, summary);
-}, { requireAuth: false });
+    return jsonResponse(200, summary);
+  },
+  { requireAuth: false },
+);
 
 // ─── Retry failed records ────────────────────────────────────────────────────
 
@@ -2676,560 +2861,586 @@ interface RetryFailedBody {
   recordId?: string;
 }
 
-export const retryFailedHandler = wrapHandler(async (ctx) => {
-  const body = parseBody<RetryFailedBody>(ctx.event);
-  if (!body.ok) return jsonResponse(400, { message: body.error });
+export const retryFailedHandler = wrapHandler(
+  async (ctx) => {
+    const body = parseBody<RetryFailedBody>(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
 
-  if (body.value.type && !VALID_FAILURE_TYPES.has(body.value.type)) {
-    return jsonResponse(422, {
-      message: `Invalid type. Must be one of: ${[...VALID_FAILURE_TYPES].join(', ')}`,
+    if (body.value.type && !VALID_FAILURE_TYPES.has(body.value.type)) {
+      return jsonResponse(422, {
+        message: `Invalid type. Must be one of: ${[...VALID_FAILURE_TYPES].join(', ')}`,
+      });
+    }
+
+    const service = createFailureQueueService();
+    const context = {
+      correlationId: ctx.correlationId,
+      actorId: ctx.actorUserId ?? 'system',
+      module: 'accounting',
+    };
+
+    const type = body.value.type as SyncRecordType | undefined;
+
+    if (body.value.recordId && body.value.type) {
+      const result = await service.retryRecord(
+        body.value.type as SyncRecordType,
+        body.value.recordId,
+        context,
+      );
+      return jsonResponse(200, result);
+    }
+
+    const results = await service.retryAll(type, context);
+    return jsonResponse(200, {
+      retried: results.length,
+      succeeded: results.filter((r) => r.success).length,
+      failed: results.filter((r) => !r.success).length,
+      results,
     });
-  }
-
-  const service = createFailureQueueService();
-  const context = {
-    correlationId: ctx.correlationId,
-    actorId: ctx.actorUserId ?? 'system',
-    module: 'accounting',
-  };
-
-  const type = body.value.type as SyncRecordType | undefined;
-
-  if (body.value.recordId && body.value.type) {
-    const result = await service.retryRecord(
-      body.value.type as SyncRecordType,
-      body.value.recordId,
-      context,
-    );
-    return jsonResponse(200, result);
-  }
-
-  const results = await service.retryAll(type, context);
-  return jsonResponse(200, {
-    retried: results.length,
-    succeeded: results.filter((r) => r.success).length,
-    failed: results.filter((r) => !r.success).length,
-    results,
-  });
-}, { requireAuth: false });
+  },
+  { requireAuth: false },
+);
 
 // ─── Operational ledger preview ─────────────────────────────────────────────
 
-export const listOperationalLedgerHandler = wrapHandler(async (ctx) => {
-  const qs = ctx.event.queryStringParameters ?? {};
-  const limit = parseLedgerLimit(qs.limit);
-  const offset = parseLedgerOffset(qs.offset);
-  const sourceType = qs.sourceType as OperationalLedgerSourceType | undefined;
-  const status = qs.status as OperationalLedgerStatus | undefined;
+export const listOperationalLedgerHandler = wrapHandler(
+  async (ctx) => {
+    const qs = ctx.event.queryStringParameters ?? {};
+    const limit = parseLedgerLimit(qs.limit);
+    const offset = parseLedgerOffset(qs.offset);
+    const sourceType = qs.sourceType as OperationalLedgerSourceType | undefined;
+    const status = qs.status as OperationalLedgerStatus | undefined;
 
-  if (sourceType && !OPERATIONAL_LEDGER_SOURCE_TYPES.has(sourceType)) {
-    return jsonResponse(422, {
-      message: `Invalid sourceType. Must be one of: ${[...OPERATIONAL_LEDGER_SOURCE_TYPES].join(', ')}`,
+    if (sourceType && !OPERATIONAL_LEDGER_SOURCE_TYPES.has(sourceType)) {
+      return jsonResponse(422, {
+        message: `Invalid sourceType. Must be one of: ${[...OPERATIONAL_LEDGER_SOURCE_TYPES].join(', ')}`,
+      });
+    }
+    if (status && !OPERATIONAL_LEDGER_STATUSES.has(status)) {
+      return jsonResponse(422, {
+        message: `Invalid status. Must be one of: ${[...OPERATIONAL_LEDGER_STATUSES].join(', ')}`,
+      });
+    }
+
+    const take = Math.min(limit + offset, 200);
+    const snapshot = await loadOperationalLedgerSnapshot(take);
+    const entries = snapshot.entries
+      .filter((entry) => !sourceType || entry.sourceType === sourceType)
+      .filter((entry) => !status || entry.status === status)
+      .sort((a, b) => Date.parse(b.ledgerDate) - Date.parse(a.ledgerDate));
+
+    return jsonResponse(200, {
+      items: entries.slice(offset, offset + limit),
+      total: entries.length,
+      limit,
+      offset,
+      summary: summarizeLedgerEntries(entries, snapshot.exceptions),
+      postingRules: OPERATIONAL_LEDGER_POSTING_RULES,
     });
-  }
-  if (status && !OPERATIONAL_LEDGER_STATUSES.has(status)) {
-    return jsonResponse(422, {
-      message: `Invalid status. Must be one of: ${[...OPERATIONAL_LEDGER_STATUSES].join(', ')}`,
-    });
-  }
-
-  const take = Math.min(limit + offset, 200);
-  const snapshot = await loadOperationalLedgerSnapshot(take);
-  const entries = snapshot.entries
-    .filter((entry) => !sourceType || entry.sourceType === sourceType)
-    .filter((entry) => !status || entry.status === status)
-    .sort((a, b) => Date.parse(b.ledgerDate) - Date.parse(a.ledgerDate));
-
-  return jsonResponse(200, {
-    items: entries.slice(offset, offset + limit),
-    total: entries.length,
-    limit,
-    offset,
-    summary: summarizeLedgerEntries(entries, snapshot.exceptions),
-    postingRules: OPERATIONAL_LEDGER_POSTING_RULES,
-  });
-}, { requireAuth: false });
+  },
+  { requireAuth: false },
+);
 
 // ─── Accounting journals ────────────────────────────────────────────────────
 
-export const listAccountingPeriodLocksHandler = wrapHandler(async (ctx) => {
-  const qs = ctx.event.queryStringParameters ?? {};
-  const limit = parseJournalLimit(qs.limit);
-  const offset = parseJournalOffset(qs.offset);
+export const listAccountingPeriodLocksHandler = wrapHandler(
+  async (ctx) => {
+    const qs = ctx.event.queryStringParameters ?? {};
+    const limit = parseJournalLimit(qs.limit);
+    const offset = parseJournalOffset(qs.offset);
 
-  const [rows, total] = await Promise.all([
-    accountingPeriodLockQueries.list({ take: limit, skip: offset }),
-    accountingPeriodLockQueries.count(),
-  ]);
+    const [rows, total] = await Promise.all([
+      accountingPeriodLockQueries.list({ take: limit, skip: offset }),
+      accountingPeriodLockQueries.count(),
+    ]);
 
-  return jsonResponse(200, {
-    items: rows.map(mapPeriodLock),
-    total,
-    limit,
-    offset,
-  });
-}, { requireAuth: false });
-
-export const lockAccountingPeriodHandler = wrapHandler(async (ctx) => {
-  const body = parseBody<PeriodLockRequest>(ctx.event);
-  if (!body.ok) {
-    return jsonResponse(400, { message: body.error });
-  }
-  if (body.value.confirm !== true) {
-    return jsonResponse(400, {
-      message: 'Set confirm=true to lock an accounting period.',
+    return jsonResponse(200, {
+      items: rows.map(mapPeriodLock),
+      total,
+      limit,
+      offset,
     });
-  }
+  },
+  { requireAuth: false },
+);
 
-  const from = parseOptionalReportDate(body.value.from, false);
-  const to = parseOptionalReportDate(body.value.to, true);
-  if (!body.value.from || from === 'invalid') {
-    return jsonResponse(422, { message: 'A valid from date is required.' });
-  }
-  if (!body.value.to || to === 'invalid') {
-    return jsonResponse(422, { message: 'A valid to date is required.' });
-  }
-  if (!from || !to) {
-    return jsonResponse(422, { message: 'Both from and to dates are required.' });
-  }
-  const periodStart = from;
-  const periodEnd = to;
-  if (periodStart > periodEnd) {
-    return jsonResponse(422, { message: 'from must be before to.' });
-  }
-
-  const reason = body.value.reason?.trim();
-  if (!reason) {
-    return jsonResponse(422, { message: 'A close reason is required to lock a period.' });
-  }
-
-  const overlapping = await accountingPeriodLockQueries.listOverlapping({
-    from: periodStart,
-    to: periodEnd,
-  });
-  if (overlapping.length > 0) {
-    const lock = overlapping[0]!;
-    return jsonResponse(409, {
-      message: `This period overlaps a locked period from ${periodDateLabel(
-        lock.periodStart,
-      )} to ${periodDateLabel(lock.periodEnd)}.`,
-      lock: mapPeriodLock(lock),
-    });
-  }
-
-  const [journals, journalTotal, operationalSnapshot] = await Promise.all([
-    accountingReportQueries.listPostedJournals({
-      from: periodStart,
-      to: periodEnd,
-      take: TRIAL_BALANCE_JOURNAL_LIMIT,
-    }),
-    accountingReportQueries.countPostedJournals({ from: periodStart, to: periodEnd }),
-    loadOperationalLedgerSnapshot(200),
-  ]);
-  const report = buildTrialBalanceReport({
-    journals,
-    journalTotal,
-    operationalSnapshot,
-    periodStart,
-    periodEnd,
-  });
-
-  if (report.summary.closeStatus === 'BLOCKED') {
-    return jsonResponse(409, {
-      message: 'Close readiness is blocked. Resolve critical checks before locking this period.',
-      closeStatus: report.summary.closeStatus,
-      closeChecks: report.closeChecks,
-    });
-  }
-  if (report.summary.closeStatus === 'NEEDS_REVIEW' && body.value.allowWarnings !== true) {
-    return jsonResponse(409, {
-      message: 'Close readiness has warnings. Set allowWarnings=true after accounting review.',
-      closeStatus: report.summary.closeStatus,
-      closeChecks: report.closeChecks,
-    });
-  }
-
-  const lock = await accountingPeriodLockQueries.create({
-    from: periodStart,
-    to: periodEnd,
-    reason,
-    actorId: ctx.actorUserId ?? 'system',
-    correlationId: ctx.correlationId,
-  });
-
-  return jsonResponse(201, {
-    lock: mapPeriodLock(lock),
-    closeStatus: report.summary.closeStatus,
-    summary: report.summary,
-  });
-}, { requireAuth: false });
-
-export const listAccountingJournalsHandler = wrapHandler(async (ctx) => {
-  const qs = ctx.event.queryStringParameters ?? {};
-  const limit = parseJournalLimit(qs.limit);
-  const offset = parseJournalOffset(qs.offset);
-  const sourceType = qs.sourceType as OperationalLedgerSourceType | undefined;
-  const status = qs.status as AccountingJournalStatus | undefined;
-
-  if (sourceType && !OPERATIONAL_LEDGER_SOURCE_TYPES.has(sourceType)) {
-    return jsonResponse(422, {
-      message: `Invalid sourceType. Must be one of: ${[...OPERATIONAL_LEDGER_SOURCE_TYPES].join(', ')}`,
-    });
-  }
-  if (status && !ACCOUNTING_JOURNAL_STATUSES.has(status)) {
-    return jsonResponse(422, {
-      message: `Invalid status. Must be one of: ${[...ACCOUNTING_JOURNAL_STATUSES].join(', ')}`,
-    });
-  }
-
-  const [rows, total] = await Promise.all([
-    accountingJournalQueries.list({ take: limit, skip: offset, sourceType, status }),
-    accountingJournalQueries.count({ sourceType, status }),
-  ]);
-  const items = rows.map(mapJournal);
-
-  return jsonResponse(200, {
-    items,
-    total,
-    limit,
-    offset,
-    summary: summarizeJournals(items),
-  });
-}, { requireAuth: false });
-
-export const getAccountingTrialBalanceHandler = wrapHandler(async (ctx) => {
-  const qs = ctx.event.queryStringParameters ?? {};
-  const from = parseOptionalReportDate(qs.from, false);
-  const to = parseOptionalReportDate(qs.to, true);
-
-  if (from === 'invalid') {
-    return jsonResponse(422, { message: 'Invalid from date. Use an ISO date or timestamp.' });
-  }
-  if (to === 'invalid') {
-    return jsonResponse(422, { message: 'Invalid to date. Use an ISO date or timestamp.' });
-  }
-  if (from && to && from > to) {
-    return jsonResponse(422, { message: 'from must be before to.' });
-  }
-
-  const [journals, journalTotal, operationalSnapshot] = await Promise.all([
-    accountingReportQueries.listPostedJournals({
-      from,
-      to,
-      take: TRIAL_BALANCE_JOURNAL_LIMIT,
-    }),
-    accountingReportQueries.countPostedJournals({ from, to }),
-    loadOperationalLedgerSnapshot(200),
-  ]);
-
-  return jsonResponse(200, buildTrialBalanceReport({
-    journals,
-    journalTotal,
-    operationalSnapshot,
-    periodStart: from,
-    periodEnd: to,
-  }));
-}, { requireAuth: false });
-
-export const getAccountingClosePackageHandler = wrapHandler(async (ctx) => {
-  const qs = ctx.event.queryStringParameters ?? {};
-  const from = parseOptionalReportDate(qs.from, false);
-  const to = parseOptionalReportDate(qs.to, true);
-
-  if (from === 'invalid') {
-    return jsonResponse(422, { message: 'Invalid from date. Use an ISO date or timestamp.' });
-  }
-  if (to === 'invalid') {
-    return jsonResponse(422, { message: 'Invalid to date. Use an ISO date or timestamp.' });
-  }
-  if (from && to && from > to) {
-    return jsonResponse(422, { message: 'from must be before to.' });
-  }
-
-  const documentLimit = parseJournalLimit(qs.documentLimit, 50);
-  const journalLimit = parseJournalLimit(qs.journalLimit, 100);
-  const [
-    journals,
-    journalTotal,
-    operationalSnapshot,
-    periodLocks,
-    invoiceRows,
-    invoiceTotal,
-    paymentRows,
-    paymentTotal,
-  ] = await Promise.all([
-    accountingReportQueries.listPostedJournals({
-      from,
-      to,
-      take: TRIAL_BALANCE_JOURNAL_LIMIT,
-    }),
-    accountingReportQueries.countPostedJournals({ from, to }),
-    loadOperationalLedgerSnapshot(200),
-    from && to ? accountingPeriodLockQueries.listOverlapping({ from, to }) : Promise.resolve([]),
-    accountingClosePackageQueries.listInvoiceDocuments({
-      from,
-      to,
-      take: documentLimit,
-    }),
-    accountingClosePackageQueries.countInvoiceDocuments({ from, to }),
-    accountingClosePackageQueries.listPaymentDocuments({
-      from,
-      to,
-      take: documentLimit,
-    }),
-    accountingClosePackageQueries.countPaymentDocuments({ from, to }),
-  ]);
-
-  const report = buildTrialBalanceReport({
-    journals,
-    journalTotal,
-    operationalSnapshot,
-    periodStart: from,
-    periodEnd: to,
-  });
-  const periodLock =
-    from && to
-      ? periodLocks.find((lock) => lock.periodStart <= from && lock.periodEnd >= to) ??
-        periodLocks[0] ??
-        null
-      : null;
-
-  const [workOrdersById, paymentWorkOrdersById, customersById] = await Promise.all([
-    loadInvoiceWorkOrderSummaries(invoiceRows.map((row) => row.workOrderId)),
-    loadInvoiceWorkOrderSummaries(paymentRows.map((row) => row.workOrderId)),
-    loadCustomerSyncSummaries(paymentRows.map((row) => row.customerId)),
-  ]);
-  const allWorkOrdersById = new Map([...workOrdersById, ...paymentWorkOrdersById]);
-  const invoices = invoiceRows.map((record) =>
-    mapClosePackageInvoice(record, allWorkOrdersById),
-  );
-  const payments = paymentRows.map((record) =>
-    mapClosePackagePayment(record, allWorkOrdersById, customersById),
-  );
-  const invoiceReviewCount = invoices.filter(
-    (document) => document.documentStatus === 'NEEDS_REVIEW',
-  ).length;
-  const paymentReviewCount = payments.filter(
-    (document) => document.documentStatus === 'NEEDS_REVIEW',
-  ).length;
-  const openCheckCount = report.closeChecks.filter((check) => !check.ok).length;
-  const blockerCount = openCheckCount + invoiceReviewCount + paymentReviewCount;
-  const mappedPeriodLock = periodLock ? mapPeriodLock(periodLock) : null;
-  const evidence = buildClosePackageEvidence({
-    report,
-    periodLock: mappedPeriodLock,
-    invoiceTotal,
-    paymentTotal,
-    journalTotal,
-  });
-  const actions = buildClosePackageActions({
-    report,
-    periodLock: mappedPeriodLock,
-    invoiceReviewCount,
-    paymentReviewCount,
-  });
-
-  const response: AccountingClosePackageResponse = {
-    packageId: closePackageId(from, to),
-    packageNumber: closePackageNumber(from, to),
-    generatedAt: new Date().toISOString(),
-    periodStart: formatReportDate(from),
-    periodEnd: formatReportDate(to),
-    currencyCode: 'USD',
-    closeStatus: report.summary.closeStatus,
-    readyForExternalReview:
-      report.summary.closeStatus === 'READY' &&
-      blockerCount === 0 &&
-      !report.summary.truncated &&
-      Boolean(mappedPeriodLock),
-    periodLock: mappedPeriodLock,
-    summary: {
-      accountCount: report.summary.accountCount,
-      postedJournalCount: report.summary.postedJournalCount,
-      totalDebitCents: report.summary.totalDebitCents,
-      totalCreditCents: report.summary.totalCreditCents,
-      outOfBalanceCents: report.summary.outOfBalanceCents,
-      unpostedOperationalCount: report.summary.unpostedOperationalCount,
-      reviewItemCount: report.summary.reviewItemCount,
-      integrationExceptionCount: report.summary.integrationExceptionCount,
-      invoiceDocumentCount: invoiceTotal,
-      paymentDocumentCount: paymentTotal,
-      journalEvidenceCount: journalTotal,
-      blockerCount,
-      truncated:
-        report.summary.truncated ||
-        invoiceRows.length < invoiceTotal ||
-        paymentRows.length < paymentTotal ||
-        Math.min(journalLimit, journals.length) < journalTotal,
-    },
-    closeChecks: report.closeChecks,
-    accountLines: report.accountLines,
-    journals: journals.slice(0, journalLimit).map(mapJournal),
-    documents: { invoices, payments },
-    evidence,
-    actions,
-  };
-
-  return jsonResponse(200, response);
-}, { requireAuth: false });
-
-export const reverseAccountingJournalHandler = wrapHandler(async (ctx) => {
-  const journalId = ctx.event.pathParameters?.journalId ?? ctx.event.pathParameters?.id;
-  if (!journalId) {
-    return jsonResponse(400, { message: 'journalId path parameter is required.' });
-  }
-
-  const body = parseBody<JournalReversalRequest>(ctx.event);
-  if (!body.ok) {
-    return jsonResponse(400, { message: body.error });
-  }
-  if (body.value.confirm !== true) {
-    return jsonResponse(400, { message: 'Set confirm=true to reverse a journal.' });
-  }
-
-  const reason = body.value.reason?.trim();
-  if (!reason) {
-    return jsonResponse(422, { message: 'A reversal reason is required.' });
-  }
-
-  const reversalDate = parseOptionalReportDate(body.value.reversalDate, false);
-  if (reversalDate === 'invalid') {
-    return jsonResponse(422, { message: 'Invalid reversalDate. Use an ISO date or timestamp.' });
-  }
-  const effectiveReversalDate = reversalDate ?? new Date();
-
-  const original = await accountingJournalQueries.findById(journalId);
-  if (!original) {
-    return jsonResponse(404, { message: 'Journal not found.' });
-  }
-  if (original.reversalOfJournalId) {
-    return jsonResponse(409, { message: 'Reversal journals cannot be reversed from this action.' });
-  }
-  if (original.status === 'REVERSED') {
-    const reversal = await accountingJournalQueries.findReversalForJournal(original.id);
-    return jsonResponse(409, {
-      message: 'Journal is already reversed.',
-      original: mapJournal(original),
-      reversal: reversal ? mapJournal(reversal) : null,
-    });
-  }
-
-  const locks = await accountingPeriodLockQueries.listOverlapping({
-    from: original.ledgerDate < effectiveReversalDate ? original.ledgerDate : effectiveReversalDate,
-    to: original.ledgerDate > effectiveReversalDate ? original.ledgerDate : effectiveReversalDate,
-  });
-  const originalLock = findLockForDate(original.ledgerDate, locks);
-  if (originalLock) {
-    return jsonResponse(409, {
-      message: `Journal ${original.journalNumber} is in locked period ${periodDateLabel(
-        originalLock.periodStart,
-      )} to ${periodDateLabel(originalLock.periodEnd)}.`,
-    });
-  }
-  const reversalLock = findLockForDate(effectiveReversalDate, locks);
-  if (reversalLock) {
-    return jsonResponse(409, {
-      message: `Reversal date is in locked period ${periodDateLabel(
-        reversalLock.periodStart,
-      )} to ${periodDateLabel(reversalLock.periodEnd)}.`,
-    });
-  }
-
-  const result = await accountingJournalQueries.reverseJournal(
-    original,
-    { reason, reversalDate: effectiveReversalDate },
-    {
-      actorId: ctx.actorUserId ?? 'system',
-      correlationId: ctx.correlationId,
-    },
-  );
-
-  return jsonResponse(201, {
-    original: mapJournal(result.original),
-    reversal: mapJournal(result.reversal),
-    summary: summarizeJournals([mapJournal(result.original), mapJournal(result.reversal)]),
-  });
-}, { requireAuth: false });
-
-export const postOperationalLedgerJournalsHandler = wrapHandler(async (ctx) => {
-  const body = parseBody<JournalPostRequest>(ctx.event);
-  if (!body.ok) {
-    return jsonResponse(400, { message: body.error });
-  }
-  if (body.value.confirm !== true) {
-    return jsonResponse(400, {
-      message: 'Set confirm=true to post operational ledger entries into immutable journals.',
-    });
-  }
-  if (
-    body.value.sourceType &&
-    !OPERATIONAL_LEDGER_SOURCE_TYPES.has(body.value.sourceType)
-  ) {
-    return jsonResponse(422, {
-      message: `Invalid sourceType. Must be one of: ${[...OPERATIONAL_LEDGER_SOURCE_TYPES].join(', ')}`,
-    });
-  }
-
-  const limit = parseJournalLimit(body.value.limit, 100);
-  const snapshot = await loadOperationalLedgerSnapshot(limit);
-  const sourceEntries = snapshot.entries.filter(
-    (entry) => !body.value.sourceType || entry.sourceType === body.value.sourceType,
-  );
-  const candidates = sourceEntries
-    .filter(isPostableOperationalEntry)
-    .slice(0, limit);
-  const lockWindow =
-    candidates.length > 0
-      ? candidates.reduce(
-          (window, entry) => {
-            const ledgerDate = new Date(entry.ledgerDate);
-            return {
-              from: ledgerDate < window.from ? ledgerDate : window.from,
-              to: ledgerDate > window.to ? ledgerDate : window.to,
-            };
-          },
-          {
-            from: new Date(candidates[0]!.ledgerDate),
-            to: new Date(candidates[0]!.ledgerDate),
-          },
-        )
-      : null;
-  const periodLocks = lockWindow
-    ? await accountingPeriodLockQueries.listOverlapping(lockWindow)
-    : [];
-  const unlockedCandidates = candidates.filter(
-    (entry) => !findLockForDate(new Date(entry.ledgerDate), periodLocks),
-  );
-
-  const posted: AccountingJournalResponse[] = [];
-  const skipped = {
-    notPostable: sourceEntries.length - candidates.length,
-    lockedPeriod: candidates.length - unlockedCandidates.length,
-    existing: 0,
-  };
-
-  for (const entry of unlockedCandidates) {
-    const existing = await accountingJournalQueries.findBySource(entry);
-    if (existing) {
-      skipped.existing += 1;
-      posted.push(mapJournal(existing));
-      continue;
+export const lockAccountingPeriodHandler = wrapHandler(
+  async (ctx) => {
+    const body = parseBody<PeriodLockRequest>(ctx.event);
+    if (!body.ok) {
+      return jsonResponse(400, { message: body.error });
+    }
+    if (body.value.confirm !== true) {
+      return jsonResponse(400, {
+        message: 'Set confirm=true to lock an accounting period.',
+      });
     }
 
-    const journal = await accountingJournalQueries.createFromOperationalEntry(entry, {
+    const from = parseOptionalReportDate(body.value.from, false);
+    const to = parseOptionalReportDate(body.value.to, true);
+    if (!body.value.from || from === 'invalid') {
+      return jsonResponse(422, { message: 'A valid from date is required.' });
+    }
+    if (!body.value.to || to === 'invalid') {
+      return jsonResponse(422, { message: 'A valid to date is required.' });
+    }
+    if (!from || !to) {
+      return jsonResponse(422, { message: 'Both from and to dates are required.' });
+    }
+    const periodStart = from;
+    const periodEnd = to;
+    if (periodStart > periodEnd) {
+      return jsonResponse(422, { message: 'from must be before to.' });
+    }
+
+    const reason = body.value.reason?.trim();
+    if (!reason) {
+      return jsonResponse(422, { message: 'A close reason is required to lock a period.' });
+    }
+
+    const overlapping = await accountingPeriodLockQueries.listOverlapping({
+      from: periodStart,
+      to: periodEnd,
+    });
+    if (overlapping.length > 0) {
+      const lock = overlapping[0]!;
+      return jsonResponse(409, {
+        message: `This period overlaps a locked period from ${periodDateLabel(
+          lock.periodStart,
+        )} to ${periodDateLabel(lock.periodEnd)}.`,
+        lock: mapPeriodLock(lock),
+      });
+    }
+
+    const [journals, journalTotal, operationalSnapshot] = await Promise.all([
+      accountingReportQueries.listPostedJournals({
+        from: periodStart,
+        to: periodEnd,
+        take: TRIAL_BALANCE_JOURNAL_LIMIT,
+      }),
+      accountingReportQueries.countPostedJournals({ from: periodStart, to: periodEnd }),
+      loadOperationalLedgerSnapshot(200),
+    ]);
+    const report = buildTrialBalanceReport({
+      journals,
+      journalTotal,
+      operationalSnapshot,
+      periodStart,
+      periodEnd,
+    });
+
+    if (report.summary.closeStatus === 'BLOCKED') {
+      return jsonResponse(409, {
+        message: 'Close readiness is blocked. Resolve critical checks before locking this period.',
+        closeStatus: report.summary.closeStatus,
+        closeChecks: report.closeChecks,
+      });
+    }
+    if (report.summary.closeStatus === 'NEEDS_REVIEW' && body.value.allowWarnings !== true) {
+      return jsonResponse(409, {
+        message: 'Close readiness has warnings. Set allowWarnings=true after accounting review.',
+        closeStatus: report.summary.closeStatus,
+        closeChecks: report.closeChecks,
+      });
+    }
+
+    const lock = await accountingPeriodLockQueries.create({
+      from: periodStart,
+      to: periodEnd,
+      reason,
       actorId: ctx.actorUserId ?? 'system',
       correlationId: ctx.correlationId,
     });
-    posted.push(mapJournal(journal));
-  }
 
-  return jsonResponse(201, {
-    posted,
-    postedCount: posted.length - skipped.existing,
-    skipped,
-    summary: summarizeJournals(posted),
-  });
-}, { requireAuth: false });
+    return jsonResponse(201, {
+      lock: mapPeriodLock(lock),
+      closeStatus: report.summary.closeStatus,
+      summary: report.summary,
+    });
+  },
+  { requireAuth: false },
+);
+
+export const listAccountingJournalsHandler = wrapHandler(
+  async (ctx) => {
+    const qs = ctx.event.queryStringParameters ?? {};
+    const limit = parseJournalLimit(qs.limit);
+    const offset = parseJournalOffset(qs.offset);
+    const sourceType = qs.sourceType as OperationalLedgerSourceType | undefined;
+    const status = qs.status as AccountingJournalStatus | undefined;
+
+    if (sourceType && !OPERATIONAL_LEDGER_SOURCE_TYPES.has(sourceType)) {
+      return jsonResponse(422, {
+        message: `Invalid sourceType. Must be one of: ${[...OPERATIONAL_LEDGER_SOURCE_TYPES].join(', ')}`,
+      });
+    }
+    if (status && !ACCOUNTING_JOURNAL_STATUSES.has(status)) {
+      return jsonResponse(422, {
+        message: `Invalid status. Must be one of: ${[...ACCOUNTING_JOURNAL_STATUSES].join(', ')}`,
+      });
+    }
+
+    const [rows, total] = await Promise.all([
+      accountingJournalQueries.list({ take: limit, skip: offset, sourceType, status }),
+      accountingJournalQueries.count({ sourceType, status }),
+    ]);
+    const items = rows.map(mapJournal);
+
+    return jsonResponse(200, {
+      items,
+      total,
+      limit,
+      offset,
+      summary: summarizeJournals(items),
+    });
+  },
+  { requireAuth: false },
+);
+
+export const getAccountingTrialBalanceHandler = wrapHandler(
+  async (ctx) => {
+    const qs = ctx.event.queryStringParameters ?? {};
+    const from = parseOptionalReportDate(qs.from, false);
+    const to = parseOptionalReportDate(qs.to, true);
+
+    if (from === 'invalid') {
+      return jsonResponse(422, { message: 'Invalid from date. Use an ISO date or timestamp.' });
+    }
+    if (to === 'invalid') {
+      return jsonResponse(422, { message: 'Invalid to date. Use an ISO date or timestamp.' });
+    }
+    if (from && to && from > to) {
+      return jsonResponse(422, { message: 'from must be before to.' });
+    }
+
+    const [journals, journalTotal, operationalSnapshot] = await Promise.all([
+      accountingReportQueries.listPostedJournals({
+        from,
+        to,
+        take: TRIAL_BALANCE_JOURNAL_LIMIT,
+      }),
+      accountingReportQueries.countPostedJournals({ from, to }),
+      loadOperationalLedgerSnapshot(200),
+    ]);
+
+    return jsonResponse(
+      200,
+      buildTrialBalanceReport({
+        journals,
+        journalTotal,
+        operationalSnapshot,
+        periodStart: from,
+        periodEnd: to,
+      }),
+    );
+  },
+  { requireAuth: false },
+);
+
+export const getAccountingClosePackageHandler = wrapHandler(
+  async (ctx) => {
+    const qs = ctx.event.queryStringParameters ?? {};
+    const from = parseOptionalReportDate(qs.from, false);
+    const to = parseOptionalReportDate(qs.to, true);
+
+    if (from === 'invalid') {
+      return jsonResponse(422, { message: 'Invalid from date. Use an ISO date or timestamp.' });
+    }
+    if (to === 'invalid') {
+      return jsonResponse(422, { message: 'Invalid to date. Use an ISO date or timestamp.' });
+    }
+    if (from && to && from > to) {
+      return jsonResponse(422, { message: 'from must be before to.' });
+    }
+
+    const documentLimit = parseJournalLimit(qs.documentLimit, 50);
+    const journalLimit = parseJournalLimit(qs.journalLimit, 100);
+    const [
+      journals,
+      journalTotal,
+      operationalSnapshot,
+      periodLocks,
+      invoiceRows,
+      invoiceTotal,
+      paymentRows,
+      paymentTotal,
+    ] = await Promise.all([
+      accountingReportQueries.listPostedJournals({
+        from,
+        to,
+        take: TRIAL_BALANCE_JOURNAL_LIMIT,
+      }),
+      accountingReportQueries.countPostedJournals({ from, to }),
+      loadOperationalLedgerSnapshot(200),
+      from && to ? accountingPeriodLockQueries.listOverlapping({ from, to }) : Promise.resolve([]),
+      accountingClosePackageQueries.listInvoiceDocuments({
+        from,
+        to,
+        take: documentLimit,
+      }),
+      accountingClosePackageQueries.countInvoiceDocuments({ from, to }),
+      accountingClosePackageQueries.listPaymentDocuments({
+        from,
+        to,
+        take: documentLimit,
+      }),
+      accountingClosePackageQueries.countPaymentDocuments({ from, to }),
+    ]);
+
+    const report = buildTrialBalanceReport({
+      journals,
+      journalTotal,
+      operationalSnapshot,
+      periodStart: from,
+      periodEnd: to,
+    });
+    const periodLock =
+      from && to
+        ? (periodLocks.find((lock) => lock.periodStart <= from && lock.periodEnd >= to) ??
+          periodLocks[0] ??
+          null)
+        : null;
+
+    const [workOrdersById, paymentWorkOrdersById, customersById] = await Promise.all([
+      loadInvoiceWorkOrderSummaries(invoiceRows.map((row) => row.workOrderId)),
+      loadInvoiceWorkOrderSummaries(paymentRows.map((row) => row.workOrderId)),
+      loadCustomerSyncSummaries(paymentRows.map((row) => row.customerId)),
+    ]);
+    const allWorkOrdersById = new Map([...workOrdersById, ...paymentWorkOrdersById]);
+    const invoices = invoiceRows.map((record) => mapClosePackageInvoice(record, allWorkOrdersById));
+    const payments = paymentRows.map((record) =>
+      mapClosePackagePayment(record, allWorkOrdersById, customersById),
+    );
+    const invoiceReviewCount = invoices.filter(
+      (document) => document.documentStatus === 'NEEDS_REVIEW',
+    ).length;
+    const paymentReviewCount = payments.filter(
+      (document) => document.documentStatus === 'NEEDS_REVIEW',
+    ).length;
+    const openCheckCount = report.closeChecks.filter((check) => !check.ok).length;
+    const blockerCount = openCheckCount + invoiceReviewCount + paymentReviewCount;
+    const mappedPeriodLock = periodLock ? mapPeriodLock(periodLock) : null;
+    const evidence = buildClosePackageEvidence({
+      report,
+      periodLock: mappedPeriodLock,
+      invoiceTotal,
+      paymentTotal,
+      journalTotal,
+    });
+    const actions = buildClosePackageActions({
+      report,
+      periodLock: mappedPeriodLock,
+      invoiceReviewCount,
+      paymentReviewCount,
+    });
+
+    const response: AccountingClosePackageResponse = {
+      packageId: closePackageId(from, to),
+      packageNumber: closePackageNumber(from, to),
+      generatedAt: new Date().toISOString(),
+      periodStart: formatReportDate(from),
+      periodEnd: formatReportDate(to),
+      currencyCode: 'USD',
+      closeStatus: report.summary.closeStatus,
+      readyForExternalReview:
+        report.summary.closeStatus === 'READY' &&
+        blockerCount === 0 &&
+        !report.summary.truncated &&
+        Boolean(mappedPeriodLock),
+      periodLock: mappedPeriodLock,
+      summary: {
+        accountCount: report.summary.accountCount,
+        postedJournalCount: report.summary.postedJournalCount,
+        totalDebitCents: report.summary.totalDebitCents,
+        totalCreditCents: report.summary.totalCreditCents,
+        outOfBalanceCents: report.summary.outOfBalanceCents,
+        unpostedOperationalCount: report.summary.unpostedOperationalCount,
+        reviewItemCount: report.summary.reviewItemCount,
+        integrationExceptionCount: report.summary.integrationExceptionCount,
+        invoiceDocumentCount: invoiceTotal,
+        paymentDocumentCount: paymentTotal,
+        journalEvidenceCount: journalTotal,
+        blockerCount,
+        truncated:
+          report.summary.truncated ||
+          invoiceRows.length < invoiceTotal ||
+          paymentRows.length < paymentTotal ||
+          Math.min(journalLimit, journals.length) < journalTotal,
+      },
+      closeChecks: report.closeChecks,
+      accountLines: report.accountLines,
+      journals: journals.slice(0, journalLimit).map(mapJournal),
+      documents: { invoices, payments },
+      evidence,
+      actions,
+    };
+
+    return jsonResponse(200, response);
+  },
+  { requireAuth: false },
+);
+
+export const reverseAccountingJournalHandler = wrapHandler(
+  async (ctx) => {
+    const journalId = ctx.event.pathParameters?.journalId ?? ctx.event.pathParameters?.id;
+    if (!journalId) {
+      return jsonResponse(400, { message: 'journalId path parameter is required.' });
+    }
+
+    const body = parseBody<JournalReversalRequest>(ctx.event);
+    if (!body.ok) {
+      return jsonResponse(400, { message: body.error });
+    }
+    if (body.value.confirm !== true) {
+      return jsonResponse(400, { message: 'Set confirm=true to reverse a journal.' });
+    }
+
+    const reason = body.value.reason?.trim();
+    if (!reason) {
+      return jsonResponse(422, { message: 'A reversal reason is required.' });
+    }
+
+    const reversalDate = parseOptionalReportDate(body.value.reversalDate, false);
+    if (reversalDate === 'invalid') {
+      return jsonResponse(422, { message: 'Invalid reversalDate. Use an ISO date or timestamp.' });
+    }
+    const effectiveReversalDate = reversalDate ?? new Date();
+
+    const original = await accountingJournalQueries.findById(journalId);
+    if (!original) {
+      return jsonResponse(404, { message: 'Journal not found.' });
+    }
+    if (original.reversalOfJournalId) {
+      return jsonResponse(409, {
+        message: 'Reversal journals cannot be reversed from this action.',
+      });
+    }
+    if (original.status === 'REVERSED') {
+      const reversal = await accountingJournalQueries.findReversalForJournal(original.id);
+      return jsonResponse(409, {
+        message: 'Journal is already reversed.',
+        original: mapJournal(original),
+        reversal: reversal ? mapJournal(reversal) : null,
+      });
+    }
+
+    const locks = await accountingPeriodLockQueries.listOverlapping({
+      from:
+        original.ledgerDate < effectiveReversalDate ? original.ledgerDate : effectiveReversalDate,
+      to: original.ledgerDate > effectiveReversalDate ? original.ledgerDate : effectiveReversalDate,
+    });
+    const originalLock = findLockForDate(original.ledgerDate, locks);
+    if (originalLock) {
+      return jsonResponse(409, {
+        message: `Journal ${original.journalNumber} is in locked period ${periodDateLabel(
+          originalLock.periodStart,
+        )} to ${periodDateLabel(originalLock.periodEnd)}.`,
+      });
+    }
+    const reversalLock = findLockForDate(effectiveReversalDate, locks);
+    if (reversalLock) {
+      return jsonResponse(409, {
+        message: `Reversal date is in locked period ${periodDateLabel(
+          reversalLock.periodStart,
+        )} to ${periodDateLabel(reversalLock.periodEnd)}.`,
+      });
+    }
+
+    const result = await accountingJournalQueries.reverseJournal(
+      original,
+      { reason, reversalDate: effectiveReversalDate },
+      {
+        actorId: ctx.actorUserId ?? 'system',
+        correlationId: ctx.correlationId,
+      },
+    );
+
+    return jsonResponse(201, {
+      original: mapJournal(result.original),
+      reversal: mapJournal(result.reversal),
+      summary: summarizeJournals([mapJournal(result.original), mapJournal(result.reversal)]),
+    });
+  },
+  { requireAuth: false },
+);
+
+export const postOperationalLedgerJournalsHandler = wrapHandler(
+  async (ctx) => {
+    const body = parseBody<JournalPostRequest>(ctx.event);
+    if (!body.ok) {
+      return jsonResponse(400, { message: body.error });
+    }
+    if (body.value.confirm !== true) {
+      return jsonResponse(400, {
+        message: 'Set confirm=true to post operational ledger entries into immutable journals.',
+      });
+    }
+    if (body.value.sourceType && !OPERATIONAL_LEDGER_SOURCE_TYPES.has(body.value.sourceType)) {
+      return jsonResponse(422, {
+        message: `Invalid sourceType. Must be one of: ${[...OPERATIONAL_LEDGER_SOURCE_TYPES].join(', ')}`,
+      });
+    }
+
+    const limit = parseJournalLimit(body.value.limit, 100);
+    const snapshot = await loadOperationalLedgerSnapshot(limit);
+    const sourceEntries = snapshot.entries.filter(
+      (entry) => !body.value.sourceType || entry.sourceType === body.value.sourceType,
+    );
+    const candidates = sourceEntries.filter(isPostableOperationalEntry).slice(0, limit);
+    const lockWindow =
+      candidates.length > 0
+        ? candidates.reduce(
+            (window, entry) => {
+              const ledgerDate = new Date(entry.ledgerDate);
+              return {
+                from: ledgerDate < window.from ? ledgerDate : window.from,
+                to: ledgerDate > window.to ? ledgerDate : window.to,
+              };
+            },
+            {
+              from: new Date(candidates[0]!.ledgerDate),
+              to: new Date(candidates[0]!.ledgerDate),
+            },
+          )
+        : null;
+    const periodLocks = lockWindow
+      ? await accountingPeriodLockQueries.listOverlapping(lockWindow)
+      : [];
+    const unlockedCandidates = candidates.filter(
+      (entry) => !findLockForDate(new Date(entry.ledgerDate), periodLocks),
+    );
+
+    const posted: AccountingJournalResponse[] = [];
+    const skipped = {
+      notPostable: sourceEntries.length - candidates.length,
+      lockedPeriod: candidates.length - unlockedCandidates.length,
+      existing: 0,
+    };
+
+    for (const entry of unlockedCandidates) {
+      const existing = await accountingJournalQueries.findBySource(entry);
+      if (existing) {
+        skipped.existing += 1;
+        posted.push(mapJournal(existing));
+        continue;
+      }
+
+      const journal = await accountingJournalQueries.createFromOperationalEntry(entry, {
+        actorId: ctx.actorUserId ?? 'system',
+        correlationId: ctx.correlationId,
+      });
+      posted.push(mapJournal(journal));
+    }
+
+    return jsonResponse(201, {
+      posted,
+      postedCount: posted.length - skipped.existing,
+      skipped,
+      summary: summarizeJournals(posted),
+    });
+  },
+  { requireAuth: false },
+);
 
 // ─── Mapping service factory ──────────────────────────────────────────────────
 
@@ -3241,70 +3452,85 @@ const VALID_DIMENSION_TYPES = new Set<string>(Object.values(DimensionMappingType
 
 // ─── List dimension mappings ──────────────────────────────────────────────────
 
-export const listDimensionMappingsHandler = wrapHandler(async (ctx) => {
-  const qs = ctx.event.queryStringParameters ?? {};
-  const integrationAccountId = qs.integrationAccountId;
-  if (!integrationAccountId) {
-    return jsonResponse(400, { message: 'integrationAccountId query parameter is required.' });
-  }
+export const listDimensionMappingsHandler = wrapHandler(
+  async (ctx) => {
+    const qs = ctx.event.queryStringParameters ?? {};
+    const integrationAccountId = qs.integrationAccountId;
+    if (!integrationAccountId) {
+      return jsonResponse(400, { message: 'integrationAccountId query parameter is required.' });
+    }
 
-  const service = createMappingService();
-  const items = await service.listDimensionMappings(integrationAccountId, qs.namespace ?? 'default');
-  return jsonResponse(200, { items, total: items.length });
-}, { requireAuth: false });
+    const service = createMappingService();
+    const items = await service.listDimensionMappings(
+      integrationAccountId,
+      qs.namespace ?? 'default',
+    );
+    return jsonResponse(200, { items, total: items.length });
+  },
+  { requireAuth: false },
+);
 
 // ─── Upsert dimension mapping ─────────────────────────────────────────────────
 
-export const upsertDimensionMappingHandler = wrapHandler(async (ctx) => {
-  const body = parseBody<UpsertDimensionInput>(ctx.event);
-  if (!body.ok) return jsonResponse(400, { message: body.error });
+export const upsertDimensionMappingHandler = wrapHandler(
+  async (ctx) => {
+    const body = parseBody<UpsertDimensionInput>(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
 
-  const { integrationAccountId, mappingType, internalCode, externalId } = body.value;
-  if (!integrationAccountId || !mappingType || !internalCode || !externalId) {
-    return jsonResponse(422, {
-      message: 'integrationAccountId, mappingType, internalCode, and externalId are required.',
-    });
-  }
-  if (!VALID_DIMENSION_TYPES.has(mappingType)) {
-    return jsonResponse(422, {
-      message: `Invalid mappingType. Must be one of: ${[...VALID_DIMENSION_TYPES].join(', ')}`,
-    });
-  }
+    const { integrationAccountId, mappingType, internalCode, externalId } = body.value;
+    if (!integrationAccountId || !mappingType || !internalCode || !externalId) {
+      return jsonResponse(422, {
+        message: 'integrationAccountId, mappingType, internalCode, and externalId are required.',
+      });
+    }
+    if (!VALID_DIMENSION_TYPES.has(mappingType)) {
+      return jsonResponse(422, {
+        message: `Invalid mappingType. Must be one of: ${[...VALID_DIMENSION_TYPES].join(', ')}`,
+      });
+    }
 
-  const service = createMappingService();
-  const result = await service.upsertDimensionMapping(body.value);
-  return jsonResponse(200, result);
-}, { requireAuth: false });
+    const service = createMappingService();
+    const result = await service.upsertDimensionMapping(body.value);
+    return jsonResponse(200, result);
+  },
+  { requireAuth: false },
+);
 
 // ─── List tax mappings ────────────────────────────────────────────────────────
 
-export const listTaxMappingsHandler = wrapHandler(async (ctx) => {
-  const qs = ctx.event.queryStringParameters ?? {};
-  const integrationAccountId = qs.integrationAccountId;
-  if (!integrationAccountId) {
-    return jsonResponse(400, { message: 'integrationAccountId query parameter is required.' });
-  }
+export const listTaxMappingsHandler = wrapHandler(
+  async (ctx) => {
+    const qs = ctx.event.queryStringParameters ?? {};
+    const integrationAccountId = qs.integrationAccountId;
+    if (!integrationAccountId) {
+      return jsonResponse(400, { message: 'integrationAccountId query parameter is required.' });
+    }
 
-  const service = createMappingService();
-  const items = await service.listTaxMappings(integrationAccountId, qs.namespace ?? 'default');
-  return jsonResponse(200, { items, total: items.length });
-}, { requireAuth: false });
+    const service = createMappingService();
+    const items = await service.listTaxMappings(integrationAccountId, qs.namespace ?? 'default');
+    return jsonResponse(200, { items, total: items.length });
+  },
+  { requireAuth: false },
+);
 
 // ─── Upsert tax mapping ───────────────────────────────────────────────────────
 
-export const upsertTaxMappingHandler = wrapHandler(async (ctx) => {
-  const body = parseBody<UpsertTaxInput>(ctx.event);
-  if (!body.ok) return jsonResponse(400, { message: body.error });
+export const upsertTaxMappingHandler = wrapHandler(
+  async (ctx) => {
+    const body = parseBody<UpsertTaxInput>(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
 
-  const { integrationAccountId, taxRegionCode, internalTaxCode, externalTaxCodeId } = body.value;
-  if (!integrationAccountId || !taxRegionCode || !internalTaxCode || !externalTaxCodeId) {
-    return jsonResponse(422, {
-      message:
-        'integrationAccountId, taxRegionCode, internalTaxCode, and externalTaxCodeId are required.',
-    });
-  }
+    const { integrationAccountId, taxRegionCode, internalTaxCode, externalTaxCodeId } = body.value;
+    if (!integrationAccountId || !taxRegionCode || !internalTaxCode || !externalTaxCodeId) {
+      return jsonResponse(422, {
+        message:
+          'integrationAccountId, taxRegionCode, internalTaxCode, and externalTaxCodeId are required.',
+      });
+    }
 
-  const service = createMappingService();
-  const result = await service.upsertTaxMapping(body.value);
-  return jsonResponse(200, result);
-}, { requireAuth: false });
+    const service = createMappingService();
+    const result = await service.upsertTaxMapping(body.value);
+    return jsonResponse(200, result);
+  },
+  { requireAuth: false },
+);

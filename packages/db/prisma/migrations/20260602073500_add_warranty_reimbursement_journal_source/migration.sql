@@ -1,0 +1,2 @@
+ALTER TYPE accounting."AccountingJournalSourceType"
+  ADD VALUE IF NOT EXISTS 'WARRANTY_REIMBURSEMENT';

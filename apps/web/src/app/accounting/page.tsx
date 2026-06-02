@@ -39,6 +39,9 @@ interface AccountingMetrics {
   ledgerEntries: number;
   ledgerReviewCount: number;
   ledgerValue: number;
+  warrantyReady: number;
+  warrantyReview: number;
+  warrantyValue: number;
 }
 
 const EMPTY: AccountingMetrics = {
@@ -58,6 +61,9 @@ const EMPTY: AccountingMetrics = {
   ledgerEntries: 0,
   ledgerReviewCount: 0,
   ledgerValue: 0,
+  warrantyReady: 0,
+  warrantyReview: 0,
+  warrantyValue: 0,
 };
 
 const STRICT_LIVE_DATA = { allowMockFallback: false } as const;
@@ -78,6 +84,7 @@ const ACCOUNTING_LINKS = {
   recentInvoices: erpRoute('quickbooks-invoice'),
   openInvoices: erpRoute('quickbooks-invoice', { filter: 'OPEN' }),
   ledger: erpRoute('accounting-ledger'),
+  warranty: erpRoute('accounting-ledger', { sourceType: 'WARRANTY_REIMBURSEMENT' }),
   reconciliation: erpRoute('accounting-reconciliation'),
   integrationSettings: erpRoute('integration-settings'),
 };
@@ -148,6 +155,10 @@ export default function AccountingPage() {
       void customerAll;
       const payableSummary = summarizePayables(ok(payables)?.items ?? []);
       const ledgerSummary = ok(ledger)?.summary;
+      const ledgerItems = ok(ledger)?.items ?? [];
+      const warrantyEntries = ledgerItems.filter(
+        (entry) => entry.sourceType === 'WARRANTY_REIMBURSEMENT',
+      );
 
       setM({
         qb: ok(qb) ?? null,
@@ -172,6 +183,11 @@ export default function AccountingPage() {
           (ledgerSummary?.statusTotals.FAILED.count ?? 0) +
           (ledgerSummary?.statusTotals.MISMATCH.count ?? 0),
         ledgerValue: (ledgerSummary?.totalDebitCents ?? 0) / 100,
+        warrantyReady: warrantyEntries.filter(
+          (entry) => entry.status === 'READY_FOR_REVIEW' || entry.status === 'POSTED',
+        ).length,
+        warrantyReview: warrantyEntries.filter((entry) => entry.status === 'NEEDS_REVIEW').length,
+        warrantyValue: warrantyEntries.reduce((sum, entry) => sum + entry.amountCents, 0) / 100,
       });
       setLoadError(rejected ? errorMessage(rejected.reason) : null);
       setLoading(false);
@@ -395,7 +411,7 @@ export default function AccountingPage() {
           <span>Local sync state</span>
           <span className="group-open:rotate-90 transition-transform inline-block">▸</span>
         </summary>
-        <div className="grid grid-cols-2 gap-4 mb-6 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-4 mb-6 lg:grid-cols-7">
           <KpiCard
             label="Total failures"
             value={m.failureSummary.total}
@@ -446,6 +462,14 @@ export default function AccountingPage() {
             tone={m.ledgerReviewCount > 0 ? 'amber' : 'neutral'}
             subline={`${m.ledgerReviewCount} review · ${formatUsd(m.ledgerValue)}`}
             href={ACCOUNTING_LINKS.ledger}
+            loading={loading}
+          />
+          <KpiCard
+            label="Warranty claims"
+            value={m.warrantyReady + m.warrantyReview}
+            tone={m.warrantyReview > 0 ? 'amber' : m.warrantyReady > 0 ? 'green' : 'neutral'}
+            subline={`${m.warrantyReady} postable · ${m.warrantyReview} review · ${formatUsd(m.warrantyValue)}`}
+            href={ACCOUNTING_LINKS.warranty}
             loading={loading}
           />
         </div>
@@ -744,6 +768,17 @@ function buildActionQueue(m: AccountingMetrics, connected: boolean): QueuedActio
       detail: `${m.payablesReady} ready for bill entry · ${m.payablesReview} need receiving or variance cleanup · ${formatUsd(m.payablesValue)} accepted value.`,
       cta: 'Review payables →',
       href: ACCOUNTING_LINKS.payables,
+    });
+  }
+
+  const warrantyNeedingAction = m.warrantyReady + m.warrantyReview;
+  if (warrantyNeedingAction > 0) {
+    out.push({
+      severity: m.warrantyReview > 0 ? 'medium' : 'low',
+      title: `${warrantyNeedingAction} warranty claim${warrantyNeedingAction === 1 ? '' : 's'} need reimbursement posting`,
+      detail: `${m.warrantyReady} postable in the accounting ledger · ${m.warrantyReview} need provider context cleanup · ${formatUsd(m.warrantyValue)} approved value.`,
+      cta: 'Review reimbursements →',
+      href: ACCOUNTING_LINKS.warranty,
     });
   }
 

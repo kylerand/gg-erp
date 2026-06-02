@@ -1460,6 +1460,8 @@ test('accounting sync monitor exposes live purchase-order payable handoff', () =
       'LiveDataWarning',
       'PO bill review',
       'Ledger entries',
+      'Warranty claims',
+      "erpRoute('accounting-ledger', { sourceType: 'WARRANTY_REIMBURSEMENT' })",
     ].filter((snippet) => !accountingSource.includes(snippet)),
     [],
   );
@@ -1548,6 +1550,9 @@ test('accounting sync monitor exposes live purchase-order payable handoff', () =
       'Payable receipts',
       'Customer payments',
       'Reconciliation variance',
+      'Warranty reimbursements',
+      'initialSourceFilter()',
+      "erpRoute('warranty-claim'",
       "erpRecordRoute('purchase-order'",
       "erpRoute('accounting-sync', { view: 'payments' })",
       "erpRoute('accounting-reconciliation')",

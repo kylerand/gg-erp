@@ -352,15 +352,16 @@
           deployed standalone customer profile editing, deployed standalone cart asset editing,
           deployed customer timeline, deployed next actions, deployed customer activity logging,
           deployed dealer relationship updates, deployed dealer relationship creation work, deployed
-          dealer account maintenance work, deployed dealer account route cleanup, and active
-          warranty claim/reimbursement work. The app has moved past polished static screens into a
-          usable shop-ops ERP foundation, but ShopMonkey cutover remains blocked until complete
-          parts and purchase-order source exports are captured.
+          dealer account maintenance work, deployed dealer account route cleanup, deployed warranty
+          claim/reimbursement storage and route cleanup, and active warranty reimbursement
+          accounting ledger work. The app has moved past polished static screens into a usable
+          shop-ops ERP foundation, but ShopMonkey cutover remains blocked until complete parts and
+          purchase-order source exports are captured.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 2, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 190</span>
-          <span class="chip">Active slice: Warranty claim reimbursement workflow</span>
+          <span class="chip">Baseline: origin/main through PR 192</span>
+          <span class="chip">Active slice: Warranty reimbursement accounting ledger</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
@@ -687,10 +688,12 @@
               allowlists after CD, and PR #190 added a strict-live customer warranty handoff panel
               with exact dealer relationship reads, provider coverage status, uncovered-cart
               detection, open service/payment context, and query-prefilled warranty-provider
-              relationship creation. This branch adds first-class warranty claim storage, live
+              relationship creation. PR #191 added first-class warranty claim storage, live
               list/create/update claim routes, a warranty claims queue, customer workspace claim
               counts, claim timeline events, prefilled claim intake, and reimbursement follow-up
-              actions.
+              actions. PR #192 removed the deployed warranty route allowlist. This branch adds
+              approved warranty claims as accounting ledger entries with dashboard drill-through,
+              review status, and immutable journal posting support.
             </p>
           </div>
 
@@ -836,9 +839,9 @@
             work-order provenance, and version diff workflows need a heavier change-control gate.
           </li>
           <li>
-            <strong>Deepen customer workspaces:</strong> remove the temporary warranty-claim route
-            allowlist after CD deploys the new routes, then use UAT to decide whether provider
-            document attachments or QuickBooks reimbursement posting needs a separate slice.
+            <strong>Deepen warranty reimbursement:</strong> finish the accounting-ledger source for
+            approved provider claims, then use UAT to decide whether provider document attachments
+            or a policy-specific QuickBooks reimbursement posting path needs a separate slice.
           </li>
         </ol>
       </section>

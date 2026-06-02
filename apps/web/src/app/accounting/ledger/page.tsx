@@ -38,6 +38,7 @@ const SOURCE_FILTERS: Array<'ALL' | OperationalLedgerSourceType> = [
   'PAYABLE_RECEIPT',
   'CUSTOMER_PAYMENT',
   'RECONCILIATION_VARIANCE',
+  'WARRANTY_REIMBURSEMENT',
 ];
 const STATUS_FILTERS: Array<'ALL' | OperationalLedgerStatus> = [
   'ALL',
@@ -53,9 +54,13 @@ const STATUS_FILTERS: Array<'ALL' | OperationalLedgerStatus> = [
 const DEFAULT_PERIOD = currentMonthRange();
 
 export default function AccountingLedgerPage() {
-  const [sourceType, setSourceType] = useState<'ALL' | OperationalLedgerSourceType>('ALL');
+  const [sourceType, setSourceType] = useState<'ALL' | OperationalLedgerSourceType>(() =>
+    initialSourceFilter(),
+  );
   const [status, setStatus] = useState<'ALL' | OperationalLedgerStatus>('ALL');
-  const [periodFrom, setPeriodFrom] = useState(() => initialPeriodValue('from', DEFAULT_PERIOD.from));
+  const [periodFrom, setPeriodFrom] = useState(() =>
+    initialPeriodValue('from', DEFAULT_PERIOD.from),
+  );
   const [periodTo, setPeriodTo] = useState(() => initialPeriodValue('to', DEFAULT_PERIOD.to));
   const [lockReason, setLockReason] = useState('Month-end close reviewed in ERP.');
   const [ledger, setLedger] = useState<OperationalLedgerResponse | null>(null);
@@ -74,28 +79,28 @@ export default function AccountingLedgerPage() {
     const sourceFilter = sourceType === 'ALL' ? undefined : sourceType;
     const [ledgerData, journalData, trialBalanceData, closePackageData, periodLockData] =
       await Promise.all([
-      listOperationalLedger(
-        {
-          limit: 100,
-          sourceType: sourceFilter,
-          status: status === 'ALL' ? undefined : status,
-        },
-        STRICT_LIVE_DATA,
-      ),
-      listAccountingJournals(
-        {
-          limit: 50,
-          sourceType: sourceFilter,
-        },
-        STRICT_LIVE_DATA,
-      ),
-      getAccountingTrialBalance({ from: periodFrom, to: periodTo }, STRICT_LIVE_DATA),
-      getAccountingClosePackage(
-        { from: periodFrom, to: periodTo, documentLimit: 50, journalLimit: 50 },
-        STRICT_LIVE_DATA,
-      ),
-      listAccountingPeriodLocks({ limit: 12 }, STRICT_LIVE_DATA),
-    ]);
+        listOperationalLedger(
+          {
+            limit: 100,
+            sourceType: sourceFilter,
+            status: status === 'ALL' ? undefined : status,
+          },
+          STRICT_LIVE_DATA,
+        ),
+        listAccountingJournals(
+          {
+            limit: 50,
+            sourceType: sourceFilter,
+          },
+          STRICT_LIVE_DATA,
+        ),
+        getAccountingTrialBalance({ from: periodFrom, to: periodTo }, STRICT_LIVE_DATA),
+        getAccountingClosePackage(
+          { from: periodFrom, to: periodTo, documentLimit: 50, journalLimit: 50 },
+          STRICT_LIVE_DATA,
+        ),
+        listAccountingPeriodLocks({ limit: 12 }, STRICT_LIVE_DATA),
+      ]);
     return { ledgerData, journalData, trialBalanceData, closePackageData, periodLockData };
   }, [periodFrom, periodTo, sourceType, status]);
 
@@ -202,8 +207,14 @@ export default function AccountingLedgerPage() {
     setLoadError(null);
     setPostResult(null);
     try {
-      const result = await reverseAccountingJournal(entry.id, { reason: reason.trim() }, STRICT_LIVE_DATA);
-      setPostResult(`${result.original.journalNumber} reversed with ${result.reversal.journalNumber}.`);
+      const result = await reverseAccountingJournal(
+        entry.id,
+        { reason: reason.trim() },
+        STRICT_LIVE_DATA,
+      );
+      setPostResult(
+        `${result.original.journalNumber} reversed with ${result.reversal.journalNumber}.`,
+      );
       const { ledgerData, journalData, trialBalanceData, closePackageData, periodLockData } =
         await loadData();
       setLedger(ledgerData);
@@ -249,7 +260,7 @@ export default function AccountingLedgerPage() {
     <div>
       <PageHeader
         title="Accounting Ledger"
-        description="Operational accounting entries, posting rules, and immutable journal consequences from live payables, payments, and reconciliation variance."
+        description="Operational accounting entries, posting rules, and immutable journal consequences from live payables, payments, warranty reimbursements, and reconciliation variance."
       />
 
       {loadError && (
@@ -333,7 +344,9 @@ export default function AccountingLedgerPage() {
               Entries needing review, failed syncs, pending payments, and mismatches stay in the
               operational ledger.
             </p>
-            {postResult && <p className="mt-2 text-xs font-semibold text-green-700">{postResult}</p>}
+            {postResult && (
+              <p className="mt-2 text-xs font-semibold text-green-700">{postResult}</p>
+            )}
           </div>
           <button
             type="button"
@@ -346,43 +359,43 @@ export default function AccountingLedgerPage() {
         </div>
       </div>
 
-      <div className="mb-6 grid gap-4 lg:grid-cols-3">
-        {SOURCE_FILTERS.filter((source): source is OperationalLedgerSourceType => source !== 'ALL').map(
-          (source) => {
-            const rule = rulesBySource.get(source);
-            const total = summary?.sourceTotals[source];
-            return (
-              <button
-                key={source}
-                type="button"
-                onClick={() => setSourceType(source)}
-                className={`rounded-lg border bg-white p-4 text-left transition-colors ${
-                  sourceType === source
-                    ? 'border-gray-900'
-                    : 'border-gray-200 hover:border-yellow-400'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">{sourceLabel(source)}</p>
-                    <p className="mt-1 text-xs text-gray-500">{rule?.trigger}</p>
-                  </div>
-                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
-                    {total?.count ?? 0}
-                  </span>
+      <div className="mb-6 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+        {SOURCE_FILTERS.filter(
+          (source): source is OperationalLedgerSourceType => source !== 'ALL',
+        ).map((source) => {
+          const rule = rulesBySource.get(source);
+          const total = summary?.sourceTotals[source];
+          return (
+            <button
+              key={source}
+              type="button"
+              onClick={() => setSourceType(source)}
+              className={`rounded-lg border bg-white p-4 text-left transition-colors ${
+                sourceType === source
+                  ? 'border-gray-900'
+                  : 'border-gray-200 hover:border-yellow-400'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">{sourceLabel(source)}</p>
+                  <p className="mt-1 text-xs text-gray-500">{rule?.trigger}</p>
                 </div>
-                <div className="mt-3 text-xs text-gray-600">
-                  <span className="font-semibold text-gray-900">{rule?.debitAccount}</span>
-                  <span className="mx-1 text-gray-400">to</span>
-                  <span className="font-semibold text-gray-900">{rule?.creditAccount}</span>
-                </div>
-                <div className="mt-2 text-lg font-semibold text-gray-900">
-                  {formatUsdCents(total?.amountCents ?? 0)}
-                </div>
-              </button>
-            );
-          },
-        )}
+                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
+                  {total?.count ?? 0}
+                </span>
+              </div>
+              <div className="mt-3 text-xs text-gray-600">
+                <span className="font-semibold text-gray-900">{rule?.debitAccount}</span>
+                <span className="mx-1 text-gray-400">to</span>
+                <span className="font-semibold text-gray-900">{rule?.creditAccount}</span>
+              </div>
+              <div className="mt-2 text-lg font-semibold text-gray-900">
+                {formatUsdCents(total?.amountCents ?? 0)}
+              </div>
+            </button>
+          );
+        })}
       </div>
 
       <div className="mb-8 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(420px,1.3fr)]">
@@ -395,7 +408,7 @@ export default function AccountingLedgerPage() {
       ) : !ledger || ledger.items.length === 0 ? (
         <EmptyState
           title="No ledger entries match these filters"
-          description="Received purchase orders, customer payments, or reconciliation mismatches will appear here after they exist in the live system."
+          description="Received purchase orders, customer payments, approved warranty claims, or reconciliation mismatches will appear here after they exist in the live system."
         />
       ) : (
         <LedgerTable entries={ledger.items} />
@@ -418,7 +431,7 @@ export default function AccountingLedgerPage() {
         ) : !journals || journals.items.length === 0 ? (
           <EmptyState
             title="No journals posted yet"
-            description="Use Post ready journals after live payable receipts or posted customer payments are available."
+            description="Use Post ready journals after live payable receipts, approved warranty reimbursements, or posted customer payments are available."
           />
         ) : (
           <JournalTable
@@ -514,7 +527,9 @@ function PeriodControlPanel({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-sm font-semibold text-gray-900">Accounting period</h2>
-            <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${closeStatusClass(closeStatus)}`}>
+            <span
+              className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${closeStatusClass(closeStatus)}`}
+            >
               {closeStatusLabel(closeStatus)}
             </span>
           </div>
@@ -671,7 +686,11 @@ function ClosePackagePanel({
             <CloseMetric
               label="Period lock"
               value={closePackage.periodLock ? 'Locked' : 'Open'}
-              detail={closePackage.periodLock ? formatDate(closePackage.periodLock.lockedAt) : 'Not locked'}
+              detail={
+                closePackage.periodLock
+                  ? formatDate(closePackage.periodLock.lockedAt)
+                  : 'Not locked'
+              }
             />
           </div>
 
@@ -712,7 +731,9 @@ function EvidenceList({ items }: { items: AccountingClosePackageEvidence[] }) {
               <span className="font-semibold text-gray-900">{item.label}</span>
               <span className="ml-2 text-xs text-gray-500">{item.value}</span>
             </span>
-            <span className={`rounded-full border px-2 py-0.5 text-xs ${actionStatusClass(item.status)}`}>
+            <span
+              className={`rounded-full border px-2 py-0.5 text-xs ${actionStatusClass(item.status)}`}
+            >
               {actionStatusLabel(item.status)}
             </span>
           </Link>
@@ -735,7 +756,9 @@ function ClosePackageActions({ actions }: { actions: AccountingClosePackageActio
           >
             <div className="flex items-center justify-between gap-3">
               <span className="text-sm font-semibold text-gray-900">{action.label}</span>
-              <span className={`rounded-full border px-2 py-0.5 text-xs ${actionStatusClass(action.status)}`}>
+              <span
+                className={`rounded-full border px-2 py-0.5 text-xs ${actionStatusClass(action.status)}`}
+              >
                 {actionStatusLabel(action.status)}
               </span>
             </div>
@@ -750,7 +773,9 @@ function ClosePackageActions({ actions }: { actions: AccountingClosePackageActio
 function ClosePackageInvoiceList({ invoices }: { invoices: AccountingClosePackageInvoice[] }) {
   return (
     <div>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Invoice documents</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+        Invoice documents
+      </h3>
       {invoices.length === 0 ? (
         <div className="mt-2 rounded-md border border-dashed border-gray-200 px-3 py-4 text-sm text-gray-500">
           No invoice sync documents are in this package period.
@@ -773,7 +798,9 @@ function ClosePackageInvoiceList({ invoices }: { invoices: AccountingClosePackag
                 <DocumentStatusPill status={invoice.documentStatus} />
               </div>
               <div className="mt-1 text-xs text-gray-400">
-                {invoice.exportedAt ? `Exported ${formatDate(invoice.exportedAt)}` : `Created ${formatDate(invoice.createdAt)}`}
+                {invoice.exportedAt
+                  ? `Exported ${formatDate(invoice.exportedAt)}`
+                  : `Created ${formatDate(invoice.createdAt)}`}
               </div>
             </Link>
           ))}
@@ -786,7 +813,9 @@ function ClosePackageInvoiceList({ invoices }: { invoices: AccountingClosePackag
 function ClosePackagePaymentList({ payments }: { payments: AccountingClosePackagePayment[] }) {
   return (
     <div>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Payment documents</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+        Payment documents
+      </h3>
       {payments.length === 0 ? (
         <div className="mt-2 rounded-md border border-dashed border-gray-200 px-3 py-4 text-sm text-gray-500">
           No payment sync documents are in this package period.
@@ -809,8 +838,14 @@ function ClosePackagePaymentList({ payments }: { payments: AccountingClosePackag
                 <DocumentStatusPill status={payment.documentStatus} />
               </div>
               <div className="mt-1 flex items-center justify-between gap-3 text-xs text-gray-400">
-                <span>{payment.paymentDate ? formatDate(payment.paymentDate) : formatDate(payment.updatedAt)}</span>
-                <span className="font-semibold text-gray-700">{formatUsdCents(payment.amountCents)}</span>
+                <span>
+                  {payment.paymentDate
+                    ? formatDate(payment.paymentDate)
+                    : formatDate(payment.updatedAt)}
+                </span>
+                <span className="font-semibold text-gray-700">
+                  {formatUsdCents(payment.amountCents)}
+                </span>
               </div>
             </Link>
           ))}
@@ -848,7 +883,9 @@ function CloseReadinessPanel({
             Live trial balance, unposted ledger entries, and sync exceptions.
           </p>
         </div>
-        <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${closeStatusClass(closeStatus)}`}>
+        <span
+          className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${closeStatusClass(closeStatus)}`}
+        >
           {closeStatusLabel(closeStatus)}
         </span>
       </div>
@@ -917,7 +954,11 @@ function CloseCheckRow({ check }: { check: AccountingCloseCheck }) {
         <div className="flex items-center gap-2">
           <span
             className={`h-2 w-2 shrink-0 rounded-full ${
-              check.ok ? 'bg-green-500' : check.severity === 'critical' ? 'bg-red-500' : 'bg-amber-500'
+              check.ok
+                ? 'bg-green-500'
+                : check.severity === 'critical'
+                  ? 'bg-red-500'
+                  : 'bg-amber-500'
             }`}
           />
           <p className="text-sm font-semibold text-gray-900">{check.label}</p>
@@ -1189,7 +1230,11 @@ function MetricCard({
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-4">
       <div className={`text-2xl font-semibold ${toneClass}`}>
-        {loading ? <span className="inline-block h-7 w-20 animate-pulse rounded bg-gray-200" /> : value}
+        {loading ? (
+          <span className="inline-block h-7 w-20 animate-pulse rounded bg-gray-200" />
+        ) : (
+          value
+        )}
       </div>
       <div className="mt-1 text-xs font-semibold text-gray-500">{label}</div>
       <div className="mt-1 text-[11px] text-gray-400">{detail}</div>
@@ -1218,10 +1263,14 @@ function StatusPill({ status }: { status: OperationalLedgerStatus }) {
 function DocumentStatusPill({
   status,
 }: {
-  status: AccountingClosePackageInvoice['documentStatus'] | AccountingClosePackagePayment['documentStatus'];
+  status:
+    | AccountingClosePackageInvoice['documentStatus']
+    | AccountingClosePackagePayment['documentStatus'];
 }) {
   return (
-    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs ${documentStatusClass(status)}`}>
+    <span
+      className={`shrink-0 rounded-full border px-2 py-0.5 text-xs ${documentStatusClass(status)}`}
+    >
       {documentStatusLabel(status)}
     </span>
   );
@@ -1234,6 +1283,9 @@ function relatedHref(entry: OperationalLedgerEntry): string {
   if (entry.relatedRecordType === 'payment-sync') {
     return erpRoute('accounting-sync', { view: 'payments' });
   }
+  if (entry.relatedRecordType === 'warranty-claim') {
+    return erpRoute('warranty-claim', { claimId: entry.relatedRecordId });
+  }
   return erpRoute('accounting-reconciliation');
 }
 
@@ -1242,7 +1294,16 @@ function sourceLabel(sourceType: OperationalLedgerSourceType): string {
     PAYABLE_RECEIPT: 'Payable receipts',
     CUSTOMER_PAYMENT: 'Customer payments',
     RECONCILIATION_VARIANCE: 'Reconciliation variance',
+    WARRANTY_REIMBURSEMENT: 'Warranty reimbursements',
   }[sourceType];
+}
+
+function initialSourceFilter(): 'ALL' | OperationalLedgerSourceType {
+  if (typeof window === 'undefined') return 'ALL';
+  const value = new URLSearchParams(window.location.search).get('sourceType');
+  return SOURCE_FILTERS.includes(value as OperationalLedgerSourceType)
+    ? (value as OperationalLedgerSourceType)
+    : 'ALL';
 }
 
 function documentStatusLabel(status: AccountingClosePackageInvoice['documentStatus']): string {
@@ -1298,11 +1359,13 @@ function closeStatusLabel(status: AccountingCloseStatus): string {
 }
 
 function closeStatusTone(status: AccountingCloseStatus): 'green' | 'amber' | 'red' {
-  return ({
-    READY: 'green',
-    NEEDS_REVIEW: 'amber',
-    BLOCKED: 'red',
-  } as const)[status];
+  return (
+    {
+      READY: 'green',
+      NEEDS_REVIEW: 'amber',
+      BLOCKED: 'red',
+    } as const
+  )[status];
 }
 
 function closeStatusClass(status: AccountingCloseStatus): string {

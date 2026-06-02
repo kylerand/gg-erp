@@ -1655,6 +1655,14 @@ test('inventory procurement drill-in uses live PO/vendor reads and focused recei
       'beginPartEdit',
       'Save Part',
       'valuationSummary',
+      'VALUATION_ISSUE_OPTIONS',
+      'VALUATION_SOURCE_OPTIONS',
+      'valuationIssue: valuationIssue || undefined',
+      "buildPartsHref({ valuationIssue: 'MISSING_COST'",
+      "valuationIssue: 'REORDER_EXPOSURE'",
+      "buildPartsHref({ valuationIssue: '', valuationSource: 'NO_COST' })",
+      'Valuation Action Queue',
+      "erpRoute('material-planning')",
       'formatMoney(p.inventoryValue)',
       'formatValuationSource(p.valuationSource)',
       'selectedPartIds',
@@ -1676,9 +1684,17 @@ test('inventory procurement drill-in uses live PO/vendor reads and focused recei
   );
 
   assert.deepEqual(
-    ['PartValuationSummary', 'valuationSource', 'inventoryValue'].filter(
-      (snippet) => !apiClientSource.includes(snippet),
-    ),
+    [
+      'PartValuationSummary',
+      'PartValuationIssue',
+      'PartValuationSource',
+      'valuationIssue?: PartValuationIssue',
+      'valuationSource?: PartValuationSource',
+      "qs.set('valuationIssue'",
+      "qs.set('valuationSource'",
+      'valuationSource',
+      'inventoryValue',
+    ].filter((snippet) => !apiClientSource.includes(snippet)),
     [],
   );
 

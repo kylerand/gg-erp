@@ -3,7 +3,16 @@ import { Fragment, useEffect, useState, useCallback, useMemo, useRef } from 'rea
 import type { FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { CheckSquare, Clipboard, Download, FileUp, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckSquare,
+  Clipboard,
+  Download,
+  FileUp,
+  History,
+  PackageSearch,
+  X,
+} from 'lucide-react';
 import { PageHeader, LoadingSkeleton, EmptyState, StatusBadge } from '@gg-erp/ui';
 import {
   createPart,
@@ -16,6 +25,8 @@ import {
   type PartCategory,
   type PartState,
   type PartStockFilter,
+  type PartValuationIssue,
+  type PartValuationSource,
   type PartValuationSummary,
   type UpdatePartInput,
 } from '@/lib/api-client';
@@ -27,6 +38,8 @@ import { Pagination } from '@/components/ui/pagination';
 
 const PAGE_SIZE = 25;
 type StockFilter = PartStockFilter | '';
+type ValuationIssueFilter = PartValuationIssue | '';
+type ValuationSourceFilter = PartValuationSource | '';
 
 const PART_STATE_OPTIONS: { value: PartState; label: string }[] = [
   { value: 'ACTIVE', label: 'Active' },
@@ -61,6 +74,19 @@ const LIFECYCLE_OPTIONS: { value: LifecycleLevel; label: string }[] = [
 const STOCK_OPTIONS: { value: StockFilter; label: string }[] = [
   { value: '', label: 'All stock levels' },
   { value: 'OUT', label: 'Out of stock' },
+];
+
+const VALUATION_ISSUE_OPTIONS: { value: ValuationIssueFilter; label: string }[] = [
+  { value: '', label: 'All valuation states' },
+  { value: 'REORDER_EXPOSURE', label: 'Below minimum stock' },
+  { value: 'MISSING_COST', label: 'Missing cost evidence' },
+];
+
+const VALUATION_SOURCE_OPTIONS: { value: ValuationSourceFilter; label: string }[] = [
+  { value: '', label: 'All cost sources' },
+  { value: 'LOT_LEDGER', label: 'Lot cost' },
+  { value: 'LATEST_PO', label: 'Latest PO cost' },
+  { value: 'NO_COST', label: 'No cost evidence' },
 ];
 
 type PartImportStatus = 'READY' | 'INVALID' | 'CREATED' | 'FAILED';
@@ -190,6 +216,14 @@ function parseStock(value: string | null): StockFilter {
   return value === 'OUT' ? 'OUT' : '';
 }
 
+function parseValuationIssue(value: string | null): ValuationIssueFilter {
+  return isOptionValue(value, VALUATION_ISSUE_OPTIONS) ? value : '';
+}
+
+function parseValuationSource(value: string | null): ValuationSourceFilter {
+  return isOptionValue(value, VALUATION_SOURCE_OPTIONS) ? value : '';
+}
+
 function nowStamp(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -261,6 +295,8 @@ export default function PartsPage() {
   const activeInstallStage = parseInstallStage(searchParams.get('installStage'));
   const activeLifecycleLevel = parseLifecycleLevel(searchParams.get('lifecycleLevel'));
   const activeStock = parseStock(searchParams.get('stock'));
+  const activeValuationIssue = parseValuationIssue(searchParams.get('valuationIssue'));
+  const activeValuationSource = parseValuationSource(searchParams.get('valuationSource'));
   const [parts, setParts] = useState<Part[]>([]);
   const [total, setTotal] = useState(0);
   const [valuationSummary, setValuationSummary] =
@@ -286,6 +322,8 @@ export default function PartsPage() {
       cat: PartCategory | '',
       stage: InstallStage | '',
       level: LifecycleLevel | '',
+      valuationIssue: ValuationIssueFilter,
+      valuationSource: ValuationSourceFilter,
       p: number,
       ps: number,
     ) => {
@@ -298,6 +336,8 @@ export default function PartsPage() {
           category: cat || undefined,
           installStage: stage || undefined,
           lifecycleLevel: level || undefined,
+          valuationIssue: valuationIssue || undefined,
+          valuationSource: valuationSource || undefined,
           limit: ps,
           offset: (p - 1) * ps,
         });
@@ -324,6 +364,8 @@ export default function PartsPage() {
     activeInstallStage,
     activeLifecycleLevel,
     activeStock,
+    activeValuationIssue,
+    activeValuationSource,
   ]);
 
   useEffect(() => {
@@ -338,6 +380,8 @@ export default function PartsPage() {
     activeInstallStage,
     activeLifecycleLevel,
     activeStock,
+    activeValuationIssue,
+    activeValuationSource,
     page,
     pageSize,
   ]);
@@ -352,6 +396,8 @@ export default function PartsPage() {
           activeCategory,
           activeInstallStage,
           activeLifecycleLevel,
+          activeValuationIssue,
+          activeValuationSource,
           page,
           pageSize,
         ),
@@ -365,6 +411,8 @@ export default function PartsPage() {
     activeInstallStage,
     activeLifecycleLevel,
     activeStock,
+    activeValuationIssue,
+    activeValuationSource,
     page,
     pageSize,
     load,
@@ -377,6 +425,8 @@ export default function PartsPage() {
     category?: PartCategory | '';
     installStage?: InstallStage | '';
     lifecycleLevel?: LifecycleLevel | '';
+    valuationIssue?: ValuationIssueFilter;
+    valuationSource?: ValuationSourceFilter;
   }) {
     const search = next.search !== undefined ? next.search : activeSearch;
     const partState = next.partState !== undefined ? next.partState : activePartState;
@@ -385,6 +435,10 @@ export default function PartsPage() {
     const installStage = next.installStage !== undefined ? next.installStage : activeInstallStage;
     const lifecycleLevel =
       next.lifecycleLevel !== undefined ? next.lifecycleLevel : activeLifecycleLevel;
+    const valuationIssue =
+      next.valuationIssue !== undefined ? next.valuationIssue : activeValuationIssue;
+    const valuationSource =
+      next.valuationSource !== undefined ? next.valuationSource : activeValuationSource;
 
     return erpRoute('part', {
       search: search.trim() || undefined,
@@ -393,6 +447,8 @@ export default function PartsPage() {
       category: category || undefined,
       installStage: installStage || undefined,
       lifecycleLevel: lifecycleLevel || undefined,
+      valuationIssue: valuationIssue || undefined,
+      valuationSource: valuationSource || undefined,
     });
   }
 
@@ -407,7 +463,9 @@ export default function PartsPage() {
     activeStock ||
     activeCategory ||
     activeInstallStage ||
-    activeLifecycleLevel,
+    activeLifecycleLevel ||
+    activeValuationIssue ||
+    activeValuationSource,
   );
 
   const emptyDescription = hasActiveFilters
@@ -426,6 +484,13 @@ export default function PartsPage() {
     () => parts.reduce((sum, part) => sum + (part.inventoryValue ?? 0), 0),
     [parts],
   );
+  const missingCostHref = buildPartsHref({ valuationIssue: 'MISSING_COST', valuationSource: '' });
+  const reorderExposureHref = buildPartsHref({
+    valuationIssue: 'REORDER_EXPOSURE',
+    valuationSource: '',
+  });
+  const noCostSourceHref = buildPartsHref({ valuationIssue: '', valuationSource: 'NO_COST' });
+  const lotCostSourceHref = buildPartsHref({ valuationIssue: '', valuationSource: 'LOT_LEDGER' });
   const allVisibleSelected = parts.length > 0 && selectedParts.length === parts.length;
   const readyImportCount = importRows.filter((row) => row.status === 'READY').length;
   const createdImportCount = importRows.filter((row) => row.status === 'CREATED').length;
@@ -537,6 +602,8 @@ export default function PartsPage() {
           activeCategory,
           activeInstallStage,
           activeLifecycleLevel,
+          activeValuationIssue,
+          activeValuationSource,
           page,
           pageSize,
         );
@@ -685,6 +752,32 @@ export default function PartsPage() {
             </option>
           ))}
         </select>
+        <select
+          value={activeValuationIssue}
+          onChange={(event) =>
+            pushFilter({ valuationIssue: event.target.value as ValuationIssueFilter })
+          }
+          className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm"
+        >
+          {VALUATION_ISSUE_OPTIONS.map((o) => (
+            <option key={o.value || 'ALL'} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={activeValuationSource}
+          onChange={(event) =>
+            pushFilter({ valuationSource: event.target.value as ValuationSourceFilter })
+          }
+          className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm"
+        >
+          {VALUATION_SOURCE_OPTIONS.map((o) => (
+            <option key={o.value || 'ALL'} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
         {hasActiveFilters && (
           <Link
             href={erpRoute('part')}
@@ -695,7 +788,10 @@ export default function PartsPage() {
         )}
       </div>
       <div className="mb-4 grid gap-3 md:grid-cols-4">
-        <div className="rounded-lg border border-gray-200 bg-white p-3">
+        <Link
+          href={lotCostSourceHref}
+          className="rounded-lg border border-gray-200 bg-white p-3 transition hover:border-yellow-300 hover:bg-yellow-50/40"
+        >
           <div className="text-xs font-semibold uppercase text-gray-500">Stock value</div>
           <div className="mt-1 text-2xl font-semibold text-gray-900">
             {formatMoney(valuationSummary.totalInventoryValue)}
@@ -703,8 +799,11 @@ export default function PartsPage() {
           <div className="mt-1 text-xs text-gray-500">
             {formatMoney(visibleInventoryValue)} on this page
           </div>
-        </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-3">
+        </Link>
+        <Link
+          href={erpRoute('inventory-ledger')}
+          className="rounded-lg border border-gray-200 bg-white p-3 transition hover:border-yellow-300 hover:bg-yellow-50/40"
+        >
           <div className="text-xs font-semibold uppercase text-gray-500">Available qty</div>
           <div className="mt-1 text-2xl font-semibold text-gray-900">
             {formatQuantity(valuationSummary.totalQuantityAvailable)}
@@ -712,8 +811,11 @@ export default function PartsPage() {
           <div className="mt-1 text-xs text-gray-500">
             {formatQuantity(valuationSummary.totalQuantityOnHand)} on hand
           </div>
-        </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-3">
+        </Link>
+        <Link
+          href={reorderExposureHref}
+          className="rounded-lg border border-gray-200 bg-white p-3 transition hover:border-yellow-300 hover:bg-yellow-50/40"
+        >
           <div className="text-xs font-semibold uppercase text-gray-500">Reorder exposure</div>
           <div className="mt-1 text-2xl font-semibold text-amber-700">
             {formatMoney(valuationSummary.totalShortfallValue)}
@@ -721,8 +823,11 @@ export default function PartsPage() {
           <div className="mt-1 text-xs text-gray-500">
             {formatQuantity(valuationSummary.totalShortfallQuantity)} units below min
           </div>
-        </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-3">
+        </Link>
+        <Link
+          href={missingCostHref}
+          className="rounded-lg border border-gray-200 bg-white p-3 transition hover:border-yellow-300 hover:bg-yellow-50/40"
+        >
           <div className="text-xs font-semibold uppercase text-gray-500">Cost coverage</div>
           <div className="mt-1 text-2xl font-semibold text-gray-900">
             {valuationSummary.stockedPartCount}
@@ -730,6 +835,72 @@ export default function PartsPage() {
           <div className="mt-1 text-xs text-gray-500">
             {valuationSummary.missingCostPartCount} stocked parts missing cost evidence
           </div>
+        </Link>
+      </div>
+      <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-semibold text-amber-950">Valuation Action Queue</h2>
+            <p className="text-xs text-amber-900">
+              Work the exceptions that affect purchasing and accounting review.
+            </p>
+          </div>
+          <Link
+            href={erpRoute('part')}
+            className="text-xs font-semibold text-[#B1581B] hover:underline"
+          >
+            Clear valuation view
+          </Link>
+        </div>
+        <div className="grid gap-2 md:grid-cols-4">
+          <Link
+            href={missingCostHref}
+            className="rounded-md border border-amber-200 bg-white px-3 py-2 text-sm transition hover:border-amber-400"
+          >
+            <span className="flex items-center gap-2 font-semibold text-gray-900">
+              <AlertTriangle className="h-4 w-4 text-amber-700" />
+              Review missing costs
+            </span>
+            <span className="mt-1 block text-xs text-gray-500">
+              {valuationSummary.missingCostPartCount} stocked parts need evidence
+            </span>
+          </Link>
+          <Link
+            href={erpRoute('material-planning')}
+            className="rounded-md border border-amber-200 bg-white px-3 py-2 text-sm transition hover:border-amber-400"
+          >
+            <span className="flex items-center gap-2 font-semibold text-gray-900">
+              <PackageSearch className="h-4 w-4 text-amber-700" />
+              Plan replenishment
+            </span>
+            <span className="mt-1 block text-xs text-gray-500">
+              {formatQuantity(valuationSummary.totalShortfallQuantity)} units below minimum
+            </span>
+          </Link>
+          <Link
+            href={noCostSourceHref}
+            className="rounded-md border border-amber-200 bg-white px-3 py-2 text-sm transition hover:border-amber-400"
+          >
+            <span className="flex items-center gap-2 font-semibold text-gray-900">
+              <AlertTriangle className="h-4 w-4 text-red-600" />
+              Show no-cost rows
+            </span>
+            <span className="mt-1 block text-xs text-gray-500">
+              Audit parts before close depends on valuation
+            </span>
+          </Link>
+          <Link
+            href={erpRoute('inventory-ledger')}
+            className="rounded-md border border-amber-200 bg-white px-3 py-2 text-sm transition hover:border-amber-400"
+          >
+            <span className="flex items-center gap-2 font-semibold text-gray-900">
+              <History className="h-4 w-4 text-gray-700" />
+              Open movement ledger
+            </span>
+            <span className="mt-1 block text-xs text-gray-500">
+              Confirm receipts, adjustments, transfers, and issues
+            </span>
+          </Link>
         </div>
       </div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white p-3">

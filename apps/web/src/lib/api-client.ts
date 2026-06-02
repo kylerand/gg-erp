@@ -1671,6 +1671,9 @@ export type PartColor =
   | 'RAW_ALUMINUM'
   | 'STAINLESS_STEEL';
 
+export type PartValuationSource = 'LOT_LEDGER' | 'LATEST_PO' | 'NO_COST';
+export type PartValuationIssue = 'MISSING_COST' | 'REORDER_EXPOSURE';
+
 export interface Part {
   id: string;
   sku: string;
@@ -1703,7 +1706,7 @@ export interface Part {
   inventoryValue?: number;
   shortfallQuantity?: number;
   shortfallValue?: number;
-  valuationSource?: 'LOT_LEDGER' | 'LATEST_PO' | 'NO_COST';
+  valuationSource?: PartValuationSource;
   location?: string;
 }
 
@@ -1837,6 +1840,8 @@ export interface ListPartsParams {
   category?: PartCategory;
   installStage?: InstallStage;
   lifecycleLevel?: LifecycleLevel;
+  valuationIssue?: PartValuationIssue;
+  valuationSource?: PartValuationSource;
   manufacturerId?: string;
   defaultVendorId?: string;
   limit?: number;
@@ -1854,6 +1859,8 @@ export async function listParts(
   if (params?.category) qs.set('category', params.category);
   if (params?.installStage) qs.set('installStage', params.installStage);
   if (params?.lifecycleLevel) qs.set('lifecycleLevel', params.lifecycleLevel);
+  if (params?.valuationIssue) qs.set('valuationIssue', params.valuationIssue);
+  if (params?.valuationSource) qs.set('valuationSource', params.valuationSource);
   if (params?.manufacturerId) qs.set('manufacturerId', params.manufacturerId);
   if (params?.defaultVendorId) qs.set('defaultVendorId', params.defaultVendorId);
   qs.set('limit', String(params?.limit ?? 25));

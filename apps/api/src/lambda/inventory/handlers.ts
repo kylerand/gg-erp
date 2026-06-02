@@ -871,13 +871,16 @@ interface PartInventoryBalanceRow {
   quantityConsumed: unknown;
 }
 
+type PartValuationSource = 'LOT_LEDGER' | 'LATEST_PO' | 'NO_COST';
+type PartValuationIssue = 'MISSING_COST' | 'REORDER_EXPOSURE';
+
 interface PartValuationRow extends PartInventoryBalanceRow {
   quantityAvailable: unknown;
   estimatedUnitCost: unknown;
   inventoryValue: unknown;
   shortfallQuantity: unknown;
   shortfallValue: unknown;
-  valuationSource: string;
+  valuationSource: PartValuationSource;
 }
 
 interface NormalizedPartValuation {
@@ -890,7 +893,7 @@ interface NormalizedPartValuation {
   inventoryValue: number;
   shortfallQuantity: number;
   shortfallValue: number;
-  valuationSource: string;
+  valuationSource: PartValuationSource;
 }
 
 interface PartValuationSummary {
@@ -3217,6 +3220,9 @@ const PART_INCLUDE = {
   defaultLocation: { select: { locationName: true } },
 } as const;
 
+const PART_VALUATION_SOURCES: PartValuationSource[] = ['LOT_LEDGER', 'LATEST_PO', 'NO_COST'];
+const PART_VALUATION_ISSUES: PartValuationIssue[] = ['MISSING_COST', 'REORDER_EXPOSURE'];
+
 async function queryPartValuationRows(
   db: InventorySqlClient,
   partIds: string[],
@@ -3387,6 +3393,30 @@ function summarizePartValuations(rows: PartValuationRow[]): PartValuationSummary
   };
 }
 
+function isPartValuationSource(value: string | undefined): value is PartValuationSource {
+  return PART_VALUATION_SOURCES.includes(value as PartValuationSource);
+}
+
+function isPartValuationIssue(value: string | undefined): value is PartValuationIssue {
+  return PART_VALUATION_ISSUES.includes(value as PartValuationIssue);
+}
+
+function matchesPartValuationFilters(
+  valuation: NormalizedPartValuation | undefined,
+  issue?: PartValuationIssue,
+  source?: PartValuationSource,
+): boolean {
+  if (!valuation) return false;
+  if (source && valuation.valuationSource !== source) return false;
+  if (issue === 'MISSING_COST') {
+    return valuation.quantityOnHand > 0 && valuation.valuationSource === 'NO_COST';
+  }
+  if (issue === 'REORDER_EXPOSURE') {
+    return valuation.shortfallQuantity > 0;
+  }
+  return true;
+}
+
 function withPartValuation<T extends ReturnType<typeof toPartResponse>>(
   part: T,
   valuation: NormalizedPartValuation | undefined,
@@ -3415,6 +3445,8 @@ export const listPartsHandler = wrapHandler(
     const category = qs.category as string | undefined;
     const installStage = qs.installStage as string | undefined;
     const lifecycleLevel = qs.lifecycleLevel as string | undefined;
+    const valuationIssue = qs.valuationIssue as string | undefined;
+    const valuationSource = qs.valuationSource as string | undefined;
     const manufacturerId = qs.manufacturerId as string | undefined;
     const defaultVendorId = qs.defaultVendorId as string | undefined;
     const limit = Math.min(parseInt(qs.limit ?? '100', 10), 1000);
@@ -3423,6 +3455,18 @@ export const listPartsHandler = wrapHandler(
     if (stock && stock !== 'OUT') {
       return jsonResponse(422, { message: 'Invalid stock filter. Must be OUT.' });
     }
+    if (valuationIssue && !isPartValuationIssue(valuationIssue)) {
+      return jsonResponse(422, {
+        message: `Invalid valuationIssue filter. Must be one of: ${PART_VALUATION_ISSUES.join(', ')}.`,
+      });
+    }
+    if (valuationSource && !isPartValuationSource(valuationSource)) {
+      return jsonResponse(422, {
+        message: `Invalid valuationSource filter. Must be one of: ${PART_VALUATION_SOURCES.join(', ')}.`,
+      });
+    }
+    const activeValuationIssue = valuationIssue as PartValuationIssue | undefined;
+    const activeValuationSource = valuationSource as PartValuationSource | undefined;
 
     const where = {
       ...(partState ? { partState: partState as 'ACTIVE' | 'INACTIVE' | 'DISCONTINUED' } : {}),
@@ -3474,20 +3518,11 @@ export const listPartsHandler = wrapHandler(
     };
 
     const prisma = getInventoryPrisma();
-    const [items, matchingParts] = await Promise.all([
-      getInventoryPrisma().part.findMany({
-        where,
-        orderBy: { sku: 'asc' },
-        take: limit,
-        skip: offset,
-        include: PART_INCLUDE,
-      }),
-      getInventoryPrisma().part.findMany({
-        where,
-        select: { id: true },
-        orderBy: { sku: 'asc' },
-      }),
-    ]);
+    const matchingParts = await prisma.part.findMany({
+      where,
+      select: { id: true },
+      orderBy: { sku: 'asc' },
+    });
 
     const valuationRows = await queryPartValuationRows(
       prisma,
@@ -3496,15 +3531,37 @@ export const listPartsHandler = wrapHandler(
     const valuationByPart = new Map(
       valuationRows.map((row) => [row.partId, normalizePartValuation(row)]),
     );
+    const filteredMatchingParts =
+      activeValuationIssue || activeValuationSource
+        ? matchingParts.filter((part) =>
+            matchesPartValuationFilters(
+              valuationByPart.get(part.id),
+              activeValuationIssue,
+              activeValuationSource,
+            ),
+          )
+        : matchingParts;
+    const filteredPartIds = new Set(filteredMatchingParts.map((part) => part.id));
+    const filteredValuationRows = valuationRows.filter((row) => filteredPartIds.has(row.partId));
+    const pagePartIds = filteredMatchingParts.slice(offset, offset + limit).map((part) => part.id);
+    const pageItems =
+      pagePartIds.length > 0
+        ? await prisma.part.findMany({
+            where: { id: { in: pagePartIds }, deletedAt: null },
+            include: PART_INCLUDE,
+          })
+        : [];
+    const pageItemsById = new Map(pageItems.map((part) => [part.id, part]));
 
     return jsonResponse(200, {
-      items: items.map((part) =>
-        withPartValuation(toPartResponse(part), valuationByPart.get(part.id)),
-      ),
-      total: matchingParts.length,
+      items: pagePartIds
+        .map((partId) => pageItemsById.get(partId))
+        .filter((part): part is NonNullable<typeof part> => Boolean(part))
+        .map((part) => withPartValuation(toPartResponse(part), valuationByPart.get(part.id))),
+      total: filteredMatchingParts.length,
       limit,
       offset,
-      valuationSummary: summarizePartValuations(valuationRows),
+      valuationSummary: summarizePartValuations(filteredValuationRows),
     });
   },
   { requireAuth: false },

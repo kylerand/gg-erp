@@ -1279,6 +1279,25 @@ resource "aws_lambda_function" "identity_list_dealer_relationships" {
   }
 }
 
+resource "aws_lambda_function" "identity_create_dealer_relationship" {
+  function_name    = "${var.name_prefix}-identity-create-dealer-relationship"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "create-dealer-relationship.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/identity-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.identity_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.identity_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
 resource "aws_lambda_function" "identity_update_dealer_relationship" {
   function_name    = "${var.name_prefix}-identity-update-dealer-relationship"
   role             = aws_iam_role.erp_lambda.arn
@@ -2548,6 +2567,22 @@ resource "aws_apigatewayv2_route" "identity_list_dealer_relationships" {
   route_key          = "GET /identity/dealer-relationships"
   target             = "integrations/${aws_apigatewayv2_integration.identity_list_dealer_relationships.id}"
   authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "identity_create_dealer_relationship" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.identity_create_dealer_relationship.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "identity_create_dealer_relationship" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /identity/dealer-relationships"
+  target             = "integrations/${aws_apigatewayv2_integration.identity_create_dealer_relationship.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "identity_update_dealer_relationship" {
@@ -6073,6 +6108,7 @@ locals {
     identity_me                             = aws_lambda_function.identity_me
     identity_list_dealers                   = aws_lambda_function.identity_list_dealers
     identity_list_dealer_relationships      = aws_lambda_function.identity_list_dealer_relationships
+    identity_create_dealer_relationship     = aws_lambda_function.identity_create_dealer_relationship
     identity_update_dealer_relationship     = aws_lambda_function.identity_update_dealer_relationship
     identity_list_employees                 = aws_lambda_function.identity_list_employees
     work_orders_get                         = aws_lambda_function.work_orders_get

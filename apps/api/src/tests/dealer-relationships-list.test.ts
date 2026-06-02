@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { PrismaClient } from '@prisma/client';
 import {
+  createDealerRelationshipHandler,
   disconnectListDealerRelationshipsHandlerDependencies,
   handler as listDealerRelationshipsHandler,
   setListDealerRelationshipsPrismaForTests,
@@ -133,6 +134,206 @@ test('listDealerRelationshipsHandler returns dealer relationship rows with custo
     assert.ok(JSON.stringify(findManyArgs).includes('dealerAccount'));
     assert.ok(JSON.stringify(findManyArgs).includes('cartVehicle'));
     assert.ok(JSON.stringify(countArgs).includes('ACTIVE'));
+  } finally {
+    await disconnectListDealerRelationshipsHandlerDependencies();
+  }
+});
+
+test('createDealerRelationshipHandler creates a dealer relationship with customer and cart context', async () => {
+  const now = new Date('2026-06-01T12:00:00Z');
+  let createArgs: unknown;
+
+  setListDealerRelationshipsPrismaForTests({
+    dealerAccount: {
+      findUnique: async () => ({
+        id: 'dealer-1',
+        dealerCode: 'DEALER-RIVER',
+        territory: 'Central Florida',
+        serviceRelationship: 'ACTIVE',
+        customer: {
+          id: 'dealer-customer-1',
+          fullName: 'Jordan Manager',
+          companyName: 'Riverside Golf Club',
+          email: 'ops@riverside.example',
+          phone: '555-0100',
+          state: 'ACTIVE',
+        },
+      }),
+    },
+    customer: {
+      findUnique: async () => ({
+        id: 'customer-1',
+        fullName: 'Avery Customer',
+        companyName: null,
+        email: 'avery@example.com',
+        phone: '555-0199',
+        state: 'ACTIVE',
+      }),
+    },
+    cartVehicle: {
+      findUnique: async () => ({
+        id: 'vehicle-1',
+        customerId: 'customer-1',
+        vin: '7GGERPTEST0000001',
+        serialNumber: 'GG-100',
+        modelCode: 'LUX-4',
+        modelYear: 2026,
+        state: 'REGISTERED',
+      }),
+    },
+    dealerRelationship: {
+      create: async (args: { data: Record<string, unknown> }) => {
+        createArgs = args;
+        return {
+          id: 'relationship-1',
+          relationshipType: args.data.relationshipType,
+          relationshipState: args.data.relationshipState,
+          escalationOwner: args.data.escalationOwner,
+          notes: args.data.notes,
+          startedAt: now,
+          endedAt: null,
+          updatedAt: args.data.updatedAt,
+          dealerAccount: {
+            id: 'dealer-1',
+            dealerCode: 'DEALER-RIVER',
+            territory: 'Central Florida',
+            serviceRelationship: 'ACTIVE',
+            customer: {
+              id: 'dealer-customer-1',
+              fullName: 'Jordan Manager',
+              companyName: 'Riverside Golf Club',
+              email: 'ops@riverside.example',
+              phone: '555-0100',
+              state: 'ACTIVE',
+            },
+          },
+          customer: {
+            id: 'customer-1',
+            fullName: 'Avery Customer',
+            companyName: null,
+            email: 'avery@example.com',
+            phone: '555-0199',
+            state: 'ACTIVE',
+          },
+          cartVehicle: {
+            id: 'vehicle-1',
+            vin: '7GGERPTEST0000001',
+            serialNumber: 'GG-100',
+            modelCode: 'LUX-4',
+            modelYear: 2026,
+            state: 'REGISTERED',
+          },
+        };
+      },
+    },
+    $disconnect: async () => undefined,
+  } as unknown as PrismaClient);
+
+  try {
+    const response = await createDealerRelationshipHandler({
+      body: JSON.stringify({
+        dealerId: 'dealer-1',
+        customerId: 'customer-1',
+        cartVehicleId: 'vehicle-1',
+        relationshipType: 'servicing dealer',
+        escalationOwner: '  Jordan Manager  ',
+        notes: '  Handles warranty triage  ',
+      }),
+    });
+
+    assert.equal(response.statusCode, 201);
+    assert.deepEqual((createArgs as { data: Record<string, unknown> }).data, {
+      dealerAccountId: 'dealer-1',
+      customerId: 'customer-1',
+      cartVehicleId: 'vehicle-1',
+      relationshipType: 'SERVICING_DEALER',
+      relationshipState: 'ACTIVE',
+      escalationOwner: 'Jordan Manager',
+      notes: 'Handles warranty triage',
+      startedAt: (createArgs as { data: { startedAt: Date } }).data.startedAt,
+      endedAt: null,
+      updatedAt: (createArgs as { data: { updatedAt: Date } }).data.updatedAt,
+    });
+
+    const payload = JSON.parse(response.body) as {
+      relationship: {
+        id: string;
+        dealerName: string;
+        customerName: string;
+        cartVehicleId: string;
+        relationshipType: string;
+        relationshipState: string;
+      };
+    };
+    assert.equal(payload.relationship.id, 'relationship-1');
+    assert.equal(payload.relationship.dealerName, 'Riverside Golf Club');
+    assert.equal(payload.relationship.customerName, 'Avery Customer');
+    assert.equal(payload.relationship.cartVehicleId, 'vehicle-1');
+    assert.equal(payload.relationship.relationshipType, 'SERVICING_DEALER');
+    assert.equal(payload.relationship.relationshipState, 'ACTIVE');
+  } finally {
+    await disconnectListDealerRelationshipsHandlerDependencies();
+  }
+});
+
+test('createDealerRelationshipHandler rejects carts that belong to a different customer', async () => {
+  setListDealerRelationshipsPrismaForTests({
+    dealerAccount: {
+      findUnique: async () => ({
+        id: 'dealer-1',
+        dealerCode: null,
+        territory: null,
+        serviceRelationship: 'ACTIVE',
+        customer: {
+          id: 'dealer-customer-1',
+          fullName: 'Dealer',
+          companyName: null,
+          email: 'dealer@example.com',
+          phone: null,
+          state: 'ACTIVE',
+        },
+      }),
+    },
+    customer: {
+      findUnique: async () => ({
+        id: 'customer-1',
+        fullName: 'Customer',
+        companyName: null,
+        email: 'customer@example.com',
+        phone: null,
+        state: 'ACTIVE',
+      }),
+    },
+    cartVehicle: {
+      findUnique: async () => ({
+        id: 'vehicle-1',
+        customerId: 'other-customer',
+        vin: '7GGERPTEST0000001',
+        serialNumber: 'GG-100',
+        modelCode: 'LUX-4',
+        modelYear: 2026,
+        state: 'REGISTERED',
+      }),
+    },
+    dealerRelationship: {
+      create: async () => {
+        throw new Error('create should not be called');
+      },
+    },
+    $disconnect: async () => undefined,
+  } as unknown as PrismaClient);
+
+  try {
+    const response = await createDealerRelationshipHandler({
+      body: JSON.stringify({
+        dealerId: 'dealer-1',
+        customerId: 'customer-1',
+        cartVehicleId: 'vehicle-1',
+      }),
+    });
+
+    assert.equal(response.statusCode, 422);
+    assert.match(JSON.parse(response.body).message, /different customer/i);
   } finally {
     await disconnectListDealerRelationshipsHandlerDependencies();
   }

@@ -28,6 +28,7 @@ const lambdas: LambdaEntry[] = [
   { context: 'identity', handler: 'me',             entry: 'apps/api/src/lambda/identity/me.handler.ts' },
   { context: 'identity', handler: 'list-dealers',   entry: 'apps/api/src/lambda/identity/list-dealers.handler.ts' },
   { context: 'identity', handler: 'list-dealer-relationships', entry: 'apps/api/src/lambda/identity/list-dealer-relationships.handler.ts' },
+  { context: 'identity', handler: 'create-dealer-relationship', entry: 'apps/api/src/lambda/identity/create-dealer-relationship.handler.ts' },
   { context: 'identity', handler: 'update-dealer-relationship', entry: 'apps/api/src/lambda/identity/update-dealer-relationship.handler.ts' },
   { context: 'identity', handler: 'list-employees', entry: 'apps/api/src/lambda/identity/list-employees.handler.ts' },
   { context: 'identity', handler: 'admin-list-users',   entry: 'apps/api/src/lambda/identity/admin-list-users.entry.ts' },

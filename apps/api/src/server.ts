@@ -126,6 +126,7 @@ import { adminUpdateUserHandler } from './lambda/identity/admin-update-user.hand
 import { adminDeleteUserHandler } from './lambda/identity/admin-delete-user.handler.js';
 import { handler as listDealersHandler } from './lambda/identity/list-dealers.handler.js';
 import {
+  createDealerRelationshipHandler,
   handler as listDealerRelationshipsHandler,
   updateDealerRelationshipHandler,
 } from './lambda/identity/list-dealer-relationships.handler.js';
@@ -444,6 +445,8 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     result = await listDealersHandler(event);
   } else if (pathname === '/identity/dealer-relationships' && method === 'GET') {
     result = await listDealerRelationshipsHandler(event);
+  } else if (pathname === '/identity/dealer-relationships' && method === 'POST') {
+    result = await createDealerRelationshipHandler(event);
   } else if (dealerRelationshipMatch && method === 'PATCH') {
     result = await updateDealerRelationshipHandler({
       ...event,

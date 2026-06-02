@@ -63,8 +63,22 @@ const RELATIONSHIP_TYPES = new Set([
   'BILLING_ACCOUNT',
   'WARRANTY_PROVIDER',
 ]);
-const RELATIONSHIP_STATES = new Set(['ACTIVE', 'INACTIVE', 'ENDED']);
-const UPDATEABLE_RELATIONSHIP_STATES = new Set(['ACTIVE', 'INACTIVE', 'ENDED']);
+type RelationshipType = 'ACCOUNT_OWNER' | 'SERVICING_DEALER' | 'BILLING_ACCOUNT' | 'WARRANTY_PROVIDER';
+type RelationshipState = 'ACTIVE' | 'INACTIVE' | 'ENDED';
+const RELATIONSHIP_STATES = new Set<RelationshipState>(['ACTIVE', 'INACTIVE', 'ENDED']);
+const CREATEABLE_RELATIONSHIP_STATES = new Set<RelationshipState>(['ACTIVE', 'INACTIVE']);
+const UPDATEABLE_RELATIONSHIP_STATES = new Set<RelationshipState>(['ACTIVE', 'INACTIVE', 'ENDED']);
+
+interface CreateDealerRelationshipBody {
+  dealerId?: string;
+  dealerAccountId?: string;
+  customerId?: string;
+  cartVehicleId?: string | null;
+  relationshipType?: string;
+  relationshipState?: string;
+  escalationOwner?: string | null;
+  notes?: string | null;
+}
 
 interface UpdateDealerRelationshipBody {
   relationshipState?: string;
@@ -85,6 +99,20 @@ function customerDisplayName(customer: RelationshipCustomerRecord): string {
 function cartDisplayName(vehicle: RelationshipVehicleRecord | null): string | undefined {
   if (!vehicle) return undefined;
   return `${vehicle.modelYear} ${vehicle.modelCode}`;
+}
+
+function trimmed(value: unknown): string | undefined {
+  return typeof value === 'string' ? value.trim() || undefined : undefined;
+}
+
+function normalizeRelationshipType(value: unknown): RelationshipType | undefined {
+  const candidate = trimmed(value)?.toUpperCase().replace(/[\s-]+/g, '_') as RelationshipType | undefined;
+  return candidate && RELATIONSHIP_TYPES.has(candidate) ? candidate : undefined;
+}
+
+function normalizeRelationshipState(value: unknown): RelationshipState | undefined {
+  const candidate = trimmed(value)?.toUpperCase() as RelationshipState | undefined;
+  return candidate && RELATIONSHIP_STATES.has(candidate) ? candidate : undefined;
 }
 
 function toRelationshipResponse(record: DealerRelationshipRecord) {
@@ -122,14 +150,14 @@ export const handler = wrapHandler(
   async (ctx) => {
     const qs = ctx.event.queryStringParameters ?? {};
     const search = qs.search?.trim();
-    const state = qs.state?.trim().toUpperCase();
+    const state = normalizeRelationshipState(qs.state);
     const limit = Math.min(parsePositiveInteger(qs.limit, 100), 500);
     const offset = parsePositiveInteger(qs.offset, 0);
     const relationshipTypeQuery = search?.toUpperCase().replace(/[\s-]+/g, '_');
 
     const activeRelationshipWhere = {
       ...(state && RELATIONSHIP_STATES.has(state)
-        ? { relationshipState: state as 'ACTIVE' | 'INACTIVE' | 'ENDED' }
+        ? { relationshipState: state }
         : {}),
     };
     const searchWhere = search
@@ -204,6 +232,109 @@ export const handler = wrapHandler(
   { requireAuth: false },
 );
 
+export const createDealerRelationshipHandler = wrapHandler(
+  async (ctx) => {
+    const body = parseBody<CreateDealerRelationshipBody>(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
+
+    const dealerAccountId = trimmed(body.value.dealerId) ?? trimmed(body.value.dealerAccountId);
+    const customerId = trimmed(body.value.customerId);
+    const cartVehicleId = trimmed(body.value.cartVehicleId);
+    const relationshipType = normalizeRelationshipType(body.value.relationshipType) ?? 'SERVICING_DEALER';
+    const relationshipState = normalizeRelationshipState(body.value.relationshipState) ?? 'ACTIVE';
+    const escalationOwner = trimmed(body.value.escalationOwner) ?? null;
+    const notes = trimmed(body.value.notes) ?? null;
+
+    if (!dealerAccountId || !customerId) {
+      return jsonResponse(422, {
+        message: 'dealerId and customerId are required.',
+      });
+    }
+    if (!RELATIONSHIP_TYPES.has(relationshipType)) {
+      return jsonResponse(422, {
+        message:
+          'relationshipType must be ACCOUNT_OWNER, SERVICING_DEALER, BILLING_ACCOUNT, or WARRANTY_PROVIDER.',
+      });
+    }
+    if (!CREATEABLE_RELATIONSHIP_STATES.has(relationshipState)) {
+      return jsonResponse(422, {
+        message: 'relationshipState must be ACTIVE or INACTIVE for new dealer relationships.',
+      });
+    }
+
+    const [dealerAccount, customer, cartVehicle] = await Promise.all([
+      getPrisma().dealerAccount.findUnique({
+        where: { id: dealerAccountId },
+        include: { customer: true },
+      }),
+      getPrisma().customer.findUnique({
+        where: { id: customerId },
+      }),
+      cartVehicleId
+        ? getPrisma().cartVehicle.findUnique({
+            where: { id: cartVehicleId },
+          })
+        : Promise.resolve(null),
+    ]);
+
+    if (!dealerAccount) return jsonResponse(404, { message: `Dealer account not found: ${dealerAccountId}` });
+    if (!customer) return jsonResponse(404, { message: `Customer not found: ${customerId}` });
+    if (customer.state !== 'ACTIVE') {
+      return jsonResponse(422, {
+        message: 'Only active customers can be linked to a dealer relationship.',
+      });
+    }
+    if (dealerAccount.serviceRelationship !== 'ACTIVE' && relationshipState === 'ACTIVE') {
+      return jsonResponse(422, {
+        message: 'Dealer account must be active before creating an active relationship.',
+      });
+    }
+    if (cartVehicleId && !cartVehicle) {
+      return jsonResponse(404, { message: `Cart vehicle not found: ${cartVehicleId}` });
+    }
+    if (cartVehicle && cartVehicle.customerId !== customerId) {
+      return jsonResponse(422, {
+        message: 'Selected cart belongs to a different customer.',
+      });
+    }
+
+    const now = new Date();
+    try {
+      const created = await getPrisma().dealerRelationship.create({
+        data: {
+          dealerAccountId,
+          customerId,
+          cartVehicleId: cartVehicleId ?? null,
+          relationshipType,
+          relationshipState,
+          escalationOwner,
+          notes,
+          startedAt: now,
+          endedAt: null,
+          updatedAt: now,
+        },
+        include: {
+          dealerAccount: { include: { customer: true } },
+          customer: true,
+          cartVehicle: true,
+        },
+      });
+
+      return jsonResponse(201, {
+        relationship: toRelationshipResponse(created as DealerRelationshipRecord),
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        return jsonResponse(409, {
+          message: 'An active dealer relationship already exists for this dealer, customer, cart, and type.',
+        });
+      }
+      throw err;
+    }
+  },
+  { requireAuth: false },
+);
+
 export const updateDealerRelationshipHandler = wrapHandler(
   async (ctx) => {
     const id = ctx.event.pathParameters?.id;
@@ -226,7 +357,7 @@ export const updateDealerRelationshipHandler = wrapHandler(
     const now = new Date();
 
     if ('relationshipState' in body.value) {
-      const state = body.value.relationshipState?.trim().toUpperCase();
+      const state = normalizeRelationshipState(body.value.relationshipState);
       if (!state || !UPDATEABLE_RELATIONSHIP_STATES.has(state)) {
         return jsonResponse(422, {
           message: 'relationshipState must be ACTIVE, INACTIVE, or ENDED.',

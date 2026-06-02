@@ -1,34 +1,34 @@
 {
-  "generatedAt": "2026-06-01T08:36:11.857Z",
-  "sourceFile": "packages/migration/shopmonkey-sanitized-1773274402708.json",
+  "generatedAt": "2026-06-02T11:35:00.841Z",
+  "sourceFile": "gg-erp-shopmonkey-enriched-sanitized.json",
   "sourceKind": "sanitized-report",
   "database": {
     "mode": "disposable-docker",
     "image": "postgres:16-alpine",
     "keptContainer": false
   },
-  "overallStatus": "FAIL",
+  "overallStatus": "PASS",
   "commands": [
     {
       "name": "Start disposable PostgreSQL",
-      "command": "docker run -d --name gg-erp-shopmonkey-rehearsal-1780302962977-d0c31be8 -p 127.0.0.1::5432 postgres:16-alpine",
+      "command": "docker run -d --name gg-erp-shopmonkey-rehearsal-1780400092827-8f8a8207 -p 127.0.0.1::5432 postgres:16-alpine",
       "status": "PASS",
       "exitCode": 0,
-      "durationMs": 142
+      "durationMs": 199
     },
     {
       "name": "Apply Prisma migrations",
       "command": "npm run db:deploy --workspace=packages/db",
       "status": "PASS",
       "exitCode": 0,
-      "durationMs": 894
+      "durationMs": 1135
     },
     {
       "name": "Run ShopMonkey loader",
-      "command": "npx tsx packages/migration/src/cli/load-shopmonkey.ts packages/migration/shopmonkey-sanitized-1773274402708.json",
+      "command": "npx tsx packages/migration/src/cli/load-shopmonkey.ts gg-erp-shopmonkey-enriched-sanitized.json",
       "status": "PASS",
       "exitCode": 0,
-      "durationMs": 6422
+      "durationMs": 5160
     }
   ],
   "entities": [
@@ -86,35 +86,35 @@
       "required": true,
       "sourceRows": 25,
       "sourceSkipped": 0,
-      "importedRows": 25,
+      "importedRows": 26,
       "mappedRows": 25,
       "expectedRows": 25,
       "status": "PASS",
-      "detail": "Vendors loaded 25/25 rows with 25 external ID mappings."
+      "detail": "Vendors loaded 26/25 rows with 25 external ID mappings."
     },
     {
       "key": "parts",
       "label": "Parts",
       "required": true,
-      "sourceRows": 0,
+      "sourceRows": 100,
       "sourceSkipped": 0,
-      "importedRows": 0,
-      "mappedRows": 0,
-      "expectedRows": 0,
-      "status": "FAIL",
-      "detail": "Parts has no loadable source rows."
+      "importedRows": 100,
+      "mappedRows": 100,
+      "expectedRows": 100,
+      "status": "PASS",
+      "detail": "Parts loaded 100/100 rows with 100 external ID mappings."
     },
     {
       "key": "purchaseOrders",
       "label": "Purchase Orders",
       "required": true,
-      "sourceRows": 0,
+      "sourceRows": 11,
       "sourceSkipped": 0,
-      "importedRows": 0,
-      "mappedRows": 0,
-      "expectedRows": 0,
-      "status": "FAIL",
-      "detail": "Purchase Orders has no loadable source rows."
+      "importedRows": 11,
+      "mappedRows": 11,
+      "expectedRows": 11,
+      "status": "PASS",
+      "detail": "Purchase Orders loaded 11/11 rows with 11 external ID mappings."
     }
   ],
   "referenceSeeds": [
@@ -190,7 +190,7 @@
     "Migration errors": 0
   },
   "nextActions": [
-    "Repair failed import coverage: Parts, Purchase Orders.",
-    "Rerun the isolated rehearsal before loading any shared staging or production database."
+    "Use this isolated rehearsal as the row-count baseline for the next staging cutover run.",
+    "Run operator UAT against imported customers, carts, work orders, vendors, and accounting sync queues."
   ]
 }

@@ -342,6 +342,7 @@ function sanitizeInventoryPart(p: SmInventoryPart): SanitizedPart {
 }
 
 const SM_PO_STATUS_MAP: Record<string, string> = {
+  draft: 'DRAFT',
   open: 'APPROVED',
   ordered: 'SENT',
   fulfilled: 'RECEIVED',

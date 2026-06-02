@@ -10,7 +10,7 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname, resolve, relative } from 'node:path';
+import { basename, dirname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PrismaClient } from '@prisma/client';
 import { readShopMonkeySource } from '../loaders/shopmonkey-source.js';
@@ -115,6 +115,11 @@ function toCommandReport(result: CommandResult): RehearsalCommandReport {
     exitCode: result.exitCode,
     durationMs: result.durationMs,
   };
+}
+
+function sourceReportPath(sourcePath: string): string {
+  const relativePath = relative(repoRoot, sourcePath);
+  return relativePath.startsWith('..') ? basename(sourcePath) : relativePath;
 }
 
 async function waitForPostgres(containerName: string): Promise<void> {
@@ -464,7 +469,7 @@ async function main(): Promise<void> {
         loaderArgs,
         {
           env: { DB_DATABASE_URL: dbUrl },
-          reportCommand: `npx tsx packages/migration/src/cli/load-shopmonkey.ts ${relative(repoRoot, sourcePath)}`,
+          reportCommand: `npx tsx packages/migration/src/cli/load-shopmonkey.ts ${sourceReportPath(sourcePath)}`,
         },
       );
       commands.push(toCommandReport(loaderResult));
@@ -493,7 +498,7 @@ async function main(): Promise<void> {
     (collected?.entities ?? []).map((entity) => [entity.key, entity]),
   );
   const report = buildIsolatedRehearsalReport({
-    sourceFile: relative(repoRoot, sourcePath),
+    sourceFile: sourceReportPath(sourcePath),
     sourceKind: source.sourceKind,
     database: {
       mode: config.dbUrl ? 'provided-local-url' : 'disposable-docker',

@@ -16,7 +16,7 @@
  *   GET  /v3/customer/:id/vehicle  → vehicles per customer (no global vehicle list)
  *   GET  /v3/order                 → work orders (list)
  *   GET  /v3/order/:id/service     → service line items (labors + parts) for a single order
- *   POST /v3/inventory_part/search → inventory parts catalog
+ *   GET  /v3/inventory_part        → inventory parts catalog
  *   GET  /v3/user                  → employees
  *   GET  /v3/vendor                → vendors
  *   GET  /v3/purchase_order        → purchase orders
@@ -552,11 +552,74 @@ export async function fetchOrderServices(
 }
 
 /**
- * Fetch inventory parts using POST /v3/inventory_part/search.
- * ShopMonkey v3 exposes a proper inventory parts catalog — not just line items.
+ * Fetch inventory parts using GET /v3/inventory_part.
+ *
+ * ShopMonkey reports a larger inventory-part total than a normal offset/page
+ * walk can reach because the endpoint repeats records across pages. A dense
+ * skip/take sweep captures the stable unique row set exposed by the API while
+ * making any remaining reported-total gap visible in logs/evidence.
  */
 export async function fetchInventoryParts(session: ShopMonkeySession): Promise<SmInventoryPart[]> {
-  return fetchAllPost<SmInventoryPart>(session, '/inventory_part/search', {});
+  const results: SmInventoryPart[] = [];
+  const seenIds = new Set<string>();
+  let totalKnown: number | null = null;
+  const pageSize = DEFAULT_PAGE_SIZE;
+  const skipStep = 10;
+  const maxSweeps = 2;
+  let emptySweeps = 0;
+
+  for (let sweep = 1; sweep <= maxSweeps; sweep += 1) {
+    const countBefore = results.length;
+    const maxSkip = totalKnown ? totalKnown + pageSize : 500;
+
+    for (let skip = 0; skip <= maxSkip; skip += skipStep) {
+      const params = new URLSearchParams({
+        take: String(pageSize),
+        skip: String(skip),
+      });
+      const res = await apiFetch<ListResponse<SmInventoryPart>>(`/inventory_part?${params}`, {
+        headers: { Authorization: `Bearer ${session.token}` },
+      }, MAX_RETRIES);
+
+      if (sweep === 1 && skip === 0 && res.meta) {
+        console.log(`[shopmonkey] /inventory_part: meta = ${JSON.stringify(res.meta)}`);
+        if (res.meta.total != null) {
+          totalKnown = res.meta.total;
+        }
+      }
+
+      for (const record of Array.isArray(res.data) ? res.data : []) {
+        if (!seenIds.has(record.id)) {
+          seenIds.add(record.id);
+          results.push(record);
+        }
+      }
+
+      if (totalKnown !== null && results.length >= totalKnown) break;
+      await sleep(PAGE_DELAY_MS);
+    }
+
+    const newThisSweep = results.length - countBefore;
+    const progress = totalKnown ? ` / ${totalKnown}` : '';
+    console.log(`[shopmonkey] /inventory_part: sweep ${sweep} — ${results.length}${progress} unique records (+${newThisSweep} new this sweep)`);
+
+    if (totalKnown !== null && results.length >= totalKnown) break;
+    if (newThisSweep === 0) {
+      emptySweeps += 1;
+      if (emptySweeps >= 1) break;
+    } else {
+      emptySweeps = 0;
+    }
+  }
+
+  if (totalKnown !== null && results.length < totalKnown) {
+    console.warn(
+      `[shopmonkey] /inventory_part: collected ${results.length}/${totalKnown} unique records; ` +
+      'the API repeated rows before exposing the full reported total.',
+    );
+  }
+  console.log(`[shopmonkey] /inventory_part: done — ${results.length} total unique records`);
+  return results;
 }
 
 /** @deprecated Use fetchInventoryParts(). Returns empty for backward-compat. */

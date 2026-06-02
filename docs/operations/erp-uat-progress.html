@@ -640,11 +640,13 @@
                 disposable PostgreSQL database and writes counts-only evidence to
                 `docs/operations/shopmonkey-isolated-rehearsal.html`; the current rehearsal passes
                 with zero migration errors after loading 28 employees, 447 customers, 56 vehicles,
-                465 work orders, 25 vendors, 100 parts, and 11 purchase orders.
+                465 work orders, 25 vendors, 189 parts, and 11 purchase orders. Inventory-part
+                capture now uses a dense ShopMonkey `GET /inventory_part?take=&skip=` sweep instead
+                of stopping at the first 100 search rows.
               </td>
               <td>
                 Reconcile the one customer warning, 68 work-order warnings, absent line-item
-                assignments, and the 237-reported/100-collected parts API coverage before shared
+                assignments, and the remaining 48-part reported-total coverage gap before shared
                 staging cutover UAT.
               </td>
             </tr>

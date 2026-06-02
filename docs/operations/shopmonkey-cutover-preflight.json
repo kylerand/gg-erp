@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-06-02T11:29:43.938Z",
+  "generatedAt": "2026-06-02T12:01:15.206Z",
   "sourceFile": "gg-erp-shopmonkey-enriched-sanitized.json",
-  "sourceChecksum": "fd50bbc231e4d8d17899a295b18767b886e15f1360030ad2cac7f89f7350c52e",
+  "sourceChecksum": "7ee9fe260bed8c645ccc0249c8f06ce9d015f7d3f763b171bc57c669431eefbd",
   "overallStatus": "WARN",
   "totals": {
     "entitiesPresent": 7,
-    "totalRows": 1132,
-    "validRows": 1063,
+    "totalRows": 1221,
+    "validRows": 1152,
     "warnedRows": 69,
     "skippedRows": 0
   },
@@ -70,8 +70,8 @@
       "key": "parts",
       "label": "Parts",
       "status": "PASS",
-      "total": 100,
-      "valid": 100,
+      "total": 189,
+      "valid": 189,
       "warned": 0,
       "skipped": 0,
       "validRatio": 1,

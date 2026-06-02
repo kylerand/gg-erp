@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-02T11:35:00.841Z",
+  "generatedAt": "2026-06-02T12:01:30.942Z",
   "sourceFile": "gg-erp-shopmonkey-enriched-sanitized.json",
   "sourceKind": "sanitized-report",
   "database": {
@@ -11,24 +11,24 @@
   "commands": [
     {
       "name": "Start disposable PostgreSQL",
-      "command": "docker run -d --name gg-erp-shopmonkey-rehearsal-1780400092827-8f8a8207 -p 127.0.0.1::5432 postgres:16-alpine",
+      "command": "docker run -d --name gg-erp-shopmonkey-rehearsal-1780401682577-ba924dd3 -p 127.0.0.1::5432 postgres:16-alpine",
       "status": "PASS",
       "exitCode": 0,
-      "durationMs": 199
+      "durationMs": 226
     },
     {
       "name": "Apply Prisma migrations",
       "command": "npm run db:deploy --workspace=packages/db",
       "status": "PASS",
       "exitCode": 0,
-      "durationMs": 1135
+      "durationMs": 1018
     },
     {
       "name": "Run ShopMonkey loader",
       "command": "npx tsx packages/migration/src/cli/load-shopmonkey.ts gg-erp-shopmonkey-enriched-sanitized.json",
       "status": "PASS",
       "exitCode": 0,
-      "durationMs": 5160
+      "durationMs": 5641
     }
   ],
   "entities": [
@@ -96,13 +96,13 @@
       "key": "parts",
       "label": "Parts",
       "required": true,
-      "sourceRows": 100,
+      "sourceRows": 189,
       "sourceSkipped": 0,
-      "importedRows": 100,
-      "mappedRows": 100,
-      "expectedRows": 100,
+      "importedRows": 189,
+      "mappedRows": 189,
+      "expectedRows": 189,
       "status": "PASS",
-      "detail": "Parts loaded 100/100 rows with 100 external ID mappings."
+      "detail": "Parts loaded 189/189 rows with 189 external ID mappings."
     },
     {
       "key": "purchaseOrders",

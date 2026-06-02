@@ -95,6 +95,7 @@ model CartVehicle {
 
   buildConfigurations BuildConfiguration[]
   dealerRelationships DealerRelationship[]
+  warrantyClaims      WarrantyClaim[]
 
   @@index([customerId, state], map: "cart_vehicles_customer_state_idx")
   @@map("cart_vehicles")
@@ -1244,11 +1245,12 @@ model WoOrder {
   updatedAt         DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
   version           Int       @default(0)
 
-  stockLocation StockLocation?    @relation(fields: [stockLocationId], references: [id])
-  operations    WoOperation[]
-  parts         WoPartLine[]
-  statusHistory WoStatusHistory[]
-  qcGates       WorkOrderQcGate[]
+  stockLocation  StockLocation?    @relation(fields: [stockLocationId], references: [id])
+  operations     WoOperation[]
+  parts          WoPartLine[]
+  statusHistory  WoStatusHistory[]
+  qcGates        WorkOrderQcGate[]
+  warrantyClaims WarrantyClaim[]
 
   @@unique([workOrderNumber])
   @@index([status, dueAt])
@@ -1904,6 +1906,18 @@ enum DealerRelationshipState {
   @@schema("customers")
 }
 
+enum WarrantyClaimStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REIMBURSEMENT_PENDING
+  REIMBURSED
+  DENIED
+  CLOSED
+
+  @@schema("customers")
+}
+
 model Customer {
   id                     String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   state                  CustomerLifecycleState @default(LEAD)
@@ -1922,6 +1936,7 @@ model Customer {
 
   dealerAccount       DealerAccount?
   dealerRelationships DealerRelationship[]
+  warrantyClaims      WarrantyClaim[]
 
   @@index([state])
   @@map("customers")
@@ -1941,8 +1956,9 @@ model DealerAccount {
   archivedAt          DateTime?          @map("archived_at") @db.Timestamptz(6)
   version             Int                @default(0)
 
-  customer      Customer             @relation(fields: [customerId], references: [id])
-  relationships DealerRelationship[]
+  customer       Customer             @relation(fields: [customerId], references: [id])
+  relationships  DealerRelationship[]
+  warrantyClaims WarrantyClaim[]
 
   @@index([serviceRelationship, updatedAt], map: "dealer_accounts_relationship_idx")
   @@index([territory], map: "dealer_accounts_territory_idx")
@@ -1965,14 +1981,56 @@ model DealerRelationship {
   updatedAt         DateTime                @default(now()) @map("updated_at") @db.Timestamptz(6)
   version           Int                     @default(0)
 
-  dealerAccount DealerAccount @relation(fields: [dealerAccountId], references: [id])
-  customer      Customer      @relation(fields: [customerId], references: [id])
-  cartVehicle   CartVehicle?  @relation(fields: [cartVehicleId], references: [id])
+  dealerAccount  DealerAccount   @relation(fields: [dealerAccountId], references: [id])
+  customer       Customer        @relation(fields: [customerId], references: [id])
+  cartVehicle    CartVehicle?    @relation(fields: [cartVehicleId], references: [id])
+  warrantyClaims WarrantyClaim[]
 
   @@index([dealerAccountId, relationshipState], map: "customer_dealer_relationships_dealer_state_idx")
   @@index([customerId, relationshipState], map: "customer_dealer_relationships_customer_state_idx")
   @@index([cartVehicleId], map: "customer_dealer_relationships_vehicle_idx")
   @@map("customer_dealer_relationships")
+  @@schema("customers")
+}
+
+model WarrantyClaim {
+  id                    String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  claimNumber           String              @unique(map: "warranty_claims_claim_number_uk") @map("claim_number")
+  customerId            String              @map("customer_id") @db.Uuid
+  dealerAccountId       String?             @map("dealer_account_id") @db.Uuid
+  dealerRelationshipId  String?             @map("dealer_relationship_id") @db.Uuid
+  cartVehicleId         String?             @map("cart_vehicle_id") @db.Uuid
+  workOrderId           String?             @map("work_order_id") @db.Uuid
+  claimStatus           WarrantyClaimStatus @default(DRAFT) @map("claim_status")
+  requestedAmountCents  Int                 @default(0) @map("requested_amount_cents")
+  approvedAmountCents   Int?                @map("approved_amount_cents")
+  reimbursedAmountCents Int?                @map("reimbursed_amount_cents")
+  externalReference     String?             @map("external_reference")
+  claimReason           String              @default("Warranty service") @map("claim_reason")
+  ownerUserId           String?             @map("owner_user_id") @db.Uuid
+  notes                 String?
+  submittedAt           DateTime?           @map("submitted_at") @db.Timestamptz(6)
+  approvedAt            DateTime?           @map("approved_at") @db.Timestamptz(6)
+  reimbursedAt          DateTime?           @map("reimbursed_at") @db.Timestamptz(6)
+  closedAt              DateTime?           @map("closed_at") @db.Timestamptz(6)
+  correlationId         String?             @map("correlation_id")
+  createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime            @default(now()) @map("updated_at") @db.Timestamptz(6)
+  version               Int                 @default(0)
+
+  customer           Customer            @relation(fields: [customerId], references: [id])
+  dealerAccount      DealerAccount?      @relation(fields: [dealerAccountId], references: [id])
+  dealerRelationship DealerRelationship? @relation(fields: [dealerRelationshipId], references: [id])
+  cartVehicle        CartVehicle?        @relation(fields: [cartVehicleId], references: [id])
+  workOrder          WoOrder?            @relation(fields: [workOrderId], references: [id])
+
+  @@index([customerId, claimStatus], map: "warranty_claims_customer_status_idx")
+  @@index([dealerAccountId, claimStatus], map: "warranty_claims_dealer_status_idx")
+  @@index([dealerRelationshipId], map: "warranty_claims_relationship_idx")
+  @@index([cartVehicleId], map: "warranty_claims_cart_vehicle_idx")
+  @@index([workOrderId], map: "warranty_claims_work_order_idx")
+  @@index([claimStatus, updatedAt], map: "warranty_claims_status_updated_idx")
+  @@map("warranty_claims")
   @@schema("customers")
 }
 

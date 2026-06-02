@@ -13,6 +13,7 @@ const truthCriticalPages = [
   'app/customer-dealers/customers/[id]/page.tsx',
   'app/customer-dealers/dealers/page.tsx',
   'app/customer-dealers/relationships/page.tsx',
+  'app/customer-dealers/warranty/page.tsx',
   'app/inventory/page.tsx',
   'app/inventory/planning/page.tsx',
   'app/inventory/purchase-orders/page.tsx',
@@ -362,6 +363,7 @@ test('customer dealer ops views are backed by live customer and cart data', () =
   const customerDetailSource = readSource('app/customer-dealers/customers/[id]/page.tsx');
   const dealersSource = readSource('app/customer-dealers/dealers/page.tsx');
   const relationshipsSource = readSource('app/customer-dealers/relationships/page.tsx');
+  const warrantySource = readSource('app/customer-dealers/warranty/page.tsx');
   const workOrderCreateSource = readSource('app/work-orders/new/page.tsx');
   const apiClientSource = readSource('lib/api-client.ts');
   const dealerHandlerSource = readFileSync(
@@ -379,14 +381,24 @@ test('customer dealer ops views are backed by live customer and cart data', () =
     path.resolve(WEB_SRC_DIR, '../../../apps/api/src/lambda/tickets/handlers.ts'),
     'utf8',
   );
+  const warrantyClaimsHandlerSource = readFileSync(
+    path.resolve(
+      WEB_SRC_DIR,
+      '../../../apps/api/src/lambda/identity/list-warranty-claims.handler.ts',
+    ),
+    'utf8',
+  );
 
   assert.deepEqual(
     [
       'listCustomers({ limit: 1, offset: 0 }, strictApiOptions)',
       'listDealers({ limit: 1, offset: 0 }, strictApiOptions)',
       'listDealerRelationships({ limit: 1, offset: 0 }, strictApiOptions)',
+      'listWarrantyClaims({ limit: 1, offset: 0 }, strictApiOptions)',
       'relationshipTotal',
+      'warrantyClaimTotal',
       "erpRoute('customer-relationship')",
+      "erpRoute('warranty-claim')",
     ].filter((snippet) => !hubSource.includes(snippet)),
     [],
   );
@@ -410,6 +422,7 @@ test('customer dealer ops views are backed by live customer and cart data', () =
       'listCustomerSyncs({ customerId, limit: 10 }, STRICT_LIVE_DATA)',
       'listPaymentSyncRecords({ customerId, limit: 10 }, STRICT_LIVE_DATA)',
       "listDealerRelationships({ customerId, state: 'ACTIVE', limit: 50 }, STRICT_LIVE_DATA)",
+      'listWarrantyClaims({ customerId, limit: 25 }, STRICT_LIVE_DATA)',
       'updateCustomer(customer.id, payload)',
       'setCustomer(updated)',
       'Edit Profile',
@@ -433,9 +446,14 @@ test('customer dealer ops views are backed by live customer and cart data', () =
       'timelineItems.map((item)',
       'buildWarrantyHandoff({',
       'Warranty Handoff',
+      'warrantyClaims: warrantyClaims.items',
       'warrantyHandoff.actions.map((action)',
+      'New Warranty Claim',
+      'Open warranty claim',
+      'Follow warranty reimbursement',
       'Assign Warranty Provider',
       'Manage Relationships',
+      "erpRoute('warranty-claim'",
       "relationshipType: 'WARRANTY_PROVIDER'",
       "erpRecordRoute('work-order', workOrder.id)",
       "erpRoute('create-sales-opportunity', { customerId })",
@@ -500,6 +518,29 @@ test('customer dealer ops views are backed by live customer and cart data', () =
     [],
   );
   assert.deepEqual(
+    [
+      'listWarrantyClaims(',
+      'createWarrantyClaim(',
+      'updateWarrantyClaim(',
+      'listDealerRelationships(',
+      "state: 'ACTIVE'",
+      'listCartVehicles({ customerId: createDraft.customerId, limit: 100 }, STRICT_LIVE_DATA)',
+      'listWoOrders({ customerId: createDraft.customerId, limit: 100 }, STRICT_LIVE_DATA)',
+      'CustomerSelector',
+      'SearchableSelect',
+      'New Warranty Claim',
+      'Create Claim',
+      'Update Claim',
+      'Save Claim',
+      'Provider Links',
+      "erpRoute('customer-relationship'",
+      "erpRecordRoute('work-order'",
+      "erpRoute('accounting-sync'",
+      'STRICT_LIVE_DATA',
+    ].filter((snippet) => !warrantySource.includes(snippet)),
+    [],
+  );
+  assert.deepEqual(
     ['useSearchParams', "searchParams.get('customerId')", "searchParams.get('vehicleId')"].filter(
       (snippet) => !workOrderCreateSource.includes(snippet),
     ),
@@ -513,11 +554,16 @@ test('customer dealer ops views are backed by live customer and cart data', () =
       'export async function listDealerRelationships',
       'export async function createDealerRelationship',
       'export async function updateDealerRelationship',
+      'export async function listWarrantyClaims',
+      'export async function createWarrantyClaim',
+      'export async function updateWarrantyClaim',
       'params?:',
       '/identity/dealers',
       '/identity/dealers/${id}',
       '/identity/dealer-relationships',
       '/identity/dealer-relationships/${id}',
+      '/identity/warranty-claims',
+      '/identity/warranty-claims/${id}',
       'total: res.total',
       "if (params?.customerId) qs.set('customerId', params.customerId);",
     ].filter((snippet) => !apiClientSource.includes(snippet)),
@@ -557,6 +603,23 @@ test('customer dealer ops views are backed by live customer and cart data', () =
   );
   assert.deepEqual(
     [
+      'getPrisma().warrantyClaim.findMany',
+      'const customerId = qs.customerId?.trim();',
+      '...(customerId ? { customerId } : {})',
+      'export const createWarrantyClaimHandler',
+      'getPrisma().warrantyClaim.create',
+      'export const updateWarrantyClaimHandler',
+      'getPrisma().warrantyClaim.update',
+      'dealerRelationship: {',
+      'workOrder: true',
+      "source: 'warranty-claim'",
+      'version: { increment: 1 }',
+      'total',
+    ].filter((snippet) => !warrantyClaimsHandlerSource.includes(snippet)),
+    [],
+  );
+  assert.deepEqual(
+    [
       'const customerId = qs.customerId?.trim();',
       'customerReference: { equals: customerId }',
     ].filter((snippet) => !ticketsHandlerSource.includes(snippet)),
@@ -564,6 +627,7 @@ test('customer dealer ops views are backed by live customer and cart data', () =
   );
   assert.equal(dealersSource.includes('Add your first dealer'), false);
   assert.equal(relationshipsSource.includes('storage is not configured yet'), false);
+  assert.equal(warrantySource.includes('storage is not configured yet'), false);
   assert.equal(dealerHandlerSource.includes('items: [], total: 0 }),'), false);
 });
 

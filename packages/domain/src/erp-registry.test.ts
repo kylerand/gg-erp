@@ -69,10 +69,7 @@ test('registry route helper resolves module links and filtered routes', () => {
     }),
     '/accounting/sync?view=invoices&state=SYNCED&period=today',
   );
-  assert.equal(
-    getRequiredErpRoute('report-work-order-blockers'),
-    '/reporting/blocked-alerts',
-  );
+  assert.equal(getRequiredErpRoute('report-work-order-blockers'), '/reporting/blocked-alerts');
   assert.equal(
     getRequiredErpRoute('report-open-accounts-receivable', { query: 'Smith' }),
     '/accounting/quickbooks/invoices?filter=OPEN&query=Smith',
@@ -112,6 +109,9 @@ test('workspace navigation items include live links and quick actions', () => {
   assert.ok(
     getErpWorkspaceNavigationItems('customers').some((item) => item.key === 'create-customer'),
   );
+  assert.ok(
+    getErpWorkspaceNavigationItems('customers').some((item) => item.key === 'warranty-claim'),
+  );
   assert.ok(inventoryItems.some((item) => item.key === 'purchase-order'));
   assert.ok(inventoryItems.some((item) => item.key === 'inventory-ledger'));
   assert.ok(inventoryItems.some((item) => item.key === 'inventory-adjustment'));
@@ -130,9 +130,7 @@ test('workspace navigation items include live links and quick actions', () => {
   assert.ok(
     getErpWorkspaceNavigationItems('planning').some((item) => item.key === 'build-configuration'),
   );
-  assert.ok(
-    getErpWorkspaceNavigationItems('planning').some((item) => item.key === 'build-bom'),
-  );
+  assert.ok(getErpWorkspaceNavigationItems('planning').some((item) => item.key === 'build-bom'));
   assert.ok(
     getErpWorkspaceNavigationItems('admin').some((item) => item.key === 'accounting-settings'),
   );

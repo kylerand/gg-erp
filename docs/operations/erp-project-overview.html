@@ -351,25 +351,25 @@
           deployed customer workspace drill-in, deployed customer accounting-history context,
           deployed standalone customer profile editing, deployed standalone cart asset editing,
           deployed customer timeline, deployed next actions, deployed customer activity logging,
-          deployed dealer relationship updates, deployed dealer relationship creation work,
-          deployed dealer account maintenance work, deployed dealer account route cleanup, and active
-          warranty handoff work. The app has moved past polished static screens into a
+          deployed dealer relationship updates, deployed dealer relationship creation work, deployed
+          dealer account maintenance work, deployed dealer account route cleanup, and active
+          warranty claim/reimbursement work. The app has moved past polished static screens into a
           usable shop-ops ERP foundation, but ShopMonkey cutover remains blocked until complete
           parts and purchase-order source exports are captured.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 2, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 189</span>
-          <span class="chip">Active slice: Customer warranty handoff workflow</span>
+          <span class="chip">Baseline: origin/main through PR 190</span>
+          <span class="chip">Active slice: Warranty claim reimbursement workflow</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
 
       <div class="summary">
         <div class="metric">
-          <strong>83%</strong>
+          <strong>84%</strong>
           <span>Estimated production readiness for an internal ERP rollout.</span>
-          <div class="bar warn"><span style="width: 83%"></span></div>
+          <div class="bar warn"><span style="width: 84%"></span></div>
         </div>
         <div class="metric">
           <strong>94%</strong>
@@ -377,9 +377,9 @@
           <div class="bar good"><span style="width: 94%"></span></div>
         </div>
         <div class="metric">
-          <strong>83%</strong>
+          <strong>84%</strong>
           <span>Live workflow/API contract completeness.</span>
-          <div class="bar warn"><span style="width: 83%"></span></div>
+          <div class="bar warn"><span style="width: 84%"></span></div>
         </div>
         <div class="metric">
           <strong>66%</strong>
@@ -666,9 +666,9 @@
           <div class="module-card">
             <header>
               <h3>Customers, Dealers, Assets</h3>
-              <span class="pill doing">63%</span>
+              <span class="pill doing">68%</span>
             </header>
-            <div class="bar warn"><span style="width: 63%"></span></div>
+            <div class="bar warn"><span style="width: 68%"></span></div>
             <p>
               Customer/cart profile editing exists inside work orders. PR #177 added a standalone
               customer workspace for profile, cart assets, work orders, opportunities, quotes, and
@@ -680,14 +680,17 @@
               quotes, stale opportunities, and missing intake context. PR #183 added inline customer
               activity logging through the live sales activity API, PR #184 added row-level dealer
               relationship state, escalation owner, and notes editing, PR #185 removed the deployed
-              update-route allowlist after CD, PR #186 added a live dealer relationship link workflow
-              with dealer, active-customer, and optional cart selectors, PR #187 removed the
-              deployed create-route allowlist after CD, PR #188 added deployed live dealer account
-              creation/profile updates, and PR #189 removed the deployed dealer account route
-              allowlists after CD. This branch adds a strict-live customer warranty handoff panel
+              update-route allowlist after CD, PR #186 added a live dealer relationship link
+              workflow with dealer, active-customer, and optional cart selectors, PR #187 removed
+              the deployed create-route allowlist after CD, PR #188 added deployed live dealer
+              account creation/profile updates, PR #189 removed the deployed dealer account route
+              allowlists after CD, and PR #190 added a strict-live customer warranty handoff panel
               with exact dealer relationship reads, provider coverage status, uncovered-cart
               detection, open service/payment context, and query-prefilled warranty-provider
-              relationship creation.
+              relationship creation. This branch adds first-class warranty claim storage, live
+              list/create/update claim routes, a warranty claims queue, customer workspace claim
+              counts, claim timeline events, prefilled claim intake, and reimbursement follow-up
+              actions.
             </p>
           </div>
 
@@ -771,10 +774,9 @@
               <td><span class="pill done">Green</span></td>
               <td>
                 Latest main CI, QA smoke, QA coverage, and Pages completed successfully after PR 183
-                merged. PR #174
-                previously deployed the accounting snapshot tables and updated close-package reads,
-                and live smoke proved the close-package route still reaches the protected API
-                authorizer path.
+                merged. PR #174 previously deployed the accounting snapshot tables and updated
+                close-package reads, and live smoke proved the close-package route still reaches the
+                protected API authorizer path.
               </td>
             </tr>
             <tr>
@@ -805,8 +807,9 @@
               <td>Known route exceptions</td>
               <td><span class="pill done">None</span></td>
               <td>
-                <code>known-broken.json</code> is empty again after direct production probes confirmed
-                <code>POST /identity/dealers</code> and <code>PATCH /identity/dealers/{id}</code>
+                <code>known-broken.json</code> is empty again after direct production probes
+                confirmed <code>POST /identity/dealers</code> and
+                <code>PATCH /identity/dealers/{id}</code>
                 reach the protected API authorizer path.
               </td>
             </tr>
@@ -833,8 +836,9 @@
             work-order provenance, and version diff workflows need a heavier change-control gate.
           </li>
           <li>
-            <strong>Deepen customer workspaces:</strong> finish the customer warranty handoff
-            workflow, then add a dedicated warranty claim/reimbursement lifecycle if UAT needs one.
+            <strong>Deepen customer workspaces:</strong> remove the temporary warranty-claim route
+            allowlist after CD deploys the new routes, then use UAT to decide whether provider
+            document attachments or QuickBooks reimbursement posting needs a separate slice.
           </li>
         </ol>
       </section>

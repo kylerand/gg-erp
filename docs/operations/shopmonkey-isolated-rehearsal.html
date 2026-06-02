@@ -154,13 +154,13 @@
           <h1>ShopMonkey Isolated Rehearsal</h1>
           <p class="muted">Source: gg-erp-shopmonkey-enriched-sanitized.json (sanitized-report)</p>
         </div>
-        <div class="stamp">Generated: 2026-06-02T11:35:00.841Z</div>
+        <div class="stamp">Generated: 2026-06-02T12:01:30.942Z</div>
       </header>
 
       <div class="summary">
         <div class="metric"><strong class="pass">PASS</strong><span>Overall status</span></div>
         <div class="metric"><strong>7</strong><span>Passed entity gates</span></div>
-        <div class="metric"><strong>1,133</strong><span>Imported rows</span></div>
+        <div class="metric"><strong>1,222</strong><span>Imported rows</span></div>
         <div class="metric"><strong>8</strong><span>Passed seed gates</span></div>
       </div>
 
@@ -227,11 +227,11 @@
         <tr>
           <td>Parts</td>
           <td><span class="pill pass">PASS</span></td>
-          <td>100</td>
-          <td>100</td>
-          <td>100</td>
-          <td>100</td>
-          <td>Parts loaded 100/100 rows with 100 external ID mappings.</td>
+          <td>189</td>
+          <td>189</td>
+          <td>189</td>
+          <td>189</td>
+          <td>Parts loaded 189/189 rows with 189 external ID mappings.</td>
         </tr>
         <tr>
           <td>Purchase Orders</td>
@@ -335,20 +335,20 @@
           <td><span class="pill pass">PASS</span></td>
           <td>0</td>
           <td>0.2s</td>
-          <td><code>docker run -d --name gg-erp-shopmonkey-rehearsal-1780400092827-8f8a8207 -p 127.0.0.1::5432 postgres:16-alpine</code></td>
+          <td><code>docker run -d --name gg-erp-shopmonkey-rehearsal-1780401682577-ba924dd3 -p 127.0.0.1::5432 postgres:16-alpine</code></td>
         </tr>
         <tr>
           <td>Apply Prisma migrations</td>
           <td><span class="pill pass">PASS</span></td>
           <td>0</td>
-          <td>1.1s</td>
+          <td>1.0s</td>
           <td><code>npm run db:deploy --workspace=packages/db</code></td>
         </tr>
         <tr>
           <td>Run ShopMonkey loader</td>
           <td><span class="pill pass">PASS</span></td>
           <td>0</td>
-          <td>5.2s</td>
+          <td>5.6s</td>
           <td><code>npx tsx packages/migration/src/cli/load-shopmonkey.ts gg-erp-shopmonkey-enriched-sanitized.json</code></td>
         </tr></tbody>
         </table>

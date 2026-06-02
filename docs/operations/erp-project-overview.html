@@ -447,10 +447,11 @@
             <ul>
               <li>
                 ShopMonkey cutover is no longer blocked on zero inventory parts or zero purchase
-                orders: read-only source enrichment produced 100 valid parts and 11 valid purchase
-                orders, the preflight moved to WARN, and the isolated loader rehearsal passed.
-                Remaining cutover confidence depends on warning-row review, full parts coverage
-                reconciliation, and shared staging UAT.
+                orders: read-only source enrichment produced 189 valid parts and 11 valid purchase
+                orders, the preflight moved to WARN, and the isolated loader rehearsal passed. The
+                connector now uses a dense ShopMonkey inventory-part sweep instead of stopping at
+                the first 100 search rows. Remaining cutover confidence depends on warning-row
+                review, the 48-part reported-total coverage gap, and shared staging UAT.
               </li>
               <li>
                 Planning now has routing/job-card, build-configuration, and BOM masters with
@@ -747,8 +748,9 @@
             <p>
               ShopMonkey migration framework and reference seed gates exist. Read-only source
               enrichment moved parts and purchase orders through preflight, and the disposable
-              rehearsal now passes with zero migration errors. Complete parts coverage
-              reconciliation, warning-row review, and shared staging UAT are still required.
+              rehearsal now passes with zero migration errors after importing 189 parts and 11
+              purchase orders. Warning-row review, the 48-part reported-total coverage gap, and
+              shared staging UAT are still required.
             </p>
           </div>
 
@@ -839,8 +841,8 @@
         <ol>
           <li>
             <strong>Run shared ShopMonkey staging cutover UAT:</strong> reconcile the one customer
-            warning, 68 work-order warnings, absent line-item assignments, and the
-            237-reported/100-collected parts API coverage before production cutover.
+            warning, 68 work-order warnings, absent line-item assignments, and the remaining
+            48-part reported-total coverage gap before production cutover.
           </li>
           <li>
             <strong>Keep production blockers closed:</strong> continue verifying

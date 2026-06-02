@@ -16,14 +16,17 @@ import {
   listWoOrders,
   paymentSyncWorkOrderDisplayName,
   salesUserDisplayName,
+  updateCartVehicle,
   updateCustomer,
   type CartVehicle,
+  type CartVehicleState,
   type Customer,
   type CustomerSyncRecord,
   type PaymentSyncRecord,
   type Quote,
   type SalesActivity,
   type SalesOpportunity,
+  type UpdateCartVehicleInput,
   type UpdateCustomerInput,
   type WoOrder,
 } from '@/lib/api-client';
@@ -34,6 +37,13 @@ import { Textarea } from '@/components/ui/textarea';
 
 const STRICT_LIVE_DATA = { allowMockFallback: false } as const;
 const CONTACT_METHOD_OPTIONS = ['EMAIL', 'PHONE', 'SMS'] as const;
+const CART_STATE_OPTIONS = [
+  'REGISTERED',
+  'IN_BUILD',
+  'QUALITY_HOLD',
+  'COMPLETED',
+  'RETIRED',
+] as const;
 
 interface RelatedLoad<T> {
   items: T[];
@@ -48,6 +58,14 @@ interface CustomerProfileDraft {
   preferredContactMethod: 'EMAIL' | 'PHONE' | 'SMS';
   billingAddress: string;
   shippingAddress: string;
+}
+
+interface CartProfileDraft {
+  vin: string;
+  serialNumber: string;
+  modelCode: string;
+  modelYear: string;
+  state: CartVehicleState;
 }
 
 function customerDisplayName(customer: Customer): string {
@@ -100,6 +118,16 @@ function customerDraftFromCustomer(customer: Customer): CustomerProfileDraft {
       : 'EMAIL',
     billingAddress: customer.billingAddress ?? '',
     shippingAddress: customer.shippingAddress ?? '',
+  };
+}
+
+function cartDraftFromVehicle(vehicle: CartVehicle): CartProfileDraft {
+  return {
+    vin: vehicle.vin,
+    serialNumber: vehicle.serialNumber,
+    modelCode: vehicle.modelCode,
+    modelYear: String(vehicle.modelYear),
+    state: CART_STATE_OPTIONS.includes(vehicle.state) ? vehicle.state : 'REGISTERED',
   };
 }
 
@@ -172,6 +200,10 @@ export default function CustomerDetailPage() {
   const [profileDraft, setProfileDraft] = useState<CustomerProfileDraft | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
+  const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null);
+  const [vehicleDraft, setVehicleDraft] = useState<CartProfileDraft | null>(null);
+  const [savingVehicleId, setSavingVehicleId] = useState<string | null>(null);
+  const [vehicleSaveError, setVehicleSaveError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState<string[]>([]);
 
@@ -307,6 +339,62 @@ export default function CustomerDetailPage() {
       setProfileSaveError(errorMessage(error));
     } finally {
       setSavingProfile(false);
+    }
+  }
+
+  function beginVehicleEdit(vehicle: CartVehicle) {
+    setVehicleDraft(cartDraftFromVehicle(vehicle));
+    setVehicleSaveError(null);
+    setEditingVehicleId(vehicle.id);
+  }
+
+  function cancelVehicleEdit() {
+    setEditingVehicleId(null);
+    setVehicleDraft(null);
+    setVehicleSaveError(null);
+  }
+
+  async function saveVehicleProfile(vehicle: CartVehicle) {
+    if (!vehicleDraft) return;
+    const modelYear = Number(vehicleDraft.modelYear);
+    if (!vehicleDraft.serialNumber.trim()) {
+      setVehicleSaveError('Cart serial number is required.');
+      return;
+    }
+    if (!vehicleDraft.vin.trim()) {
+      setVehicleSaveError('Cart VIN is required.');
+      return;
+    }
+    if (!vehicleDraft.modelCode.trim()) {
+      setVehicleSaveError('Cart model is required.');
+      return;
+    }
+    if (!Number.isInteger(modelYear) || modelYear < 1950 || modelYear > 2100) {
+      setVehicleSaveError('Model year must be an integer between 1950 and 2100.');
+      return;
+    }
+
+    const payload: UpdateCartVehicleInput = {
+      vin: vehicleDraft.vin.trim(),
+      serialNumber: vehicleDraft.serialNumber.trim(),
+      modelCode: vehicleDraft.modelCode.trim(),
+      modelYear,
+      state: vehicleDraft.state,
+    };
+
+    setSavingVehicleId(vehicle.id);
+    setVehicleSaveError(null);
+    try {
+      const updated = await updateCartVehicle(vehicle.id, payload);
+      setVehicles((current) => ({
+        ...current,
+        items: current.items.map((item) => (item.id === updated.id ? updated : item)),
+      }));
+      cancelVehicleEdit();
+    } catch (error) {
+      setVehicleSaveError(errorMessage(error));
+    } finally {
+      setSavingVehicleId(null);
     }
   }
 
@@ -574,30 +662,145 @@ export default function CustomerDetailPage() {
           ) : (
             <div className="space-y-3">
               {vehicles.items.map((vehicle) => (
-                <div
-                  key={vehicle.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-gray-200 px-3 py-2"
-                >
-                  <div>
-                    <div className="font-medium text-gray-900">
-                      {vehicle.modelYear} {vehicle.modelCode}
+                <div key={vehicle.id} className="rounded-md border border-gray-200 px-3 py-2">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="font-medium text-gray-900">
+                        {vehicle.modelYear} {vehicle.modelCode}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        VIN {vehicle.vin} · Serial {vehicle.serialNumber}
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-500">
-                      VIN {vehicle.vin} · Serial {vehicle.serialNumber}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge status={vehicle.state} />
+                      {editingVehicleId !== vehicle.id && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => beginVehicleEdit(vehicle)}
+                        >
+                          Edit Asset
+                        </Button>
+                      )}
+                      <Link
+                        href={erpRoute('create-work-order', {
+                          customerId,
+                          vehicleId: vehicle.id,
+                        })}
+                        className="text-sm font-semibold text-gray-900 hover:underline"
+                      >
+                        Start work
+                      </Link>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <StatusBadge status={vehicle.state} />
-                    <Link
-                      href={erpRoute('create-work-order', {
-                        customerId,
-                        vehicleId: vehicle.id,
-                      })}
-                      className="text-sm font-semibold text-gray-900 hover:underline"
-                    >
-                      Start work
-                    </Link>
-                  </div>
+                  {editingVehicleId === vehicle.id && vehicleDraft && (
+                    <div className="mt-3 space-y-3 rounded-lg border border-amber-200 bg-amber-50/40 p-3">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="space-y-1">
+                          <span className="text-xs font-semibold uppercase text-gray-500">
+                            Serial
+                          </span>
+                          <Input
+                            value={vehicleDraft.serialNumber}
+                            onChange={(event) =>
+                              setVehicleDraft((current) =>
+                                current
+                                  ? { ...current, serialNumber: event.target.value }
+                                  : current,
+                              )
+                            }
+                          />
+                        </label>
+                        <label className="space-y-1">
+                          <span className="text-xs font-semibold uppercase text-gray-500">VIN</span>
+                          <Input
+                            value={vehicleDraft.vin}
+                            onChange={(event) =>
+                              setVehicleDraft((current) =>
+                                current ? { ...current, vin: event.target.value } : current,
+                              )
+                            }
+                          />
+                        </label>
+                        <label className="space-y-1">
+                          <span className="text-xs font-semibold uppercase text-gray-500">
+                            Model
+                          </span>
+                          <Input
+                            value={vehicleDraft.modelCode}
+                            onChange={(event) =>
+                              setVehicleDraft((current) =>
+                                current ? { ...current, modelCode: event.target.value } : current,
+                              )
+                            }
+                          />
+                        </label>
+                        <label className="space-y-1">
+                          <span className="text-xs font-semibold uppercase text-gray-500">
+                            Year
+                          </span>
+                          <Input
+                            inputMode="numeric"
+                            value={vehicleDraft.modelYear}
+                            onChange={(event) =>
+                              setVehicleDraft((current) =>
+                                current ? { ...current, modelYear: event.target.value } : current,
+                              )
+                            }
+                          />
+                        </label>
+                        <label className="space-y-1">
+                          <span className="text-xs font-semibold uppercase text-gray-500">
+                            State
+                          </span>
+                          <select
+                            className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
+                            value={vehicleDraft.state}
+                            onChange={(event) =>
+                              setVehicleDraft((current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      state: event.target.value as CartVehicleState,
+                                    }
+                                  : current,
+                              )
+                            }
+                          >
+                            {CART_STATE_OPTIONS.map((state) => (
+                              <option key={state} value={state}>
+                                {normalizeStatus(state)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                      {vehicleSaveError && (
+                        <p className="text-sm text-red-700">{vehicleSaveError}</p>
+                      )}
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => saveVehicleProfile(vehicle)}
+                          disabled={savingVehicleId === vehicle.id}
+                        >
+                          {savingVehicleId === vehicle.id ? 'Saving' : 'Save Cart'}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={cancelVehicleEdit}
+                          disabled={savingVehicleId === vehicle.id}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

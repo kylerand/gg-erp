@@ -241,12 +241,12 @@
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: making the registry-backed customer workspace writable by adding standalone
-          profile editing through the live customer update API. Customer records now show QuickBooks
-          customer-sync and payment-sync activity alongside profile, cart, work-order, quote,
-          opportunity, and activity context. Accounting document snapshots are deployed on main with
-          no live API route exceptions. ShopMonkey cutover readiness remains blocked on missing
-          parts and purchase-order source exports.
+          Current focus: making the registry-backed customer workspace more actionable by adding
+          row-level cart asset editing through the live vehicle update API. Customer records now
+          show QuickBooks customer-sync and payment-sync activity alongside writable profile, cart,
+          work-order, quote, opportunity, and activity context. Accounting document snapshots are
+          deployed on main with no live API route exceptions. ShopMonkey cutover readiness remains
+          blocked on missing parts and purchase-order source exports.
         </p>
         <div class="progress" aria-label="97 percent complete"><div style="width: 97%"></div></div>
       </section>
@@ -394,11 +394,12 @@
                 status, and action-link context. PR #177 added a registry-backed customer detail
                 workspace with strict-live profile, cart assets, work orders, opportunities, quotes,
                 and sales activity plus context-aware create actions. PR #178 extended the workspace
-                with strict-live QuickBooks customer-sync and payment-sync history. This branch adds
-                standalone profile editing through the live customer update API.
+                with strict-live QuickBooks customer-sync and payment-sync history. PR #179 added
+                standalone profile editing through the live customer update API. This branch adds
+                row-level cart asset editing through the live vehicle update API.
               </td>
               <td>
-                Finish CI/QA for standalone customer profile editing, then add create/update dealer
+                Finish CI/QA for standalone cart asset editing, then add create/update dealer
                 assignment workflows once relationship ownership mutation rules are finalized.
               </td>
             </tr>

@@ -4094,6 +4094,52 @@ export async function listDealers(
     : { items: res.items ?? [], total: res.total ?? res.items?.length ?? 0 };
 }
 
+export interface CreateDealerInput {
+  customerId: string;
+  dealerCode?: string | null;
+  territory?: string | null;
+  serviceRelationship?: Dealer['serviceRelationship'];
+  accountOwner?: string | null;
+  notes?: string | null;
+}
+
+export interface UpdateDealerInput {
+  dealerCode?: string | null;
+  territory?: string | null;
+  serviceRelationship?: Dealer['serviceRelationship'];
+  accountOwner?: string | null;
+  notes?: string | null;
+}
+
+export async function createDealer(
+  input: CreateDealerInput,
+): Promise<Dealer> {
+  const data = await apiFetch<{ dealer: Dealer }>(
+    '/identity/dealers',
+    {
+      method: 'POST',
+      headers: mutationHeaders(),
+      body: JSON.stringify(input),
+    },
+  );
+  return data.dealer;
+}
+
+export async function updateDealer(
+  id: string,
+  input: UpdateDealerInput,
+): Promise<Dealer> {
+  const data = await apiFetch<{ dealer: Dealer }>(
+    `/identity/dealers/${id}`,
+    {
+      method: 'PATCH',
+      headers: mutationHeaders(),
+      body: JSON.stringify(input),
+    },
+  );
+  return data.dealer;
+}
+
 export interface DealerRelationship {
   id: string;
   dealerId: string;

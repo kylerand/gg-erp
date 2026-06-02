@@ -124,7 +124,11 @@ import { adminListUsersHandler } from './lambda/identity/admin-list-users.handle
 import { adminCreateUserHandler } from './lambda/identity/admin-create-user.handler.js';
 import { adminUpdateUserHandler } from './lambda/identity/admin-update-user.handler.js';
 import { adminDeleteUserHandler } from './lambda/identity/admin-delete-user.handler.js';
-import { handler as listDealersHandler } from './lambda/identity/list-dealers.handler.js';
+import {
+  createDealerAccountHandler,
+  handler as listDealersHandler,
+  updateDealerAccountHandler,
+} from './lambda/identity/list-dealers.handler.js';
 import {
   createDealerRelationshipHandler,
   handler as listDealerRelationshipsHandler,
@@ -298,6 +302,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   // ── Path parameter extraction helpers ────────────────────────────────────
   const migrationBatchMatch = pathname.match(/^\/migration\/batches\/([^/]+)/);
   const customerMatch = pathname.match(/^\/identity\/customers\/([^/]+)/);
+  const dealerMatch = pathname.match(/^\/identity\/dealers\/([^/]+)$/);
   const dealerRelationshipMatch = pathname.match(/^\/identity\/dealer-relationships\/([^/]+)$/);
   const vehicleMatch = pathname.match(/^\/planning\/vehicles\/([^/]+)$/);
   const partMatch = pathname.match(/^\/inventory\/parts\/([^/]+)(?:\/([^/]+))?/);
@@ -443,6 +448,13 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     result = await listCustomersHandler(event);
   } else if (pathname === '/identity/dealers' && method === 'GET') {
     result = await listDealersHandler(event);
+  } else if (pathname === '/identity/dealers' && method === 'POST') {
+    result = await createDealerAccountHandler(event);
+  } else if (dealerMatch && method === 'PATCH') {
+    result = await updateDealerAccountHandler({
+      ...event,
+      pathParameters: { id: dealerMatch[1] },
+    });
   } else if (pathname === '/identity/dealer-relationships' && method === 'GET') {
     result = await listDealerRelationshipsHandler(event);
   } else if (pathname === '/identity/dealer-relationships' && method === 'POST') {

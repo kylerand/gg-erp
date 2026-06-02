@@ -222,6 +222,23 @@ export interface BuildPackageApprovalEvidenceResponse {
   createdAt: string;
 }
 
+export interface BuildPackageSignoffResponse {
+  id: string;
+  buildConfigurationId: string;
+  bomId: string;
+  packageId: string;
+  signoffNote: string;
+  signedOffBy?: string;
+  signedOffAt: string;
+  reviewPackGeneratedAt: string;
+  approvalCount: number;
+  changeCount: number;
+  routeCount: number;
+  routeStepCount: number;
+  routeTemplateIds: string[];
+  createdAt: string;
+}
+
 export interface BuildPackageReviewPackResponse {
   id: string;
   generatedAt: string;
@@ -231,6 +248,7 @@ export interface BuildPackageReviewPackResponse {
   routeTemplates: RoutingTemplateResponse[];
   changeEvents: PlanningChangeEventResponse[];
   approvalEvidence: BuildPackageApprovalEvidenceResponse[];
+  latestSignoff?: BuildPackageSignoffResponse;
   summary: {
     bomLineCount: number;
     routeCount: number;
@@ -239,12 +257,19 @@ export interface BuildPackageReviewPackResponse {
     estimatedLaborCostCents: number;
     changeCount: number;
     approvalCount: number;
+    signoffCount: number;
   };
 }
 
 export interface GetBuildPackageReviewPackInput {
   buildConfigurationId: string;
   bomId: string;
+}
+
+export interface SignOffBuildPackageInput {
+  buildConfigurationId: string;
+  bomId: string;
+  signoffNote: string;
 }
 
 export interface CreateBuildConfigurationInput {
@@ -344,6 +369,10 @@ export interface PlanningMasterStore {
   getBuildPackageReviewPack(
     input: GetBuildPackageReviewPackInput,
   ): Promise<BuildPackageReviewPackResponse | undefined>;
+  signOffBuildPackage(
+    input: SignOffBuildPackageInput,
+    context: RequestContext,
+  ): Promise<BuildPackageSignoffResponse>;
 }
 
 class PlanningMasterCommandError extends Error {
@@ -580,6 +609,22 @@ interface PlanningChangeEventRow {
   createdAt: Date | string;
 }
 
+interface BuildPackageSignoffRow {
+  id: string;
+  buildConfigurationId: string;
+  bomId: string;
+  signoffNote: string;
+  signedOffBy: string | null;
+  signedOffAt: Date | string;
+  reviewPackGeneratedAt: Date | string;
+  approvalCount: number;
+  changeCount: number;
+  routeCount: number;
+  routeStepCount: number;
+  routeTemplateIds: unknown;
+  createdAt: Date | string;
+}
+
 function mapConfiguration(
   row: BuildConfigurationRow,
   changeEvents: BuildConfigurationChangeEventResponse[],
@@ -750,6 +795,29 @@ function mapBuildPackageApprovalEvidence(
     approvedAt: event.approvedAt,
     appliedBy: event.appliedBy,
     createdAt: event.createdAt,
+  };
+}
+
+function buildPackageId(buildConfigurationId: string, bomId: string): string {
+  return `${buildConfigurationId}:${bomId}`;
+}
+
+function mapBuildPackageSignoff(row: BuildPackageSignoffRow): BuildPackageSignoffResponse {
+  return {
+    id: row.id,
+    buildConfigurationId: row.buildConfigurationId,
+    bomId: row.bomId,
+    packageId: buildPackageId(row.buildConfigurationId, row.bomId),
+    signoffNote: row.signoffNote,
+    signedOffBy: row.signedOffBy ?? undefined,
+    signedOffAt: iso(row.signedOffAt),
+    reviewPackGeneratedAt: iso(row.reviewPackGeneratedAt),
+    approvalCount: Number(row.approvalCount),
+    changeCount: Number(row.changeCount),
+    routeCount: Number(row.routeCount),
+    routeStepCount: Number(row.routeStepCount),
+    routeTemplateIds: normalizeOptions(row.routeTemplateIds),
+    createdAt: iso(row.createdAt),
   };
 }
 
@@ -1090,6 +1158,51 @@ async function loadPlanningChangeEventsForEntities(
   `;
 
   return rows.map(mapPlanningChangeEvent);
+}
+
+async function loadBuildPackageSignoffs(
+  db: DbClient,
+  pairs: Array<{ buildConfigurationId: string; bomId: string }>,
+): Promise<Map<string, BuildPackageSignoffResponse>> {
+  const uniquePairs = Array.from(
+    new Map(pairs.map((pair) => [buildPackageId(pair.buildConfigurationId, pair.bomId), pair])).values(),
+  );
+  if (uniquePairs.length === 0) return new Map();
+
+  const predicates = uniquePairs.map(
+    (pair) => Prisma.sql`(
+      build_configuration_id = ${pair.buildConfigurationId}::uuid
+      AND bom_id = ${pair.bomId}::uuid
+    )`,
+  );
+  const rows = await db.$queryRaw<BuildPackageSignoffRow[]>`
+    SELECT
+      id::text AS "id",
+      build_configuration_id::text AS "buildConfigurationId",
+      bom_id::text AS "bomId",
+      signoff_note AS "signoffNote",
+      coalesce(signed_off_by_ref, signed_off_by_user_id::text) AS "signedOffBy",
+      signed_off_at AS "signedOffAt",
+      review_pack_generated_at AS "reviewPackGeneratedAt",
+      approval_count AS "approvalCount",
+      change_count AS "changeCount",
+      route_count AS "routeCount",
+      route_step_count AS "routeStepCount",
+      route_template_ids AS "routeTemplateIds",
+      created_at AS "createdAt"
+    FROM planning.build_package_signoffs
+    WHERE ${Prisma.join(predicates, ' OR ')}
+    ORDER BY signed_off_at DESC, id DESC
+  `;
+
+  const signoffsByPackage = new Map<string, BuildPackageSignoffResponse>();
+  for (const row of rows) {
+    const signoff = mapBuildPackageSignoff(row);
+    if (!signoffsByPackage.has(signoff.packageId)) {
+      signoffsByPackage.set(signoff.packageId, signoff);
+    }
+  }
+  return signoffsByPackage;
 }
 
 function planningChangeEventsCte(): Prisma.Sql {
@@ -2299,6 +2412,12 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
     const approvalEvidence = changeEvents
       .filter((event) => event.approvalNote || event.approvedAt || event.approvedBy)
       .map(mapBuildPackageApprovalEvidence);
+    const packageId = buildPackageId(configuration.id, bom.id);
+    const latestSignoff = (
+      await loadBuildPackageSignoffs(prisma, [
+        { buildConfigurationId: configuration.id, bomId: bom.id },
+      ])
+    ).get(packageId);
     const packageRow = packageRows[0];
     const routeStepCount = routeTemplates.reduce((total, template) => total + template.stepCount, 0);
     const estimatedMinutes = routeTemplates.reduce(
@@ -2311,10 +2430,10 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
     );
 
     return {
-      id: `${configuration.id}:${bom.id}`,
+      id: packageId,
       generatedAt: new Date().toISOString(),
       package: {
-        id: `${configuration.id}:${bom.id}`,
+        id: packageId,
         buildConfigurationId: configuration.id,
         bomId: bom.id,
         label: `${configuration.configurationCode} / ${bom.bomCode}`,
@@ -2336,6 +2455,7 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
           [`CONFIG_${configuration.configurationStatus}`]: 1,
           [`BOM_${bom.bomStatus}`]: 1,
           ACTIVE_ROUTES: routeTemplates.length,
+          [latestSignoff ? 'PACKAGE_SIGNED_OFF' : 'PACKAGE_NEEDS_SIGNOFF']: 1,
         },
       },
       configuration,
@@ -2343,6 +2463,7 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
       routeTemplates,
       changeEvents,
       approvalEvidence,
+      latestSignoff,
       summary: {
         bomLineCount: bom.lines.length,
         routeCount: routeTemplates.length,
@@ -2351,8 +2472,105 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
         estimatedLaborCostCents,
         changeCount: changeEvents.length,
         approvalCount: approvalEvidence.length,
+        signoffCount: latestSignoff ? 1 : 0,
       },
     };
+  }
+
+  async signOffBuildPackage(
+    input: SignOffBuildPackageInput,
+    context: RequestContext,
+  ): Promise<BuildPackageSignoffResponse> {
+    if (!isUuid(input.buildConfigurationId)) {
+      throw new PlanningMasterCommandError('buildConfigurationId must be a UUID.', 400);
+    }
+    if (!isUuid(input.bomId)) {
+      throw new PlanningMasterCommandError('bomId must be a UUID.', 400);
+    }
+    const signoffNote = normalizeText(input.signoffNote);
+    if (!signoffNote) {
+      throw new PlanningMasterCommandError('Build package sign-off requires a note.', 422);
+    }
+
+    const reviewPack = await this.getBuildPackageReviewPack({
+      buildConfigurationId: input.buildConfigurationId,
+      bomId: input.bomId,
+    });
+    if (!reviewPack) {
+      throw new PlanningMasterCommandError('Build package review pack was not found.', 404);
+    }
+    if (reviewPack.latestSignoff) {
+      throw new PlanningMasterCommandError('Build package is already signed off.', 409);
+    }
+    if (reviewPack.summary.routeCount === 0) {
+      throw new PlanningMasterCommandError(
+        'Build package sign-off requires at least one active routing template.',
+        409,
+      );
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const existing = (
+        await loadBuildPackageSignoffs(tx, [
+          { buildConfigurationId: input.buildConfigurationId, bomId: input.bomId },
+        ])
+      ).get(reviewPack.id);
+      if (existing) {
+        throw new PlanningMasterCommandError('Build package is already signed off.', 409);
+      }
+
+      const rows = await tx.$queryRaw<BuildPackageSignoffRow[]>`
+        INSERT INTO planning.build_package_signoffs (
+          build_configuration_id,
+          bom_id,
+          signoff_note,
+          signed_off_by_user_id,
+          signed_off_by_ref,
+          signed_off_at,
+          review_pack_generated_at,
+          approval_count,
+          change_count,
+          route_count,
+          route_step_count,
+          route_template_ids,
+          last_correlation_id,
+          last_request_id
+        )
+        VALUES (
+          ${input.buildConfigurationId}::uuid,
+          ${input.bomId}::uuid,
+          ${signoffNote},
+          ${actorUuid(context.actorId)}::uuid,
+          ${actorRef(context.actorId)},
+          now(),
+          ${reviewPack.generatedAt}::timestamptz,
+          ${reviewPack.summary.approvalCount},
+          ${reviewPack.summary.changeCount},
+          ${reviewPack.summary.routeCount},
+          ${reviewPack.summary.routeStepCount},
+          ${JSON.stringify(reviewPack.routeTemplates.map((template) => template.id))}::jsonb,
+          ${context.correlationId},
+          ${context.requestId ?? null}
+        )
+        RETURNING
+          id::text AS "id",
+          build_configuration_id::text AS "buildConfigurationId",
+          bom_id::text AS "bomId",
+          signoff_note AS "signoffNote",
+          coalesce(signed_off_by_ref, signed_off_by_user_id::text) AS "signedOffBy",
+          signed_off_at AS "signedOffAt",
+          review_pack_generated_at AS "reviewPackGeneratedAt",
+          approval_count AS "approvalCount",
+          change_count AS "changeCount",
+          route_count AS "routeCount",
+          route_step_count AS "routeStepCount",
+          route_template_ids AS "routeTemplateIds",
+          created_at AS "createdAt"
+      `;
+      const signoff = rows[0];
+      if (!signoff) throw new PlanningMasterCommandError('Build package sign-off was not created.', 500);
+      return mapBuildPackageSignoff(signoff);
+    });
   }
 
   async createRoutingTemplate(
@@ -2625,6 +2843,7 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
         lastCustomerDisplayName: string | null;
         configurationStatus: string;
         bomStatus: string;
+        signoffId: string | null;
       }>
     >`
       SELECT
@@ -2644,11 +2863,15 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
         concat(cv.model_year::text, ' ', cv.model_code, ' · ', cv.serial_number) AS "lastVehicleDisplayName",
         coalesce(nullif(c.company_name, ''), c.full_name) AS "lastCustomerDisplayName",
         bc.configuration_status::text AS "configurationStatus",
-        b.bom_status::text AS "bomStatus"
+        b.bom_status::text AS "bomStatus",
+        bps.id::text AS "signoffId"
       FROM planning.build_configurations bc
       JOIN planning.build_boms b ON b.build_configuration_id = bc.id
       JOIN planning.cart_vehicles cv ON cv.id = bc.vehicle_id
       LEFT JOIN customers.customers c ON c.id = cv.customer_id
+      LEFT JOIN planning.build_package_signoffs bps
+        ON bps.build_configuration_id = bc.id
+       AND bps.bom_id = b.id
       LEFT JOIN planning.work_orders wo
         ON wo.build_configuration_id = bc.id::text
        AND wo.bom_id = b.id::text
@@ -2663,7 +2886,7 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
           OR c.full_name ILIKE concat('%', ${search ?? ''}, '%')
           OR c.company_name ILIKE concat('%', ${search ?? ''}, '%')
         )
-      GROUP BY bc.id, b.id, cv.id, c.id
+      GROUP BY bc.id, b.id, cv.id, c.id, bps.id
       ORDER BY coalesce(max(wo.updated_at), greatest(bc.updated_at, b.updated_at)) DESC
       LIMIT 500
     `;
@@ -2684,6 +2907,7 @@ class PrismaPlanningMasterStore implements PlanningMasterStore {
       stateCounts: {
         [`CONFIG_${row.configurationStatus}`]: 1,
         [`BOM_${row.bomStatus}`]: 1,
+        [row.signoffId ? 'PACKAGE_SIGNED_OFF' : 'PACKAGE_NEEDS_SIGNOFF']: 1,
       },
     }));
     const offset = input.offset ?? 0;
@@ -2841,6 +3065,35 @@ export async function getBuildPackageReviewPackHandler(
     }
 
     return json(200, { reviewPack });
+  } catch (error) {
+    return errorJson(error);
+  }
+}
+
+export async function signOffBuildPackageHandler(
+  event: ApiGatewayProxyEventLike,
+): Promise<ApiGatewayProxyResultLike> {
+  try {
+    const body = parseJsonBody(event.body) as Partial<SignOffBuildPackageInput> | undefined;
+    const buildConfigurationId = body?.buildConfigurationId?.trim();
+    const bomId = body?.bomId?.trim();
+    const signoffNote = normalizeText(body?.signoffNote);
+
+    if (!buildConfigurationId || !isUuid(buildConfigurationId)) {
+      return json(422, { message: 'buildConfigurationId must be a UUID.' });
+    }
+    if (!bomId || !isUuid(bomId)) {
+      return json(422, { message: 'bomId must be a UUID.' });
+    }
+    if (!signoffNote) {
+      return json(422, { message: 'Build package sign-off requires a note.' });
+    }
+
+    const signoff = await planningMasterStore.signOffBuildPackage(
+      { buildConfigurationId, bomId, signoffNote },
+      requestContext(event),
+    );
+    return json(201, { signoff });
   } catch (error) {
     return errorJson(error);
   }

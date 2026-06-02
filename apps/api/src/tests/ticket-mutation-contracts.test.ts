@@ -190,6 +190,14 @@ test('createWoOrderHandler creates execution work order operations and BOM part 
           },
         ];
       }
+      if (sql.includes('FROM planning.build_package_signoffs')) {
+        return [
+          {
+            id: '00000000-0000-4000-8000-000000000107',
+            signedOffAt: '2026-06-01T00:00:00.000Z',
+          },
+        ];
+      }
       if (sql.includes('FROM planning.build_bom_lines')) {
         return [
           {
@@ -237,6 +245,73 @@ test('createWoOrderHandler creates execution work order operations and BOM part 
     assert.equal(partRows[0]?.requestedQuantity, 3);
     assert.ok(partRows[0]?.workOrderOperationId);
     assert.ok(planningCreate);
+  } finally {
+    setTicketHandlerPrismaForTests(undefined);
+  }
+});
+
+test('createWoOrderHandler blocks unsigned released build packages', async () => {
+  const ACTOR_ID = '00000000-0000-4000-8000-000000000101';
+  const VEHICLE_ID = '00000000-0000-4000-8000-000000000102';
+  const CUSTOMER_ID = '00000000-0000-4000-8000-000000000103';
+  const CONFIG_ID = '00000000-0000-4000-8000-000000000104';
+  const BOM_ID = '00000000-0000-4000-8000-000000000105';
+
+  setTicketHandlerPrismaForTests({
+    woOrder: {
+      async findUnique() {
+        return null;
+      },
+    },
+    workOrder: {
+      async findUnique() {
+        return null;
+      },
+    },
+    async $queryRaw(strings: TemplateStringsArray) {
+      const sql = Array.from(strings).join('');
+      if (sql.includes('FROM planning.build_configurations')) {
+        return [
+          {
+            buildConfigurationId: CONFIG_ID,
+            configurationCode: 'PKG-ALPHA',
+            configurationVersion: 2,
+            configurationStatus: 'RELEASED',
+            vehicleId: VEHICLE_ID,
+            vehicleDisplayName: '2026 GG - SERIAL-1',
+            customerId: CUSTOMER_ID,
+            customerDisplayName: 'Golfin Garage',
+            bomId: BOM_ID,
+            bomCode: 'BOM-ALPHA',
+            revision: 3,
+            bomStatus: 'APPROVED',
+          },
+        ];
+      }
+      if (sql.includes('FROM planning.build_package_signoffs')) {
+        return [];
+      }
+      throw new Error(`Unexpected query: ${sql}`);
+    },
+  } as unknown as Partial<PrismaClient>);
+
+  try {
+    const response = await createWoOrderHandler({
+      headers: { 'x-actor-id': ACTOR_ID },
+      body: JSON.stringify({
+        workOrderNumber: 'WO-UNSIGNED-001',
+        vehicleId: VEHICLE_ID,
+        customerId: CUSTOMER_ID,
+        buildConfigurationId: CONFIG_ID,
+        bomId: BOM_ID,
+      }),
+    });
+
+    assert.equal(response.statusCode, 409);
+    assert.equal(
+      (JSON.parse(response.body) as { message: string }).message,
+      'Build package must be signed off before creating a work order.',
+    );
   } finally {
     setTicketHandlerPrismaForTests(undefined);
   }
@@ -344,6 +419,14 @@ test('createWoOrderHandler uses active routing template steps when supplied', as
             bomCode: 'BOM-ALPHA',
             revision: 3,
             bomStatus: 'APPROVED',
+          },
+        ];
+      }
+      if (sql.includes('FROM planning.build_package_signoffs')) {
+        return [
+          {
+            id: '00000000-0000-4000-8000-000000000109',
+            signedOffAt: '2026-06-01T00:00:00.000Z',
           },
         ];
       }

@@ -232,8 +232,8 @@
       </header>
 
       <div class="summary">
-        <div class="metric"><strong>29</strong><span>Tracked delivery slices</span></div>
-        <div class="metric"><strong>27</strong><span>Done</span></div>
+        <div class="metric"><strong>30</strong><span>Tracked delivery slices</span></div>
+        <div class="metric"><strong>28</strong><span>Done</span></div>
         <div class="metric"><strong>1</strong><span>In progress</span></div>
         <div class="metric"><strong>1</strong><span>Blocked</span></div>
       </div>
@@ -241,19 +241,18 @@
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: turning missing-cost valuation exceptions into a ledger-backed cost
-          evidence posting action after deploying selected-row exception action briefs, handoff
-          export, focused first-row actions, row-level movement evidence, stock corrections, cycle
-          counts, replenishment purchase orders, inventory part editing, warranty provider
-          evidence, and reimbursement follow-through through the accounting operational ledger and
-          immutable journal posting flow. Customer records now show QuickBooks customer-sync and payment-sync
-          activity alongside a combined timeline, derived next actions, writable profile, writable
-          cart, inline activity logging, work-order, quote, opportunity, warranty claim, and
-          accounting context. Warranty claim routes are deployed with no live API route exceptions.
-          ShopMonkey cutover readiness remains blocked on missing parts and purchase-order source
-          exports.
+          Current focus: adding stateful package-level ECO sign-off after deploying ledger-backed
+          cost evidence posting for missing-cost valuation exceptions, selected-row exception action
+          briefs, handoff export, focused first-row actions, row-level movement evidence, stock
+          corrections, cycle counts, replenishment purchase orders, inventory part editing, warranty
+          provider evidence, and reimbursement follow-through through the accounting operational
+          ledger and immutable journal posting flow. Customer records now show QuickBooks
+          customer-sync and payment-sync activity alongside a combined timeline, derived next
+          actions, writable profile, writable cart, inline activity logging, work-order, quote,
+          opportunity, warranty claim, and accounting context. ShopMonkey cutover readiness remains
+          blocked on missing parts and purchase-order source exports.
         </p>
-        <div class="progress" aria-label="97 percent complete"><div style="width: 97%"></div></div>
+        <div class="progress" aria-label="98 percent complete"><div style="width: 98%"></div></div>
       </section>
 
       <section>
@@ -270,7 +269,7 @@
           <tbody>
             <tr>
               <td>Progress dashboard</td>
-              <td><span class="pill done">Done</span></td>
+              <td><span class="pill doing">In Progress</span></td>
               <td>This HTML tracker plus `docs/architecture/erp-actionability-upgrade-plan.md`.</td>
               <td>Update this page when each PR slice lands.</td>
             </tr>
@@ -381,11 +380,16 @@
                 <code>GET /planning/change-events</code>, and execution work orders now link back to
                 their source configuration, BOM, route template, and filtered ECO history. Released
                 configuration/approved-BOM packages now open a live ECO review pack with BOM lines,
-                active routes, approval evidence, change history, and a copyable summary.
+                active routes, approval evidence, change history, and a copyable summary. This
+                branch adds persisted package-level sign-off evidence so a released configuration and
+                approved BOM can be explicitly accepted for production use after route coverage is
+                present; work-order creation is blocked until that package sign-off exists.
               </td>
               <td>
-                Add stateful package-level ECO sign-off or external report delivery only if change
-                volume requires it.
+                Ship the sign-off API/UI, then keep external report delivery as the remaining
+                planning-depth option if change volume requires it; remove the temporary
+                <code>POST /planning/build-packages/signoffs</code>
+                pending-deploy smoke allowance after CD deploys the route.
               </td>
             </tr>
             <tr>
@@ -593,7 +597,7 @@
                 per-part stock value, URL-backed missing-cost, reorder-exposure, and cost-source
                 drilldowns, the valuation action queue, and row-level handoffs into part-filtered
                 movement evidence, stock correction, cycle-count, and replenishment PO workflows are
-                deployed; this branch adds ledger-backed cost evidence posting for stocked lots so
+                deployed; ledger-backed cost evidence posting for stocked lots is deployed so
                 missing-cost rows can be resolved without changing on-hand quantity.
               </td>
             </tr>

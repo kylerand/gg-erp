@@ -160,6 +160,7 @@ model BuildConfiguration {
   boms             BuildBom[]
   routingTemplates RoutingTemplate[]
   changeEvents     BuildConfigurationChangeEvent[]
+  packageSignoffs  BuildPackageSignoff[]
 
   @@unique([vehicleId, configurationVersion], map: "build_configurations_vehicle_version_key")
   @@index([configurationStatus], map: "build_configurations_status_idx")
@@ -215,6 +216,7 @@ model BuildBom {
   buildConfiguration BuildConfiguration    @relation(fields: [buildConfigurationId], references: [id])
   lines              BuildBomLine[]
   changeEvents       BuildBomChangeEvent[]
+  packageSignoffs    BuildPackageSignoff[]
 
   @@unique([buildConfigurationId, revision], map: "build_boms_configuration_revision_key")
   @@index([bomStatus], map: "build_boms_status_idx")
@@ -249,6 +251,34 @@ model BuildBomChangeEvent {
   @@index([buildConfigurationId], map: "build_bom_change_events_configuration_idx")
   @@index([changeKind], map: "build_bom_change_events_kind_idx")
   @@map("build_bom_change_events")
+  @@schema("planning")
+}
+
+model BuildPackageSignoff {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  buildConfigurationId  String   @map("build_configuration_id") @db.Uuid
+  bomId                 String   @map("bom_id") @db.Uuid
+  signoffNote           String   @map("signoff_note")
+  signedOffByUserId     String?  @map("signed_off_by_user_id") @db.Uuid
+  signedOffByRef        String?  @map("signed_off_by_ref")
+  signedOffAt           DateTime @default(now()) @map("signed_off_at") @db.Timestamptz(6)
+  reviewPackGeneratedAt DateTime @default(now()) @map("review_pack_generated_at") @db.Timestamptz(6)
+  approvalCount         Int      @default(0) @map("approval_count")
+  changeCount           Int      @default(0) @map("change_count")
+  routeCount            Int      @default(0) @map("route_count")
+  routeStepCount        Int      @default(0) @map("route_step_count")
+  routeTemplateIds      Json     @default("[]") @map("route_template_ids") @db.JsonB
+  lastCorrelationId     String?  @map("last_correlation_id")
+  lastRequestId         String?  @map("last_request_id")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  buildConfiguration BuildConfiguration @relation(fields: [buildConfigurationId], references: [id], onDelete: Restrict)
+  bom                BuildBom           @relation(fields: [bomId], references: [id], onDelete: Restrict)
+
+  @@unique([buildConfigurationId, bomId], map: "build_package_signoffs_configuration_bom_key")
+  @@index([buildConfigurationId, signedOffAt], map: "build_package_signoffs_configuration_idx")
+  @@index([bomId, signedOffAt], map: "build_package_signoffs_bom_idx")
+  @@map("build_package_signoffs")
   @@schema("planning")
 }
 

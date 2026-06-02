@@ -223,6 +223,9 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
       "erpRecordRoute('work-order'",
       'manualBuildConfigurationId',
       'manualBomId',
+      'PACKAGE_SIGNED_OFF',
+      'selectedBuildPackageNeedsSignoff',
+      'Needs package sign-off',
       'SearchableSelect',
       'CustomerSelector',
       'allowMockFallback: false',
@@ -239,12 +242,14 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
       'createBom',
       'createRoutingTemplate',
       'getBuildPackageReviewPack',
+      'signOffBuildPackage',
       'transitionRoutingTemplate',
       'allowMockFallback: false',
       "erpRoute('create-work-order'",
       'Version Review',
       'ECO Report',
       'ECO Review Pack',
+      'Package Sign-off',
       'loadReviewPack',
       'copyReviewPack',
       'prepareConfigurationRevision',
@@ -255,6 +260,7 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
   );
   assert.ok(apiClientSource.includes('/planning/build-packages'));
   assert.ok(apiClientSource.includes('/planning/build-packages/review-pack'));
+  assert.ok(apiClientSource.includes('/planning/build-packages/signoffs'));
   assert.ok(apiClientSource.includes('/planning/change-events'));
   assert.ok(apiClientSource.includes('/planning/build-configurations'));
   assert.ok(apiClientSource.includes('/planning/boms'));

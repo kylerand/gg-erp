@@ -357,14 +357,15 @@
           reimbursement accounting ledger work, deployed provider document evidence work, deployed
           inventory part editing work, deployed inventory valuation rollups, deployed valuation
           exception drilldown work, deployed valuation exception handoff work, deployed selected-row
-          exception workbench work, and active cost evidence posting work. The app has moved past polished static screens into a usable
+          exception workbench work, deployed cost evidence posting work, and active package-level
+          ECO sign-off work. The app has moved past polished static screens into a usable
           shop-ops ERP foundation, but ShopMonkey cutover remains blocked until complete parts and
           purchase-order source exports are captured.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 2, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 199</span>
-          <span class="chip">Active slice: Inventory cost evidence posting</span>
+          <span class="chip">Baseline: origin/main through PR 200</span>
+          <span class="chip">Active slice: Package-level ECO sign-off</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
@@ -452,9 +453,9 @@
                 Planning now has routing/job-card, build-configuration, and BOM masters with
                 effective windows, costing metadata, QC/evidence seeding, and approval history.
                 Work-order execution now links back to the source configuration, BOM, route
-                template, and ECO history, and released packages now expose a live ECO review pack.
-                Stateful package-level sign-off is the remaining manufacturing-depth gap if change
-                volume grows.
+                template, and ECO history, released packages now expose a live ECO review pack, and
+                this branch adds persisted package-level sign-off evidence before packages are
+                accepted for production use.
               </li>
               <li>
                 Accounting is still integration-first, but ready operational ledger entries now
@@ -649,8 +650,10 @@
               expose full engineering-change history through a dedicated route. Work orders now
               surface their source configuration, BOM, route template, and ECO history. Released
               packages now open an ECO review pack with BOM lines, active routes, approval evidence,
-              and a copyable summary. Remaining depth is stateful package-level sign-off or external
-              delivery if change volume requires it.
+              and a copyable summary. This branch adds note-backed package sign-off records tied to
+              released configuration and approved BOM pairs, and work-order creation is blocked
+              until that sign-off exists; remaining depth is external review-pack delivery if change
+              volume requires it.
             </p>
           </div>
 
@@ -775,27 +778,27 @@
               <td>Latest production baseline</td>
               <td><span class="pill done">Merged</span></td>
               <td>
-                <code>origin/main</code> is through PR 188 after dealer account creation/profile
-                updates passed hosted validate, QA smoke, main CI, QA, Pages, and CD. This branch
-                removes the now-deployed dealer account route allowances.
+                <code>origin/main</code> is through PR 200 after inventory cost evidence posting
+                passed hosted CI, QA, Pages, and CD. This branch layers package-level ECO sign-off
+                on top of that deployed production baseline.
               </td>
             </tr>
             <tr>
               <td>Recent pipeline health</td>
               <td><span class="pill done">Green</span></td>
               <td>
-                Latest main CI, QA smoke, QA coverage, and Pages completed successfully after PR 183
-                merged. PR #174 previously deployed the accounting snapshot tables and updated
-                close-package reads, and live smoke proved the close-package route still reaches the
-                protected API authorizer path.
+                Latest main CI, QA smoke, QA coverage, Pages, and CD completed successfully after PR
+                200 merged. The current package sign-off branch has passed focused API and web
+                regression checks locally before PR validation.
               </td>
             </tr>
             <tr>
               <td>Route/API surface</td>
               <td><span class="pill info">Broad</span></td>
               <td>
-                Deployed main covers 193 API routes including
-                <code>GET /accounting/reports/close-package</code>.
+                Deployed main covers 201 API routes; this branch adds
+                <code>POST /planning/build-packages/signoffs</code>
+                to the planned route surface.
               </td>
             </tr>
             <tr>
@@ -816,12 +819,11 @@
             </tr>
             <tr>
               <td>Known route exceptions</td>
-              <td><span class="pill done">None</span></td>
+              <td><span class="pill watch">Pending Deploy</span></td>
               <td>
-                <code>known-broken.json</code> is empty again after direct production probes
-                confirmed <code>POST /identity/dealers</code> and
-                <code>PATCH /identity/dealers/{id}</code>
-                reach the protected API authorizer path.
+                <code>known-broken.json</code> contains only the PR #201 pending-deploy route miss
+                for <code>POST /planning/build-packages/signoffs</code>. Remove it after CD deploys
+                the new API Gateway route.
               </td>
             </tr>
           </tbody>
@@ -842,9 +844,10 @@
             in live UAT runs.
           </li>
           <li>
-            <strong>Deepen planning execution:</strong> add stateful package-level ECO sign-off or
-            external review-pack delivery if the current route/configuration/BOM approval history,
-            work-order provenance, and version diff workflows need a heavier change-control gate.
+            <strong>Deepen planning execution:</strong> deploy package-level ECO sign-off, then keep
+            external review-pack delivery only if the current route/configuration/BOM approval
+            history, work-order provenance, and version diff workflows need a heavier change-control
+            gate.
           </li>
           <li>
             <strong>Deepen inventory master data:</strong> validate cost evidence posting in UAT,

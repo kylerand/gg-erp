@@ -11,6 +11,8 @@ export interface SearchableSelectOption {
   label: string;
   description?: string;
   meta?: string;
+  disabled?: boolean;
+  disabledReason?: string;
 }
 
 interface SearchableSelectProps {
@@ -91,12 +93,14 @@ export function SearchableSelect({
               <button
                 key={option.id}
                 type="button"
+                disabled={option.disabled}
                 onClick={() => {
+                  if (option.disabled) return;
                   onChange(option.id);
                   onSearchChange('');
                   setOpen(false);
                 }}
-                className="block w-full border-b border-gray-100 px-3 py-2 text-left last:border-b-0 hover:bg-amber-50"
+                className="block w-full border-b border-gray-100 px-3 py-2 text-left last:border-b-0 hover:bg-amber-50 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:opacity-70"
               >
                 <span className="block text-sm font-semibold text-gray-900">{option.label}</span>
                 {option.description && (
@@ -104,6 +108,11 @@ export function SearchableSelect({
                 )}
                 {option.meta && (
                   <span className="mt-0.5 block text-xs text-gray-400">{option.meta}</span>
+                )}
+                {option.disabledReason && (
+                  <span className="mt-0.5 block text-xs font-medium text-amber-700">
+                    {option.disabledReason}
+                  </span>
                 )}
               </button>
             ))

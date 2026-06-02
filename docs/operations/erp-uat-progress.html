@@ -404,13 +404,16 @@
                 logging through the live sales activity API, PR #184 added relationship state,
                 escalation owner, and notes editing through
                 <code>PATCH /identity/dealer-relationships/{id}</code>, PR #185 removed the
-                deployed update-route allowlist after CD, and PR #186 added a live relationship link
+                deployed update-route allowlist after CD, PR #186 added a live relationship link
                 workflow through <code>POST /identity/dealer-relationships</code> with dealer,
-                active-customer, and optional cart selectors. This branch removes the deployed
-                create-route allowlist after CD verified the route reaches the authorizer.
+                active-customer, and optional cart selectors, and PR #187 removed the deployed
+                create-route allowlist after CD. This branch adds live dealer account creation and
+                profile updates through <code>POST /identity/dealers</code> and
+                <code>PATCH /identity/dealers/{id}</code>.
               </td>
               <td>
-                Add dealer account creation/profile updates and richer warranty handoff workflows.
+                Finish CI/QA/CD for dealer account creation/profile updates, remove the temporary
+                pending-deploy route allowlists after CD, then add richer warranty handoff workflows.
               </td>
             </tr>
             <tr>

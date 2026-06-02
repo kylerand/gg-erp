@@ -1260,6 +1260,44 @@ resource "aws_lambda_function" "identity_list_dealers" {
   }
 }
 
+resource "aws_lambda_function" "identity_create_dealer" {
+  function_name    = "${var.name_prefix}-identity-create-dealer"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "create-dealer.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/identity-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.identity_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.identity_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
+resource "aws_lambda_function" "identity_update_dealer" {
+  function_name    = "${var.name_prefix}-identity-update-dealer"
+  role             = aws_iam_role.erp_lambda.arn
+  runtime          = "nodejs20.x"
+  handler          = "update-dealer.handler"
+  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
+  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/identity-lambda.zip" : null
+  filename         = var.lambda_artifacts_bucket_name == "" ? var.identity_lambda_zip_path : null
+  source_code_hash = filebase64sha256(var.identity_lambda_zip_path)
+  timeout          = 15
+  memory_size      = 256
+  environment { variables = local.lambda_common_env }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+}
+
 resource "aws_lambda_function" "identity_list_dealer_relationships" {
   function_name    = "${var.name_prefix}-identity-list-dealer-relationships"
   role             = aws_iam_role.erp_lambda.arn
@@ -2552,6 +2590,38 @@ resource "aws_apigatewayv2_route" "identity_list_dealers" {
   route_key          = "GET /identity/dealers"
   target             = "integrations/${aws_apigatewayv2_integration.identity_list_dealers.id}"
   authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "identity_create_dealer" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.identity_create_dealer.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "identity_create_dealer" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "POST /identity/dealers"
+  target             = "integrations/${aws_apigatewayv2_integration.identity_create_dealer.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
+}
+
+resource "aws_apigatewayv2_integration" "identity_update_dealer" {
+  api_id                 = aws_apigatewayv2_api.erp.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.identity_update_dealer.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "identity_update_dealer" {
+  api_id             = aws_apigatewayv2_api.erp.id
+  route_key          = "PATCH /identity/dealers/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.identity_update_dealer.id}"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "identity_list_dealer_relationships" {
@@ -6107,6 +6177,8 @@ locals {
     reporting_snapshot                      = aws_lambda_function.reporting_snapshot
     identity_me                             = aws_lambda_function.identity_me
     identity_list_dealers                   = aws_lambda_function.identity_list_dealers
+    identity_create_dealer                  = aws_lambda_function.identity_create_dealer
+    identity_update_dealer                  = aws_lambda_function.identity_update_dealer
     identity_list_dealer_relationships      = aws_lambda_function.identity_list_dealer_relationships
     identity_create_dealer_relationship     = aws_lambda_function.identity_create_dealer_relationship
     identity_update_dealer_relationship     = aws_lambda_function.identity_update_dealer_relationship

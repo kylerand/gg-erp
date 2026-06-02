@@ -1074,6 +1074,8 @@ const ROUTES: RouteEntry[] = [
   // Identity / Customers / Dealers
   { method: 'GET', template: '/identity/customers', schema: paginated(customer) },
   { method: 'GET', template: '/identity/dealers', schema: paginated(dealer) },
+  { method: 'POST', template: '/identity/dealers', schema: z.object({ dealer }) },
+  { method: 'PATCH', template: '/identity/dealers/{id}', schema: z.object({ dealer }) },
   { method: 'GET', template: '/identity/dealer-relationships', schema: paginated(dealerRelationship) },
   {
     method: 'POST',

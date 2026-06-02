@@ -16,6 +16,7 @@ import {
   listWoOrders,
   paymentSyncWorkOrderDisplayName,
   salesUserDisplayName,
+  updateCustomer,
   type CartVehicle,
   type Customer,
   type CustomerSyncRecord,
@@ -23,16 +24,30 @@ import {
   type Quote,
   type SalesActivity,
   type SalesOpportunity,
+  type UpdateCustomerInput,
   type WoOrder,
 } from '@/lib/api-client';
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 
 const STRICT_LIVE_DATA = { allowMockFallback: false } as const;
+const CONTACT_METHOD_OPTIONS = ['EMAIL', 'PHONE', 'SMS'] as const;
 
 interface RelatedLoad<T> {
   items: T[];
   total: number;
+}
+
+interface CustomerProfileDraft {
+  fullName: string;
+  companyName: string;
+  email: string;
+  phone: string;
+  preferredContactMethod: 'EMAIL' | 'PHONE' | 'SMS';
+  billingAddress: string;
+  shippingAddress: string;
 }
 
 function customerDisplayName(customer: Customer): string {
@@ -61,6 +76,31 @@ function formatCurrency(value?: number | null): string {
 
 function normalizeStatus(value: string): string {
   return value.replace(/_/g, ' ');
+}
+
+function optionalText(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Request failed.';
+}
+
+function customerDraftFromCustomer(customer: Customer): CustomerProfileDraft {
+  return {
+    fullName: customer.fullName,
+    companyName: customer.companyName ?? '',
+    email: customer.email,
+    phone: customer.phone ?? '',
+    preferredContactMethod: CONTACT_METHOD_OPTIONS.includes(
+      customer.preferredContactMethod as CustomerProfileDraft['preferredContactMethod'],
+    )
+      ? (customer.preferredContactMethod as CustomerProfileDraft['preferredContactMethod'])
+      : 'EMAIL',
+    billingAddress: customer.billingAddress ?? '',
+    shippingAddress: customer.shippingAddress ?? '',
+  };
 }
 
 function Section({
@@ -128,6 +168,10 @@ export default function CustomerDetailPage() {
     items: [],
     total: 0,
   });
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileDraft, setProfileDraft] = useState<CustomerProfileDraft | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState<string[]>([]);
 
@@ -224,6 +268,48 @@ export default function CustomerDetailPage() {
     void load();
   }, [load]);
 
+  function beginProfileEdit() {
+    if (!customer) return;
+    setProfileDraft(customerDraftFromCustomer(customer));
+    setProfileSaveError(null);
+    setEditingProfile(true);
+  }
+
+  async function saveProfile() {
+    if (!customer || !profileDraft) return;
+    if (!profileDraft.fullName.trim()) {
+      setProfileSaveError('Customer name is required.');
+      return;
+    }
+    if (!profileDraft.email.trim()) {
+      setProfileSaveError('Customer email is required.');
+      return;
+    }
+
+    const payload: UpdateCustomerInput = {
+      fullName: profileDraft.fullName.trim(),
+      companyName: optionalText(profileDraft.companyName),
+      email: profileDraft.email.trim(),
+      phone: optionalText(profileDraft.phone),
+      preferredContactMethod: profileDraft.preferredContactMethod,
+      billingAddress: optionalText(profileDraft.billingAddress),
+      shippingAddress: optionalText(profileDraft.shippingAddress),
+    };
+
+    setSavingProfile(true);
+    setProfileSaveError(null);
+    try {
+      const updated = await updateCustomer(customer.id, payload);
+      setCustomer(updated);
+      setEditingProfile(false);
+      setProfileDraft(null);
+    } catch (error) {
+      setProfileSaveError(errorMessage(error));
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
   if (loading) {
     return (
       <div>
@@ -302,45 +388,176 @@ export default function CustomerDetailPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_1.35fr]">
-        <Section title="Contact & Profile">
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="text-xs font-medium uppercase text-gray-500">Lifecycle</dt>
-              <dd className="mt-1">
-                <StatusBadge status={customer.state} />
-              </dd>
+        <Section
+          title="Contact & Profile"
+          action={
+            !editingProfile ? (
+              <Button type="button" size="sm" variant="outline" onClick={beginProfileEdit}>
+                Edit Profile
+              </Button>
+            ) : null
+          }
+        >
+          {editingProfile && profileDraft ? (
+            <div className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold uppercase text-gray-500">Full Name</span>
+                  <Input
+                    value={profileDraft.fullName}
+                    onChange={(event) =>
+                      setProfileDraft((current) =>
+                        current ? { ...current, fullName: event.target.value } : current,
+                      )
+                    }
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold uppercase text-gray-500">Company</span>
+                  <Input
+                    value={profileDraft.companyName}
+                    onChange={(event) =>
+                      setProfileDraft((current) =>
+                        current ? { ...current, companyName: event.target.value } : current,
+                      )
+                    }
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold uppercase text-gray-500">Email</span>
+                  <Input
+                    type="email"
+                    value={profileDraft.email}
+                    onChange={(event) =>
+                      setProfileDraft((current) =>
+                        current ? { ...current, email: event.target.value } : current,
+                      )
+                    }
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold uppercase text-gray-500">Phone</span>
+                  <Input
+                    value={profileDraft.phone}
+                    onChange={(event) =>
+                      setProfileDraft((current) =>
+                        current ? { ...current, phone: event.target.value } : current,
+                      )
+                    }
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold uppercase text-gray-500">Preferred</span>
+                  <select
+                    className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
+                    value={profileDraft.preferredContactMethod}
+                    onChange={(event) =>
+                      setProfileDraft((current) =>
+                        current
+                          ? {
+                              ...current,
+                              preferredContactMethod: event.target
+                                .value as CustomerProfileDraft['preferredContactMethod'],
+                            }
+                          : current,
+                      )
+                    }
+                  >
+                    {CONTACT_METHOD_OPTIONS.map((method) => (
+                      <option key={method} value={method}>
+                        {method}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <label className="block space-y-1">
+                <span className="text-xs font-semibold uppercase text-gray-500">
+                  Billing Address
+                </span>
+                <Textarea
+                  rows={2}
+                  value={profileDraft.billingAddress}
+                  onChange={(event) =>
+                    setProfileDraft((current) =>
+                      current ? { ...current, billingAddress: event.target.value } : current,
+                    )
+                  }
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs font-semibold uppercase text-gray-500">
+                  Shipping Address
+                </span>
+                <Textarea
+                  rows={2}
+                  value={profileDraft.shippingAddress}
+                  onChange={(event) =>
+                    setProfileDraft((current) =>
+                      current ? { ...current, shippingAddress: event.target.value } : current,
+                    )
+                  }
+                />
+              </label>
+              {profileSaveError && <p className="text-sm text-red-700">{profileSaveError}</p>}
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" onClick={saveProfile} disabled={savingProfile}>
+                  {savingProfile ? 'Saving' : 'Save Profile'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setEditingProfile(false);
+                    setProfileDraft(null);
+                    setProfileSaveError(null);
+                  }}
+                  disabled={savingProfile}
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
-            <div>
-              <dt className="text-xs font-medium uppercase text-gray-500">Preferred Contact</dt>
-              <dd className="mt-1 text-gray-900">
-                {normalizeStatus(customer.preferredContactMethod)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium uppercase text-gray-500">Full Name</dt>
-              <dd className="mt-1 text-gray-900">{customer.fullName}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium uppercase text-gray-500">Company</dt>
-              <dd className="mt-1 text-gray-900">{customer.companyName ?? '-'}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium uppercase text-gray-500">Email</dt>
-              <dd className="mt-1 text-gray-900">{customer.email}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium uppercase text-gray-500">Phone</dt>
-              <dd className="mt-1 text-gray-900">{customer.phone ?? '-'}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium uppercase text-gray-500">Billing</dt>
-              <dd className="mt-1 text-gray-900">{customer.billingAddress ?? '-'}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium uppercase text-gray-500">Shipping</dt>
-              <dd className="mt-1 text-gray-900">{customer.shippingAddress ?? '-'}</dd>
-            </div>
-          </dl>
+          ) : (
+            <dl className="grid gap-3 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="text-xs font-medium uppercase text-gray-500">Lifecycle</dt>
+                <dd className="mt-1">
+                  <StatusBadge status={customer.state} />
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase text-gray-500">Preferred Contact</dt>
+                <dd className="mt-1 text-gray-900">
+                  {normalizeStatus(customer.preferredContactMethod)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase text-gray-500">Full Name</dt>
+                <dd className="mt-1 text-gray-900">{customer.fullName}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase text-gray-500">Company</dt>
+                <dd className="mt-1 text-gray-900">{customer.companyName ?? '-'}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase text-gray-500">Email</dt>
+                <dd className="mt-1 text-gray-900">{customer.email}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase text-gray-500">Phone</dt>
+                <dd className="mt-1 text-gray-900">{customer.phone ?? '-'}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase text-gray-500">Billing</dt>
+                <dd className="mt-1 text-gray-900">{customer.billingAddress ?? '-'}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase text-gray-500">Shipping</dt>
+                <dd className="mt-1 text-gray-900">{customer.shippingAddress ?? '-'}</dd>
+              </div>
+            </dl>
+          )}
         </Section>
 
         <Section title="Cart Assets" count={vehicles.total}>

@@ -349,15 +349,15 @@
           journal-posting, trial-balance close-readiness, period-control deploy, close-package
           deploy, accounting document-snapshot deploy, completed customer-selector hardening,
           deployed customer workspace drill-in, deployed customer accounting-history context,
-          deployed standalone customer profile editing, and active standalone cart asset editing.
-          The app has moved past polished static screens into a usable shop-ops ERP foundation, but
-          ShopMonkey cutover remains blocked until complete parts and purchase-order source exports
-          are captured.
+          deployed standalone customer profile editing, deployed standalone cart asset editing, and
+          active customer timeline work. The app has moved past polished static screens into a
+          usable shop-ops ERP foundation, but ShopMonkey cutover remains blocked until complete
+          parts and purchase-order source exports are captured.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 2, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 179</span>
-          <span class="chip">Active slice: Customer cart asset editing</span>
+          <span class="chip">Baseline: origin/main through PR 180</span>
+          <span class="chip">Active slice: Customer timeline</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
@@ -499,8 +499,8 @@
                 route misses.
               </td>
               <td>
-                Finish standalone cart asset editing, verify saved cart profile changes, and run
-                live UAT scripts by role.
+                Finish the customer timeline, verify live service/sales/accounting history
+                drill-ins, and run live UAT scripts by role.
               </td>
             </tr>
             <tr>
@@ -670,9 +670,10 @@
               Customer/cart profile editing exists inside work orders. PR #177 added a standalone
               customer workspace for profile, cart assets, work orders, opportunities, quotes, and
               activity. PR #178 added customer-level QuickBooks sync and payment-sync history. PR
-              #179 added standalone profile editing from the customer workspace. This branch adds
-              row-level cart asset editing from the same workspace. Deeper warranty/service history
-              and dealer relationship mutation workflows still need more complete surfaces.
+              #179 added standalone profile editing from the customer workspace. PR #180 added
+              row-level cart asset editing from the same workspace. This branch adds a combined
+              service, sales, asset, and accounting timeline. Deeper warranty and dealer
+              relationship mutation workflows still need more complete surfaces.
             </p>
           </div>
 
@@ -746,9 +747,9 @@
               <td>Latest production baseline</td>
               <td><span class="pill done">Merged</span></td>
               <td>
-                <code>origin/main</code> is through PR 179 after standalone customer profile editing
-                deployed through CI, QA smoke, QA coverage, and Pages. This branch adds row-level
-                cart asset editing to that workspace.
+                <code>origin/main</code> is through PR 180 after standalone cart asset editing
+                deployed through CI, QA smoke, QA coverage, and Pages. This branch adds the combined
+                customer timeline to that workspace.
               </td>
             </tr>
             <tr>
@@ -817,7 +818,7 @@
             work-order provenance, and version diff workflows need a heavier change-control gate.
           </li>
           <li>
-            <strong>Deepen customer workspaces:</strong> finish standalone cart asset editing,
+            <strong>Deepen customer workspaces:</strong> finish the combined customer timeline,
             verify profile/cart/sales/work-order/accounting reads and writes, and then tackle dealer
             assignment mutations once relationship ownership rules are finalized.
           </li>

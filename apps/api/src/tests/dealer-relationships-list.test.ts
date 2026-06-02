@@ -73,6 +73,7 @@ test('listDealerRelationshipsHandler returns dealer relationship rows with custo
     const response = await listDealerRelationshipsHandler({
       queryStringParameters: {
         search: 'riverside',
+        customerId: 'customer-1',
         state: 'ACTIVE',
         limit: '10',
       },
@@ -133,7 +134,9 @@ test('listDealerRelationshipsHandler returns dealer relationship rows with custo
     });
     assert.ok(JSON.stringify(findManyArgs).includes('dealerAccount'));
     assert.ok(JSON.stringify(findManyArgs).includes('cartVehicle'));
+    assert.ok(JSON.stringify(findManyArgs).includes('customer-1'));
     assert.ok(JSON.stringify(countArgs).includes('ACTIVE'));
+    assert.ok(JSON.stringify(countArgs).includes('customer-1'));
   } finally {
     await disconnectListDealerRelationshipsHandlerDependencies();
   }

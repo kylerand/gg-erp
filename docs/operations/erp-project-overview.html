@@ -351,23 +351,25 @@
           deployed customer workspace drill-in, deployed customer accounting-history context,
           deployed standalone customer profile editing, deployed standalone cart asset editing,
           deployed customer timeline, deployed next actions, deployed customer activity logging,
-          deployed dealer relationship updates, deployed dealer relationship creation work, and deployed dealer account maintenance work. The app has moved past polished static screens into a
+          deployed dealer relationship updates, deployed dealer relationship creation work,
+          deployed dealer account maintenance work, deployed dealer account route cleanup, and active
+          warranty handoff work. The app has moved past polished static screens into a
           usable shop-ops ERP foundation, but ShopMonkey cutover remains blocked until complete
           parts and purchase-order source exports are captured.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 2, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 188</span>
-          <span class="chip">Active slice: Dealer account route allowlist cleanup</span>
+          <span class="chip">Baseline: origin/main through PR 189</span>
+          <span class="chip">Active slice: Customer warranty handoff workflow</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
 
       <div class="summary">
         <div class="metric">
-          <strong>82%</strong>
+          <strong>83%</strong>
           <span>Estimated production readiness for an internal ERP rollout.</span>
-          <div class="bar warn"><span style="width: 82%"></span></div>
+          <div class="bar warn"><span style="width: 83%"></span></div>
         </div>
         <div class="metric">
           <strong>94%</strong>
@@ -375,9 +377,9 @@
           <div class="bar good"><span style="width: 94%"></span></div>
         </div>
         <div class="metric">
-          <strong>82%</strong>
+          <strong>83%</strong>
           <span>Live workflow/API contract completeness.</span>
-          <div class="bar warn"><span style="width: 82%"></span></div>
+          <div class="bar warn"><span style="width: 83%"></span></div>
         </div>
         <div class="metric">
           <strong>66%</strong>
@@ -500,8 +502,8 @@
                 route misses.
               </td>
               <td>
-                Finish dealer account route allowlist cleanup, verify live service/sales/accounting
-                history drill-ins, and run live UAT scripts by role.
+                Finish customer warranty handoff, verify live service/sales/accounting history
+                drill-ins, and run live UAT scripts by role.
               </td>
             </tr>
             <tr>
@@ -679,11 +681,13 @@
               activity logging through the live sales activity API, PR #184 added row-level dealer
               relationship state, escalation owner, and notes editing, PR #185 removed the deployed
               update-route allowlist after CD, PR #186 added a live dealer relationship link workflow
-              with dealer, active-customer, and optional cart selectors, and PR #187 removed the
-                deployed create-route allowlist after CD, and PR #188 added deployed live dealer account creation
-                and profile updates with active-customer promotion, dealer code, territory, status,
-                owner, and notes controls. This branch removes the dealer account route allowlist
-                after CD proved both routes reach the protected API authorizer path.
+              with dealer, active-customer, and optional cart selectors, PR #187 removed the
+              deployed create-route allowlist after CD, PR #188 added deployed live dealer account
+              creation/profile updates, and PR #189 removed the deployed dealer account route
+              allowlists after CD. This branch adds a strict-live customer warranty handoff panel
+              with exact dealer relationship reads, provider coverage status, uncovered-cart
+              detection, open service/payment context, and query-prefilled warranty-provider
+              relationship creation.
             </p>
           </div>
 
@@ -829,8 +833,8 @@
             work-order provenance, and version diff workflows need a heavier change-control gate.
           </li>
           <li>
-            <strong>Deepen customer workspaces:</strong> finish the dealer account route allowlist
-            cleanup, then add richer warranty handoff workflows.
+            <strong>Deepen customer workspaces:</strong> finish the customer warranty handoff
+            workflow, then add a dedicated warranty claim/reimbursement lifecycle if UAT needs one.
           </li>
         </ol>
       </section>

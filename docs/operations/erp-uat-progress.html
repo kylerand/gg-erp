@@ -407,14 +407,17 @@
                 deployed update-route allowlist after CD, PR #186 added a live relationship link
                 workflow through <code>POST /identity/dealer-relationships</code> with dealer,
                 active-customer, and optional cart selectors, PR #187 removed the deployed
-                create-route allowlist after CD, and PR #188 added deployed live dealer account
+                create-route allowlist after CD, PR #188 added deployed live dealer account
                 creation/profile updates through <code>POST /identity/dealers</code> and
-                <code>PATCH /identity/dealers/{id}</code>. This branch removes the dealer account
-                route allowlist after CD proved both routes reach the protected API authorizer path.
+                <code>PATCH /identity/dealers/{id}</code>, and PR #189 removed the deployed
+                dealer account route allowlists after CD. This branch adds a strict-live customer
+                warranty handoff panel backed by exact dealer relationship reads, provider coverage
+                status, uncovered-cart detection, open service/payment context, and query-prefilled
+                warranty-provider relationship creation.
               </td>
               <td>
-                Finish dealer account route allowlist cleanup, then add richer warranty handoff
-                workflows.
+                Finish customer warranty handoff, then add a dedicated warranty
+                claim/reimbursement lifecycle if UAT needs one.
               </td>
             </tr>
             <tr>

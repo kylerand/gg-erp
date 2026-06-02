@@ -4171,6 +4171,7 @@ export interface DealerRelationship {
 export async function listDealerRelationships(
   params?: {
     search?: string;
+    customerId?: string;
     state?: DealerRelationship['relationshipState'];
     limit?: number;
     offset?: number;
@@ -4179,6 +4180,7 @@ export async function listDealerRelationships(
 ): Promise<{ items: DealerRelationship[]; total: number; limit?: number; offset?: number }> {
   const qs = new URLSearchParams();
   if (params?.search) qs.set('search', params.search);
+  if (params?.customerId) qs.set('customerId', params.customerId);
   if (params?.state) qs.set('state', params.state);
   if (params?.limit) qs.set('limit', String(params.limit));
   if (params?.offset) qs.set('offset', String(params.offset));

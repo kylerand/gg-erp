@@ -11,6 +11,7 @@ import {
   listActivities,
   listCartVehicles,
   listCustomerSyncs,
+  listDealerRelationships,
   listOpportunities,
   listPaymentSyncRecords,
   listQuotes,
@@ -23,6 +24,7 @@ import {
   type CartVehicleState,
   type Customer,
   type CustomerSyncRecord,
+  type DealerRelationship,
   type PaymentSyncRecord,
   type Quote,
   type SalesActivity,
@@ -99,6 +101,29 @@ interface CustomerNextActionItem {
   actionLabel: string;
   status?: string;
   sortOrder: number;
+}
+
+interface WarrantyHandoffAction {
+  id: string;
+  priority: 'High' | 'Normal';
+  title: string;
+  detail: string;
+  href: string;
+  actionLabel: string;
+  status?: string;
+}
+
+interface WarrantyHandoffSummary {
+  status: string;
+  tone: 'ready' | 'warning' | 'critical';
+  detail: string;
+  providerLabel: string;
+  coverageDetail: string;
+  relationships: DealerRelationship[];
+  uncoveredVehicles: CartVehicle[];
+  openServiceOrders: WoOrder[];
+  paymentIssues: PaymentSyncRecord[];
+  actions: WarrantyHandoffAction[];
 }
 
 function customerDisplayName(customer: Customer): string {
@@ -419,6 +444,191 @@ function buildCustomerNextActions({
     .slice(0, 6);
 }
 
+function buildWarrantyHandoff({
+  customerId,
+  vehicles,
+  workOrders,
+  quotes,
+  dealerRelationships,
+  paymentSyncs,
+}: {
+  customerId: string;
+  vehicles: CartVehicle[];
+  workOrders: WoOrder[];
+  quotes: Quote[];
+  dealerRelationships: DealerRelationship[];
+  paymentSyncs: PaymentSyncRecord[];
+}): WarrantyHandoffSummary {
+  const activeRelationships = dealerRelationships.filter(
+    (relationship) => relationship.relationshipState === 'ACTIVE',
+  );
+  const warrantyRelationships = activeRelationships.filter(
+    (relationship) => relationship.relationshipType === 'WARRANTY_PROVIDER',
+  );
+  const serviceRelationships = activeRelationships.filter(
+    (relationship) =>
+      relationship.relationshipType === 'SERVICING_DEALER' ||
+      relationship.relationshipType === 'ACCOUNT_OWNER',
+  );
+  const accountLevelWarranty = warrantyRelationships.some(
+    (relationship) => !relationship.cartVehicleId,
+  );
+  const coveredVehicleIds = new Set(
+    warrantyRelationships
+      .map((relationship) => relationship.cartVehicleId)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const uncoveredVehicles = vehicles.filter(
+    (vehicle) => !accountLevelWarranty && !coveredVehicleIds.has(vehicle.id),
+  );
+  const openServiceOrders = workOrders.filter(
+    (workOrder) => workOrder.status !== 'COMPLETED' && workOrder.status !== 'CANCELLED',
+  );
+  const blockedServiceOrders = openServiceOrders.filter(
+    (workOrder) => workOrder.status === 'BLOCKED',
+  );
+  const paymentIssues = paymentSyncs.filter(
+    (record) => record.state === 'FAILED' || record.state === 'MISMATCH',
+  );
+  const acceptedQuotes = quotes.filter(
+    (quote) => quote.status === 'ACCEPTED' && !quote.convertedWoId,
+  );
+  const primaryVehicle = uncoveredVehicles[0] ?? vehicles[0];
+  const relationshipHref = erpRoute('customer-relationship', {
+    customerId,
+    create: 'relationship',
+    relationshipType: 'WARRANTY_PROVIDER',
+    vehicleId: primaryVehicle?.id,
+  });
+  const actions: WarrantyHandoffAction[] = [];
+
+  if (warrantyRelationships.length === 0) {
+    actions.push({
+      id: 'assign-warranty-provider',
+      priority: 'High',
+      title: 'Assign warranty provider',
+      detail: 'No active warranty provider relationship is tied to this customer.',
+      href: relationshipHref,
+      actionLabel: 'Assign Provider',
+      status: 'MISSING',
+    });
+  } else if (uncoveredVehicles.length > 0) {
+    actions.push({
+      id: 'cover-unassigned-cart',
+      priority: 'Normal',
+      title: 'Cover unassigned cart asset',
+      detail: `${uncoveredVehicles.length} cart asset${
+        uncoveredVehicles.length === 1 ? '' : 's'
+      } need a cart-level warranty provider.`,
+      href: relationshipHref,
+      actionLabel: 'Add Cart Coverage',
+      status: 'PARTIAL',
+    });
+  }
+
+  if (openServiceOrders.length > 0) {
+    actions.push({
+      id: 'open-service-work',
+      priority: blockedServiceOrders.length > 0 ? 'High' : 'Normal',
+      title: blockedServiceOrders.length > 0 ? 'Resolve blocked warranty work' : 'Review open service work',
+      detail: `${openServiceOrders.length} open work order${
+        openServiceOrders.length === 1 ? '' : 's'
+      } tied to this customer.`,
+      href: erpRoute('work-order', { search: customerId }),
+      actionLabel: 'Open Work History',
+      status: blockedServiceOrders.length > 0 ? 'BLOCKED' : 'OPEN',
+    });
+  } else {
+    actions.push({
+      id: 'start-warranty-work',
+      priority: 'Normal',
+      title: 'Start warranty work order',
+      detail: primaryVehicle
+        ? `${primaryVehicle.modelYear} ${primaryVehicle.modelCode} is ready for a warranty intake.`
+        : 'Create the first service intake for this customer.',
+      href: erpRoute('create-work-order', {
+        customerId,
+        vehicleId: primaryVehicle?.id,
+      }),
+      actionLabel: 'New Work Order',
+    });
+  }
+
+  if (acceptedQuotes.length > 0) {
+    const quote = acceptedQuotes[0];
+    actions.push({
+      id: `accepted-quote-${quote.id}`,
+      priority: 'High',
+      title: 'Convert accepted warranty quote',
+      detail: `${quote.quoteNumber} is accepted for ${formatCurrency(quote.total)}.`,
+      href: erpRecordRoute('quote', quote.id),
+      actionLabel: 'Open Quote',
+      status: quote.status,
+    });
+  }
+
+  if (paymentIssues.length > 0) {
+    actions.push({
+      id: 'payment-review',
+      priority: 'High',
+      title: 'Clear payment or reimbursement issue',
+      detail: `${paymentIssues.length} payment sync record${
+        paymentIssues.length === 1 ? '' : 's'
+      } need accounting review before closeout.`,
+      href: erpRoute('accounting-sync', { view: 'payments', customerId }),
+      actionLabel: 'Open Payments',
+      status: paymentIssues[0]?.state,
+    });
+  }
+
+  let status = 'Ready for Warranty Handoff';
+  let tone: WarrantyHandoffSummary['tone'] = 'ready';
+  let detail = 'Warranty provider, service, and billing context are available from live records.';
+  if (warrantyRelationships.length === 0) {
+    status = 'Needs Warranty Provider';
+    tone = 'critical';
+    detail = 'Assign a warranty provider before service handoff or reimbursement work.';
+  } else if (uncoveredVehicles.length > 0) {
+    status = 'Partial Warranty Coverage';
+    tone = 'warning';
+    detail = 'At least one cart asset is not covered by an active warranty provider relationship.';
+  } else if (blockedServiceOrders.length > 0) {
+    status = 'Service Blocked';
+    tone = 'critical';
+    detail = 'Warranty coverage exists, but active service work is blocked.';
+  } else if (paymentIssues.length > 0) {
+    status = 'Billing Review Needed';
+    tone = 'warning';
+    detail = 'Coverage and service context exist, but accounting has unresolved payment sync work.';
+  }
+
+  const provider = warrantyRelationships[0] ?? serviceRelationships[0];
+  const providerLabel = provider
+    ? [provider.dealerName, provider.dealerCode].filter(Boolean).join(' · ')
+    : 'No dealer assigned';
+  const coverageDetail =
+    warrantyRelationships.length === 0
+      ? 'No active warranty provider relationship.'
+      : accountLevelWarranty
+        ? 'Account-level warranty coverage applies to all cart assets.'
+        : `${coveredVehicleIds.size} of ${vehicles.length} cart asset${
+            vehicles.length === 1 ? '' : 's'
+          } covered.`;
+
+  return {
+    status,
+    tone,
+    detail,
+    providerLabel,
+    coverageDetail,
+    relationships: activeRelationships,
+    uncoveredVehicles,
+    openServiceOrders,
+    paymentIssues,
+    actions: actions.slice(0, 5),
+  };
+}
+
 function buildCustomerTimeline({
   customerId,
   vehicles,
@@ -625,6 +835,12 @@ export default function CustomerDetailPage() {
     items: [],
     total: 0,
   });
+  const [dealerRelationships, setDealerRelationships] = useState<
+    RelatedLoad<DealerRelationship>
+  >({
+    items: [],
+    total: 0,
+  });
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileDraft, setProfileDraft] = useState<CustomerProfileDraft | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -655,6 +871,7 @@ export default function CustomerDetailPage() {
       activityResult,
       customerSyncResult,
       paymentSyncResult,
+      dealerRelationshipResult,
     ] = await Promise.allSettled([
       getCustomer(customerId, STRICT_LIVE_DATA),
       listCartVehicles({ customerId, limit: 50 }, STRICT_LIVE_DATA),
@@ -664,6 +881,7 @@ export default function CustomerDetailPage() {
       listActivities({ customerId, limit: 25 }, STRICT_LIVE_DATA),
       listCustomerSyncs({ customerId, limit: 10 }, STRICT_LIVE_DATA),
       listPaymentSyncRecords({ customerId, limit: 10 }, STRICT_LIVE_DATA),
+      listDealerRelationships({ customerId, state: 'ACTIVE', limit: 50 }, STRICT_LIVE_DATA),
     ]);
 
     const nextErrors: string[] = [];
@@ -725,6 +943,13 @@ export default function CustomerDetailPage() {
     } else {
       setPaymentSyncs({ items: [], total: 0 });
       nextErrors.push('Payment sync history failed to load.');
+    }
+
+    if (dealerRelationshipResult.status === 'fulfilled') {
+      setDealerRelationships(dealerRelationshipResult.value);
+    } else {
+      setDealerRelationships({ items: [], total: 0 });
+      nextErrors.push('Dealer warranty relationships failed to load.');
     }
 
     setErrors(nextErrors);
@@ -919,6 +1144,14 @@ export default function CustomerDetailPage() {
     customerSyncs: customerSyncs.items,
     paymentSyncs: paymentSyncs.items,
   });
+  const warrantyHandoff = buildWarrantyHandoff({
+    customerId,
+    vehicles: vehicles.items,
+    workOrders: workOrders.items,
+    quotes: quotes.items,
+    dealerRelationships: dealerRelationships.items,
+    paymentSyncs: paymentSyncs.items,
+  });
 
   return (
     <div className="space-y-6">
@@ -969,6 +1202,7 @@ export default function CustomerDetailPage() {
         <MetricTile label="Opportunities" value={opportunities.total} />
         <MetricTile label="Quotes" value={quotes.total} />
         <MetricTile label="Activities" value={activities.total} />
+        <MetricTile label="Dealer Links" value={dealerRelationships.total} />
         <MetricTile label="Accounting Sync" value={customerSyncs.total + paymentSyncs.total} />
       </div>
 
@@ -1091,6 +1325,148 @@ export default function CustomerDetailPage() {
             ))}
           </div>
         )}
+      </Section>
+
+      <Section
+        title="Warranty Handoff"
+        count={warrantyHandoff.actions.length}
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <ActionLink href={erpRoute('customer-relationship', { customerId })}>
+              Manage Relationships
+            </ActionLink>
+            <ActionLink
+              href={erpRoute('create-work-order', {
+                customerId,
+                vehicleId: primaryVehicle?.id,
+              })}
+            >
+              New Warranty Work
+            </ActionLink>
+          </div>
+        }
+      >
+        <div className="grid gap-3 lg:grid-cols-3">
+          <div
+            className={
+              warrantyHandoff.tone === 'critical'
+                ? 'rounded-md border border-red-200 bg-red-50 px-3 py-2'
+                : warrantyHandoff.tone === 'warning'
+                  ? 'rounded-md border border-amber-200 bg-amber-50 px-3 py-2'
+                  : 'rounded-md border border-green-200 bg-green-50 px-3 py-2'
+            }
+          >
+            <div className="text-xs font-semibold uppercase text-gray-500">Handoff Status</div>
+            <div className="mt-1 font-semibold text-gray-900">{warrantyHandoff.status}</div>
+            <div className="mt-1 text-sm text-gray-700">{warrantyHandoff.detail}</div>
+          </div>
+          <div className="rounded-md border border-gray-200 px-3 py-2">
+            <div className="text-xs font-semibold uppercase text-gray-500">Warranty Provider</div>
+            <div className="mt-1 font-semibold text-gray-900">
+              {warrantyHandoff.providerLabel}
+            </div>
+            <div className="mt-1 text-sm text-gray-600">{warrantyHandoff.coverageDetail}</div>
+          </div>
+          <div className="rounded-md border border-gray-200 px-3 py-2">
+            <div className="text-xs font-semibold uppercase text-gray-500">Service Context</div>
+            <div className="mt-1 font-semibold text-gray-900">
+              {warrantyHandoff.openServiceOrders.length} open work order
+              {warrantyHandoff.openServiceOrders.length === 1 ? '' : 's'}
+            </div>
+            <div className="mt-1 text-sm text-gray-600">
+              {warrantyHandoff.paymentIssues.length} payment issue
+              {warrantyHandoff.paymentIssues.length === 1 ? '' : 's'} ·{' '}
+              {warrantyHandoff.uncoveredVehicles.length} uncovered cart
+              {warrantyHandoff.uncoveredVehicles.length === 1 ? '' : 's'}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 xl:grid-cols-[1.1fr_1fr]">
+          <div>
+            <h3 className="mb-2 text-sm font-semibold text-gray-900">Active Dealer Coverage</h3>
+            {warrantyHandoff.relationships.length === 0 ? (
+              <EmptyState
+                title="No active dealer coverage"
+                description="Assign a servicing dealer or warranty provider before warranty work is handed off."
+                action={
+                  <ActionLink
+                    href={erpRoute('customer-relationship', {
+                      customerId,
+                      create: 'relationship',
+                      relationshipType: 'WARRANTY_PROVIDER',
+                      vehicleId: primaryVehicle?.id,
+                    })}
+                  >
+                    Assign Warranty Provider
+                  </ActionLink>
+                }
+              />
+            ) : (
+              <div className="space-y-2">
+                {warrantyHandoff.relationships.slice(0, 4).map((relationship) => (
+                  <div key={relationship.id} className="rounded-md border border-gray-200 px-3 py-2">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <div className="font-semibold text-gray-900">
+                          {relationship.dealerName}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {normalizeStatus(relationship.relationshipType)} ·{' '}
+                          {relationship.cartDisplayName ?? 'Customer account'}
+                        </div>
+                      </div>
+                      <StatusBadge status={relationship.relationshipState} />
+                    </div>
+                    <div className="mt-2 text-sm text-gray-700">
+                      {relationship.escalationOwner
+                        ? `Owner: ${relationship.escalationOwner}`
+                        : 'No escalation owner assigned'}
+                    </div>
+                    {relationship.notes && (
+                      <div className="mt-1 text-sm text-gray-600">{relationship.notes}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <h3 className="mb-2 text-sm font-semibold text-gray-900">Handoff Actions</h3>
+            <div className="space-y-2">
+              {warrantyHandoff.actions.map((action) => (
+                <div
+                  key={action.id}
+                  className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-gray-200 px-3 py-2"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={
+                          action.priority === 'High'
+                            ? 'rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700'
+                            : 'rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-700'
+                        }
+                      >
+                        {action.priority}
+                      </span>
+                      {action.status && <StatusBadge status={action.status} />}
+                    </div>
+                    <div className="mt-1 font-semibold text-gray-900">{action.title}</div>
+                    <div className="mt-1 text-sm text-gray-600">{action.detail}</div>
+                  </div>
+                  <Link
+                    href={action.href}
+                    className="text-sm font-semibold text-gray-900 hover:underline"
+                  >
+                    {action.actionLabel}
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </Section>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_1.35fr]">

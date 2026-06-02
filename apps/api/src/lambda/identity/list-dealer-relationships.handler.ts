@@ -150,12 +150,14 @@ export const handler = wrapHandler(
   async (ctx) => {
     const qs = ctx.event.queryStringParameters ?? {};
     const search = qs.search?.trim();
+    const customerId = qs.customerId?.trim();
     const state = normalizeRelationshipState(qs.state);
     const limit = Math.min(parsePositiveInteger(qs.limit, 100), 500);
     const offset = parsePositiveInteger(qs.offset, 0);
     const relationshipTypeQuery = search?.toUpperCase().replace(/[\s-]+/g, '_');
 
     const activeRelationshipWhere = {
+      ...(customerId ? { customerId } : {}),
       ...(state && RELATIONSHIP_STATES.has(state)
         ? { relationshipState: state }
         : {}),

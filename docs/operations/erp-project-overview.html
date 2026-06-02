@@ -353,15 +353,16 @@
           deployed customer timeline, deployed next actions, deployed customer activity logging,
           deployed dealer relationship updates, deployed dealer relationship creation work, deployed
           dealer account maintenance work, deployed dealer account route cleanup, deployed warranty
-          claim/reimbursement storage and route cleanup, and active warranty reimbursement
-          accounting ledger work. The app has moved past polished static screens into a usable
-          shop-ops ERP foundation, but ShopMonkey cutover remains blocked until complete parts and
-          purchase-order source exports are captured.
+          claim/reimbursement storage, deployed warranty route cleanup, deployed warranty
+          reimbursement accounting ledger work, and active provider document evidence work. The app
+          has moved past polished static screens into a usable shop-ops ERP foundation, but
+          ShopMonkey cutover remains blocked until complete parts and purchase-order source exports
+          are captured.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 2, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 192</span>
-          <span class="chip">Active slice: Warranty reimbursement accounting ledger</span>
+          <span class="chip">Baseline: origin/main through PR 193</span>
+          <span class="chip">Active slice: Warranty provider document evidence</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
@@ -691,9 +692,11 @@
               relationship creation. PR #191 added first-class warranty claim storage, live
               list/create/update claim routes, a warranty claims queue, customer workspace claim
               counts, claim timeline events, prefilled claim intake, and reimbursement follow-up
-              actions. PR #192 removed the deployed warranty route allowlist. This branch adds
+              actions. PR #192 removed the deployed warranty route allowlist, and PR #193 added
               approved warranty claims as accounting ledger entries with dashboard drill-through,
-              review status, and immutable journal posting support.
+              review status, and immutable journal posting support. This branch adds provider
+              document evidence to the warranty claims queue through protected attachment
+              list/download routes and claim-specific upload actions.
             </p>
           </div>
 
@@ -839,9 +842,9 @@
             work-order provenance, and version diff workflows need a heavier change-control gate.
           </li>
           <li>
-            <strong>Deepen warranty reimbursement:</strong> finish the accounting-ledger source for
-            approved provider claims, then use UAT to decide whether provider document attachments
-            or a policy-specific QuickBooks reimbursement posting path needs a separate slice.
+            <strong>Deepen warranty reimbursement:</strong> finish provider document evidence for
+            approved provider claims, then use UAT to decide whether a policy-specific QuickBooks
+            reimbursement posting path needs a separate slice.
           </li>
         </ol>
       </section>

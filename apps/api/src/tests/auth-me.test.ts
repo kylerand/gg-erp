@@ -137,6 +137,17 @@ test('GET /auth/me API Gateway route uses the Cognito JWT authorizer when config
   );
 });
 
+test('attachment list and download routes use the Cognito JWT authorizer when configured', () => {
+  for (const resourceName of ['attachments_list', 'attachments_presign_download']) {
+    const block = terraformRouteBlock(resourceName);
+    assert.match(block, /authorizer_id\s+=\s+local\.authorizer_id/);
+    assert.match(
+      block,
+      /authorization_type\s+=\s+local\.authorizer_id\s+!=\s+null\s+\?\s+"JWT"\s+:\s+"NONE"/,
+    );
+  }
+});
+
 test('GET /auth/me returns 401 when no Authorization / actor is present', async () => {
   const response = await getMeHandler(buildEvent());
 
@@ -158,16 +169,10 @@ test('GET /auth/me returns 401 when actor user ID is empty string', async () => 
 });
 
 test('GET /auth/me returns 404 when user is not found in DB', async () => {
-  const findMock = mock.method(
-    identityQueries,
-    'findUserByCognitoSubject',
-    async () => null,
-  );
+  const findMock = mock.method(identityQueries, 'findUserByCognitoSubject', async () => null);
 
   try {
-    const response = await getMeHandler(
-      buildEvent({ actorUserId: 'cognito-sub-unknown' }),
-    );
+    const response = await getMeHandler(buildEvent({ actorUserId: 'cognito-sub-unknown' }));
 
     assert.equal(response.statusCode, 404);
     assert.equal(findMock.mock.calls.length, 1);
@@ -182,11 +187,7 @@ test('GET /auth/me returns 404 when user is not found in DB', async () => {
 
 test('GET /auth/me returns user profile with roles and permissions', async () => {
   const dbUser = buildDbUser();
-  const findMock = mock.method(
-    identityQueries,
-    'findUserByCognitoSubject',
-    async () => dbUser,
-  );
+  const findMock = mock.method(identityQueries, 'findUserByCognitoSubject', async () => dbUser);
 
   try {
     const response = await getMeHandler(
@@ -229,16 +230,10 @@ test('GET /auth/me returns user profile with roles and permissions', async () =>
 
 test('GET /auth/me returns user with no roles when user has no active role assignments', async () => {
   const dbUser = buildDbUser({ userRoles: [] });
-  const findMock = mock.method(
-    identityQueries,
-    'findUserByCognitoSubject',
-    async () => dbUser,
-  );
+  const findMock = mock.method(identityQueries, 'findUserByCognitoSubject', async () => dbUser);
 
   try {
-    const response = await getMeHandler(
-      buildEvent({ actorUserId: 'cognito-sub-123' }),
-    );
+    const response = await getMeHandler(buildEvent({ actorUserId: 'cognito-sub-123' }));
 
     assert.equal(response.statusCode, 200);
     const body = JSON.parse(response.body) as {
@@ -304,16 +299,10 @@ test('GET /auth/me deduplicates permissions across multiple roles', async () => 
     ],
   });
 
-  const findMock = mock.method(
-    identityQueries,
-    'findUserByCognitoSubject',
-    async () => dbUser,
-  );
+  const findMock = mock.method(identityQueries, 'findUserByCognitoSubject', async () => dbUser);
 
   try {
-    const response = await getMeHandler(
-      buildEvent({ actorUserId: 'cognito-sub-123' }),
-    );
+    const response = await getMeHandler(buildEvent({ actorUserId: 'cognito-sub-123' }));
 
     assert.equal(response.statusCode, 200);
     const body = JSON.parse(response.body) as { permissions: string[] };

@@ -5893,9 +5893,39 @@ export async function getSalesForecast(): Promise<SalesForecastMonth[]> {
 
 // ─── Attachments ──────────────────────────────────────────────────────────────
 
+export interface FileAttachment {
+  id: string;
+  entityType: string;
+  entityId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  s3Key?: string;
+  uploadedBy: string;
+  createdAt: string;
+  deleted: boolean;
+}
+
 export interface UploadedAttachment {
   attachmentId: string;
   fileName: string;
+}
+
+export async function listAttachments(
+  params: { entityType: string; entityId: string },
+  options?: ApiDataOptions,
+): Promise<{ items: FileAttachment[] }> {
+  const qs = new URLSearchParams({
+    entityType: params.entityType,
+    entityId: params.entityId,
+  });
+  const data = await apiFetch<{ items: FileAttachment[] }>(
+    `/attachments?${qs}`,
+    undefined,
+    { items: [] },
+    options,
+  );
+  return { items: data.items ?? [] };
 }
 
 export async function uploadAttachment(input: {

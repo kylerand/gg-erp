@@ -4102,7 +4102,8 @@ resource "aws_apigatewayv2_route" "attachments_list" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "GET /attachments"
   target             = "integrations/${aws_apigatewayv2_integration.attachments_list.id}"
-  authorization_type = "NONE"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
 resource "aws_apigatewayv2_integration" "attachments_presign_download" {
@@ -4116,7 +4117,8 @@ resource "aws_apigatewayv2_route" "attachments_presign_download" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "GET /attachments/{id}/download"
   target             = "integrations/${aws_apigatewayv2_integration.attachments_presign_download.id}"
-  authorization_type = "NONE"
+  authorizer_id      = local.authorizer_id
+  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
 
 # ─── SOP / OJT Lambdas ────────────────────────────────────────────────────────

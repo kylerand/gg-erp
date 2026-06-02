@@ -351,23 +351,23 @@
           deployed customer workspace drill-in, deployed customer accounting-history context,
           deployed standalone customer profile editing, deployed standalone cart asset editing,
           deployed customer timeline, deployed next actions, deployed customer activity logging,
-          deployed dealer relationship updates, deployed dealer relationship creation work, and active dealer account maintenance work. The app has moved past polished static screens into a
+          deployed dealer relationship updates, deployed dealer relationship creation work, and deployed dealer account maintenance work. The app has moved past polished static screens into a
           usable shop-ops ERP foundation, but ShopMonkey cutover remains blocked until complete
           parts and purchase-order source exports are captured.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 2, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 187</span>
-          <span class="chip">Active slice: Dealer account creation and profile updates</span>
+          <span class="chip">Baseline: origin/main through PR 188</span>
+          <span class="chip">Active slice: Dealer account route allowlist cleanup</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
 
       <div class="summary">
         <div class="metric">
-          <strong>81%</strong>
+          <strong>82%</strong>
           <span>Estimated production readiness for an internal ERP rollout.</span>
-          <div class="bar warn"><span style="width: 81%"></span></div>
+          <div class="bar warn"><span style="width: 82%"></span></div>
         </div>
         <div class="metric">
           <strong>94%</strong>
@@ -500,7 +500,7 @@
                 route misses.
               </td>
               <td>
-                Finish dealer account creation/profile updates, verify live service/sales/accounting
+                Finish dealer account route allowlist cleanup, verify live service/sales/accounting
                 history drill-ins, and run live UAT scripts by role.
               </td>
             </tr>
@@ -680,9 +680,10 @@
               relationship state, escalation owner, and notes editing, PR #185 removed the deployed
               update-route allowlist after CD, PR #186 added a live dealer relationship link workflow
               with dealer, active-customer, and optional cart selectors, and PR #187 removed the
-              deployed create-route allowlist after CD. This branch adds live dealer account creation
-              and profile updates with active-customer promotion, dealer code, territory, status,
-              owner, and notes controls.
+                deployed create-route allowlist after CD, and PR #188 added deployed live dealer account creation
+                and profile updates with active-customer promotion, dealer code, territory, status,
+                owner, and notes controls. This branch removes the dealer account route allowlist
+                after CD proved both routes reach the protected API authorizer path.
             </p>
           </div>
 
@@ -756,9 +757,9 @@
               <td>Latest production baseline</td>
               <td><span class="pill done">Merged</span></td>
               <td>
-                <code>origin/main</code> is through PR 187 after the dealer relationship create-route
-                allowlist cleanup passed CI, QA smoke, QA coverage, and Pages. This branch adds dealer
-                account creation and profile updates.
+                <code>origin/main</code> is through PR 188 after dealer account creation/profile
+                updates passed hosted validate, QA smoke, main CI, QA, Pages, and CD. This branch
+                removes the now-deployed dealer account route allowances.
               </td>
             </tr>
             <tr>
@@ -798,11 +799,11 @@
             </tr>
             <tr>
               <td>Known route exceptions</td>
-              <td><span class="pill doing">2 pending deploy</span></td>
+              <td><span class="pill done">None</span></td>
               <td>
-                <code>known-broken.json</code> temporarily allows pending API Gateway route misses for
+                <code>known-broken.json</code> is empty again after direct production probes confirmed
                 <code>POST /identity/dealers</code> and <code>PATCH /identity/dealers/{id}</code>
-                until this branch deploys through CD.
+                reach the protected API authorizer path.
               </td>
             </tr>
           </tbody>
@@ -828,9 +829,8 @@
             work-order provenance, and version diff workflows need a heavier change-control gate.
           </li>
           <li>
-            <strong>Deepen customer workspaces:</strong> finish dealer account creation/profile
-            updates, remove their pending-deploy route allowlists after CD, then add richer warranty
-            handoff workflows.
+            <strong>Deepen customer workspaces:</strong> finish the dealer account route allowlist
+            cleanup, then add richer warranty handoff workflows.
           </li>
         </ol>
       </section>

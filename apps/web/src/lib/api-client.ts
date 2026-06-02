@@ -2277,6 +2277,44 @@ export async function createInventoryAdjustment(
   return data.adjustment;
 }
 
+export interface InventoryCostEvidence {
+  id: string;
+  stockLotId: string;
+  lotNumber?: string;
+  partId: string;
+  partSku: string;
+  partName: string;
+  stockLocationId: string;
+  locationName: string;
+  quantityOnHand: number;
+  unitCost: number;
+  valueDelta: number;
+  reasonCode: string;
+  evidenceReference?: string;
+  ledgerEntryId: string;
+  postedAt: string;
+  correlationId: string;
+}
+
+export interface CreateInventoryCostEvidenceInput {
+  adjustmentMode?: 'COST_EVIDENCE';
+  stockLotId: string;
+  unitCost: number;
+  reasonCode?: string;
+  evidenceReference?: string;
+}
+
+export async function createInventoryCostEvidence(
+  input: CreateInventoryCostEvidenceInput,
+): Promise<InventoryCostEvidence> {
+  const data = await apiFetch<{ costEvidence: InventoryCostEvidence }>('/inventory/adjustments', {
+    method: 'POST',
+    headers: mutationHeaders(),
+    body: JSON.stringify({ ...input, adjustmentMode: 'COST_EVIDENCE' }),
+  });
+  return data.costEvidence;
+}
+
 export interface InventoryLocation {
   id: string;
   locationCode: string;

@@ -110,6 +110,8 @@ export default function PartDetailPage() {
   }
 
   const part: Part = chain.part;
+  const needsCostEvidence =
+    part.valuationSource === 'NO_COST' || ((part.quantityOnHand ?? 0) > 0 && !part.estimatedUnitCost);
   return (
     <div>
       <PageHeader
@@ -166,6 +168,17 @@ export default function PartDetailPage() {
             className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:border-yellow-400"
           >
             Stock Adjustment
+          </Link>
+        )}
+        {needsCostEvidence && (part.quantityOnHand ?? 0) > 0 && (
+          <Link
+            href={erpRoute('inventory-cost-evidence', {
+              partId: part.id,
+              evidenceReference: `Cost evidence for ${part.sku}.`,
+            })}
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:border-yellow-400"
+          >
+            Cost Evidence
           </Link>
         )}
         {(part.shortfallQuantity ?? 0) > 0 && (

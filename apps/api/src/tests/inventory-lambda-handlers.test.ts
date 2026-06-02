@@ -337,6 +337,57 @@ test('createInventoryAdjustmentHandler posts balance and ledger consequences', a
   }
 });
 
+test('createInventoryAdjustmentHandler routes cost evidence without quantity movement', async () => {
+  const harness = createInventoryAdjustmentHarness();
+  setInventoryHandlerPrismaForTests(harness.prisma as never);
+
+  try {
+    const response = await createInventoryAdjustmentHandler({
+      httpMethod: 'POST',
+      headers: { 'x-correlation-id': 'cost-evidence-correlation' },
+      body: JSON.stringify({
+        adjustmentMode: 'COST_EVIDENCE',
+        stockLotId: TEST_STOCK_LOT_ID,
+        unitCost: 42.25,
+        evidenceReference: 'Vendor receipt 1001',
+      }),
+    });
+
+    assert.equal(response.statusCode, 201);
+    const payload = JSON.parse(response.body) as {
+      costEvidence: {
+        quantityOnHand: number;
+        unitCost: number;
+        valueDelta: number;
+        reasonCode: string;
+      };
+    };
+    assert.equal(payload.costEvidence.quantityOnHand, 5);
+    assert.equal(payload.costEvidence.unitCost, 42.25);
+    assert.equal(payload.costEvidence.valueDelta, 211.25);
+    assert.equal(payload.costEvidence.reasonCode, 'COST_EVIDENCE');
+
+    const ledgerCall = harness.executeCalls.find((call) =>
+      call.sql.includes('INSERT INTO inventory.inventory_ledger_entries'),
+    );
+    assert.ok(ledgerCall);
+    assert.ok(ledgerCall.values.includes('COST_EVIDENCE'));
+    assert.ok(ledgerCall.values.includes(0));
+    assert.ok(ledgerCall.values.includes(42.25));
+    assert.ok(ledgerCall.values.includes('INVENTORY_COST_EVIDENCE'));
+    assert.ok(ledgerCall.values.includes('Vendor receipt 1001'));
+
+    const balanceUpdate = harness.queryCalls.find((call) =>
+      call.sql.includes('UPDATE inventory.inventory_balances'),
+    );
+    assert.ok(balanceUpdate);
+    assert.ok(balanceUpdate.sql.includes('last_ledger_entry_id'));
+    assert.equal(balanceUpdate.sql.includes('quantity_on_hand = quantity_on_hand +'), false);
+  } finally {
+    setInventoryHandlerPrismaForTests(undefined);
+  }
+});
+
 test('listInventoryLocationsHandler returns pickable stock locations', async () => {
   const listLocationsMock = mock.method(inventoryLocationQueries, 'listLocations', async () => [
     {

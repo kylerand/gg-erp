@@ -27,6 +27,7 @@ import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/s
 interface BuildPackageOption extends SearchableSelectOption {
   buildConfigurationId: string;
   bomId: string;
+  signedOff: boolean;
   workOrderCount: number;
   lastUsedAt: string;
 }
@@ -46,15 +47,23 @@ function vehicleOption(vehicle: CartVehicle): SearchableSelectOption {
 }
 
 function buildPackageOption(pkg: WorkOrderBuildPackage): BuildPackageOption {
+  const signedOff = (pkg.stateCounts.PACKAGE_SIGNED_OFF ?? 0) > 0;
   return {
     id: pkg.id,
     buildConfigurationId: pkg.buildConfigurationId,
     bomId: pkg.bomId,
+    signedOff,
     workOrderCount: pkg.workOrderCount,
     lastUsedAt: pkg.lastUsedAt,
     label: pkg.label,
     description: pkg.description,
-    meta: `${pkg.workOrderCount} work order${pkg.workOrderCount === 1 ? '' : 's'}`,
+    meta: signedOff
+      ? `Signed off · ${pkg.workOrderCount} work order${pkg.workOrderCount === 1 ? '' : 's'}`
+      : 'Needs package sign-off',
+    disabled: !signedOff,
+    disabledReason: !signedOff
+      ? 'Sign off the ECO review pack before creating production work.'
+      : undefined,
   };
 }
 
@@ -183,6 +192,9 @@ export default function NewWorkOrderPage() {
     selectedBuildPackage?.buildConfigurationId ?? manualBuildConfigurationId.trim();
   const resolvedBomId = selectedBuildPackage?.bomId ?? manualBomId.trim();
   const hasBuildPackage = Boolean(resolvedBuildConfigurationId && resolvedBomId);
+  const selectedBuildPackageNeedsSignoff = Boolean(
+    selectedBuildPackage && !selectedBuildPackage.signedOff,
+  );
   const selectedCustomerIsValid =
     !customerId || isActiveSelectedCustomer(customerId, selectedCustomer);
 
@@ -203,6 +215,10 @@ export default function NewWorkOrderPage() {
     }
     if (!hasBuildPackage) {
       toast.error('Select a build package or enter released build references.');
+      return;
+    }
+    if (selectedBuildPackageNeedsSignoff) {
+      toast.error('Build package needs sign-off before creating production work.');
       return;
     }
 
@@ -313,7 +329,7 @@ export default function NewWorkOrderPage() {
               loading={referenceLoading}
               error={referenceError}
               placeholder="Search package, cart, customer, or reference"
-              emptyText="No released build packages matched. Enter engineering-approved references below."
+              emptyText="No signed-off build packages matched. Enter signed-off references below."
               onSearchChange={setBuildPackageSearch}
               onChange={(nextPackageId) => {
                 setBuildPackageId(nextPackageId);
@@ -368,10 +384,19 @@ export default function NewWorkOrderPage() {
             </div>
 
             {selectedBuildPackage && (
-              <div className="rounded-lg border border-[#D9CCBE] bg-[#FFF8EF] px-4 py-3 text-sm text-[#6E625A]">
+              <div
+                className={
+                  selectedBuildPackage.signedOff
+                    ? 'rounded-lg border border-[#D9CCBE] bg-[#FFF8EF] px-4 py-3 text-sm text-[#6E625A]'
+                    : 'rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800'
+                }
+              >
                 <span className="font-semibold text-[#211F1E]">{selectedBuildPackage.label}</span>{' '}
-                has been used on {selectedBuildPackage.workOrderCount} work order
-                {selectedBuildPackage.workOrderCount === 1 ? '' : 's'}.
+                {selectedBuildPackage.signedOff
+                  ? `has been used on ${selectedBuildPackage.workOrderCount} work order${
+                      selectedBuildPackage.workOrderCount === 1 ? '' : 's'
+                    }.`
+                  : 'needs package sign-off before production work can be created.'}
               </div>
             )}
 
@@ -393,6 +418,7 @@ export default function NewWorkOrderPage() {
                   customerLoading ||
                   !vehicleId ||
                   !hasBuildPackage ||
+                  selectedBuildPackageNeedsSignoff ||
                   !selectedCustomerIsValid
                 }
                 className="bg-yellow-400 text-gray-900 hover:bg-yellow-300"

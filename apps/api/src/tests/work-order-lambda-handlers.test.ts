@@ -18,6 +18,7 @@ import {
   listRoutingTemplatesHandler,
   resetPlanningMasterStoreForTests,
   setPlanningMasterStoreForTests,
+  signOffBuildPackageHandler,
   transitionBuildConfigurationHandler,
   transitionRoutingTemplateHandler,
   type PlanningMasterStore,
@@ -470,27 +471,52 @@ function createPlanningMasterStoreForTests(): PlanningMasterStore {
           source: 'PLANNING_MASTER' as const,
           workOrderCount: 2,
           lastUsedAt: '2026-06-01T00:00:00.000Z',
-          lastVehicleDisplayName: releasedConfig.vehicleDisplayName,
-          lastCustomerDisplayName: releasedConfig.customerDisplayName,
-          stateCounts: { CONFIG_RELEASED: 1, BOM_APPROVED: 1, ACTIVE_ROUTES: 1 },
-        },
-        configuration: releasedConfig,
-        bom: approvedBom,
-        routeTemplates: [activeRoute],
-        changeEvents,
-        approvalEvidence: changeEvents,
-        summary: {
-          bomLineCount: approvedBom.lines.length,
+            lastVehicleDisplayName: releasedConfig.vehicleDisplayName,
+            lastCustomerDisplayName: releasedConfig.customerDisplayName,
+            stateCounts: {
+              CONFIG_RELEASED: 1,
+              BOM_APPROVED: 1,
+              ACTIVE_ROUTES: 1,
+              PACKAGE_NEEDS_SIGNOFF: 1,
+            },
+          },
+          configuration: releasedConfig,
+          bom: approvedBom,
+          routeTemplates: [activeRoute],
+          changeEvents,
+          approvalEvidence: changeEvents,
+          latestSignoff: undefined,
+          summary: {
+            bomLineCount: approvedBom.lines.length,
+            routeCount: 1,
+            routeStepCount: activeRoute.stepCount,
+            estimatedMinutes: activeRoute.estimatedMinutes,
+            estimatedLaborCostCents: activeRoute.estimatedLaborCostCents,
+            changeCount: changeEvents.length,
+            approvalCount: changeEvents.length,
+            signoffCount: 0,
+          },
+        };
+      },
+      async signOffBuildPackage(input, context) {
+        return {
+          id: '00000000-0000-4000-8000-000000000901',
+          buildConfigurationId: input.buildConfigurationId,
+          bomId: input.bomId,
+          packageId: `${input.buildConfigurationId}:${input.bomId}`,
+          signoffNote: input.signoffNote,
+          signedOffBy: context.actorId ?? 'planner',
+          signedOffAt: '2026-06-01T00:00:00.000Z',
+          reviewPackGeneratedAt: '2026-06-01T00:00:00.000Z',
+          approvalCount: 3,
+          changeCount: 3,
           routeCount: 1,
-          routeStepCount: activeRoute.stepCount,
-          estimatedMinutes: activeRoute.estimatedMinutes,
-          estimatedLaborCostCents: activeRoute.estimatedLaborCostCents,
-          changeCount: changeEvents.length,
-          approvalCount: changeEvents.length,
-        },
-      };
-    },
-    async createRoutingTemplate(input) {
+          routeStepCount: 1,
+          routeTemplateIds: [routingTemplate.id],
+          createdAt: '2026-06-01T00:00:00.000Z',
+        };
+      },
+      async createRoutingTemplate(input) {
       return {
         ...routingTemplate,
         routeCode: input.routeCode,
@@ -554,7 +580,7 @@ function createPlanningMasterStoreForTests(): PlanningMasterStore {
             lastUsedAt: '2026-06-01T00:00:00.000Z',
             lastVehicleDisplayName: config.vehicleDisplayName,
             lastCustomerDisplayName: config.customerDisplayName,
-            stateCounts: { CONFIG_RELEASED: 1, BOM_APPROVED: 1 },
+            stateCounts: { CONFIG_RELEASED: 1, BOM_APPROVED: 1, PACKAGE_NEEDS_SIGNOFF: 1 },
           },
         ],
         total: 1,
@@ -674,6 +700,47 @@ test('build package review pack handler returns approval evidence and package de
       queryStringParameters: { buildConfigurationId: 'not-a-uuid' },
     });
     assert.equal(invalidResponse.statusCode, 422);
+  } finally {
+    resetPlanningMasterStoreForTests();
+  }
+});
+
+test('build package sign-off handler persists package-level approval evidence', async () => {
+  setPlanningMasterStoreForTests(createPlanningMasterStoreForTests());
+  try {
+    const invalidResponse = await signOffBuildPackageHandler({
+      body: JSON.stringify({
+        buildConfigurationId: '00000000-0000-4000-8000-000000000101',
+        bomId: '00000000-0000-4000-8000-000000000301',
+      }),
+    });
+    assert.equal(invalidResponse.statusCode, 422);
+
+    const response = await signOffBuildPackageHandler({
+      headers: { 'x-actor-id': 'planner@example.com' },
+      body: JSON.stringify({
+        buildConfigurationId: '00000000-0000-4000-8000-000000000101',
+        bomId: '00000000-0000-4000-8000-000000000301',
+        signoffNote: 'Reviewed config, BOM, route, and approval evidence for release.',
+      }),
+    });
+    assert.equal(response.statusCode, 201);
+    const payload = JSON.parse(response.body) as {
+      signoff: {
+        packageId: string;
+        signoffNote: string;
+        signedOffBy?: string;
+        routeCount: number;
+        routeTemplateIds: string[];
+      };
+    };
+    assert.equal(
+      payload.signoff.packageId,
+      '00000000-0000-4000-8000-000000000101:00000000-0000-4000-8000-000000000301',
+    );
+    assert.equal(payload.signoff.signedOffBy, 'planner@example.com');
+    assert.equal(payload.signoff.routeCount, 1);
+    assert.deepEqual(payload.signoff.routeTemplateIds, ['00000000-0000-4000-8000-000000000601']);
   } finally {
     resetPlanningMasterStoreForTests();
   }

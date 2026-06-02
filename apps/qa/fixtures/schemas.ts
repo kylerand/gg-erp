@@ -344,6 +344,23 @@ const buildPackageApprovalEvidence = z.object({
   createdAt: isoDate,
 });
 
+const buildPackageSignoff = z.object({
+  id: uuid,
+  buildConfigurationId: uuid,
+  bomId: uuid,
+  packageId: z.string(),
+  signoffNote: z.string(),
+  signedOffBy: z.string().optional(),
+  signedOffAt: isoDate,
+  reviewPackGeneratedAt: isoDate,
+  approvalCount: z.number().int().nonnegative(),
+  changeCount: z.number().int().nonnegative(),
+  routeCount: z.number().int().nonnegative(),
+  routeStepCount: z.number().int().nonnegative(),
+  routeTemplateIds: z.array(uuid),
+  createdAt: isoDate,
+});
+
 const buildPackageReviewPack = z.object({
   id: z.string(),
   generatedAt: isoDate,
@@ -353,6 +370,7 @@ const buildPackageReviewPack = z.object({
   routeTemplates: z.array(routingTemplate),
   changeEvents: z.array(planningChangeEvent),
   approvalEvidence: z.array(buildPackageApprovalEvidence),
+  latestSignoff: buildPackageSignoff.optional(),
   summary: z.object({
     bomLineCount: z.number().int().nonnegative(),
     routeCount: z.number().int().nonnegative(),
@@ -361,6 +379,7 @@ const buildPackageReviewPack = z.object({
     estimatedLaborCostCents: z.number().int().nonnegative(),
     changeCount: z.number().int().nonnegative(),
     approvalCount: z.number().int().nonnegative(),
+    signoffCount: z.number().int().nonnegative(),
   }),
 });
 
@@ -1010,6 +1029,7 @@ const ROUTES: RouteEntry[] = [
   { method: 'GET', template: '/planning/work-orders', schema: paginated(workOrder) },
   { method: 'GET', template: '/planning/build-packages', schema: paginated(buildPackage) },
   { method: 'GET', template: '/planning/build-packages/review-pack', schema: z.object({ reviewPack: buildPackageReviewPack }) },
+  { method: 'POST', template: '/planning/build-packages/signoffs', schema: z.object({ signoff: buildPackageSignoff }) },
   { method: 'GET', template: '/planning/change-events', schema: paginated(planningChangeEvent) },
   { method: 'GET', template: '/planning/build-configurations', schema: paginated(buildConfiguration) },
   { method: 'POST', template: '/planning/build-configurations', schema: z.object({ buildConfiguration }) },

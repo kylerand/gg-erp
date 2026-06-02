@@ -126,6 +126,11 @@ interface ReleasedBuildPackageLineRow {
   installStage: string | null;
 }
 
+interface BuildPackageSignoffGateRow {
+  id: string;
+  signedOffAt: Date | string;
+}
+
 interface ReleasedRoutingTemplateHeaderRow {
   routingTemplateId: string;
   routeCode: string;
@@ -349,6 +354,22 @@ export const createWoOrderHandler = wrapHandler(
       return jsonResponse(409, {
         message: 'BOM must be approved before creating a work order.',
         bomStatus: header.bomStatus,
+      });
+    }
+    const [buildPackageSignoff] = await db.$queryRaw<BuildPackageSignoffGateRow[]>`
+      SELECT
+        id::text AS "id",
+        signed_off_at AS "signedOffAt"
+      FROM planning.build_package_signoffs
+      WHERE build_configuration_id = ${buildConfiguration.value}::uuid
+        AND bom_id = ${bom.value}::uuid
+      LIMIT 1
+    `;
+    if (!buildPackageSignoff) {
+      return jsonResponse(409, {
+        message: 'Build package must be signed off before creating a work order.',
+        buildConfigurationId: buildConfiguration.value,
+        bomId: bom.value,
       });
     }
     if (customer && customer.ok && header.customerId && customer.value !== header.customerId) {

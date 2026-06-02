@@ -24,6 +24,7 @@ import {
   listBuildConfigurationsHandler,
   listPlanningChangeEventsHandler,
   listRoutingTemplatesHandler,
+  signOffBuildPackageHandler,
   transitionBuildConfigurationHandler,
   transitionRoutingTemplateHandler,
 } from './lambda/work-orders/planning-masters.js';
@@ -426,6 +427,8 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     result = await listBuildPackagesHandler(event);
   } else if (pathname === '/planning/build-packages/review-pack' && method === 'GET') {
     result = await getBuildPackageReviewPackHandler(event);
+  } else if (pathname === '/planning/build-packages/signoffs' && method === 'POST') {
+    result = await signOffBuildPackageHandler(event);
   } else if (pathname === '/planning/change-events' && method === 'GET') {
     result = await listPlanningChangeEventsHandler(event);
   } else if (pathname === '/planning/build-configurations' && method === 'GET') {

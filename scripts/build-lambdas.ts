@@ -51,6 +51,7 @@ const lambdas: LambdaEntry[] = [
   { context: 'work-orders', handler: 'list',        entry: 'apps/api/src/lambda/work-orders/list.handler.ts' },
   { context: 'work-orders', handler: 'list-build-packages', entry: 'apps/api/src/lambda/work-orders/list-build-packages.handler.ts' },
   { context: 'work-orders', handler: 'get-build-package-review-pack', entry: 'apps/api/src/lambda/work-orders/get-build-package-review-pack.handler.ts' },
+  { context: 'work-orders', handler: 'sign-off-build-package', entry: 'apps/api/src/lambda/work-orders/sign-off-build-package.handler.ts' },
   { context: 'work-orders', handler: 'list-planning-change-events', entry: 'apps/api/src/lambda/work-orders/list-planning-change-events.handler.ts' },
   { context: 'work-orders', handler: 'list-build-configurations', entry: 'apps/api/src/lambda/work-orders/list-build-configurations.handler.ts' },
   { context: 'work-orders', handler: 'create-build-configuration', entry: 'apps/api/src/lambda/work-orders/create-build-configuration.handler.ts' },

@@ -30,6 +30,7 @@ import {
   listCartVehicles,
   listParts,
   listRoutingTemplates,
+  signOffBuildPackage,
   transitionRoutingTemplate,
   transitionBuildConfiguration,
   type BuildPackageReviewPack,
@@ -105,6 +106,7 @@ function statusText(value: string): string {
 
 function stateSummary(pkg: WorkOrderBuildPackage): string {
   return Object.entries(pkg.stateCounts)
+    .filter(([, count]) => count > 0)
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([state, count]) => `${count} ${statusText(state)}`)
     .join(' · ');
@@ -366,6 +368,8 @@ export default function BuildPackagesPage() {
   const [selectedReviewPack, setSelectedReviewPack] = useState<BuildPackageReviewPack | undefined>();
   const [reviewPackLoading, setReviewPackLoading] = useState(false);
   const [reviewPackError, setReviewPackError] = useState<string | undefined>();
+  const [signoffNote, setSignoffNote] = useState('');
+  const [signoffSubmitting, setSignoffSubmitting] = useState(false);
 
   useEffect(() => {
     setSearch(routeSearch);
@@ -600,6 +604,7 @@ export default function BuildPackagesPage() {
         { allowMockFallback: false },
       );
       setSelectedReviewPack(reviewPack);
+      setSignoffNote(reviewPack.latestSignoff?.signoffNote ?? '');
       toast.success('Review pack loaded');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Review pack failed to load.';
@@ -616,6 +621,66 @@ export default function BuildPackagesPage() {
       toast.success('Review summary copied');
     } catch {
       toast.error('Review summary could not be copied.');
+    }
+  }
+
+  async function submitPackageSignoff(reviewPack: BuildPackageReviewPack): Promise<void> {
+    const note = signoffNote.trim();
+    if (!note) {
+      toast.error('Add a sign-off note before approving the package.');
+      return;
+    }
+    if (reviewPack.summary.routeCount === 0) {
+      toast.error('Add an active routing template before signing off this package.');
+      return;
+    }
+
+    setSignoffSubmitting(true);
+    try {
+      const signoff = await signOffBuildPackage(
+        {
+          buildConfigurationId: reviewPack.configuration.id,
+          bomId: reviewPack.bom.id,
+          signoffNote: note,
+        },
+        { allowMockFallback: false },
+      );
+      setSelectedReviewPack({
+        ...reviewPack,
+        latestSignoff: signoff,
+        package: {
+          ...reviewPack.package,
+          stateCounts: {
+            ...reviewPack.package.stateCounts,
+            PACKAGE_SIGNED_OFF: 1,
+            PACKAGE_NEEDS_SIGNOFF: 0,
+          },
+        },
+        summary: {
+          ...reviewPack.summary,
+          signoffCount: 1,
+        },
+      });
+      setPackages((current) =>
+        current.map((pkg) =>
+          pkg.id === reviewPack.package.id
+            ? {
+                ...pkg,
+                stateCounts: {
+                  ...pkg.stateCounts,
+                  PACKAGE_SIGNED_OFF: 1,
+                  PACKAGE_NEEDS_SIGNOFF: 0,
+                },
+              }
+            : pkg,
+        ),
+      );
+      toast.success('Build package signed off');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Build package sign-off failed.';
+      toast.error(message);
+    } finally {
+      setSignoffSubmitting(false);
     }
   }
 
@@ -1825,6 +1890,56 @@ export default function BuildPackagesPage() {
                     </div>
                   </div>
                 </div>
+
+                <section className="rounded-md border border-[#E8DDD2]">
+                  <div className="flex flex-col gap-3 border-b border-[#E8DDD2] px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 font-semibold text-[#211F1E]">
+                        <CheckCircle2 className="h-4 w-4 text-[#2F7D32]" />
+                        Package Sign-off
+                      </div>
+                      <div className="mt-1 text-xs text-[#6E625A]">
+                        {selectedReviewPack.latestSignoff
+                          ? `${selectedReviewPack.latestSignoff.signedOffBy ?? 'system'} · ${formatDate(
+                              selectedReviewPack.latestSignoff.signedOffAt,
+                            )}`
+                          : selectedReviewPack.summary.routeCount === 0
+                            ? 'Active route required'
+                            : 'Ready for approval'}
+                      </div>
+                    </div>
+                    {!selectedReviewPack.latestSignoff && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={
+                          signoffSubmitting ||
+                          selectedReviewPack.summary.routeCount === 0 ||
+                          signoffNote.trim().length === 0
+                        }
+                        onClick={() => void submitPackageSignoff(selectedReviewPack)}
+                      >
+                        <CheckCircle2 className="mr-2 h-4 w-4" />
+                        {signoffSubmitting ? 'Signing Off...' : 'Sign Off Package'}
+                      </Button>
+                    )}
+                  </div>
+                  <div className="p-4">
+                    {selectedReviewPack.latestSignoff ? (
+                      <div className="rounded-md bg-[#F7F1EA] px-3 py-2 text-sm text-[#4A4039]">
+                        {selectedReviewPack.latestSignoff.signoffNote}
+                      </div>
+                    ) : (
+                      <Textarea
+                        value={signoffNote}
+                        onChange={(event) => setSignoffNote(event.target.value)}
+                        placeholder="Approval note"
+                        rows={3}
+                        disabled={selectedReviewPack.summary.routeCount === 0 || signoffSubmitting}
+                      />
+                    )}
+                  </div>
+                </section>
 
                 <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
                   <section className="rounded-md border border-[#E8DDD2]">

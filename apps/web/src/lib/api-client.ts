@@ -409,6 +409,23 @@ export interface BuildPackageApprovalEvidence {
   createdAt: string;
 }
 
+export interface BuildPackageSignoff {
+  id: string;
+  buildConfigurationId: string;
+  bomId: string;
+  packageId: string;
+  signoffNote: string;
+  signedOffBy?: string;
+  signedOffAt: string;
+  reviewPackGeneratedAt: string;
+  approvalCount: number;
+  changeCount: number;
+  routeCount: number;
+  routeStepCount: number;
+  routeTemplateIds: string[];
+  createdAt: string;
+}
+
 export interface BuildPackageReviewPack {
   id: string;
   generatedAt: string;
@@ -418,6 +435,7 @@ export interface BuildPackageReviewPack {
   routeTemplates: RoutingTemplate[];
   changeEvents: PlanningChangeEvent[];
   approvalEvidence: BuildPackageApprovalEvidence[];
+  latestSignoff?: BuildPackageSignoff;
   summary: {
     bomLineCount: number;
     routeCount: number;
@@ -426,6 +444,7 @@ export interface BuildPackageReviewPack {
     estimatedLaborCostCents: number;
     changeCount: number;
     approvalCount: number;
+    signoffCount: number;
   };
 }
 
@@ -777,6 +796,22 @@ export async function getBuildPackageReviewPack(
     options,
   );
   return data.reviewPack;
+}
+
+export async function signOffBuildPackage(
+  input: { buildConfigurationId: string; bomId: string; signoffNote: string },
+  options?: ApiDataOptions,
+): Promise<BuildPackageSignoff> {
+  const data = await apiFetch<{ signoff: BuildPackageSignoff }>(
+    '/planning/build-packages/signoffs',
+    {
+      method: 'POST',
+      body: JSON.stringify(input),
+    },
+    undefined,
+    options,
+  );
+  return data.signoff;
 }
 
 export async function listWorkOrderBuildPackages(

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { EmptyState, LoadingSkeleton, PageHeader, StatusBadge } from '@gg-erp/ui';
 import {
+  createActivity,
   getCustomer,
   listActivities,
   listCartVehicles,
@@ -37,6 +38,7 @@ import { Textarea } from '@/components/ui/textarea';
 
 const STRICT_LIVE_DATA = { allowMockFallback: false } as const;
 const CONTACT_METHOD_OPTIONS = ['EMAIL', 'PHONE', 'SMS'] as const;
+const ACTIVITY_TYPE_OPTIONS = ['NOTE', 'CALL', 'EMAIL', 'MEETING', 'FOLLOW_UP'] as const;
 const CART_STATE_OPTIONS = [
   'REGISTERED',
   'IN_BUILD',
@@ -66,6 +68,14 @@ interface CartProfileDraft {
   modelCode: string;
   modelYear: string;
   state: CartVehicleState;
+}
+
+interface CustomerActivityDraft {
+  activityType: (typeof ACTIVITY_TYPE_OPTIONS)[number];
+  opportunityId: string;
+  subject: string;
+  body: string;
+  dueDate: string;
 }
 
 interface CustomerTimelineItem {
@@ -167,6 +177,16 @@ function cartDraftFromVehicle(vehicle: CartVehicle): CartProfileDraft {
     modelCode: vehicle.modelCode,
     modelYear: String(vehicle.modelYear),
     state: CART_STATE_OPTIONS.includes(vehicle.state) ? vehicle.state : 'REGISTERED',
+  };
+}
+
+function defaultActivityDraft(): CustomerActivityDraft {
+  return {
+    activityType: 'NOTE',
+    opportunityId: '',
+    subject: '',
+    body: '',
+    dueDate: '',
   };
 }
 
@@ -613,6 +633,12 @@ export default function CustomerDetailPage() {
   const [vehicleDraft, setVehicleDraft] = useState<CartProfileDraft | null>(null);
   const [savingVehicleId, setSavingVehicleId] = useState<string | null>(null);
   const [vehicleSaveError, setVehicleSaveError] = useState<string | null>(null);
+  const [loggingActivity, setLoggingActivity] = useState(false);
+  const [activityDraft, setActivityDraft] = useState<CustomerActivityDraft>(() =>
+    defaultActivityDraft(),
+  );
+  const [savingActivity, setSavingActivity] = useState(false);
+  const [activitySaveError, setActivitySaveError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState<string[]>([]);
 
@@ -804,6 +830,48 @@ export default function CustomerDetailPage() {
       setVehicleSaveError(errorMessage(error));
     } finally {
       setSavingVehicleId(null);
+    }
+  }
+
+  function beginActivityLog() {
+    setActivityDraft(defaultActivityDraft());
+    setActivitySaveError(null);
+    setLoggingActivity(true);
+  }
+
+  function cancelActivityLog() {
+    setLoggingActivity(false);
+    setActivityDraft(defaultActivityDraft());
+    setActivitySaveError(null);
+  }
+
+  async function saveCustomerActivity() {
+    if (!customer) return;
+    if (!activityDraft.subject.trim()) {
+      setActivitySaveError('Activity subject is required.');
+      return;
+    }
+
+    setSavingActivity(true);
+    setActivitySaveError(null);
+    try {
+      const created = await createActivity({
+        customerId: customer.id,
+        opportunityId: optionalText(activityDraft.opportunityId) ?? undefined,
+        activityType: activityDraft.activityType,
+        subject: activityDraft.subject.trim(),
+        body: optionalText(activityDraft.body) ?? undefined,
+        dueDate: optionalText(activityDraft.dueDate) ?? undefined,
+      });
+      setActivities((current) => ({
+        total: current.total + 1,
+        items: [created, ...current.items].slice(0, 25),
+      }));
+      cancelActivityLog();
+    } catch (error) {
+      setActivitySaveError(errorMessage(error));
+    } finally {
+      setSavingActivity(false);
     }
   }
 
@@ -1578,7 +1646,118 @@ export default function CustomerDetailPage() {
         </Section>
       </div>
 
-      <Section title="Recent Sales Activity" count={activities.total}>
+      <Section
+        title="Recent Sales Activity"
+        count={activities.total}
+        action={
+          !loggingActivity ? (
+            <Button type="button" size="sm" variant="outline" onClick={beginActivityLog}>
+              Log Activity
+            </Button>
+          ) : null
+        }
+      >
+        {loggingActivity && (
+          <div className="mb-4 space-y-3 rounded-lg border border-amber-200 bg-amber-50/40 p-3">
+            <div className="grid gap-3 md:grid-cols-[0.8fr_1fr]">
+              <label className="space-y-1">
+                <span className="text-xs font-semibold uppercase text-gray-500">Type</span>
+                <select
+                  className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
+                  value={activityDraft.activityType}
+                  onChange={(event) =>
+                    setActivityDraft((current) => ({
+                      ...current,
+                      activityType: event.target.value as CustomerActivityDraft['activityType'],
+                    }))
+                  }
+                >
+                  {ACTIVITY_TYPE_OPTIONS.map((type) => (
+                    <option key={type} value={type}>
+                      {normalizeStatus(type)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs font-semibold uppercase text-gray-500">
+                  Linked Opportunity
+                </span>
+                <select
+                  className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
+                  value={activityDraft.opportunityId}
+                  onChange={(event) =>
+                    setActivityDraft((current) => ({
+                      ...current,
+                      opportunityId: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="">Customer only</option>
+                  {opportunities.items.map((opportunity) => (
+                    <option key={opportunity.id} value={opportunity.id}>
+                      {opportunity.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="grid gap-3 md:grid-cols-[1fr_0.5fr]">
+              <label className="space-y-1">
+                <span className="text-xs font-semibold uppercase text-gray-500">Subject</span>
+                <Input
+                  value={activityDraft.subject}
+                  onChange={(event) =>
+                    setActivityDraft((current) => ({
+                      ...current,
+                      subject: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs font-semibold uppercase text-gray-500">Due Date</span>
+                <Input
+                  type="date"
+                  value={activityDraft.dueDate}
+                  onChange={(event) =>
+                    setActivityDraft((current) => ({
+                      ...current,
+                      dueDate: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+            </div>
+            <label className="block space-y-1">
+              <span className="text-xs font-semibold uppercase text-gray-500">Notes</span>
+              <Textarea
+                rows={3}
+                value={activityDraft.body}
+                onChange={(event) =>
+                  setActivityDraft((current) => ({
+                    ...current,
+                    body: event.target.value,
+                  }))
+                }
+              />
+            </label>
+            {activitySaveError && <p className="text-sm text-red-700">{activitySaveError}</p>}
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" onClick={saveCustomerActivity} disabled={savingActivity}>
+                {savingActivity ? 'Saving' : 'Save Activity'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={cancelActivityLog}
+                disabled={savingActivity}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
         {activities.items.length === 0 ? (
           <EmptyState
             title="No sales activity"

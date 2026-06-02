@@ -5652,7 +5652,11 @@ export async function createActivity(input: {
   body?: string;
   dueDate?: string;
 }): Promise<SalesActivity> {
-  return apiFetch('/sales/activities', { method: 'POST', body: JSON.stringify(input) });
+  const data = await apiFetch<{ activity: SalesActivity }>('/sales/activities', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return data.activity;
 }
 
 export async function getSalesPipelineStats(): Promise<PipelineStats> {

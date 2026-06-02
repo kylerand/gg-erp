@@ -417,6 +417,9 @@ test('customer dealer ops views are backed by live customer and cart data', () =
       'setVehicles((current) => ({',
       'Edit Asset',
       'Save Cart',
+      'createActivity({',
+      'setActivities((current) => ({',
+      'Save Activity',
       'buildCustomerNextActions({',
       'Customer Next Actions',
       'nextActionItems.map((item)',
@@ -437,6 +440,12 @@ test('customer dealer ops views are backed by live customer and cart data', () =
       "erpRecordRoute('sales-opportunity'",
       "erpRecordRoute('quote'",
     ].filter((snippet) => !customerDetailSource.includes(snippet)),
+    [],
+  );
+  assert.deepEqual(
+    ['apiFetch<{ activity: SalesActivity }>', 'return data.activity'].filter(
+      (snippet) => !apiClientSource.includes(snippet),
+    ),
     [],
   );
   assert.deepEqual(

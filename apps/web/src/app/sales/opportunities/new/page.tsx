@@ -2,16 +2,15 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import { PageHeader } from '@gg-erp/ui';
-import { createOpportunity, getCustomer, listCustomers, type Customer } from '@/lib/api-client';
+import { createOpportunity, type Customer } from '@/lib/api-client';
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
+import { CustomerSelector } from '@/components/customers/CustomerSelector';
+import { requiredActiveCustomerSubmitError } from '@/components/customers/customer-selector.helpers';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
-
-const STRICT_LIVE_DATA = { allowMockFallback: false } as const;
 
 const STAGES = [
   { value: 'PROSPECT', label: 'Prospect' },
@@ -29,24 +28,13 @@ const SOURCES = [
   { value: 'EVENT', label: 'Event' },
 ] as const;
 
-function customerOption(customer: Customer): SearchableSelectOption {
-  return {
-    id: customer.id,
-    label: customer.companyName ?? customer.fullName,
-    description: [customer.fullName, customer.email, customer.phone].filter(Boolean).join(' · '),
-    meta: customer.state,
-  };
-}
-
 export default function NewOpportunityPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialCustomerId = searchParams.get('customerId') ?? '';
   const [customerId, setCustomerId] = useState(initialCustomerId);
-  const [customerSearch, setCustomerSearch] = useState('');
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [referenceLoading, setReferenceLoading] = useState(true);
-  const [referenceError, setReferenceError] = useState<string | undefined>();
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | undefined>();
+  const [customerLoading, setCustomerLoading] = useState(Boolean(initialCustomerId));
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [stage, setStage] = useState<(typeof STAGES)[number]['value']>('PROSPECT');
@@ -56,49 +44,20 @@ export default function NewOpportunityPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    setReferenceLoading(true);
-    setReferenceError(undefined);
-
-    const customerRequest =
-      customerId && !customerSearch
-        ? getCustomer(customerId, STRICT_LIVE_DATA).then((customer) => ({
-            items: [customer],
-            total: 1,
-          }))
-        : listCustomers(
-            { search: customerSearch || undefined, state: 'ACTIVE', limit: 25 },
-            STRICT_LIVE_DATA,
-          );
-
-    customerRequest
-      .then((customerResult) => {
-        if (!active) return;
-        setCustomers(customerResult.items);
-      })
-      .catch((err: unknown) => {
-        if (!active) return;
-        setCustomers([]);
-        setReferenceError(err instanceof Error ? err.message : 'Failed to load customers.');
-      })
-      .finally(() => {
-        if (active) setReferenceLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [customerId, customerSearch]);
-
-  const customerOptions = useMemo(() => customers.map(customerOption), [customers]);
-  const selectedCustomer = customerOptions.find((option) => option.id === customerId);
-
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!customerId) {
-      setError('Customer is required.');
+    const customerError = requiredActiveCustomerSubmitError(
+      customerId,
+      selectedCustomer,
+      'opportunity',
+      'opportunities',
+    );
+    if (customerError || !selectedCustomer) {
+      setError(
+        customerError ??
+          'Choose a customer from the catalog results before creating the opportunity.',
+      );
       return;
     }
     if (!title.trim()) {
@@ -110,7 +69,7 @@ export default function NewOpportunityPage() {
     setError(null);
     try {
       const opportunity = await createOpportunity({
-        customerId,
+        customerId: selectedCustomer.id,
         title: title.trim(),
         description: description.trim() || undefined,
         stage,
@@ -145,9 +104,9 @@ export default function NewOpportunityPage() {
         description="Create a deal record from a live customer for follow-up and quoting"
       />
 
-      {(error || referenceError) && (
+      {error && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          {error ?? referenceError}
+          {error}
         </div>
       )}
 
@@ -156,20 +115,18 @@ export default function NewOpportunityPage() {
         className="max-w-3xl space-y-5 rounded-lg border border-gray-200 bg-white p-6"
       >
         <div className="grid gap-4 sm:grid-cols-2">
-          <SearchableSelect
+          <CustomerSelector
             id="opportunity-customer"
             label="Customer"
             required
             value={customerId}
-            selectedOption={selectedCustomer}
-            searchValue={customerSearch}
-            options={customerOptions}
-            loading={referenceLoading}
-            error={referenceError}
             placeholder="Search customers by name, company, or email"
-            emptyText="No active customers matched this search."
-            onSearchChange={setCustomerSearch}
-            onChange={setCustomerId}
+            onLoadingChange={setCustomerLoading}
+            onResolvedCustomer={setSelectedCustomer}
+            onChange={(nextCustomerId, customer) => {
+              setCustomerId(nextCustomerId);
+              setSelectedCustomer(customer);
+            }}
           />
           <label className="space-y-1">
             <span className="text-sm font-medium text-gray-700">Title</span>
@@ -249,7 +206,18 @@ export default function NewOpportunityPage() {
         <div className="flex flex-wrap items-center gap-3">
           <Button
             type="submit"
-            disabled={submitting}
+            disabled={
+              submitting ||
+              customerLoading ||
+              Boolean(
+                requiredActiveCustomerSubmitError(
+                  customerId,
+                  selectedCustomer,
+                  'opportunity',
+                  'opportunities',
+                ),
+              )
+            }
             className="bg-yellow-400 text-gray-900 hover:bg-yellow-300"
           >
             {submitting ? 'Creating...' : 'Create Opportunity'}

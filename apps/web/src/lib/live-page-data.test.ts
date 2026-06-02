@@ -49,10 +49,18 @@ function readSource(relativePath: string): string {
   return readFileSync(path.join(WEB_SRC_DIR, relativePath), 'utf8');
 }
 
+function pageUsesStrictLiveData(source: string): boolean {
+  if (source.includes('allowMockFallback: false')) return true;
+  if (!source.includes('CustomerSelector')) return false;
+  return readSource('components/customers/CustomerSelector.tsx').includes(
+    'allowMockFallback: false',
+  );
+}
+
 test('truth-critical pages opt out of local mock fallback data', () => {
   const missingStrictMode = truthCriticalPages.filter((relativePath) => {
     const source = readSource(relativePath);
-    return !source.includes('allowMockFallback: false');
+    return !pageUsesStrictLiveData(source);
   });
 
   assert.deepEqual(missingStrictMode, []);
@@ -283,7 +291,7 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
     [],
   );
   assert.deepEqual(
-    ['listCustomers', 'getCustomer', 'SearchableSelect', 'allowMockFallback: false'].filter(
+    ['CustomerSelector', 'requiredActiveCustomerSubmitError'].filter(
       (call) => !opportunitySource.includes(call),
     ),
     [],

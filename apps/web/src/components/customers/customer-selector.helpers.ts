@@ -40,17 +40,26 @@ export function isActiveSelectedCustomer(customerId: string, selectedCustomer?: 
   );
 }
 
+export function requiredActiveCustomerSubmitError(
+  customerId: string,
+  selectedCustomer?: Customer,
+  recordLabel = 'record',
+  pluralRecordLabel = `${recordLabel}s`,
+): string | undefined {
+  if (!customerId) return `Select an active customer before creating the ${recordLabel}.`;
+  if (!selectedCustomer)
+    return `Choose a customer from the catalog results before creating the ${recordLabel}.`;
+  if (selectedCustomer.state !== 'ACTIVE') {
+    return `Only active customers can be used for new ${pluralRecordLabel}.`;
+  }
+  return undefined;
+}
+
 export function quoteCustomerSubmitError(
   customerId: string,
   selectedCustomer?: Customer,
 ): string | undefined {
-  if (!customerId) return 'Select an active customer before creating the quote.';
-  if (!selectedCustomer)
-    return 'Choose a customer from the catalog results before creating the quote.';
-  if (selectedCustomer.state !== 'ACTIVE') {
-    return 'Only active customers can be used for new quotes.';
-  }
-  return undefined;
+  return requiredActiveCustomerSubmitError(customerId, selectedCustomer, 'quote', 'quotes');
 }
 
 export function customerSelectorEmptyMessage(search: string): string {

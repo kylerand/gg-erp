@@ -8,6 +8,7 @@ import {
   isActiveSelectedCustomer,
   mergeCustomerResults,
   quoteCustomerSubmitError,
+  requiredActiveCustomerSubmitError,
 } from './customer-selector.helpers';
 
 const activeCustomer: Customer = {
@@ -77,4 +78,8 @@ test('quote customer submit validation requires a selected active catalog custom
     'Only active customers can be used for new quotes.',
   );
   assert.equal(quoteCustomerSubmitError(activeCustomer.id, activeCustomer), undefined);
+  assert.equal(
+    requiredActiveCustomerSubmitError(activeCustomer.id, undefined, 'opportunity'),
+    'Choose a customer from the catalog results before creating the opportunity.',
+  );
 });

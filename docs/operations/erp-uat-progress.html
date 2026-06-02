@@ -241,10 +241,10 @@
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: catalog-backed customer selector hardening for quote and work-order
-          creation. Accounting document snapshots are deployed on main with no live API route
-          exceptions. ShopMonkey cutover readiness remains blocked on missing parts and
-          purchase-order source exports.
+          Current focus: extending the catalog-backed customer selector from quote and work-order
+          creation into sales opportunity creation. Accounting document snapshots are deployed on
+          main with no live API route exceptions. ShopMonkey cutover readiness remains blocked on
+          missing parts and purchase-order source exports.
         </p>
         <div class="progress" aria-label="97 percent complete"><div style="width: 97%"></div></div>
       </section>
@@ -344,13 +344,15 @@
               <td>Catalog-backed customer selector hardening</td>
               <td><span class="pill doing">In progress</span></td>
               <td>
-                This branch replaces duplicated customer selector wiring on quote and work-order
+                PR #175 replaced duplicated customer selector wiring on quote and work-order
                 creation with a shared active-customer selector, preserves selected customer context
                 from URL-driven forms, routes empty states to customer creation, and blocks quote
-                submission until a real active customer is selected from the catalog.
+                submission until a real active customer is selected from the catalog. This branch
+                extends the same selector and active-customer validation to sales opportunity
+                creation.
               </td>
               <td>
-                Pass full CI/QA, merge, deploy, and then reuse the shared selector on the remaining
+                Pass full CI/QA, merge, deploy, and then reuse the shared selector on any remaining
                 customer-bound forms where it reduces duplicate logic.
               </td>
             </tr>

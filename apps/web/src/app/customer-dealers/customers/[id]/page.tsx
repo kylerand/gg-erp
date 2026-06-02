@@ -68,6 +68,17 @@ interface CartProfileDraft {
   state: CartVehicleState;
 }
 
+interface CustomerTimelineItem {
+  id: string;
+  category: string;
+  title: string;
+  detail: string;
+  occurredAt: string;
+  status?: string;
+  href?: string;
+  actionLabel?: string;
+}
+
 function customerDisplayName(customer: Customer): string {
   return customer.companyName ?? customer.fullName;
 }
@@ -94,6 +105,12 @@ function formatCurrency(value?: number | null): string {
 
 function normalizeStatus(value: string): string {
   return value.replace(/_/g, ' ');
+}
+
+function timelineSortValue(value?: string | null): number {
+  if (!value) return 0;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
 }
 
 function optionalText(value: string): string | null {
@@ -129,6 +146,147 @@ function cartDraftFromVehicle(vehicle: CartVehicle): CartProfileDraft {
     modelYear: String(vehicle.modelYear),
     state: CART_STATE_OPTIONS.includes(vehicle.state) ? vehicle.state : 'REGISTERED',
   };
+}
+
+function buildCustomerTimeline({
+  customerId,
+  vehicles,
+  workOrders,
+  opportunities,
+  quotes,
+  activities,
+  customerSyncs,
+  paymentSyncs,
+}: {
+  customerId: string;
+  vehicles: CartVehicle[];
+  workOrders: WoOrder[];
+  opportunities: SalesOpportunity[];
+  quotes: Quote[];
+  activities: SalesActivity[];
+  customerSyncs: CustomerSyncRecord[];
+  paymentSyncs: PaymentSyncRecord[];
+}): CustomerTimelineItem[] {
+  const items: CustomerTimelineItem[] = [];
+
+  for (const workOrder of workOrders) {
+    items.push({
+      id: `work-order-${workOrder.id}`,
+      category: 'Service',
+      title: workOrder.workOrderNumber,
+      detail: [workOrder.title, workOrder.dueAt ? `Due ${formatDate(workOrder.dueAt)}` : null]
+        .filter(Boolean)
+        .join(' · '),
+      occurredAt: workOrder.updatedAt ?? workOrder.openedAt ?? workOrder.createdAt,
+      status: workOrder.status,
+      href: erpRecordRoute('work-order', workOrder.id),
+      actionLabel: 'Open Work Order',
+    });
+  }
+
+  for (const vehicle of vehicles) {
+    items.push({
+      id: `vehicle-${vehicle.id}`,
+      category: 'Asset',
+      title: `${vehicle.modelYear} ${vehicle.modelCode}`,
+      detail: `VIN ${vehicle.vin} · Serial ${vehicle.serialNumber}`,
+      occurredAt: vehicle.updatedAt ?? vehicle.createdAt,
+      status: vehicle.state,
+      href: erpRoute('create-work-order', { customerId, vehicleId: vehicle.id }),
+      actionLabel: 'Start Work',
+    });
+  }
+
+  for (const opportunity of opportunities) {
+    items.push({
+      id: `opportunity-${opportunity.id}`,
+      category: 'Sales',
+      title: opportunity.title,
+      detail: `${formatCurrency(opportunity.estimatedValue)} estimated · ${opportunity.probability}% probability`,
+      occurredAt: opportunity.updatedAt ?? opportunity.createdAt,
+      status: opportunity.stage,
+      href: erpRecordRoute('sales-opportunity', opportunity.id),
+      actionLabel: 'Open Opportunity',
+    });
+  }
+
+  for (const quote of quotes) {
+    items.push({
+      id: `quote-${quote.id}`,
+      category: 'Quote',
+      title: quote.quoteNumber,
+      detail: `${formatCurrency(quote.total)} · Valid until ${formatDate(quote.validUntil)}`,
+      occurredAt: quote.updatedAt ?? quote.createdAt,
+      status: quote.status,
+      href: erpRecordRoute('quote', quote.id),
+      actionLabel: 'Open Quote',
+    });
+  }
+
+  for (const activity of activities) {
+    const activityScheduleDetail = [
+      activity.dueDate ? `Due ${formatDate(activity.dueDate)}` : null,
+      activity.completedAt ? `Completed ${formatDate(activity.completedAt)}` : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    items.push({
+      id: `activity-${activity.id}`,
+      category: 'Activity',
+      title: activity.subject,
+      detail:
+        activity.body?.trim() || activityScheduleDetail || normalizeStatus(activity.activityType),
+      occurredAt: activity.completedAt ?? activity.createdAt,
+      status: activity.completedAt ? 'COMPLETED' : activity.activityType,
+      href: activity.opportunityId
+        ? erpRecordRoute('sales-opportunity', activity.opportunityId)
+        : erpRoute('sales'),
+      actionLabel: activity.opportunityId ? 'Open Opportunity' : 'Open Sales',
+    });
+  }
+
+  for (const record of customerSyncs) {
+    items.push({
+      id: `customer-sync-${record.id}`,
+      category: 'Accounting',
+      title: `${record.provider} customer sync`,
+      detail: [
+        `Attempts ${record.attemptCount}`,
+        record.externalReference ? `External ${record.externalReference}` : null,
+        record.lastErrorMessage,
+      ]
+        .filter(Boolean)
+        .join(' · '),
+      occurredAt: record.syncedAt ?? record.createdAt ?? '',
+      status: record.state,
+      href: erpRoute('accounting-sync', { view: 'customers', customerId }),
+      actionLabel: 'Open Customer Sync',
+    });
+  }
+
+  for (const record of paymentSyncs) {
+    items.push({
+      id: `payment-sync-${record.id}`,
+      category: 'Payment',
+      title: formatCurrency(record.amountCents / 100),
+      detail: [
+        paymentSyncWorkOrderDisplayName(record),
+        record.paymentMethod ?? record.direction,
+        record.errorMessage,
+      ]
+        .filter(Boolean)
+        .join(' · '),
+      occurredAt: record.paymentDate ?? record.updatedAt ?? record.createdAt,
+      status: record.state,
+      href: erpRoute('accounting-sync', { view: 'payments', customerId }),
+      actionLabel: 'Open Payments',
+    });
+  }
+
+  return items
+    .filter((item) => timelineSortValue(item.occurredAt) > 0)
+    .sort((a, b) => timelineSortValue(b.occurredAt) - timelineSortValue(a.occurredAt))
+    .slice(0, 12);
 }
 
 function Section({
@@ -422,6 +580,16 @@ export default function CustomerDetailPage() {
 
   const displayName = customerDisplayName(customer);
   const primaryVehicle = vehicles.items[0];
+  const timelineItems = buildCustomerTimeline({
+    customerId,
+    vehicles: vehicles.items,
+    workOrders: workOrders.items,
+    opportunities: opportunities.items,
+    quotes: quotes.items,
+    activities: activities.items,
+    customerSyncs: customerSyncs.items,
+    paymentSyncs: paymentSyncs.items,
+  });
 
   return (
     <div className="space-y-6">
@@ -474,6 +642,64 @@ export default function CustomerDetailPage() {
         <MetricTile label="Activities" value={activities.total} />
         <MetricTile label="Accounting Sync" value={customerSyncs.total + paymentSyncs.total} />
       </div>
+
+      <Section
+        title="Customer Timeline"
+        count={timelineItems.length}
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <ActionLink href={erpRoute('work-order', { search: customerId })}>
+              Work History
+            </ActionLink>
+            <ActionLink href={erpRoute('accounting-sync', { view: 'customers', customerId })}>
+              Sync History
+            </ActionLink>
+          </div>
+        }
+      >
+        {timelineItems.length === 0 ? (
+          <EmptyState
+            title="No customer history yet"
+            description="Work orders, quotes, activities, cart changes, and accounting sync events will appear here once live records exist."
+            action={
+              <ActionLink href={erpRoute('create-work-order', { customerId })}>
+                New Work Order
+              </ActionLink>
+            }
+          />
+        ) : (
+          <div className="space-y-3">
+            {timelineItems.map((item) => (
+              <div
+                key={item.id}
+                className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-gray-200 px-3 py-2"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-semibold uppercase text-gray-500">
+                      {item.category}
+                    </span>
+                    <span className="text-xs text-gray-400">{formatDate(item.occurredAt)}</span>
+                  </div>
+                  <div className="mt-1 font-semibold text-gray-900">{item.title}</div>
+                  <div className="mt-1 text-sm text-gray-600">{item.detail}</div>
+                </div>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {item.status && <StatusBadge status={item.status} />}
+                  {item.href && (
+                    <Link
+                      href={item.href}
+                      className="text-sm font-semibold text-gray-900 hover:underline"
+                    >
+                      {item.actionLabel ?? 'Open'}
+                    </Link>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_1.35fr]">
         <Section

@@ -356,15 +356,15 @@
           claim/reimbursement storage, deployed warranty route cleanup, deployed warranty
           reimbursement accounting ledger work, deployed provider document evidence work, deployed
           inventory part editing work, deployed inventory valuation rollups, deployed valuation
-          exception drilldown work, deployed valuation exception handoff work, and active selected-row
-          exception workbench work. The app has moved past polished static screens into a usable
+          exception drilldown work, deployed valuation exception handoff work, deployed selected-row
+          exception workbench work, and active cost evidence posting work. The app has moved past polished static screens into a usable
           shop-ops ERP foundation, but ShopMonkey cutover remains blocked until complete parts and
           purchase-order source exports are captured.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 2, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 198</span>
-          <span class="chip">Active slice: Inventory exception bulk workbench</span>
+          <span class="chip">Baseline: origin/main through PR 199</span>
+          <span class="chip">Active slice: Inventory cost evidence posting</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
@@ -847,8 +847,8 @@
             work-order provenance, and version diff workflows need a heavier change-control gate.
           </li>
           <li>
-            <strong>Deepen inventory master data:</strong> validate valuation exception handoffs in
-            UAT, then decide whether lot-level costing needs FIFO/weighted-average accounting policy
+            <strong>Deepen inventory master data:</strong> validate cost evidence posting in UAT,
+            then decide whether lot-level costing needs FIFO/weighted-average accounting policy
             before production close controls depend on it.
           </li>
         </ol>

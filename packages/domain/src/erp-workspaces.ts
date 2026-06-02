@@ -196,6 +196,15 @@ export const ERP_WORKSPACES = [
         keywords: ['adjustment', 'cycle count', 'correction'],
       },
       {
+        key: 'inventory-cost-evidence',
+        label: 'Cost Evidence',
+        description: 'Post unit costs for stocked lots without changing quantity.',
+        route: '/inventory/adjustments?mode=costEvidence',
+        status: 'live',
+        objectKey: 'inventory-cost-evidence',
+        keywords: ['cost evidence', 'valuation', 'missing cost'],
+      },
+      {
         key: 'inventory-transfer',
         label: 'Stock Transfers',
         description: 'Move stock between shop locations.',

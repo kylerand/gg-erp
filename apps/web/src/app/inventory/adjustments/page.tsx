@@ -10,9 +10,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
 import {
+  createInventoryCostEvidence,
   createInventoryAdjustment,
   listInventoryLots,
   type InventoryAdjustment,
+  type InventoryCostEvidence,
   type InventoryLot,
 } from '@/lib/api-client';
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
@@ -29,6 +31,14 @@ const REASON_VALUES = new Set(REASON_OPTIONS.map((reason) => reason.value));
 
 function formatQuantity(value: number): string {
   return value.toLocaleString(undefined, { maximumFractionDigits: 3 });
+}
+
+function formatMoney(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 function errorMessage(error: unknown): string {
@@ -50,21 +60,26 @@ function parseReasonCode(value: string | null): string {
 
 export default function InventoryAdjustmentsPage() {
   const searchParams = useSearchParams();
+  const costEvidenceMode = searchParams.get('mode') === 'costEvidence';
   const activePartId = searchParams.get('partId') ?? '';
   const activeStockLotId = searchParams.get('stockLotId') ?? '';
   const requestedReasonCode = parseReasonCode(searchParams.get('reasonCode'));
   const requestedNotes = searchParams.get('notes') ?? '';
+  const requestedEvidenceReference = searchParams.get('evidenceReference') ?? '';
   const [lots, setLots] = useState<InventoryLot[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedLotId, setSelectedLotId] = useState('');
   const [lotSearch, setLotSearch] = useState('');
   const [quantityDelta, setQuantityDelta] = useState('');
+  const [unitCost, setUnitCost] = useState('');
   const [reasonCode, setReasonCode] = useState(requestedReasonCode);
   const [notes, setNotes] = useState(requestedNotes);
+  const [evidenceReference, setEvidenceReference] = useState(requestedEvidenceReference);
   const [posting, setPosting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [postedAdjustment, setPostedAdjustment] = useState<InventoryAdjustment | null>(null);
+  const [postedCostEvidence, setPostedCostEvidence] = useState<InventoryCostEvidence | null>(null);
 
   const loadLots = useCallback(async () => {
     setLoading(true);
@@ -96,7 +111,8 @@ export default function InventoryAdjustmentsPage() {
   useEffect(() => {
     setReasonCode(requestedReasonCode);
     setNotes(requestedNotes);
-  }, [requestedNotes, requestedReasonCode]);
+    setEvidenceReference(requestedEvidenceReference);
+  }, [requestedEvidenceReference, requestedNotes, requestedReasonCode]);
 
   const lotOptions = useMemo(() => {
     const query = lotSearch.trim().toLowerCase();
@@ -112,38 +128,65 @@ export default function InventoryAdjustmentsPage() {
 
   const selectedLot = lots.find((lot) => lot.id === selectedLotId);
   const parsedDelta = Number(quantityDelta);
+  const parsedUnitCost = Number(unitCost);
   const countedQuantity =
-    selectedLot && Number.isFinite(parsedDelta) ? selectedLot.quantityOnHand + parsedDelta : null;
+    selectedLot && !costEvidenceMode && Number.isFinite(parsedDelta)
+      ? selectedLot.quantityOnHand + parsedDelta
+      : null;
+  const evidenceValue =
+    selectedLot && costEvidenceMode && Number.isFinite(parsedUnitCost) && parsedUnitCost > 0
+      ? selectedLot.quantityOnHand * parsedUnitCost
+      : null;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setActionError(null);
     setPostedAdjustment(null);
+    setPostedCostEvidence(null);
 
     if (!selectedLotId) {
       setActionError('Select a stock lot.');
       return;
     }
-    if (!Number.isFinite(parsedDelta) || parsedDelta === 0) {
-      setActionError('Quantity change must be non-zero.');
-      return;
-    }
-    if (!reasonCode) {
-      setActionError('Select a reason.');
-      return;
+    if (costEvidenceMode) {
+      if (!Number.isFinite(parsedUnitCost) || parsedUnitCost <= 0) {
+        setActionError('Unit cost must be greater than zero.');
+        return;
+      }
+    } else {
+      if (!Number.isFinite(parsedDelta) || parsedDelta === 0) {
+        setActionError('Quantity change must be non-zero.');
+        return;
+      }
+      if (!reasonCode) {
+        setActionError('Select a reason.');
+        return;
+      }
     }
 
     setPosting(true);
     try {
-      const adjustment = await createInventoryAdjustment({
-        stockLotId: selectedLotId,
-        quantityDelta: parsedDelta,
-        reasonCode,
-        notes: notes.trim() || undefined,
-      });
-      setPostedAdjustment(adjustment);
-      setQuantityDelta('');
-      setNotes('');
+      if (costEvidenceMode) {
+        const costEvidence = await createInventoryCostEvidence({
+          stockLotId: selectedLotId,
+          unitCost: parsedUnitCost,
+          reasonCode: 'COST_EVIDENCE',
+          evidenceReference: evidenceReference.trim() || undefined,
+        });
+        setPostedCostEvidence(costEvidence);
+        setUnitCost('');
+        setEvidenceReference('');
+      } else {
+        const adjustment = await createInventoryAdjustment({
+          stockLotId: selectedLotId,
+          quantityDelta: parsedDelta,
+          reasonCode,
+          notes: notes.trim() || undefined,
+        });
+        setPostedAdjustment(adjustment);
+        setQuantityDelta('');
+        setNotes('');
+      }
       await loadLots();
     } catch (error) {
       setActionError(errorMessage(error));
@@ -155,16 +198,28 @@ export default function InventoryAdjustmentsPage() {
   return (
     <div>
       <PageHeader
-        title="Stock Adjustments"
-        description="Post controlled on-hand corrections against live inventory lots"
+        title={costEvidenceMode ? 'Cost Evidence' : 'Stock Adjustments'}
+        description={
+          costEvidenceMode
+            ? 'Post ledger-backed unit cost evidence against live stocked lots'
+            : 'Post controlled on-hand corrections against live inventory lots'
+        }
       />
 
       <div className="mb-6 flex flex-wrap gap-2">
         <Link
-          href={erpRoute('inventory-ledger', { movementType: 'ADJUSTMENT' })}
+          href={erpRoute('inventory-ledger', {
+            movementType: costEvidenceMode ? 'COST_EVIDENCE' : 'ADJUSTMENT',
+          })}
           className="inline-flex h-7 items-center rounded-md border border-gray-200 bg-white px-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
         >
-          Adjustment Ledger
+          {costEvidenceMode ? 'Cost Evidence Ledger' : 'Adjustment Ledger'}
+        </Link>
+        <Link
+          href={erpRoute(costEvidenceMode ? 'inventory-adjustment' : 'inventory-cost-evidence')}
+          className="inline-flex h-7 items-center rounded-md border border-gray-200 bg-white px-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          {costEvidenceMode ? 'Stock Adjustments' : 'Cost Evidence'}
         </Link>
         <Link
           href={erpRoute('inventory-ledger')}
@@ -181,7 +236,9 @@ export default function InventoryAdjustmentsPage() {
       {activePartId && (
         <div className="mb-6 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
           <span className="font-medium text-amber-950">
-            Filtered to available lots for the selected part.
+            {costEvidenceMode
+              ? 'Filtered to available lots needing valuation review for the selected part.'
+              : 'Filtered to available lots for the selected part.'}
           </span>
           <div className="flex flex-wrap gap-2">
             <Link
@@ -212,7 +269,11 @@ export default function InventoryAdjustmentsPage() {
       ) : lots.length === 0 ? (
         <EmptyState
           title="No adjustable lots"
-          description="Receive inventory before posting stock corrections."
+          description={
+            costEvidenceMode
+              ? 'Receive inventory before posting cost evidence.'
+              : 'Receive inventory before posting stock corrections.'
+          }
         />
       ) : (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -235,45 +296,73 @@ export default function InventoryAdjustmentsPage() {
               onChange={setSelectedLotId}
             />
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-gray-700">Quantity change</span>
-                <Input
-                  type="number"
-                  step="0.001"
-                  value={quantityDelta}
-                  onChange={(event) => setQuantityDelta(event.target.value)}
-                  placeholder="-1 or 1"
-                  required
-                />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-gray-700">Reason</span>
-                <select
-                  value={reasonCode}
-                  onChange={(event) => setReasonCode(event.target.value)}
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  required
-                >
-                  {REASON_OPTIONS.map((reason) => (
-                    <option key={reason.value} value={reason.value}>
-                      {reason.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+            {costEvidenceMode ? (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <label className="space-y-1.5">
+                  <span className="text-sm font-medium text-gray-700">Unit cost</span>
+                  <Input
+                    type="number"
+                    step="0.0001"
+                    min="0.0001"
+                    value={unitCost}
+                    onChange={(event) => setUnitCost(event.target.value)}
+                    placeholder="12.50"
+                    required
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-sm font-medium text-gray-700">Evidence reference</span>
+                  <Input
+                    value={evidenceReference}
+                    onChange={(event) => setEvidenceReference(event.target.value)}
+                    maxLength={160}
+                    placeholder="Receipt, invoice, vendor quote, or manager approval"
+                  />
+                </label>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <label className="space-y-1.5">
+                    <span className="text-sm font-medium text-gray-700">Quantity change</span>
+                    <Input
+                      type="number"
+                      step="0.001"
+                      value={quantityDelta}
+                      onChange={(event) => setQuantityDelta(event.target.value)}
+                      placeholder="-1 or 1"
+                      required
+                    />
+                  </label>
+                  <label className="space-y-1.5">
+                    <span className="text-sm font-medium text-gray-700">Reason</span>
+                    <select
+                      value={reasonCode}
+                      onChange={(event) => setReasonCode(event.target.value)}
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      required
+                    >
+                      {REASON_OPTIONS.map((reason) => (
+                        <option key={reason.value} value={reason.value}>
+                          {reason.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
 
-            <label className="space-y-1.5">
-              <span className="text-sm font-medium text-gray-700">Notes</span>
-              <textarea
-                value={notes}
-                onChange={(event) => setNotes(event.target.value)}
-                rows={4}
-                maxLength={1000}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              />
-            </label>
+                <label className="space-y-1.5">
+                  <span className="text-sm font-medium text-gray-700">Notes</span>
+                  <textarea
+                    value={notes}
+                    onChange={(event) => setNotes(event.target.value)}
+                    rows={4}
+                    maxLength={1000}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  />
+                </label>
+              </>
+            )}
 
             {actionError && (
               <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
@@ -288,10 +377,23 @@ export default function InventoryAdjustmentsPage() {
                 </span>
               </div>
             )}
+            {postedCostEvidence && (
+              <div className="flex items-start gap-2 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+                <CheckCircle2 className="mt-0.5 h-4 w-4" />
+                <span>
+                  Posted cost evidence for {postedCostEvidence.partSku} at{' '}
+                  {formatMoney(postedCostEvidence.unitCost)}.
+                </span>
+              </div>
+            )}
 
             <Button type="submit" disabled={posting}>
               <SlidersHorizontal className="mr-2 h-4 w-4" />
-              {posting ? 'Posting...' : 'Post Adjustment'}
+              {posting
+                ? 'Posting...'
+                : costEvidenceMode
+                  ? 'Post Cost Evidence'
+                  : 'Post Adjustment'}
             </Button>
           </form>
 
@@ -313,7 +415,9 @@ export default function InventoryAdjustmentsPage() {
                 </dd>
               </div>
               <div>
-                <dt className="text-gray-500">After posting</dt>
+                <dt className="text-gray-500">
+                  {costEvidenceMode ? 'Unit cost evidence' : 'After posting'}
+                </dt>
                 <dd
                   className={
                     countedQuantity !== null && countedQuantity < 0
@@ -321,9 +425,23 @@ export default function InventoryAdjustmentsPage() {
                       : 'font-medium text-gray-900'
                   }
                 >
-                  {countedQuantity === null ? '-' : formatQuantity(countedQuantity)}
+                  {costEvidenceMode
+                    ? Number.isFinite(parsedUnitCost) && parsedUnitCost > 0
+                      ? formatMoney(parsedUnitCost)
+                      : '-'
+                    : countedQuantity === null
+                      ? '-'
+                      : formatQuantity(countedQuantity)}
                 </dd>
               </div>
+              {costEvidenceMode && (
+                <div>
+                  <dt className="text-gray-500">Resulting lot value</dt>
+                  <dd className="font-medium text-gray-900">
+                    {evidenceValue === null ? '-' : formatMoney(evidenceValue)}
+                  </dd>
+                </div>
+              )}
               <div>
                 <dt className="text-gray-500">Reserved</dt>
                 <dd className="font-medium text-gray-900">

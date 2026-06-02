@@ -747,6 +747,7 @@ const INVENTORY_LEDGER_MOVEMENT_TYPES = [
   'TRANSFER_IN',
   'ADJUSTMENT',
   'CYCLE_COUNT',
+  'COST_EVIDENCE',
   'REVERSAL',
 ] as const;
 
@@ -938,6 +939,13 @@ interface CreateInventoryAdjustmentInput {
   notes?: string;
 }
 
+interface CreateInventoryCostEvidenceInput {
+  stockLotId: string;
+  unitCost: number;
+  reasonCode?: string;
+  evidenceReference?: string;
+}
+
 interface CreateInventoryTransferInput {
   stockLotId: string;
   quantity: number;
@@ -999,6 +1007,37 @@ interface InventoryAdjustmentResponse {
   countedQuantity: number;
   reasonCode: string;
   notes?: string;
+  ledgerEntryId: string;
+  postedAt: string;
+  correlationId: string;
+}
+
+interface InventoryCostEvidenceLotRow {
+  stockLotId: string;
+  lotNumber: string | null;
+  lotState: string;
+  partId: string;
+  partSku: string;
+  partName: string;
+  stockLocationId: string;
+  locationName: string;
+  quantityOnHand: unknown;
+}
+
+interface InventoryCostEvidenceResponse {
+  id: string;
+  stockLotId: string;
+  lotNumber?: string;
+  partId: string;
+  partSku: string;
+  partName: string;
+  stockLocationId: string;
+  locationName: string;
+  quantityOnHand: number;
+  unitCost: number;
+  valueDelta: number;
+  reasonCode: string;
+  evidenceReference?: string;
   ledgerEntryId: string;
   postedAt: string;
   correlationId: string;
@@ -1140,6 +1179,15 @@ class ReservationCommandError extends Error {
 }
 
 class AdjustmentCommandError extends Error {
+  constructor(
+    readonly statusCode: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+class CostEvidenceCommandError extends Error {
   constructor(
     readonly statusCode: number,
     message: string,
@@ -1807,6 +1855,107 @@ export const inventoryAdjustmentCommands = {
         countedQuantity,
         reasonCode,
         notes,
+        ledgerEntryId,
+        postedAt: postedAt.toISOString(),
+        correlationId,
+      };
+    });
+  },
+};
+
+export const inventoryCostEvidenceCommands = {
+  async createCostEvidence(
+    input: CreateInventoryCostEvidenceInput,
+    correlationId: string,
+  ): Promise<InventoryCostEvidenceResponse> {
+    const reasonCode = input.reasonCode?.trim().toUpperCase() || 'COST_EVIDENCE';
+    const evidenceReference = input.evidenceReference?.trim() || undefined;
+
+    return getInventoryPrisma().$transaction(async (tx) => {
+      const lots = await tx.$queryRaw<InventoryCostEvidenceLotRow[]>`
+        SELECT
+          lot.id::text AS "stockLotId",
+          lot.lot_number AS "lotNumber",
+          lot.lot_state AS "lotState",
+          p.id::text AS "partId",
+          p.sku AS "partSku",
+          p.name AS "partName",
+          loc.id::text AS "stockLocationId",
+          loc.location_name AS "locationName",
+          bal.quantity_on_hand AS "quantityOnHand"
+        FROM inventory.stock_lots lot
+        JOIN inventory.parts p ON p.id = lot.part_id
+        JOIN inventory.stock_locations loc ON loc.id = lot.stock_location_id
+        JOIN inventory.inventory_balances bal
+          ON bal.stock_lot_id = lot.id
+         AND bal.stock_location_id = lot.stock_location_id
+        WHERE lot.id = ${input.stockLotId}::uuid
+        FOR UPDATE OF lot, bal
+      `;
+      const lot = lots[0];
+      if (!lot) {
+        throw new CostEvidenceCommandError(404, `Stock lot not found: ${input.stockLotId}`);
+      }
+      if (lot.lotState === 'CONSUMED' || lot.lotState === 'CLOSED') {
+        throw new CostEvidenceCommandError(
+          409,
+          `Stock lot cannot accept cost evidence in ${lot.lotState} state.`,
+        );
+      }
+
+      const quantityOnHand = numberFromDb(lot.quantityOnHand);
+      if (quantityOnHand <= 0) {
+        throw new CostEvidenceCommandError(
+          409,
+          'Cost evidence requires a stock lot with on-hand quantity.',
+        );
+      }
+
+      const postedAt = new Date();
+      const valueDelta = Number((quantityOnHand * input.unitCost).toFixed(4));
+      const ledgerEntryId = await appendInventoryLedgerEntry(tx, {
+        partId: lot.partId,
+        stockLocationId: lot.stockLocationId,
+        stockLotId: lot.stockLotId,
+        movementType: 'COST_EVIDENCE',
+        quantityDelta: 0,
+        unitCost: input.unitCost,
+        valueDelta,
+        reasonCode,
+        sourceDocumentType: 'INVENTORY_COST_EVIDENCE',
+        sourceDocumentId: evidenceReference ?? null,
+        correlationId,
+      });
+
+      const updatedBalances = await tx.$queryRaw<Array<{ id: string }>>`
+        UPDATE inventory.inventory_balances
+        SET
+          last_ledger_entry_id = ${ledgerEntryId}::uuid,
+          updated_at = now(),
+          last_correlation_id = ${correlationId},
+          version = version + 1
+        WHERE stock_lot_id = ${lot.stockLotId}::uuid
+          AND stock_location_id = ${lot.stockLocationId}::uuid
+        RETURNING id::text AS "id"
+      `;
+      if (updatedBalances.length === 0) {
+        throw new CostEvidenceCommandError(409, 'Inventory balance could not be updated.');
+      }
+
+      return {
+        id: ledgerEntryId,
+        stockLotId: lot.stockLotId,
+        lotNumber: lot.lotNumber ?? undefined,
+        partId: lot.partId,
+        partSku: lot.partSku,
+        partName: lot.partName,
+        stockLocationId: lot.stockLocationId,
+        locationName: lot.locationName,
+        quantityOnHand,
+        unitCost: input.unitCost,
+        valueDelta,
+        reasonCode,
+        evidenceReference,
         ledgerEntryId,
         postedAt: postedAt.toISOString(),
         correlationId,
@@ -2684,6 +2833,20 @@ async function handleInventoryAdjustmentCommand(command: Promise<InventoryAdjust
   }
 }
 
+async function handleInventoryCostEvidenceCommand(
+  command: Promise<InventoryCostEvidenceResponse>,
+) {
+  try {
+    const costEvidence = await command;
+    return jsonResponse(201, { costEvidence });
+  } catch (error) {
+    if (error instanceof CostEvidenceCommandError) {
+      return jsonResponse(error.statusCode, { message: error.message });
+    }
+    throw error;
+  }
+}
+
 async function handleInventoryTransferCommand(command: Promise<InventoryTransferResponse>) {
   try {
     const transfer = await command;
@@ -3133,6 +3296,23 @@ function validateCreateInventoryAdjustmentInput(
   }
   if (input.notes !== undefined && input.notes.length > 1000) {
     return 'notes must be 1000 characters or fewer.';
+  }
+  return undefined;
+}
+
+function validateCreateInventoryCostEvidenceInput(
+  input: CreateInventoryCostEvidenceInput,
+): string | undefined {
+  const stockLotId = parseOptionalUuid(input.stockLotId, 'stockLotId');
+  if (stockLotId.error || !stockLotId.value) return stockLotId.error ?? 'stockLotId is required.';
+  if (!Number.isFinite(input.unitCost) || input.unitCost <= 0) {
+    return 'unitCost must be greater than zero.';
+  }
+  if (input.reasonCode !== undefined && input.reasonCode.trim().length > 80) {
+    return 'reasonCode must be 80 characters or fewer.';
+  }
+  if (input.evidenceReference !== undefined && input.evidenceReference.length > 160) {
+    return 'evidenceReference must be 160 characters or fewer.';
   }
   return undefined;
 }
@@ -4161,6 +4341,21 @@ export const createInventoryAdjustmentHandler = wrapHandler(
 
     return handleInventoryAdjustmentCommand(
       inventoryAdjustmentCommands.createAdjustment(body.value, ctx.correlationId),
+    );
+  },
+  { requireAuth: false },
+);
+
+export const createInventoryCostEvidenceHandler = wrapHandler(
+  async (ctx) => {
+    const body = parseBody<CreateInventoryCostEvidenceInput>(ctx.event);
+    if (!body.ok) return jsonResponse(400, { message: body.error });
+
+    const validation = validateCreateInventoryCostEvidenceInput(body.value);
+    if (validation) return jsonResponse(422, { message: validation });
+
+    return handleInventoryCostEvidenceCommand(
+      inventoryCostEvidenceCommands.createCostEvidence(body.value, ctx.correlationId),
     );
   },
   { requireAuth: false },

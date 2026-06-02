@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertTriangle,
+  BadgeDollarSign,
   CheckSquare,
   ClipboardCheck,
   Clipboard,
@@ -124,6 +125,7 @@ interface PartExceptionHandoffRow {
   valuationSource: string;
   partUrl: string;
   ledgerUrl: string;
+  costEvidenceUrl: string;
   cycleCountUrl: string;
   stockAdjustmentUrl: string;
   purchaseOrderUrl: string;
@@ -183,6 +185,7 @@ const PART_EXCEPTION_HANDOFF_COLUMNS: CsvColumn<PartExceptionHandoffRow>[] = [
   { header: 'valuationSource', value: (row) => row.valuationSource },
   { header: 'partUrl', value: (row) => row.partUrl },
   { header: 'ledgerUrl', value: (row) => row.ledgerUrl },
+  { header: 'costEvidenceUrl', value: (row) => row.costEvidenceUrl },
   { header: 'cycleCountUrl', value: (row) => row.cycleCountUrl },
   { header: 'stockAdjustmentUrl', value: (row) => row.stockAdjustmentUrl },
   { header: 'purchaseOrderUrl', value: (row) => row.purchaseOrderUrl },
@@ -260,6 +263,13 @@ function buildPartActionHrefs(part: Part) {
   return {
     partUrl: erpRecordRoute('part', part.id),
     ledgerUrl: erpRoute('inventory-ledger', { partId: part.id }),
+    costEvidenceUrl:
+      partNeedsCostEvidence(part) && partCanStockAudit(part)
+        ? erpRoute('inventory-cost-evidence', {
+            partId: part.id,
+            evidenceReference: `Cost evidence for ${part.sku}.`,
+          })
+        : '',
     cycleCountUrl: partCanStockAudit(part)
       ? erpRoute('cycle-count', {
           partId: part.id,
@@ -611,6 +621,10 @@ export default function PartsPage() {
   );
   const firstSelectedPart = selectedParts[0];
   const firstSelectedHrefs = firstSelectedPart ? buildPartActionHrefs(firstSelectedPart) : null;
+  const firstMissingCostPart = selectedParts.find((part) => partNeedsCostEvidence(part));
+  const firstCostEvidenceHref = firstMissingCostPart
+    ? buildPartActionHrefs(firstMissingCostPart).costEvidenceUrl
+    : '';
   const firstReorderPart = selectedParts.find(partNeedsReorder);
   const firstReorderHref = firstReorderPart
     ? buildPartActionHrefs(firstReorderPart).purchaseOrderUrl
@@ -709,6 +723,7 @@ export default function PartsPage() {
           )})`,
           `Part: ${hrefs.partUrl}`,
           `Ledger: ${hrefs.ledgerUrl}`,
+          hrefs.costEvidenceUrl ? `Cost evidence: ${hrefs.costEvidenceUrl}` : '',
           hrefs.cycleCountUrl ? `Cycle count: ${hrefs.cycleCountUrl}` : '',
           hrefs.stockAdjustmentUrl ? `Adjustment: ${hrefs.stockAdjustmentUrl}` : '',
           hrefs.purchaseOrderUrl ? `Purchase order: ${hrefs.purchaseOrderUrl}` : '',
@@ -1219,6 +1234,15 @@ export default function PartsPage() {
                 First ledger
               </Link>
             )}
+            {firstCostEvidenceHref && (
+              <Link
+                href={firstCostEvidenceHref}
+                className="inline-flex h-8 items-center rounded-md border border-amber-200 bg-white px-2 text-xs font-semibold text-gray-700 hover:border-yellow-400"
+              >
+                <BadgeDollarSign className="mr-1 h-3.5 w-3.5" />
+                First cost
+              </Link>
+            )}
             {firstStockAuditHrefs?.cycleCountUrl && (
               <Link
                 href={firstStockAuditHrefs.cycleCountUrl}
@@ -1425,6 +1449,18 @@ export default function PartsPage() {
                               <History className="mr-1 h-3.5 w-3.5" />
                               Ledger
                             </Link>
+                            {partNeedsCostEvidence(p) && (p.quantityOnHand ?? 0) > 0 && (
+                              <Link
+                                href={erpRoute('inventory-cost-evidence', {
+                                  partId: p.id,
+                                  evidenceReference: `Cost evidence for ${p.sku}.`,
+                                })}
+                                className="inline-flex h-8 items-center rounded-md border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-700 hover:border-yellow-400"
+                              >
+                                <BadgeDollarSign className="mr-1 h-3.5 w-3.5" />
+                                Cost
+                              </Link>
+                            )}
                             {(p.quantityOnHand ?? 0) > 0 && (
                               <Link
                                 href={erpRoute('cycle-count', {

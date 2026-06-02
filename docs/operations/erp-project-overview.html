@@ -357,24 +357,25 @@
           reimbursement accounting ledger work, deployed provider document evidence work, deployed
           inventory part editing work, deployed inventory valuation rollups, deployed valuation
           exception drilldown work, deployed valuation exception handoff work, deployed selected-row
-          exception workbench work, deployed cost evidence posting work, and active package-level
-          ECO sign-off work. The app has moved past polished static screens into a usable
-          shop-ops ERP foundation, but ShopMonkey cutover remains blocked until complete parts and
-          purchase-order source exports are captured.
+          exception workbench work, deployed cost evidence posting work, deployed package-level ECO
+          sign-off work, and read-only ShopMonkey cutover source enrichment. The app has moved past
+          polished static screens into a usable shop-ops ERP foundation; ShopMonkey cutover has moved
+          from missing-source blocked to shared-staging review after parts and purchase orders passed
+          preflight and the isolated loader rehearsal passed with zero migration errors.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 2, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 200</span>
-          <span class="chip">Active slice: Package-level ECO sign-off</span>
+          <span class="chip">Baseline: origin/main through PR 202</span>
+          <span class="chip">Active slice: ShopMonkey cutover source evidence</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
 
       <div class="summary">
         <div class="metric">
-          <strong>84%</strong>
+          <strong>86%</strong>
           <span>Estimated production readiness for an internal ERP rollout.</span>
-          <div class="bar warn"><span style="width: 84%"></span></div>
+          <div class="bar warn"><span style="width: 86%"></span></div>
         </div>
         <div class="metric">
           <strong>94%</strong>
@@ -382,9 +383,9 @@
           <div class="bar good"><span style="width: 94%"></span></div>
         </div>
         <div class="metric">
-          <strong>84%</strong>
+          <strong>86%</strong>
           <span>Live workflow/API contract completeness.</span>
-          <div class="bar warn"><span style="width: 84%"></span></div>
+          <div class="bar warn"><span style="width: 86%"></span></div>
         </div>
         <div class="metric">
           <strong>66%</strong>
@@ -445,17 +446,19 @@
             <h3>What still keeps this from full production confidence</h3>
             <ul>
               <li>
-                ShopMonkey cutover evidence now fails honestly because the current export has zero
-                inventory parts and zero purchase orders. Those source domains must be exported
-                before shared staging or production cutover.
+                ShopMonkey cutover is no longer blocked on zero inventory parts or zero purchase
+                orders: read-only source enrichment produced 100 valid parts and 11 valid purchase
+                orders, the preflight moved to WARN, and the isolated loader rehearsal passed.
+                Remaining cutover confidence depends on warning-row review, full parts coverage
+                reconciliation, and shared staging UAT.
               </li>
               <li>
                 Planning now has routing/job-card, build-configuration, and BOM masters with
                 effective windows, costing metadata, QC/evidence seeding, and approval history.
                 Work-order execution now links back to the source configuration, BOM, route
                 template, and ECO history, released packages now expose a live ECO review pack, and
-                this branch adds persisted package-level sign-off evidence before packages are
-                accepted for production use.
+                deployed package-level sign-off evidence is required before packages are accepted for
+                production use.
               </li>
               <li>
                 Accounting is still integration-first, but ready operational ledger entries now
@@ -517,16 +520,16 @@
               </td>
               <td>June 20, 2026</td>
               <td>
-                <span class="pill doing">66%</span>
-                <div class="bar warn"><span style="width: 66%"></span></div>
+                <span class="pill doing">70%</span>
+                <div class="bar warn"><span style="width: 70%"></span></div>
               </td>
               <td>
                 Sales, work orders, inventory, purchasing, training, reporting, and admin can run a
                 real internal pilot.
               </td>
               <td>
-                Finish dispatch execution hardening, technician/rework contract coverage, migration
-                validation, and role permissions audit.
+                Finish shared staging cutover UAT, role permissions audit, and live role-based UAT
+                scripts against imported data.
               </td>
             </tr>
             <tr>
@@ -636,9 +639,9 @@
           <div class="module-card">
             <header>
               <h3>Planning Masters</h3>
-              <span class="pill doing">88%</span>
+              <span class="pill done">92%</span>
             </header>
-            <div class="bar good"><span style="width: 88%"></span></div>
+            <div class="bar good"><span style="width: 92%"></span></div>
             <p>
               Build package selection no longer depends only on historical work orders. Operators
               can author build configurations, lock/release them, create BOM revisions from active
@@ -650,10 +653,10 @@
               expose full engineering-change history through a dedicated route. Work orders now
               surface their source configuration, BOM, route template, and ECO history. Released
               packages now open an ECO review pack with BOM lines, active routes, approval evidence,
-              and a copyable summary. This branch adds note-backed package sign-off records tied to
-              released configuration and approved BOM pairs, and work-order creation is blocked
-              until that sign-off exists; remaining depth is external review-pack delivery if change
-              volume requires it.
+              and a copyable summary. Note-backed package sign-off records are deployed for released
+              configuration and approved BOM pairs, and work-order creation is blocked until that
+              sign-off exists; remaining depth is external review-pack delivery if change volume
+              requires it.
             </p>
           </div>
 
@@ -738,13 +741,14 @@
           <div class="module-card">
             <header>
               <h3>Migration And Data Readiness</h3>
-              <span class="pill watch">45%</span>
+              <span class="pill doing">62%</span>
             </header>
-            <div class="bar risk"><span style="width: 45%"></span></div>
+            <div class="bar warn"><span style="width: 62%"></span></div>
             <p>
-              ShopMonkey migration framework and reference seed gates exist. Current cutover
-              evidence is intentionally blocked because the export has zero parts and zero purchase
-              orders; complete source coverage and shared staging UAT are still required.
+              ShopMonkey migration framework and reference seed gates exist. Read-only source
+              enrichment moved parts and purchase orders through preflight, and the disposable
+              rehearsal now passes with zero migration errors. Complete parts coverage
+              reconciliation, warning-row review, and shared staging UAT are still required.
             </p>
           </div>
 
@@ -778,27 +782,28 @@
               <td>Latest production baseline</td>
               <td><span class="pill done">Merged</span></td>
               <td>
-                <code>origin/main</code> is through PR 200 after inventory cost evidence posting
-                passed hosted CI, QA, Pages, and CD. This branch layers package-level ECO sign-off
-                on top of that deployed production baseline.
+                <code>origin/main</code> is through PR 202 after package-level ECO sign-off deployed,
+                the temporary sign-off API-smoke allowance was removed, and main CI, QA, and Pages
+                passed for the cleanup merge. This branch layers ShopMonkey cutover source evidence
+                on top of that baseline.
               </td>
             </tr>
             <tr>
               <td>Recent pipeline health</td>
               <td><span class="pill done">Green</span></td>
               <td>
-                Latest main CI, QA smoke, QA coverage, Pages, and CD completed successfully after PR
-                200 merged. The current package sign-off branch has passed focused API and web
-                regression checks locally before PR validation.
+                Latest main CI, QA smoke, QA coverage, and Pages completed successfully after PR 202
+                merged. The current ShopMonkey source-evidence branch has passed preflight and an
+                isolated disposable-database rehearsal locally before PR validation.
               </td>
             </tr>
             <tr>
               <td>Route/API surface</td>
               <td><span class="pill info">Broad</span></td>
               <td>
-                Deployed main covers 201 API routes; this branch adds
-                <code>POST /planning/build-packages/signoffs</code>
-                to the planned route surface.
+                Deployed main covers the package sign-off API route, and this branch changes the
+                migration sanitizer plus counts-only evidence artifacts without adding runtime
+                routes.
               </td>
             </tr>
             <tr>
@@ -833,9 +838,9 @@
         <h2>Recommended Next Slice</h2>
         <ol>
           <li>
-            <strong>Capture missing ShopMonkey source domains:</strong> export inventory parts and
-            purchase orders, rerun preflight and isolated rehearsal to PASS, then run shared staging
-            cutover UAT from that complete source baseline.
+            <strong>Run shared ShopMonkey staging cutover UAT:</strong> reconcile the one customer
+            warning, 68 work-order warnings, absent line-item assignments, and the
+            237-reported/100-collected parts API coverage before production cutover.
           </li>
           <li>
             <strong>Keep production blockers closed:</strong> continue verifying
@@ -843,10 +848,9 @@
             in live UAT runs.
           </li>
           <li>
-            <strong>Deepen planning execution:</strong> deploy package-level ECO sign-off, then keep
-            external review-pack delivery only if the current route/configuration/BOM approval
-            history, work-order provenance, and version diff workflows need a heavier change-control
-            gate.
+            <strong>Deepen planning execution only as needed:</strong> keep external review-pack
+            delivery as an option if the current route/configuration/BOM approval history,
+            work-order provenance, and version diff workflows need a heavier change-control gate.
           </li>
           <li>
             <strong>Deepen inventory master data:</strong> validate cost evidence posting in UAT,
@@ -865,8 +869,8 @@
           </li>
           <li>
             The MVP implementation tracker and the actionability tracker now both mark ShopMonkey
-            cutover as blocked on missing source coverage rather than treating the partial rehearsal
-            as cutover-ready.
+            cutover as in review: no longer blocked on zero parts or purchase orders, but not ready
+            for production until staging UAT and coverage reconciliation finish.
           </li>
           <li>
             The product direction remains "Shop Ops ERP": ERPNext-informed architecture, current

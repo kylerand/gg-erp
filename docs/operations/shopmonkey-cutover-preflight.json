@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-06-01T08:35:53.257Z",
-  "sourceFile": "shopmonkey-sanitized-1773274402708.json",
-  "sourceChecksum": "74b65ace228ddec8c98c5d0d7b869db4e296261037d3c22d8415d0ce44d518cc",
-  "overallStatus": "FAIL",
+  "generatedAt": "2026-06-02T11:29:43.938Z",
+  "sourceFile": "gg-erp-shopmonkey-enriched-sanitized.json",
+  "sourceChecksum": "fd50bbc231e4d8d17899a295b18767b886e15f1360030ad2cac7f89f7350c52e",
+  "overallStatus": "WARN",
   "totals": {
-    "entitiesPresent": 5,
-    "totalRows": 1021,
-    "validRows": 952,
+    "entitiesPresent": 7,
+    "totalRows": 1132,
+    "validRows": 1063,
     "warnedRows": 69,
     "skippedRows": 0
   },
@@ -69,24 +69,24 @@
     {
       "key": "parts",
       "label": "Parts",
-      "status": "FAIL",
-      "total": 0,
-      "valid": 0,
+      "status": "PASS",
+      "total": 100,
+      "valid": 100,
       "warned": 0,
       "skipped": 0,
-      "validRatio": 0,
-      "detail": "Parts data is missing from the export."
+      "validRatio": 1,
+      "detail": "Parts meets the preflight coverage gate."
     },
     {
       "key": "purchaseOrders",
       "label": "Purchase Orders",
-      "status": "FAIL",
-      "total": 0,
-      "valid": 0,
+      "status": "PASS",
+      "total": 11,
+      "valid": 11,
       "warned": 0,
       "skipped": 0,
-      "validRatio": 0,
-      "detail": "Purchase Orders data is missing from the export."
+      "validRatio": 1,
+      "detail": "Purchase Orders meets the preflight coverage gate."
     },
     {
       "key": "lineItemAssignments",
@@ -101,8 +101,6 @@
     }
   ],
   "nextActions": [
-    "Repair failed gates: Parts, Purchase Orders.",
-    "Capture ShopMonkey source rows for Parts, Purchase Orders before any shared staging or production cutover.",
     "Review warning gates: Customers, Work Orders, Line Item Assignments.",
     "Run the loader against an isolated staging database and capture row-count reconciliation.",
     "Compare imported customers, carts, work orders, parts, vendors, and accounting sync queues in the ERP UI."

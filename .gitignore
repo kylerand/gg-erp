@@ -40,3 +40,4 @@ yarn-error.log*
 
 # Large data exports
 shopmonkey-export-*.json
+shopmonkey-sanitized-*.json

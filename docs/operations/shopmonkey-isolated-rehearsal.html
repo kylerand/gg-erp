@@ -152,15 +152,15 @@
         <div>
           <p class="muted">Disposable database load evidence</p>
           <h1>ShopMonkey Isolated Rehearsal</h1>
-          <p class="muted">Source: packages/migration/shopmonkey-sanitized-1773274402708.json (sanitized-report)</p>
+          <p class="muted">Source: gg-erp-shopmonkey-enriched-sanitized.json (sanitized-report)</p>
         </div>
-        <div class="stamp">Generated: 2026-06-01T08:36:11.857Z</div>
+        <div class="stamp">Generated: 2026-06-02T11:35:00.841Z</div>
       </header>
 
       <div class="summary">
-        <div class="metric"><strong class="fail">FAIL</strong><span>Overall status</span></div>
-        <div class="metric"><strong>5</strong><span>Passed entity gates</span></div>
-        <div class="metric"><strong>1,021</strong><span>Imported rows</span></div>
+        <div class="metric"><strong class="pass">PASS</strong><span>Overall status</span></div>
+        <div class="metric"><strong>7</strong><span>Passed entity gates</span></div>
+        <div class="metric"><strong>1,133</strong><span>Imported rows</span></div>
         <div class="metric"><strong>8</strong><span>Passed seed gates</span></div>
       </div>
 
@@ -220,27 +220,27 @@
           <td><span class="pill pass">PASS</span></td>
           <td>25</td>
           <td>25</td>
+          <td>26</td>
           <td>25</td>
-          <td>25</td>
-          <td>Vendors loaded 25/25 rows with 25 external ID mappings.</td>
+          <td>Vendors loaded 26/25 rows with 25 external ID mappings.</td>
         </tr>
         <tr>
           <td>Parts</td>
-          <td><span class="pill fail">FAIL</span></td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>Parts has no loadable source rows.</td>
+          <td><span class="pill pass">PASS</span></td>
+          <td>100</td>
+          <td>100</td>
+          <td>100</td>
+          <td>100</td>
+          <td>Parts loaded 100/100 rows with 100 external ID mappings.</td>
         </tr>
         <tr>
           <td>Purchase Orders</td>
-          <td><span class="pill fail">FAIL</span></td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>Purchase Orders has no loadable source rows.</td>
+          <td><span class="pill pass">PASS</span></td>
+          <td>11</td>
+          <td>11</td>
+          <td>11</td>
+          <td>11</td>
+          <td>Purchase Orders loaded 11/11 rows with 11 external ID mappings.</td>
         </tr></tbody>
         </table>
       </section>
@@ -334,22 +334,22 @@
           <td>Start disposable PostgreSQL</td>
           <td><span class="pill pass">PASS</span></td>
           <td>0</td>
-          <td>0.1s</td>
-          <td><code>docker run -d --name gg-erp-shopmonkey-rehearsal-1780302962977-d0c31be8 -p 127.0.0.1::5432 postgres:16-alpine</code></td>
+          <td>0.2s</td>
+          <td><code>docker run -d --name gg-erp-shopmonkey-rehearsal-1780400092827-8f8a8207 -p 127.0.0.1::5432 postgres:16-alpine</code></td>
         </tr>
         <tr>
           <td>Apply Prisma migrations</td>
           <td><span class="pill pass">PASS</span></td>
           <td>0</td>
-          <td>0.9s</td>
+          <td>1.1s</td>
           <td><code>npm run db:deploy --workspace=packages/db</code></td>
         </tr>
         <tr>
           <td>Run ShopMonkey loader</td>
           <td><span class="pill pass">PASS</span></td>
           <td>0</td>
-          <td>6.4s</td>
-          <td><code>npx tsx packages/migration/src/cli/load-shopmonkey.ts packages/migration/shopmonkey-sanitized-1773274402708.json</code></td>
+          <td>5.2s</td>
+          <td><code>npx tsx packages/migration/src/cli/load-shopmonkey.ts gg-erp-shopmonkey-enriched-sanitized.json</code></td>
         </tr></tbody>
         </table>
       </section>
@@ -379,7 +379,7 @@
 
       <section>
         <h2>Next Actions</h2>
-        <ul><li>Repair failed import coverage: Parts, Purchase Orders.</li><li>Rerun the isolated rehearsal before loading any shared staging or production database.</li></ul>
+        <ul><li>Use this isolated rehearsal as the row-count baseline for the next staging cutover run.</li><li>Run operator UAT against imported customers, carts, work orders, vendors, and accounting sync queues.</li></ul>
       </section>
     </main>
   </body>

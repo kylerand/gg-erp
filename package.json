@@ -13,7 +13,7 @@
     "dev:floor-tech": "npm run dev --workspace=apps/floor-tech",
     "dev:api": "npm run dev --workspace=apps/api",
     "dev:workers": "npm run dev --workspace=apps/workers",
-    "test:architecture": "node --test ./packages/test-utils/tests/architecture-files.test.js ./packages/test-utils/tests/plan-progress.test.js ./packages/test-utils/tests/schema-contracts.test.js",
+    "test:architecture": "node --test ./packages/test-utils/tests/architecture-files.test.js ./packages/test-utils/tests/plan-progress.test.js ./packages/test-utils/tests/reconcile-aws-state.test.js ./packages/test-utils/tests/schema-contracts.test.js",
     "test:domain": "npm run test --workspace=packages/domain --if-present",
     "test:api": "tsx --test $(find apps/api/src/tests -name '*.test.ts' -print)",
     "test:web": "npm run test --workspace=apps/web --if-present",

@@ -1699,11 +1699,33 @@ export interface Part {
   quantityAllocated?: number;
   quantityConsumed?: number;
   quantityAvailable?: number;
+  estimatedUnitCost?: number;
+  inventoryValue?: number;
+  shortfallQuantity?: number;
+  shortfallValue?: number;
+  valuationSource?: 'LOT_LEDGER' | 'LATEST_PO' | 'NO_COST';
   location?: string;
 }
 
 export type PartState = Part['partState'];
 export type PartStockFilter = 'OUT';
+
+export interface PartValuationSummary {
+  partCount: number;
+  stockedPartCount: number;
+  totalQuantityOnHand: number;
+  totalQuantityAvailable: number;
+  totalInventoryValue: number;
+  totalShortfallQuantity: number;
+  totalShortfallValue: number;
+  missingCostPartCount: number;
+}
+
+export interface ListPartsResponse {
+  items: Part[];
+  total: number;
+  valuationSummary?: PartValuationSummary;
+}
 
 export const MOCK_PARTS: Part[] = [
   {
@@ -1720,6 +1742,12 @@ export const MOCK_PARTS: Part[] = [
     partState: 'ACTIVE',
     reorderPoint: 2,
     quantityOnHand: 4,
+    quantityAvailable: 4,
+    estimatedUnitCost: 1450,
+    inventoryValue: 5800,
+    shortfallQuantity: 0,
+    shortfallValue: 0,
+    valuationSource: 'LATEST_PO',
     location: 'B-12',
   },
   {
@@ -1736,6 +1764,12 @@ export const MOCK_PARTS: Part[] = [
     partState: 'ACTIVE',
     reorderPoint: 2,
     quantityOnHand: 3,
+    quantityAvailable: 3,
+    estimatedUnitCost: 320,
+    inventoryValue: 960,
+    shortfallQuantity: 0,
+    shortfallValue: 0,
+    valuationSource: 'LOT_LEDGER',
     location: 'A-04',
   },
   {
@@ -1754,6 +1788,12 @@ export const MOCK_PARTS: Part[] = [
     partState: 'ACTIVE',
     reorderPoint: 2,
     quantityOnHand: 1,
+    quantityAvailable: 1,
+    estimatedUnitCost: 340,
+    inventoryValue: 340,
+    shortfallQuantity: 1,
+    shortfallValue: 340,
+    valuationSource: 'LOT_LEDGER',
   },
   {
     id: 'p-4',
@@ -1768,8 +1808,27 @@ export const MOCK_PARTS: Part[] = [
     partState: 'ACTIVE',
     reorderPoint: 1,
     quantityOnHand: 0,
+    quantityAvailable: 0,
+    estimatedUnitCost: 0,
+    inventoryValue: 0,
+    shortfallQuantity: 1,
+    shortfallValue: 0,
+    valuationSource: 'NO_COST',
   },
 ];
+
+const MOCK_PART_VALUATION_SUMMARY: PartValuationSummary = {
+  partCount: MOCK_PARTS.length,
+  stockedPartCount: MOCK_PARTS.filter((part) => (part.quantityOnHand ?? 0) > 0).length,
+  totalQuantityOnHand: MOCK_PARTS.reduce((sum, part) => sum + (part.quantityOnHand ?? 0), 0),
+  totalQuantityAvailable: MOCK_PARTS.reduce((sum, part) => sum + (part.quantityAvailable ?? 0), 0),
+  totalInventoryValue: MOCK_PARTS.reduce((sum, part) => sum + (part.inventoryValue ?? 0), 0),
+  totalShortfallQuantity: MOCK_PARTS.reduce((sum, part) => sum + (part.shortfallQuantity ?? 0), 0),
+  totalShortfallValue: MOCK_PARTS.reduce((sum, part) => sum + (part.shortfallValue ?? 0), 0),
+  missingCostPartCount: MOCK_PARTS.filter(
+    (part) => (part.quantityOnHand ?? 0) > 0 && part.valuationSource === 'NO_COST',
+  ).length,
+};
 
 export interface ListPartsParams {
   search?: string;
@@ -1787,7 +1846,7 @@ export interface ListPartsParams {
 export async function listParts(
   params?: ListPartsParams,
   options?: ApiDataOptions,
-): Promise<{ items: Part[]; total: number }> {
+): Promise<ListPartsResponse> {
   const qs = new URLSearchParams();
   if (params?.search) qs.set('search', params.search);
   if (params?.partState) qs.set('partState', params.partState);
@@ -1805,6 +1864,7 @@ export async function listParts(
     {
       items: MOCK_PARTS,
       total: MOCK_PARTS.length,
+      valuationSummary: MOCK_PART_VALUATION_SUMMARY,
     },
     options,
   );

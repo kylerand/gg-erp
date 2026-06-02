@@ -241,14 +241,14 @@
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: adding row-level inventory part editing after deploying warranty provider
-          evidence and reimbursement follow-through through the accounting operational ledger and
-          immutable journal posting flow. Customer records now show QuickBooks customer-sync and
-          payment-sync activity alongside a combined timeline, derived next actions, writable
-          profile, writable cart, inline activity logging, work-order, quote, opportunity, warranty
-          claim, and accounting context. Warranty claim routes are deployed with no live API route
-          exceptions. ShopMonkey cutover readiness remains blocked on missing parts and
-          purchase-order source exports.
+          Current focus: adding balance-backed inventory valuation rollups after deploying row-level
+          inventory part editing, warranty provider evidence, and reimbursement follow-through
+          through the accounting operational ledger and immutable journal posting flow. Customer
+          records now show QuickBooks customer-sync and payment-sync activity alongside a combined
+          timeline, derived next actions, writable profile, writable cart, inline activity logging,
+          work-order, quote, opportunity, warranty claim, and accounting context. Warranty claim
+          routes are deployed with no live API route exceptions. ShopMonkey cutover readiness
+          remains blocked on missing parts and purchase-order source exports.
         </p>
         <div class="progress" aria-label="97 percent complete"><div style="width: 97%"></div></div>
       </section>
@@ -584,10 +584,10 @@
                 transfers, and cycle-count variance postings.
               </td>
               <td>
-                This branch expands the part update API and part lookup table with row-level item
-                editing for name, description, UOM, minimum stock, status, category, install stage,
-                and lifecycle level. Add accounting valuation rollups after UAT confirms the item
-                review shape.
+                Row-level item editing for name, description, UOM, minimum stock, status, category,
+                install stage, and lifecycle level is deployed. This branch adds balance-backed
+                valuation summaries, per-part stock value, cost evidence, and reorder exposure to
+                the item review shape.
               </td>
             </tr>
             <tr>

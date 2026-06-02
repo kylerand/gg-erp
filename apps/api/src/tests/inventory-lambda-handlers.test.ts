@@ -25,6 +25,24 @@ const TEST_PART_ID = '00000000-0000-4000-8000-000000000005';
 const TEST_LOCATION_ID = '00000000-0000-4000-8000-000000000006';
 const TEST_DESTINATION_LOCATION_ID = '00000000-0000-4000-8000-000000000007';
 
+function partValuationRows(partId = TEST_PART_ID) {
+  return [
+    {
+      partId,
+      quantityOnHand: '5.000',
+      quantityReserved: '1.000',
+      quantityAllocated: '0.000',
+      quantityConsumed: '2.000',
+      quantityAvailable: '4.000',
+      estimatedUnitCost: '25.5000',
+      inventoryValue: '127.5000',
+      shortfallQuantity: '0.000',
+      shortfallValue: '0.0000',
+      valuationSource: 'LOT_LEDGER',
+    },
+  ];
+}
+
 test('listLotsHandler returns inventory lot details for the web contract', async () => {
   const listLotsMock = mock.method(inventoryLotQueries, 'listLots', async () => ({
     items: [
@@ -495,6 +513,66 @@ test('listPartsHandler returns 422 for invalid stock filter', async () => {
   assert.match(response.body, /Invalid stock filter/);
 });
 
+test('listPartsHandler returns balance-backed valuation rollups', async () => {
+  const partId = TEST_PART_ID;
+  const part = {
+    id: partId,
+    sku: 'GG-MADJAX-LIFT',
+    name: 'MadJax lift kit',
+    description: null,
+    unitOfMeasure: 'EA',
+    partState: 'ACTIVE',
+    reorderPoint: 2,
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+    stockLots: [],
+  };
+  const findMany = mock.fn(async (args: { take?: number; select?: { id?: boolean } }) =>
+    args.select ? [{ id: partId }] : [part],
+  );
+  const queryRaw = mock.fn(async () => partValuationRows(partId));
+  const prisma = {
+    part: { findMany },
+    $queryRaw: queryRaw,
+  };
+  setInventoryHandlerPrismaForTests(prisma as never);
+
+  try {
+    const response = await listPartsHandler({
+      httpMethod: 'GET',
+      queryStringParameters: { limit: '25' },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(findMany.mock.calls.length, 2);
+    assert.equal(queryRaw.mock.calls.length, 1);
+
+    const payload = JSON.parse(response.body) as {
+      items: Array<{
+        id: string;
+        quantityOnHand: number;
+        quantityAvailable: number;
+        estimatedUnitCost: number;
+        inventoryValue: number;
+        valuationSource: string;
+      }>;
+      total: number;
+      valuationSummary: { totalInventoryValue: number; missingCostPartCount: number };
+    };
+    assert.equal(payload.total, 1);
+    assert.equal(payload.items[0].id, partId);
+    assert.equal(payload.items[0].quantityOnHand, 5);
+    assert.equal(payload.items[0].quantityAvailable, 4);
+    assert.equal(payload.items[0].estimatedUnitCost, 25.5);
+    assert.equal(payload.items[0].inventoryValue, 127.5);
+    assert.equal(payload.items[0].valuationSource, 'LOT_LEDGER');
+    assert.equal(payload.valuationSummary.totalInventoryValue, 127.5);
+    assert.equal(payload.valuationSummary.missingCostPartCount, 0);
+  } finally {
+    setInventoryHandlerPrismaForTests(undefined);
+  }
+});
+
 test('updatePartHandler assigns an active default vendor to a part', async () => {
   const partId = '11111111-1111-4111-8111-111111111111';
   const vendorId = '22222222-2222-4222-8222-222222222222';
@@ -517,6 +595,7 @@ test('updatePartHandler assigns an active default vendor to a part', async () =>
   const prisma = {
     part: { findFirst: partFindFirst, update: partUpdate },
     vendor: { findFirst: vendorFindFirst },
+    $queryRaw: mock.fn(async () => partValuationRows(partId)),
   };
   setInventoryHandlerPrismaForTests(prisma as never);
 
@@ -541,11 +620,17 @@ test('updatePartHandler assigns an active default vendor to a part', async () =>
     assert.deepEqual(updateArgs.data.version, { increment: 1 });
 
     const payload = JSON.parse(response.body) as {
-      part: { id: string; defaultVendorId?: string; defaultVendorName?: string };
+      part: {
+        id: string;
+        defaultVendorId?: string;
+        defaultVendorName?: string;
+        inventoryValue?: number;
+      };
     };
     assert.equal(payload.part.id, partId);
     assert.equal(payload.part.defaultVendorId, vendorId);
     assert.equal(payload.part.defaultVendorName, 'MadJax');
+    assert.equal(payload.part.inventoryValue, 127.5);
   } finally {
     setInventoryHandlerPrismaForTests(undefined);
   }
@@ -572,6 +657,7 @@ test('updatePartHandler edits core part fields', async () => {
   const prisma = {
     part: { findFirst: partFindFirst, update: partUpdate },
     vendor: { findFirst: mock.fn(async () => null) },
+    $queryRaw: mock.fn(async () => partValuationRows(partId)),
   };
   setInventoryHandlerPrismaForTests(prisma as never);
 
@@ -620,6 +706,7 @@ test('updatePartHandler edits core part fields', async () => {
         installStage?: string;
         lifecycleLevel?: string;
         reorderPoint: number;
+        inventoryValue?: number;
       };
     };
     assert.equal(payload.part.name, 'MadJax lift kit XL');
@@ -630,6 +717,7 @@ test('updatePartHandler edits core part fields', async () => {
     assert.equal(payload.part.installStage, undefined);
     assert.equal(payload.part.lifecycleLevel, 'RAW_COMPONENT');
     assert.equal(payload.part.reorderPoint, 4);
+    assert.equal(payload.part.inventoryValue, 127.5);
   } finally {
     setInventoryHandlerPrismaForTests(undefined);
   }

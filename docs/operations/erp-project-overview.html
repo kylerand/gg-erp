@@ -354,15 +354,15 @@
           deployed dealer relationship updates, deployed dealer relationship creation work, deployed
           dealer account maintenance work, deployed dealer account route cleanup, deployed warranty
           claim/reimbursement storage, deployed warranty route cleanup, deployed warranty
-          reimbursement accounting ledger work, deployed provider document evidence work, and active
-          inventory part editing work. The app has moved past polished static screens into a usable
-          shop-ops ERP foundation, but ShopMonkey cutover remains blocked until complete parts and
-          purchase-order source exports are captured.
+          reimbursement accounting ledger work, deployed provider document evidence work, deployed
+          inventory part editing work, and active inventory valuation rollup work. The app has moved
+          past polished static screens into a usable shop-ops ERP foundation, but ShopMonkey cutover
+          remains blocked until complete parts and purchase-order source exports are captured.
         </p>
         <div class="meta-row">
           <span class="chip">Reviewed: June 2, 2026</span>
-          <span class="chip">Baseline: origin/main through PR 194</span>
-          <span class="chip">Active slice: Inventory part editing</span>
+          <span class="chip">Baseline: origin/main through PR 195</span>
+          <span class="chip">Active slice: Inventory valuation rollups</span>
           <span class="chip">Estimates: planning confidence +/- 10%</span>
         </div>
       </header>
@@ -622,9 +622,9 @@
               manual stock adjustments, stock transfer posting, cycle-count batch posting, and
               drill-through are live. Reservation, release, issue, adjustment, transfer, and
               cycle-count variance writes now append immutable ledger consequences. Build BOM
-              authoring and route-step standard labor costing now live in Planning. This branch adds
-              row-level part editing for core item attributes; accounting valuation rollups are the
-              next practical gap.
+              authoring and route-step standard labor costing now live in Planning. Row-level part
+              editing for core item attributes is deployed; this branch adds balance-backed
+              accounting valuation rollups to part list/detail review.
             </p>
           </div>
 
@@ -843,9 +843,9 @@
             work-order provenance, and version diff workflows need a heavier change-control gate.
           </li>
           <li>
-            <strong>Deepen inventory master data:</strong> finish row-level part editing for core
-            item attributes, then add accounting valuation rollups if UAT needs financial inventory
-            review on the item workspace.
+            <strong>Deepen inventory master data:</strong> validate balance-backed valuation rollups
+            in UAT, then decide whether lot-level costing needs FIFO/weighted-average accounting
+            policy before production close controls depend on it.
           </li>
         </ol>
       </section>

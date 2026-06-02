@@ -9,6 +9,8 @@ const WEB_SRC_DIR = path.resolve(__dirname, '..');
 
 const truthCriticalPages = [
   'app/customer-dealers/page.tsx',
+  'app/customer-dealers/customers/page.tsx',
+  'app/customer-dealers/customers/[id]/page.tsx',
   'app/customer-dealers/dealers/page.tsx',
   'app/customer-dealers/relationships/page.tsx',
   'app/inventory/page.tsx',
@@ -356,6 +358,8 @@ test('create forms use live selectors instead of raw ID entry fields', () => {
 
 test('customer dealer ops views are backed by live customer and cart data', () => {
   const hubSource = readSource('app/customer-dealers/page.tsx');
+  const customersSource = readSource('app/customer-dealers/customers/page.tsx');
+  const customerDetailSource = readSource('app/customer-dealers/customers/[id]/page.tsx');
   const dealersSource = readSource('app/customer-dealers/dealers/page.tsx');
   const relationshipsSource = readSource('app/customer-dealers/relationships/page.tsx');
   const workOrderCreateSource = readSource('app/work-orders/new/page.tsx');
@@ -371,6 +375,10 @@ test('customer dealer ops views are backed by live customer and cart data', () =
     ),
     'utf8',
   );
+  const ticketsHandlerSource = readFileSync(
+    path.resolve(WEB_SRC_DIR, '../../../apps/api/src/lambda/tickets/handlers.ts'),
+    'utf8',
+  );
 
   assert.deepEqual(
     [
@@ -380,6 +388,32 @@ test('customer dealer ops views are backed by live customer and cart data', () =
       'relationshipTotal',
       "erpRoute('customer-relationship')",
     ].filter((snippet) => !hubSource.includes(snippet)),
+    [],
+  );
+  assert.deepEqual(
+    [
+      'listCustomers(',
+      'allowMockFallback: false',
+      "erpRecordRoute('customer', c.id)",
+      'Open',
+    ].filter((snippet) => !customersSource.includes(snippet)),
+    [],
+  );
+  assert.deepEqual(
+    [
+      'getCustomer(customerId, STRICT_LIVE_DATA)',
+      'listCartVehicles({ customerId, limit: 50 }, STRICT_LIVE_DATA)',
+      'listWoOrders({ customerId, limit: 25 }, STRICT_LIVE_DATA)',
+      'listOpportunities({ customerId, limit: 25 }, STRICT_LIVE_DATA)',
+      'listQuotes({ customerId, limit: 25 }, STRICT_LIVE_DATA)',
+      'listActivities({ customerId, limit: 25 }, STRICT_LIVE_DATA)',
+      "erpRoute('create-sales-opportunity', { customerId })",
+      "erpRoute('create-quote', { customerId })",
+      "erpRoute('create-work-order'",
+      "erpRecordRoute('work-order'",
+      "erpRecordRoute('sales-opportunity'",
+      "erpRecordRoute('quote'",
+    ].filter((snippet) => !customerDetailSource.includes(snippet)),
     [],
   );
   assert.deepEqual(
@@ -419,6 +453,7 @@ test('customer dealer ops views are backed by live customer and cart data', () =
       '/identity/dealers',
       '/identity/dealer-relationships',
       'total: res.total',
+      "if (params?.customerId) qs.set('customerId', params.customerId);",
     ].filter((snippet) => !apiClientSource.includes(snippet)),
     [],
   );
@@ -440,6 +475,13 @@ test('customer dealer ops views are backed by live customer and cart data', () =
       "source: 'dealer-relationship'",
       'total',
     ].filter((snippet) => !dealerRelationshipHandlerSource.includes(snippet)),
+    [],
+  );
+  assert.deepEqual(
+    [
+      'const customerId = qs.customerId?.trim();',
+      'customerReference: { equals: customerId }',
+    ].filter((snippet) => !ticketsHandlerSource.includes(snippet)),
     [],
   );
   assert.equal(dealersSource.includes('Add your first dealer'), false);

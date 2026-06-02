@@ -435,6 +435,7 @@ export const ERP_OBJECTS = [
     kind: 'master',
     ownerContext: 'customers',
     route: '/customer-dealers/customers',
+    detailRoute: '/customer-dealers/customers/:id',
     status: 'live',
     searchFields: ['customerName', 'email', 'phone'],
     listColumns: ['customerName', 'email', 'phone', 'lastActivity'],

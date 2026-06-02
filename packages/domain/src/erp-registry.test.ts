@@ -94,6 +94,10 @@ test('registry route helper resolves module links and filtered routes', () => {
     getRequiredErpRecordRoute('quote', 'qt-1', { tab: 'lines' }),
     '/sales/quotes/qt-1?tab=lines',
   );
+  assert.equal(
+    getRequiredErpRecordRoute('customer', 'customer-1'),
+    '/customer-dealers/customers/customer-1',
+  );
 });
 
 test('workspace navigation items include live links and quick actions', () => {

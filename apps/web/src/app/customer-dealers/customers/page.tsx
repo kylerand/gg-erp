@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { PageHeader, LoadingSkeleton, EmptyState, StatusBadge } from '@gg-erp/ui';
 import { listCustomers, transitionCustomerState, type Customer } from '@/lib/api-client';
-import { erpRoute } from '@/lib/erp-routes';
+import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Pagination } from '@/components/ui/pagination';
@@ -99,39 +99,55 @@ export default function CustomersPage() {
               <tbody className="divide-y divide-gray-100">
                 {customers.map((c) => (
                   <tr key={c.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-900">{c.fullName}</td>
+                    <td className="px-4 py-3">
+                      <Link
+                        href={erpRecordRoute('customer', c.id)}
+                        className="font-medium text-gray-900 hover:underline"
+                      >
+                        {c.companyName ?? c.fullName}
+                      </Link>
+                      {c.companyName && <div className="text-xs text-gray-500">{c.fullName}</div>}
+                    </td>
                     <td className="px-4 py-3 text-gray-500">{c.email ?? '—'}</td>
                     <td className="px-4 py-3">
                       <StatusBadge status={c.state} />
                     </td>
                     <td className="px-4 py-3">
-                      {c.state === 'LEAD' && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void transition(c.id, 'ACTIVE')}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link
+                          href={erpRecordRoute('customer', c.id)}
+                          className="text-sm font-semibold text-gray-900 hover:underline"
                         >
-                          Activate
-                        </Button>
-                      )}
-                      {c.state === 'ACTIVE' && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void transition(c.id, 'INACTIVE')}
-                        >
-                          Deactivate
-                        </Button>
-                      )}
-                      {c.state === 'INACTIVE' && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void transition(c.id, 'ACTIVE')}
-                        >
-                          Re-activate
-                        </Button>
-                      )}
+                          Open
+                        </Link>
+                        {c.state === 'LEAD' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void transition(c.id, 'ACTIVE')}
+                          >
+                            Activate
+                          </Button>
+                        )}
+                        {c.state === 'ACTIVE' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void transition(c.id, 'INACTIVE')}
+                          >
+                            Deactivate
+                          </Button>
+                        )}
+                        {c.state === 'INACTIVE' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void transition(c.id, 'ACTIVE')}
+                          >
+                            Re-activate
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

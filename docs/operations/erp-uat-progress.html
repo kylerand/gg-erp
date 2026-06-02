@@ -241,10 +241,11 @@
       <section>
         <h2>Overall Progress</h2>
         <p class="muted">
-          Current focus: extending the catalog-backed customer selector from quote and work-order
-          creation into sales opportunity creation. Accounting document snapshots are deployed on
-          main with no live API route exceptions. ShopMonkey cutover readiness remains blocked on
-          missing parts and purchase-order source exports.
+          Current focus: adding a registry-backed customer workspace that turns customer rows into
+          operational drill-ins for profile, cart assets, work orders, opportunities, quotes, and
+          recent sales activity. Accounting document snapshots are deployed on main with no live API
+          route exceptions. ShopMonkey cutover readiness remains blocked on missing parts and
+          purchase-order source exports.
         </p>
         <div class="progress" aria-label="97 percent complete"><div style="width: 97%"></div></div>
       </section>
@@ -342,18 +343,18 @@
             </tr>
             <tr>
               <td>Catalog-backed customer selector hardening</td>
-              <td><span class="pill doing">In progress</span></td>
+              <td><span class="pill done">Done</span></td>
               <td>
                 PR #175 replaced duplicated customer selector wiring on quote and work-order
                 creation with a shared active-customer selector, preserves selected customer context
                 from URL-driven forms, routes empty states to customer creation, and blocks quote
-                submission until a real active customer is selected from the catalog. This branch
-                extends the same selector and active-customer validation to sales opportunity
-                creation.
+                submission until a real active customer is selected from the catalog. PR #176
+                extended the same selector and active-customer validation to sales opportunity
+                creation and passed hosted PR checks plus main CI, QA, and Pages after merge.
               </td>
               <td>
-                Pass full CI/QA, merge, deploy, and then reuse the shared selector on any remaining
-                customer-bound forms where it reduces duplicate logic.
+                Keep using the shared selector on any new customer-bound form where it reduces
+                duplicate lookup logic.
               </td>
             </tr>
             <tr>
@@ -383,18 +384,19 @@
             </tr>
             <tr>
               <td>Customer and dealer ops</td>
-              <td><span class="pill done">Done</span></td>
+              <td><span class="pill doing">In progress</span></td>
               <td>
                 Customer/dealer landing cards use strict live totals for customers, dedicated dealer
                 accounts, and explicit dealer relationship rows. Dealer accounts read the
                 `customers.dealer_accounts` model with customer profile context, and relationship
                 rows read `customers.customer_dealer_relationships` with dealer, customer, cart,
-                status, and action-link context. Deploy migrations seed existing commercial customer
-                profiles and dealer-owned carts into the dedicated model.
+                status, and action-link context. This branch adds a registry-backed customer detail
+                workspace with strict-live profile, cart assets, work orders, opportunities, quotes,
+                and sales activity plus context-aware create actions.
               </td>
               <td>
-                Add create/update dealer assignment workflows once relationship ownership mutation
-                rules are finalized.
+                Finish CI/QA for the customer workspace, then add create/update dealer assignment
+                workflows once relationship ownership mutation rules are finalized.
               </td>
             </tr>
             <tr>

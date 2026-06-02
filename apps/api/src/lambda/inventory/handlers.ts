@@ -940,6 +940,7 @@ interface CreateInventoryAdjustmentInput {
 }
 
 interface CreateInventoryCostEvidenceInput {
+  adjustmentMode?: 'COST_EVIDENCE';
   stockLotId: string;
   unitCost: number;
   reasonCode?: string;
@@ -3300,6 +3301,12 @@ function validateCreateInventoryAdjustmentInput(
   return undefined;
 }
 
+function isCreateInventoryCostEvidenceInput(
+  input: CreateInventoryAdjustmentInput | CreateInventoryCostEvidenceInput,
+): input is CreateInventoryCostEvidenceInput {
+  return (input as CreateInventoryCostEvidenceInput).adjustmentMode === 'COST_EVIDENCE';
+}
+
 function validateCreateInventoryCostEvidenceInput(
   input: CreateInventoryCostEvidenceInput,
 ): string | undefined {
@@ -4333,29 +4340,25 @@ export const consumeReservationHandler = wrapHandler(
 
 export const createInventoryAdjustmentHandler = wrapHandler(
   async (ctx) => {
-    const body = parseBody<CreateInventoryAdjustmentInput>(ctx.event);
+    const body = parseBody<CreateInventoryAdjustmentInput | CreateInventoryCostEvidenceInput>(
+      ctx.event,
+    );
     if (!body.ok) return jsonResponse(400, { message: body.error });
+
+    if (isCreateInventoryCostEvidenceInput(body.value)) {
+      const validation = validateCreateInventoryCostEvidenceInput(body.value);
+      if (validation) return jsonResponse(422, { message: validation });
+
+      return handleInventoryCostEvidenceCommand(
+        inventoryCostEvidenceCommands.createCostEvidence(body.value, ctx.correlationId),
+      );
+    }
 
     const validation = validateCreateInventoryAdjustmentInput(body.value);
     if (validation) return jsonResponse(422, { message: validation });
 
     return handleInventoryAdjustmentCommand(
       inventoryAdjustmentCommands.createAdjustment(body.value, ctx.correlationId),
-    );
-  },
-  { requireAuth: false },
-);
-
-export const createInventoryCostEvidenceHandler = wrapHandler(
-  async (ctx) => {
-    const body = parseBody<CreateInventoryCostEvidenceInput>(ctx.event);
-    if (!body.ok) return jsonResponse(400, { message: body.error });
-
-    const validation = validateCreateInventoryCostEvidenceInput(body.value);
-    if (validation) return jsonResponse(422, { message: validation });
-
-    return handleInventoryCostEvidenceCommand(
-      inventoryCostEvidenceCommands.createCostEvidence(body.value, ctx.correlationId),
     );
   },
   { requireAuth: false },

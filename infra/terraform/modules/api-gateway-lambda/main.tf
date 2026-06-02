@@ -1872,25 +1872,6 @@ resource "aws_lambda_function" "inventory_create_adjustment" {
   }
 }
 
-resource "aws_lambda_function" "inventory_create_cost_evidence" {
-  function_name    = "${var.name_prefix}-inventory-create-cost-evidence"
-  role             = aws_iam_role.erp_lambda.arn
-  runtime          = "nodejs20.x"
-  handler          = "create-cost-evidence.handler"
-  s3_bucket        = var.lambda_artifacts_bucket_name != "" ? var.lambda_artifacts_bucket_name : null
-  s3_key           = var.lambda_artifacts_bucket_name != "" ? "lambdas/inventory-lambda.zip" : null
-  filename         = var.lambda_artifacts_bucket_name == "" ? var.inventory_lambda_zip_path : null
-  source_code_hash = filebase64sha256(var.inventory_lambda_zip_path)
-  timeout          = 15
-  memory_size      = 256
-  environment { variables = local.lambda_common_env }
-
-  vpc_config {
-    subnet_ids         = var.private_subnet_ids
-    security_group_ids = [var.lambda_security_group_id]
-  }
-}
-
 resource "aws_lambda_function" "inventory_create_transfer" {
   function_name    = "${var.name_prefix}-inventory-create-transfer"
   role             = aws_iam_role.erp_lambda.arn
@@ -3330,21 +3311,6 @@ resource "aws_apigatewayv2_route" "inventory_create_adjustment" {
   api_id             = aws_apigatewayv2_api.erp.id
   route_key          = "POST /inventory/adjustments"
   target             = "integrations/${aws_apigatewayv2_integration.inventory_create_adjustment.id}"
-  authorizer_id      = local.authorizer_id
-  authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
-}
-
-resource "aws_apigatewayv2_integration" "inventory_create_cost_evidence" {
-  api_id                 = aws_apigatewayv2_api.erp.id
-  integration_type       = "AWS_PROXY"
-  integration_method     = "POST"
-  integration_uri        = aws_lambda_function.inventory_create_cost_evidence.invoke_arn
-  payload_format_version = "2.0"
-}
-resource "aws_apigatewayv2_route" "inventory_create_cost_evidence" {
-  api_id             = aws_apigatewayv2_api.erp.id
-  route_key          = "POST /inventory/cost-evidence"
-  target             = "integrations/${aws_apigatewayv2_integration.inventory_create_cost_evidence.id}"
   authorizer_id      = local.authorizer_id
   authorization_type = local.authorizer_id != null ? "JWT" : "NONE"
 }
@@ -6365,7 +6331,6 @@ locals {
     inventory_consume_reservation               = aws_lambda_function.inventory_consume_reservation
     inventory_list_ledger                       = aws_lambda_function.inventory_list_ledger
     inventory_create_adjustment                 = aws_lambda_function.inventory_create_adjustment
-    inventory_create_cost_evidence              = aws_lambda_function.inventory_create_cost_evidence
     inventory_create_transfer                   = aws_lambda_function.inventory_create_transfer
     inventory_create_cycle_count                = aws_lambda_function.inventory_create_cycle_count
     inventory_list_manufacturers                = aws_lambda_function.inventory_list_manufacturers

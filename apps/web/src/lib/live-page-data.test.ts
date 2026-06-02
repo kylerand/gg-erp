@@ -1874,7 +1874,7 @@ test('inventory procurement drill-in uses live PO/vendor reads and focused recei
       'export async function createInventoryTransfer',
       'export async function createCycleCount',
       '/inventory/adjustments',
-      '/inventory/cost-evidence',
+      "adjustmentMode: 'COST_EVIDENCE'",
       '/inventory/transfers',
       '/inventory/cycle-counts',
       'vendorId',

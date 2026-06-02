@@ -2297,6 +2297,7 @@ export interface InventoryCostEvidence {
 }
 
 export interface CreateInventoryCostEvidenceInput {
+  adjustmentMode?: 'COST_EVIDENCE';
   stockLotId: string;
   unitCost: number;
   reasonCode?: string;
@@ -2306,10 +2307,10 @@ export interface CreateInventoryCostEvidenceInput {
 export async function createInventoryCostEvidence(
   input: CreateInventoryCostEvidenceInput,
 ): Promise<InventoryCostEvidence> {
-  const data = await apiFetch<{ costEvidence: InventoryCostEvidence }>('/inventory/cost-evidence', {
+  const data = await apiFetch<{ costEvidence: InventoryCostEvidence }>('/inventory/adjustments', {
     method: 'POST',
     headers: mutationHeaders(),
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, adjustmentMode: 'COST_EVIDENCE' }),
   });
   return data.costEvidence;
 }

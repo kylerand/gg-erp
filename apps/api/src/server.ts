@@ -67,7 +67,6 @@ import {
   consumeReservationHandler,
   listInventoryLedgerHandler,
   createInventoryAdjustmentHandler,
-  createInventoryCostEvidenceHandler,
   createInventoryTransferHandler,
   createCycleCountHandler,
   listInventoryLocationsHandler,
@@ -557,8 +556,6 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     result = await listInventoryLedgerHandler(event);
   } else if (pathname === '/inventory/adjustments' && method === 'POST') {
     result = await createInventoryAdjustmentHandler(event);
-  } else if (pathname === '/inventory/cost-evidence' && method === 'POST') {
-    result = await createInventoryCostEvidenceHandler(event);
   } else if (pathname === '/inventory/transfers' && method === 'POST') {
     result = await createInventoryTransferHandler(event);
   } else if (pathname === '/inventory/cycle-counts' && method === 'POST') {
@@ -1165,7 +1162,6 @@ server.listen(PORT, () => {
   );
   console.log(
     `   Inventory   GET|POST /inventory/parts, PATCH /inventory/parts/:id, GET /inventory/vendors, GET /inventory/ledger, POST /inventory/adjustments, POST /inventory/transfers, POST /inventory/cycle-counts`,
-    `               POST /inventory/cost-evidence`,
   );
   console.log(
     `   Tickets     GET|POST /tickets/work-orders, /tickets/work-orders/:id/tasks|operations|rework|qc-gates|time-entries`,

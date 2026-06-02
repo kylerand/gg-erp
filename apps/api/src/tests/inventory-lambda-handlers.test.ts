@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test, { mock } from 'node:test';
 import {
   createInventoryAdjustmentHandler,
-  createInventoryCostEvidenceHandler,
   createCycleCountHandler,
   createInventoryTransferHandler,
   inventoryLedgerQueries,
@@ -338,15 +337,16 @@ test('createInventoryAdjustmentHandler posts balance and ledger consequences', a
   }
 });
 
-test('createInventoryCostEvidenceHandler posts valuation evidence without quantity movement', async () => {
+test('createInventoryAdjustmentHandler routes cost evidence without quantity movement', async () => {
   const harness = createInventoryAdjustmentHarness();
   setInventoryHandlerPrismaForTests(harness.prisma as never);
 
   try {
-    const response = await createInventoryCostEvidenceHandler({
+    const response = await createInventoryAdjustmentHandler({
       httpMethod: 'POST',
       headers: { 'x-correlation-id': 'cost-evidence-correlation' },
       body: JSON.stringify({
+        adjustmentMode: 'COST_EVIDENCE',
         stockLotId: TEST_STOCK_LOT_ID,
         unitCost: 42.25,
         evidenceReference: 'Vendor receipt 1001',

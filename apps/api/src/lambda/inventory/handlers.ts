@@ -871,6 +871,39 @@ interface PartInventoryBalanceRow {
   quantityConsumed: unknown;
 }
 
+interface PartValuationRow extends PartInventoryBalanceRow {
+  quantityAvailable: unknown;
+  estimatedUnitCost: unknown;
+  inventoryValue: unknown;
+  shortfallQuantity: unknown;
+  shortfallValue: unknown;
+  valuationSource: string;
+}
+
+interface NormalizedPartValuation {
+  quantityOnHand: number;
+  quantityReserved: number;
+  quantityAllocated: number;
+  quantityConsumed: number;
+  quantityAvailable: number;
+  estimatedUnitCost: number;
+  inventoryValue: number;
+  shortfallQuantity: number;
+  shortfallValue: number;
+  valuationSource: string;
+}
+
+interface PartValuationSummary {
+  partCount: number;
+  stockedPartCount: number;
+  totalQuantityOnHand: number;
+  totalQuantityAvailable: number;
+  totalInventoryValue: number;
+  totalShortfallQuantity: number;
+  totalShortfallValue: number;
+  missingCostPartCount: number;
+}
+
 interface PartProcurementRow {
   partId: string;
   inboundQuantity: unknown;
@@ -3184,6 +3217,195 @@ const PART_INCLUDE = {
   defaultLocation: { select: { locationName: true } },
 } as const;
 
+async function queryPartValuationRows(
+  db: InventorySqlClient,
+  partIds: string[],
+): Promise<PartValuationRow[]> {
+  const uniquePartIds = [...new Set(partIds.filter(Boolean))];
+  if (uniquePartIds.length === 0) return [];
+
+  const partIdSql = uniquePartIds.map((id) => Prisma.sql`${id}::uuid`);
+  return db.$queryRaw<PartValuationRow[]>`
+    WITH filtered_parts AS (
+      SELECT id, reorder_point
+      FROM inventory.parts
+      WHERE id IN (${Prisma.join(partIdSql)})
+    ),
+    latest_po AS (
+      SELECT DISTINCT ON (pol.part_id)
+        pol.part_id,
+        pol.unit_cost
+      FROM inventory.purchase_order_lines pol
+      INNER JOIN inventory.purchase_orders po
+        ON po.id = pol.purchase_order_id
+      WHERE pol.part_id IN (${Prisma.join(partIdSql)})
+        AND pol.line_state <> 'CANCELLED'
+      ORDER BY pol.part_id, po.ordered_at DESC NULLS LAST, pol.created_at DESC
+    ),
+    balance AS (
+      SELECT
+        part_id,
+        stock_lot_id,
+        COALESCE(SUM(quantity_on_hand), 0) AS quantity_on_hand,
+        COALESCE(SUM(quantity_reserved), 0) AS quantity_reserved,
+        COALESCE(SUM(quantity_allocated), 0) AS quantity_allocated,
+        COALESCE(SUM(quantity_consumed), 0) AS quantity_consumed
+      FROM inventory.inventory_balances
+      WHERE part_id IN (${Prisma.join(partIdSql)})
+      GROUP BY part_id, stock_lot_id
+    ),
+    lot_cost AS (
+      SELECT DISTINCT ON (l.stock_lot_id)
+        l.stock_lot_id,
+        l.unit_cost
+      FROM inventory.inventory_ledger_entries l
+      WHERE l.stock_lot_id IN (
+        SELECT stock_lot_id
+        FROM balance
+        WHERE stock_lot_id IS NOT NULL
+      )
+        AND l.unit_cost IS NOT NULL
+      ORDER BY l.stock_lot_id, l.created_at DESC, l.id DESC
+    ),
+    valued_lots AS (
+      SELECT
+        b.part_id,
+        b.quantity_on_hand,
+        b.quantity_reserved,
+        b.quantity_allocated,
+        b.quantity_consumed,
+        COALESCE(lc.unit_cost, lp.unit_cost, 0) AS unit_cost,
+        CASE
+          WHEN lc.unit_cost IS NOT NULL THEN 3
+          WHEN lp.unit_cost IS NOT NULL THEN 2
+          ELSE 1
+        END AS source_rank
+      FROM balance b
+      LEFT JOIN latest_po lp
+        ON lp.part_id = b.part_id
+      LEFT JOIN lot_cost lc
+        ON lc.stock_lot_id = b.stock_lot_id
+    ),
+    rollup AS (
+      SELECT
+        fp.id::text AS part_id,
+        COALESCE(SUM(vl.quantity_on_hand), 0) AS quantity_on_hand,
+        COALESCE(SUM(vl.quantity_reserved), 0) AS quantity_reserved,
+        COALESCE(SUM(vl.quantity_allocated), 0) AS quantity_allocated,
+        COALESCE(SUM(vl.quantity_consumed), 0) AS quantity_consumed,
+        COALESCE(SUM(vl.quantity_on_hand * vl.unit_cost), 0) AS inventory_value,
+        COALESCE(MAX(lp.unit_cost), 0) AS latest_unit_cost,
+        COALESCE(MAX(vl.source_rank), CASE WHEN MAX(lp.unit_cost) IS NULL THEN 1 ELSE 2 END)
+          AS source_rank,
+        fp.reorder_point
+      FROM filtered_parts fp
+      LEFT JOIN valued_lots vl
+        ON vl.part_id = fp.id
+      LEFT JOIN latest_po lp
+        ON lp.part_id = fp.id
+      GROUP BY fp.id, fp.reorder_point
+    ),
+    normalized AS (
+      SELECT
+        part_id,
+        quantity_on_hand,
+        quantity_reserved,
+        quantity_allocated,
+        quantity_consumed,
+        GREATEST(quantity_on_hand - quantity_reserved, 0) AS quantity_available,
+        inventory_value,
+        CASE
+          WHEN quantity_on_hand > 0 THEN inventory_value / quantity_on_hand
+          ELSE latest_unit_cost
+        END AS estimated_unit_cost,
+        CASE
+          WHEN source_rank >= 3 THEN 'LOT_LEDGER'
+          WHEN source_rank = 2 THEN 'LATEST_PO'
+          ELSE 'NO_COST'
+        END AS valuation_source,
+        reorder_point
+      FROM rollup
+    )
+    SELECT
+      part_id AS "partId",
+      quantity_on_hand AS "quantityOnHand",
+      quantity_reserved AS "quantityReserved",
+      quantity_allocated AS "quantityAllocated",
+      quantity_consumed AS "quantityConsumed",
+      quantity_available AS "quantityAvailable",
+      estimated_unit_cost AS "estimatedUnitCost",
+      inventory_value AS "inventoryValue",
+      GREATEST(reorder_point - quantity_available, 0) AS "shortfallQuantity",
+      GREATEST(reorder_point - quantity_available, 0) * estimated_unit_cost AS "shortfallValue",
+      valuation_source AS "valuationSource"
+    FROM normalized
+  `;
+}
+
+async function getPartValuationMap(
+  db: InventorySqlClient,
+  partIds: string[],
+): Promise<Map<string, NormalizedPartValuation>> {
+  const rows = await queryPartValuationRows(db, partIds);
+  return new Map(rows.map((row) => [row.partId, normalizePartValuation(row)]));
+}
+
+function normalizePartValuation(row: PartValuationRow): NormalizedPartValuation {
+  return {
+    quantityOnHand: numberFromDb(row.quantityOnHand),
+    quantityReserved: numberFromDb(row.quantityReserved),
+    quantityAllocated: numberFromDb(row.quantityAllocated),
+    quantityConsumed: numberFromDb(row.quantityConsumed),
+    quantityAvailable: numberFromDb(row.quantityAvailable),
+    estimatedUnitCost: numberFromDb(row.estimatedUnitCost),
+    inventoryValue: numberFromDb(row.inventoryValue),
+    shortfallQuantity: numberFromDb(row.shortfallQuantity),
+    shortfallValue: numberFromDb(row.shortfallValue),
+    valuationSource: row.valuationSource,
+  };
+}
+
+function summarizePartValuations(rows: PartValuationRow[]): PartValuationSummary {
+  const valuations = rows.map(normalizePartValuation);
+  return {
+    partCount: valuations.length,
+    stockedPartCount: valuations.filter((valuation) => valuation.quantityOnHand > 0).length,
+    totalQuantityOnHand: valuations.reduce((sum, valuation) => sum + valuation.quantityOnHand, 0),
+    totalQuantityAvailable: valuations.reduce(
+      (sum, valuation) => sum + valuation.quantityAvailable,
+      0,
+    ),
+    totalInventoryValue: valuations.reduce((sum, valuation) => sum + valuation.inventoryValue, 0),
+    totalShortfallQuantity: valuations.reduce(
+      (sum, valuation) => sum + valuation.shortfallQuantity,
+      0,
+    ),
+    totalShortfallValue: valuations.reduce((sum, valuation) => sum + valuation.shortfallValue, 0),
+    missingCostPartCount: valuations.filter(
+      (valuation) => valuation.quantityOnHand > 0 && valuation.valuationSource === 'NO_COST',
+    ).length,
+  };
+}
+
+function withPartValuation<T extends ReturnType<typeof toPartResponse>>(
+  part: T,
+  valuation: NormalizedPartValuation | undefined,
+): T & NormalizedPartValuation {
+  const fallback: NormalizedPartValuation = {
+    quantityOnHand: 0,
+    quantityReserved: 0,
+    quantityAllocated: 0,
+    quantityConsumed: 0,
+    quantityAvailable: 0,
+    estimatedUnitCost: 0,
+    inventoryValue: 0,
+    shortfallQuantity: Math.max(part.reorderPoint, 0),
+    shortfallValue: 0,
+    valuationSource: 'NO_COST',
+  };
+  return { ...part, ...(valuation ?? fallback) };
+}
+
 export const listPartsHandler = wrapHandler(
   async (ctx) => {
     const qs = ctx.event.queryStringParameters ?? {};
@@ -3251,7 +3473,8 @@ export const listPartsHandler = wrapHandler(
       deletedAt: null,
     };
 
-    const [items, total] = await Promise.all([
+    const prisma = getInventoryPrisma();
+    const [items, matchingParts] = await Promise.all([
       getInventoryPrisma().part.findMany({
         where,
         orderBy: { sku: 'asc' },
@@ -3259,10 +3482,30 @@ export const listPartsHandler = wrapHandler(
         skip: offset,
         include: PART_INCLUDE,
       }),
-      getInventoryPrisma().part.count({ where }),
+      getInventoryPrisma().part.findMany({
+        where,
+        select: { id: true },
+        orderBy: { sku: 'asc' },
+      }),
     ]);
 
-    return jsonResponse(200, { items: items.map(toPartResponse), total, limit, offset });
+    const valuationRows = await queryPartValuationRows(
+      prisma,
+      matchingParts.map((part) => part.id),
+    );
+    const valuationByPart = new Map(
+      valuationRows.map((row) => [row.partId, normalizePartValuation(row)]),
+    );
+
+    return jsonResponse(200, {
+      items: items.map((part) =>
+        withPartValuation(toPartResponse(part), valuationByPart.get(part.id)),
+      ),
+      total: matchingParts.length,
+      limit,
+      offset,
+      valuationSummary: summarizePartValuations(valuationRows),
+    });
   },
   { requireAuth: false },
 );
@@ -3308,14 +3551,20 @@ export const getPartChainHandler = wrapHandler(
       }
     }
 
+    const chainParts = [...ancestors, part, ...descendants];
+    const valuationByPart = await getPartValuationMap(
+      prisma,
+      chainParts.map((chainPart) => chainPart.id),
+    );
+
     return jsonResponse(200, {
       ancestors: ancestors.map((p) => ({
-        part: toPartResponse(p),
+        part: withPartValuation(toPartResponse(p), valuationByPart.get(p.id)),
         producedViaStage: p.producedViaStage ?? undefined,
       })),
-      part: toPartResponse(part),
+      part: withPartValuation(toPartResponse(part), valuationByPart.get(part.id)),
       descendants: descendants.map((p) => ({
-        part: toPartResponse(p),
+        part: withPartValuation(toPartResponse(p), valuationByPart.get(p.id)),
         producedViaStage: p.producedViaStage ?? undefined,
       })),
     });
@@ -4037,13 +4286,17 @@ export const getPartHandler = wrapHandler(
     const id = ctx.event.pathParameters?.id;
     if (!id) return jsonResponse(400, { message: 'Part ID is required.' });
 
-    const part = await getInventoryPrisma().part.findFirst({
+    const prisma = getInventoryPrisma();
+    const part = await prisma.part.findFirst({
       where: { id, deletedAt: null },
       include: PART_INCLUDE,
     });
     if (!part) return jsonResponse(404, { message: `Part not found: ${id}` });
 
-    return jsonResponse(200, { part: toPartResponse(part) });
+    const valuationByPart = await getPartValuationMap(prisma, [part.id]);
+    return jsonResponse(200, {
+      part: withPartValuation(toPartResponse(part), valuationByPart.get(part.id)),
+    });
   },
   { requireAuth: false },
 );
@@ -4257,8 +4510,11 @@ export const updatePartHandler = wrapHandler(
       data,
       include: PART_INCLUDE,
     });
+    const valuationByPart = await getPartValuationMap(getInventoryPrisma(), [part.id]);
 
-    return jsonResponse(200, { part: toPartResponse(part) });
+    return jsonResponse(200, {
+      part: withPartValuation(toPartResponse(part), valuationByPart.get(part.id)),
+    });
   },
   { requireAuth: false },
 );
@@ -4293,7 +4549,8 @@ export const createPartHandler = wrapHandler(
     }
 
     const now = new Date();
-    const part = await getInventoryPrisma().part.create({
+    const prisma = getInventoryPrisma();
+    const part = await prisma.part.create({
       data: {
         id: randomUUID(),
         sku: normalizedSku,
@@ -4306,8 +4563,11 @@ export const createPartHandler = wrapHandler(
         updatedAt: now,
       },
     });
+    const valuationByPart = await getPartValuationMap(prisma, [part.id]);
 
-    return jsonResponse(201, { part: toPartResponse(part) });
+    return jsonResponse(201, {
+      part: withPartValuation(toPartResponse(part), valuationByPart.get(part.id)),
+    });
   },
   { requireAuth: false },
 );

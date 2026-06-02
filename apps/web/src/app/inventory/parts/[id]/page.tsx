@@ -14,6 +14,26 @@ function formatEnum(value: string | undefined): string {
     .join(' ');
 }
 
+function formatQuantity(value: number | undefined): string {
+  if (value === undefined || !Number.isFinite(value)) return '—';
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(value);
+}
+
+function formatMoney(value: number | undefined): string {
+  if (value === undefined || !Number.isFinite(value)) return '—';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function formatValuationSource(value: Part['valuationSource']): string {
+  if (value === 'LOT_LEDGER') return 'Lot ledger cost';
+  if (value === 'LATEST_PO') return 'Latest purchase order';
+  return 'No cost evidence';
+}
+
 function DetailField({ label, value }: { label: string; value: string | number | undefined }) {
   return (
     <div>
@@ -104,7 +124,12 @@ export default function PartDetailPage() {
         <DetailField label="Color" value={formatEnum(part.color)} />
         <DetailField label="Unit" value={part.unitOfMeasure} />
         <DetailField label="Min Qty" value={part.reorderPoint} />
-        <DetailField label="On Hand" value={part.quantityOnHand ?? '—'} />
+        <DetailField label="On Hand" value={formatQuantity(part.quantityOnHand)} />
+        <DetailField label="Available" value={formatQuantity(part.quantityAvailable)} />
+        <DetailField label="Unit Cost" value={formatMoney(part.estimatedUnitCost)} />
+        <DetailField label="Stock Value" value={formatMoney(part.inventoryValue)} />
+        <DetailField label="Reorder Exposure" value={formatMoney(part.shortfallValue)} />
+        <DetailField label="Cost Evidence" value={formatValuationSource(part.valuationSource)} />
         <DetailField label="Manufacturer" value={part.manufacturerName} />
         <DetailField label="MFR Part #" value={part.manufacturerPartNumber} />
         <DetailField label="Default Vendor" value={part.defaultVendorName} />

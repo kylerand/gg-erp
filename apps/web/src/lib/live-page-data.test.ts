@@ -1654,6 +1654,9 @@ test('inventory procurement drill-in uses live PO/vendor reads and focused recei
       'updatePart(part.id, payload, { allowMockFallback: false })',
       'beginPartEdit',
       'Save Part',
+      'valuationSummary',
+      'formatMoney(p.inventoryValue)',
+      'formatValuationSource(p.valuationSource)',
       'selectedPartIds',
       'handlePartImport',
       'Create valid parts',
@@ -1663,8 +1666,18 @@ test('inventory procurement drill-in uses live PO/vendor reads and focused recei
   );
 
   assert.deepEqual(
-    ["erpRoute('inventory-ledger', { partId: part.id })", 'Movement History'].filter(
-      (snippet) => !partDetailSource.includes(snippet),
+    [
+      "erpRoute('inventory-ledger', { partId: part.id })",
+      'Movement History',
+      'Stock Value',
+      'Cost Evidence',
+    ].filter((snippet) => !partDetailSource.includes(snippet)),
+    [],
+  );
+
+  assert.deepEqual(
+    ['PartValuationSummary', 'valuationSource', 'inventoryValue'].filter(
+      (snippet) => !apiClientSource.includes(snippet),
     ),
     [],
   );

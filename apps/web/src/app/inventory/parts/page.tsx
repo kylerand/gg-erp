@@ -16,6 +16,7 @@ import {
   type PartCategory,
   type PartState,
   type PartStockFilter,
+  type PartValuationSummary,
   type UpdatePartInput,
 } from '@/lib/api-client';
 import { erpRecordRoute, erpRoute } from '@/lib/erp-routes';
@@ -96,6 +97,12 @@ const PART_EXPORT_COLUMNS: CsvColumn<Part>[] = [
   { header: 'defaultVendorName', value: (part) => part.defaultVendorName },
   { header: 'reorderPoint', value: (part) => part.reorderPoint },
   { header: 'quantityOnHand', value: (part) => part.quantityOnHand },
+  { header: 'quantityAvailable', value: (part) => part.quantityAvailable },
+  { header: 'estimatedUnitCost', value: (part) => part.estimatedUnitCost },
+  { header: 'inventoryValue', value: (part) => part.inventoryValue },
+  { header: 'shortfallQuantity', value: (part) => part.shortfallQuantity },
+  { header: 'shortfallValue', value: (part) => part.shortfallValue },
+  { header: 'valuationSource', value: (part) => part.valuationSource },
   { header: 'location', value: (part) => part.defaultLocationName ?? part.location },
 ];
 
@@ -117,12 +124,43 @@ const PART_IMPORT_TEMPLATE: CreatePartInput[] = [
   },
 ];
 
+const EMPTY_VALUATION_SUMMARY: PartValuationSummary = {
+  partCount: 0,
+  stockedPartCount: 0,
+  totalQuantityOnHand: 0,
+  totalQuantityAvailable: 0,
+  totalInventoryValue: 0,
+  totalShortfallQuantity: 0,
+  totalShortfallValue: 0,
+  missingCostPartCount: 0,
+};
+
 function formatEnum(value: string | undefined): string {
   if (!value) return '—';
   return value
     .split('_')
     .map((w) => w.charAt(0) + w.slice(1).toLowerCase())
     .join(' ');
+}
+
+function formatQuantity(value: number | undefined): string {
+  if (value === undefined || !Number.isFinite(value)) return '—';
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(value);
+}
+
+function formatMoney(value: number | undefined): string {
+  if (value === undefined || !Number.isFinite(value)) return '—';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function formatValuationSource(value: Part['valuationSource']): string {
+  if (value === 'LOT_LEDGER') return 'Lot cost';
+  if (value === 'LATEST_PO') return 'Latest PO';
+  return 'No cost';
 }
 
 function isOptionValue<T extends string>(
@@ -225,6 +263,8 @@ export default function PartsPage() {
   const activeStock = parseStock(searchParams.get('stock'));
   const [parts, setParts] = useState<Part[]>([]);
   const [total, setTotal] = useState(0);
+  const [valuationSummary, setValuationSummary] =
+    useState<PartValuationSummary>(EMPTY_VALUATION_SUMMARY);
   const [searchText, setSearchText] = useState(activeSearch);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
@@ -263,6 +303,7 @@ export default function PartsPage() {
         });
         setParts(r.items);
         setTotal(r.total);
+        setValuationSummary(r.valuationSummary ?? EMPTY_VALUATION_SUMMARY);
       } finally {
         setLoading(false);
       }
@@ -380,6 +421,10 @@ export default function PartsPage() {
   const selectedParts = useMemo(
     () => parts.filter((part) => selectedPartIds.includes(part.id)),
     [parts, selectedPartIds],
+  );
+  const visibleInventoryValue = useMemo(
+    () => parts.reduce((sum, part) => sum + (part.inventoryValue ?? 0), 0),
+    [parts],
   );
   const allVisibleSelected = parts.length > 0 && selectedParts.length === parts.length;
   const readyImportCount = importRows.filter((row) => row.status === 'READY').length;
@@ -649,6 +694,44 @@ export default function PartsPage() {
           </Link>
         )}
       </div>
+      <div className="mb-4 grid gap-3 md:grid-cols-4">
+        <div className="rounded-lg border border-gray-200 bg-white p-3">
+          <div className="text-xs font-semibold uppercase text-gray-500">Stock value</div>
+          <div className="mt-1 text-2xl font-semibold text-gray-900">
+            {formatMoney(valuationSummary.totalInventoryValue)}
+          </div>
+          <div className="mt-1 text-xs text-gray-500">
+            {formatMoney(visibleInventoryValue)} on this page
+          </div>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-white p-3">
+          <div className="text-xs font-semibold uppercase text-gray-500">Available qty</div>
+          <div className="mt-1 text-2xl font-semibold text-gray-900">
+            {formatQuantity(valuationSummary.totalQuantityAvailable)}
+          </div>
+          <div className="mt-1 text-xs text-gray-500">
+            {formatQuantity(valuationSummary.totalQuantityOnHand)} on hand
+          </div>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-white p-3">
+          <div className="text-xs font-semibold uppercase text-gray-500">Reorder exposure</div>
+          <div className="mt-1 text-2xl font-semibold text-amber-700">
+            {formatMoney(valuationSummary.totalShortfallValue)}
+          </div>
+          <div className="mt-1 text-xs text-gray-500">
+            {formatQuantity(valuationSummary.totalShortfallQuantity)} units below min
+          </div>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-white p-3">
+          <div className="text-xs font-semibold uppercase text-gray-500">Cost coverage</div>
+          <div className="mt-1 text-2xl font-semibold text-gray-900">
+            {valuationSummary.stockedPartCount}
+          </div>
+          <div className="mt-1 text-xs text-gray-500">
+            {valuationSummary.missingCostPartCount} stocked parts missing cost evidence
+          </div>
+        </div>
+      </div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white p-3">
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" variant="outline" onClick={() => exportParts('visible')}>
@@ -790,8 +873,8 @@ export default function PartsPage() {
         />
       ) : (
         <>
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+            <table className="w-full min-w-[1500px] text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">
@@ -813,6 +896,8 @@ export default function PartsPage() {
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Vendor</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Min</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">On Hand</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">Unit Cost</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">Stock Value</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Location</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
                   <th className="px-4 py-3 text-right font-medium text-gray-600">Actions</th>
@@ -864,6 +949,15 @@ export default function PartsPage() {
                             {p.quantityOnHand === 0 ? '0' : (p.quantityOnHand ?? '—')}
                           </span>
                         </td>
+                        <td className="px-4 py-3 text-gray-600">
+                          <div>{formatMoney(p.estimatedUnitCost)}</div>
+                          <div className="text-xs text-gray-400">
+                            {formatValuationSource(p.valuationSource)}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 font-semibold text-gray-900">
+                          {formatMoney(p.inventoryValue)}
+                        </td>
                         <td className="px-4 py-3 text-gray-500">
                           {p.defaultLocationName ?? p.location ?? '—'}
                         </td>
@@ -883,7 +977,7 @@ export default function PartsPage() {
                       </tr>
                       {isEditing && (
                         <tr>
-                          <td colSpan={14} className="bg-yellow-50/40 px-4 py-4">
+                          <td colSpan={16} className="bg-yellow-50/40 px-4 py-4">
                             <div className="grid gap-3 lg:grid-cols-[1.2fr_0.7fr_0.6fr_0.7fr_0.9fr_0.9fr_1fr]">
                               <label className="space-y-1">
                                 <span className="text-xs font-semibold uppercase text-gray-500">

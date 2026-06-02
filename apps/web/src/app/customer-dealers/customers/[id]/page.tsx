@@ -9,12 +9,17 @@ import {
   getCustomer,
   listActivities,
   listCartVehicles,
+  listCustomerSyncs,
   listOpportunities,
+  listPaymentSyncRecords,
   listQuotes,
   listWoOrders,
+  paymentSyncWorkOrderDisplayName,
   salesUserDisplayName,
   type CartVehicle,
   type Customer,
+  type CustomerSyncRecord,
+  type PaymentSyncRecord,
   type Quote,
   type SalesActivity,
   type SalesOpportunity,
@@ -115,6 +120,14 @@ export default function CustomerDetailPage() {
   });
   const [quotes, setQuotes] = useState<RelatedLoad<Quote>>({ items: [], total: 0 });
   const [activities, setActivities] = useState<RelatedLoad<SalesActivity>>({ items: [], total: 0 });
+  const [customerSyncs, setCustomerSyncs] = useState<RelatedLoad<CustomerSyncRecord>>({
+    items: [],
+    total: 0,
+  });
+  const [paymentSyncs, setPaymentSyncs] = useState<RelatedLoad<PaymentSyncRecord>>({
+    items: [],
+    total: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState<string[]>([]);
 
@@ -129,6 +142,8 @@ export default function CustomerDetailPage() {
       opportunityResult,
       quoteResult,
       activityResult,
+      customerSyncResult,
+      paymentSyncResult,
     ] = await Promise.allSettled([
       getCustomer(customerId, STRICT_LIVE_DATA),
       listCartVehicles({ customerId, limit: 50 }, STRICT_LIVE_DATA),
@@ -136,6 +151,8 @@ export default function CustomerDetailPage() {
       listOpportunities({ customerId, limit: 25 }, STRICT_LIVE_DATA),
       listQuotes({ customerId, limit: 25 }, STRICT_LIVE_DATA),
       listActivities({ customerId, limit: 25 }, STRICT_LIVE_DATA),
+      listCustomerSyncs({ customerId, limit: 10 }, STRICT_LIVE_DATA),
+      listPaymentSyncRecords({ customerId, limit: 10 }, STRICT_LIVE_DATA),
     ]);
 
     const nextErrors: string[] = [];
@@ -183,6 +200,20 @@ export default function CustomerDetailPage() {
     } else {
       setActivities({ items: [], total: 0 });
       nextErrors.push('Sales activity failed to load.');
+    }
+
+    if (customerSyncResult.status === 'fulfilled') {
+      setCustomerSyncs(customerSyncResult.value);
+    } else {
+      setCustomerSyncs({ items: [], total: 0 });
+      nextErrors.push('Customer accounting sync failed to load.');
+    }
+
+    if (paymentSyncResult.status === 'fulfilled') {
+      setPaymentSyncs(paymentSyncResult.value);
+    } else {
+      setPaymentSyncs({ items: [], total: 0 });
+      nextErrors.push('Payment sync history failed to load.');
     }
 
     setErrors(nextErrors);
@@ -261,12 +292,13 @@ export default function CustomerDetailPage() {
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
         <MetricTile label="Cart Assets" value={vehicles.total} />
         <MetricTile label="Work Orders" value={workOrders.total} />
         <MetricTile label="Opportunities" value={opportunities.total} />
         <MetricTile label="Quotes" value={quotes.total} />
         <MetricTile label="Activities" value={activities.total} />
+        <MetricTile label="Accounting Sync" value={customerSyncs.total + paymentSyncs.total} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_1.35fr]">
@@ -493,32 +525,114 @@ export default function CustomerDetailPage() {
           )}
         </Section>
 
-        <Section title="Recent Sales Activity" count={activities.total}>
-          {activities.items.length === 0 ? (
-            <EmptyState
-              title="No sales activity"
-              description="Activity will appear here after follow-up notes, calls, or stage changes are logged."
-            />
-          ) : (
-            <div className="space-y-3">
-              {activities.items.map((activity) => (
-                <div key={activity.id} className="rounded-md border border-gray-200 px-3 py-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="font-semibold text-gray-900">{activity.subject}</div>
-                    <StatusBadge status={activity.activityType} />
-                  </div>
-                  {activity.body && <p className="mt-1 text-sm text-gray-600">{activity.body}</p>}
-                  <div className="mt-2 text-xs text-gray-500">
-                    Created {formatDate(activity.createdAt)}
-                    {activity.dueDate ? ` · Due ${formatDate(activity.dueDate)}` : ''}
-                    {activity.completedAt ? ` · Completed ${formatDate(activity.completedAt)}` : ''}
-                  </div>
-                </div>
-              ))}
+        <Section
+          title="Accounting Sync"
+          count={customerSyncs.total + paymentSyncs.total}
+          action={
+            <div className="flex flex-wrap items-center gap-2">
+              <ActionLink href={erpRoute('accounting-sync', { view: 'customers', customerId })}>
+                Customer Sync
+              </ActionLink>
+              <ActionLink href={erpRoute('accounting-sync', { view: 'payments', customerId })}>
+                Payments
+              </ActionLink>
             </div>
-          )}
+          }
+        >
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div>
+              <h3 className="mb-2 text-sm font-semibold text-gray-900">Customer Sync</h3>
+              {customerSyncs.items.length === 0 ? (
+                <p className="rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-500">
+                  No customer sync records for this profile.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {customerSyncs.items.map((record) => (
+                    <div key={record.id} className="rounded-md border border-gray-200 px-3 py-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="font-semibold text-gray-900">{record.provider}</div>
+                        <StatusBadge status={record.state} />
+                      </div>
+                      <div className="mt-1 text-xs text-gray-500">
+                        Attempts {record.attemptCount} · Created {formatDate(record.createdAt)}
+                      </div>
+                      {record.externalReference && (
+                        <div className="mt-1 text-xs text-gray-600">
+                          External {record.externalReference}
+                        </div>
+                      )}
+                      {record.lastErrorMessage && (
+                        <div className="mt-1 text-xs text-red-700">{record.lastErrorMessage}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <h3 className="mb-2 text-sm font-semibold text-gray-900">Payments</h3>
+              {paymentSyncs.items.length === 0 ? (
+                <p className="rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-500">
+                  No payment sync records for this customer.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {paymentSyncs.items.map((record) => (
+                    <div key={record.id} className="rounded-md border border-gray-200 px-3 py-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <Link
+                          href={erpRecordRoute('work-order', record.workOrderId)}
+                          className="font-semibold text-gray-900 hover:underline"
+                        >
+                          {paymentSyncWorkOrderDisplayName(record)}
+                        </Link>
+                        <StatusBadge status={record.state} />
+                      </div>
+                      <div className="mt-1 text-sm text-gray-700">
+                        {formatCurrency(record.amountCents / 100)}
+                        {record.paymentMethod ? ` · ${record.paymentMethod}` : ''}
+                      </div>
+                      <div className="mt-1 text-xs text-gray-500">
+                        Attempts {record.attemptCount} · Updated {formatDate(record.updatedAt)}
+                      </div>
+                      {record.errorMessage && (
+                        <div className="mt-1 text-xs text-red-700">{record.errorMessage}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </Section>
       </div>
+
+      <Section title="Recent Sales Activity" count={activities.total}>
+        {activities.items.length === 0 ? (
+          <EmptyState
+            title="No sales activity"
+            description="Activity will appear here after follow-up notes, calls, or stage changes are logged."
+          />
+        ) : (
+          <div className="space-y-3">
+            {activities.items.map((activity) => (
+              <div key={activity.id} className="rounded-md border border-gray-200 px-3 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="font-semibold text-gray-900">{activity.subject}</div>
+                  <StatusBadge status={activity.activityType} />
+                </div>
+                {activity.body && <p className="mt-1 text-sm text-gray-600">{activity.body}</p>}
+                <div className="mt-2 text-xs text-gray-500">
+                  Created {formatDate(activity.createdAt)}
+                  {activity.dueDate ? ` · Due ${formatDate(activity.dueDate)}` : ''}
+                  {activity.completedAt ? ` · Completed ${formatDate(activity.completedAt)}` : ''}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
 
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" onClick={() => void load()}>

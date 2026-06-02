@@ -141,29 +141,39 @@ export default function SyncMonitorPage() {
   const [view, setViewState] = useState<SyncView>('failures');
   const [state, setStateFilter] = useState<StateFilter>('ALL');
   const [period, setPeriodFilter] = useState<PeriodFilter>();
+  const [customerIdFilter, setCustomerIdFilter] = useState<string | undefined>();
   const [qbConnected, setQbConnected] = useState<boolean | null>(null);
   const [qbCompany, setQbCompany] = useState<string | undefined>();
   const [retrying, setRetrying] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    setViewState(normalizeView(params.get('view') ?? params.get('tab')));
-    setStateFilter(normalizeState(params.get('state')));
-    setPeriodFilter(params.get('period') === 'today' ? 'today' : undefined);
-  }, []);
+    const nextView = normalizeView(params.get('view') ?? params.get('tab'));
+    const nextState = normalizeState(params.get('state'));
+    const nextPeriod = params.get('period') === 'today' ? 'today' : undefined;
+    const nextCustomerId = params.get('customerId')?.trim() || undefined;
 
-  useEffect(() => {
     let cancelled = false;
+    setViewState(nextView);
+    setStateFilter(nextState);
+    setPeriodFilter(nextPeriod);
+    setCustomerIdFilter(nextCustomerId);
     setLoading(true);
     setLoadError(null);
     const invoiceRequests = INVOICE_LOAD_STATES.map((syncState) =>
       listInvoiceSyncRecords({ state: syncState, limit: 200 }, STRICT_LIVE_DATA),
     );
     const customerRequests = CUSTOMER_LOAD_STATES.map((syncState) =>
-      listCustomerSyncs({ state: syncState, limit: 200 }, STRICT_LIVE_DATA),
+      listCustomerSyncs(
+        { state: syncState, customerId: nextCustomerId, limit: 200 },
+        STRICT_LIVE_DATA,
+      ),
     );
     const paymentRequests = PAYMENT_LOAD_STATES.map((syncState) =>
-      listPaymentSyncRecords({ state: syncState, limit: 200 }, STRICT_LIVE_DATA),
+      listPaymentSyncRecords(
+        { state: syncState, customerId: nextCustomerId, limit: 200 },
+        STRICT_LIVE_DATA,
+      ),
     );
     Promise.allSettled([
       ...invoiceRequests,
@@ -302,6 +312,9 @@ export default function SyncMonitorPage() {
 
     const qs = new URLSearchParams();
     qs.set('view', nextView);
+    if (customerIdFilter) {
+      qs.set('customerId', customerIdFilter);
+    }
     if (
       (nextView === 'invoices' || nextView === 'customers' || nextView === 'payments') &&
       nextState !== 'ALL'
@@ -411,6 +424,20 @@ export default function SyncMonitorPage() {
           <p className="text-sm font-semibold text-yellow-800">
             Could not load all sync data: {loadError}
           </p>
+        </div>
+      )}
+
+      {customerIdFilter && (view === 'customers' || view === 'payments') && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3">
+          <p className="text-sm font-semibold text-yellow-900">
+            Filtered to customer {customerIdFilter}
+          </p>
+          <a
+            href={erpRoute('accounting-sync', { view })}
+            className="text-sm font-semibold text-yellow-900 hover:underline"
+          >
+            Clear filter
+          </a>
         </div>
       )}
 

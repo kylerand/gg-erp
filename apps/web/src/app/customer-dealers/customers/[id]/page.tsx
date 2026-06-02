@@ -79,6 +79,18 @@ interface CustomerTimelineItem {
   actionLabel?: string;
 }
 
+interface CustomerNextActionItem {
+  id: string;
+  priority: 'Critical' | 'High' | 'Normal';
+  category: string;
+  title: string;
+  detail: string;
+  href: string;
+  actionLabel: string;
+  status?: string;
+  sortOrder: number;
+}
+
 function customerDisplayName(customer: Customer): string {
   return customer.companyName ?? customer.fullName;
 }
@@ -111,6 +123,16 @@ function timelineSortValue(value?: string | null): number {
   if (!value) return 0;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function daysUntil(value?: string | null): number | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  date.setHours(0, 0, 0, 0);
+  return Math.ceil((date.getTime() - today.getTime()) / 86_400_000);
 }
 
 function optionalText(value: string): string | null {
@@ -146,6 +168,235 @@ function cartDraftFromVehicle(vehicle: CartVehicle): CartProfileDraft {
     modelYear: String(vehicle.modelYear),
     state: CART_STATE_OPTIONS.includes(vehicle.state) ? vehicle.state : 'REGISTERED',
   };
+}
+
+function buildCustomerNextActions({
+  customerId,
+  vehicles,
+  workOrders,
+  opportunities,
+  quotes,
+  activities,
+  customerSyncs,
+  paymentSyncs,
+}: {
+  customerId: string;
+  vehicles: CartVehicle[];
+  workOrders: WoOrder[];
+  opportunities: SalesOpportunity[];
+  quotes: Quote[];
+  activities: SalesActivity[];
+  customerSyncs: CustomerSyncRecord[];
+  paymentSyncs: PaymentSyncRecord[];
+}): CustomerNextActionItem[] {
+  const actions: CustomerNextActionItem[] = [];
+  const openOpportunityStages = new Set(['PROSPECT', 'QUALIFIED', 'PROPOSAL', 'NEGOTIATION']);
+  const activeQuoteStatuses = new Set(['DRAFT', 'SENT']);
+
+  for (const record of customerSyncs.filter((item) => item.state === 'FAILED').slice(0, 2)) {
+    actions.push({
+      id: `customer-sync-${record.id}`,
+      priority: 'Critical',
+      category: 'Accounting',
+      title: 'Fix customer sync failure',
+      detail:
+        record.lastErrorMessage ??
+        `${record.provider} customer sync has failed after ${record.attemptCount} attempts.`,
+      href: erpRoute('accounting-sync', { view: 'customers', customerId }),
+      actionLabel: 'Open Customer Sync',
+      status: record.state,
+      sortOrder: 10,
+    });
+  }
+
+  for (const record of paymentSyncs
+    .filter((item) => item.state === 'FAILED' || item.state === 'MISMATCH')
+    .slice(0, 2)) {
+    actions.push({
+      id: `payment-sync-${record.id}`,
+      priority: 'Critical',
+      category: 'Payment',
+      title: record.state === 'MISMATCH' ? 'Resolve payment mismatch' : 'Fix payment sync failure',
+      detail:
+        record.errorMessage ??
+        `${paymentSyncWorkOrderDisplayName(record)} has ${record.attemptCount} payment sync attempts.`,
+      href: erpRoute('accounting-sync', { view: 'payments', customerId }),
+      actionLabel: 'Open Payments',
+      status: record.state,
+      sortOrder: 20,
+    });
+  }
+
+  for (const workOrder of workOrders.filter((item) => item.status === 'BLOCKED').slice(0, 2)) {
+    actions.push({
+      id: `blocked-work-order-${workOrder.id}`,
+      priority: 'Critical',
+      category: 'Service',
+      title: 'Unblock work order',
+      detail: `${workOrder.workOrderNumber} · ${workOrder.title}`,
+      href: erpRecordRoute('work-order', workOrder.id),
+      actionLabel: 'Open Work Order',
+      status: workOrder.status,
+      sortOrder: 30,
+    });
+  }
+
+  for (const activity of activities
+    .filter(
+      (item) =>
+        !item.completedAt && daysUntil(item.dueDate) !== null && daysUntil(item.dueDate)! < 0,
+    )
+    .slice(0, 2)) {
+    actions.push({
+      id: `overdue-activity-${activity.id}`,
+      priority: 'High',
+      category: 'Sales',
+      title: 'Complete overdue follow-up',
+      detail: `${activity.subject} was due ${formatDate(activity.dueDate)}.`,
+      href: activity.opportunityId
+        ? erpRecordRoute('sales-opportunity', activity.opportunityId)
+        : erpRoute('sales'),
+      actionLabel: activity.opportunityId ? 'Log Activity' : 'Open Sales',
+      status: activity.activityType,
+      sortOrder: 40,
+    });
+  }
+
+  for (const quote of quotes
+    .filter((item) => item.status === 'ACCEPTED' && !item.convertedWoId)
+    .slice(0, 2)) {
+    actions.push({
+      id: `accepted-quote-${quote.id}`,
+      priority: 'High',
+      category: 'Quote',
+      title: 'Convert accepted quote',
+      detail: `${quote.quoteNumber} is accepted for ${formatCurrency(quote.total)}.`,
+      href: erpRecordRoute('quote', quote.id),
+      actionLabel: 'Open Quote',
+      status: quote.status,
+      sortOrder: 50,
+    });
+  }
+
+  for (const quote of quotes
+    .filter((item) => activeQuoteStatuses.has(item.status) && daysUntil(item.validUntil) !== null)
+    .sort((a, b) => (daysUntil(a.validUntil) ?? 999) - (daysUntil(b.validUntil) ?? 999))
+    .slice(0, 2)) {
+    const remainingDays = daysUntil(quote.validUntil);
+    if (remainingDays !== null && remainingDays <= 14) {
+      actions.push({
+        id: `quote-expiration-${quote.id}`,
+        priority: remainingDays < 0 ? 'High' : 'Normal',
+        category: 'Quote',
+        title: remainingDays < 0 ? 'Review expired quote' : 'Follow up before quote expires',
+        detail:
+          remainingDays < 0
+            ? `${quote.quoteNumber} passed its valid-until date on ${formatDate(quote.validUntil)}.`
+            : `${quote.quoteNumber} expires in ${remainingDays} days for ${formatCurrency(
+                quote.total,
+              )}.`,
+        href: erpRecordRoute('quote', quote.id),
+        actionLabel: 'Open Quote',
+        status: quote.status,
+        sortOrder: 60 + Math.max(remainingDays, 0),
+      });
+    }
+  }
+
+  for (const workOrder of workOrders
+    .filter((item) => item.status !== 'COMPLETED' && item.status !== 'CANCELLED')
+    .sort((a, b) => (daysUntil(a.dueAt) ?? 999) - (daysUntil(b.dueAt) ?? 999))
+    .slice(0, 2)) {
+    const remainingDays = daysUntil(workOrder.dueAt);
+    if (remainingDays !== null && remainingDays <= 3) {
+      actions.push({
+        id: `work-order-due-${workOrder.id}`,
+        priority: remainingDays < 0 ? 'High' : 'Normal',
+        category: 'Service',
+        title: remainingDays < 0 ? 'Catch up overdue work order' : 'Confirm upcoming work order',
+        detail:
+          remainingDays < 0
+            ? `${workOrder.workOrderNumber} was due ${formatDate(workOrder.dueAt)}.`
+            : `${workOrder.workOrderNumber} is due ${formatDate(workOrder.dueAt)}.`,
+        href: erpRecordRoute('work-order', workOrder.id),
+        actionLabel: 'Open Work Order',
+        status: workOrder.status,
+        sortOrder: 80 + Math.max(remainingDays, 0),
+      });
+    }
+  }
+
+  const openOpportunities = opportunities.filter((item) => openOpportunityStages.has(item.stage));
+  for (const opportunity of openOpportunities
+    .filter(
+      (item) =>
+        daysUntil(item.expectedCloseDate) !== null && daysUntil(item.expectedCloseDate)! < 0,
+    )
+    .slice(0, 2)) {
+    actions.push({
+      id: `overdue-opportunity-${opportunity.id}`,
+      priority: 'Normal',
+      category: 'Sales',
+      title: 'Review overdue opportunity',
+      detail: `${opportunity.title} expected close was ${formatDate(opportunity.expectedCloseDate)}.`,
+      href: erpRecordRoute('sales-opportunity', opportunity.id),
+      actionLabel: 'Open Opportunity',
+      status: opportunity.stage,
+      sortOrder: 100,
+    });
+  }
+
+  const latestActivity = activities
+    .map((activity) => timelineSortValue(activity.completedAt ?? activity.createdAt))
+    .sort((a, b) => b - a)[0];
+  const staleActivity =
+    openOpportunities.length > 0 &&
+    (!latestActivity || Date.now() - latestActivity > 14 * 86_400_000);
+  if (staleActivity) {
+    const opportunity = openOpportunities[0];
+    actions.push({
+      id: `stale-sales-activity-${opportunity.id}`,
+      priority: 'Normal',
+      category: 'Sales',
+      title: activities.length === 0 ? 'Log first sales activity' : 'Log customer follow-up',
+      detail: `${opportunity.title} has no recent completed activity.`,
+      href: erpRecordRoute('sales-opportunity', opportunity.id),
+      actionLabel: 'Log Activity',
+      status: opportunity.stage,
+      sortOrder: 120,
+    });
+  }
+
+  if (vehicles.length === 0 && workOrders.length === 0) {
+    actions.push({
+      id: 'start-first-work-order',
+      priority: 'Normal',
+      category: 'Service',
+      title: 'Start first shop intake',
+      detail: 'No cart asset or execution work order is tied to this customer yet.',
+      href: erpRoute('create-work-order', { customerId }),
+      actionLabel: 'New Work Order',
+      sortOrder: 140,
+    });
+  }
+
+  if (openOpportunities.length === 0 && quotes.length === 0) {
+    actions.push({
+      id: 'start-first-opportunity',
+      priority: 'Normal',
+      category: 'Sales',
+      title: 'Create sales opportunity',
+      detail: 'No open opportunity or quote is tied to this customer.',
+      href: erpRoute('create-sales-opportunity', { customerId }),
+      actionLabel: 'New Opportunity',
+      sortOrder: 150,
+    });
+  }
+
+  return actions
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .filter((action, index, sorted) => sorted.findIndex((item) => item.id === action.id) === index)
+    .slice(0, 6);
 }
 
 function buildCustomerTimeline({
@@ -580,6 +831,16 @@ export default function CustomerDetailPage() {
 
   const displayName = customerDisplayName(customer);
   const primaryVehicle = vehicles.items[0];
+  const nextActionItems = buildCustomerNextActions({
+    customerId,
+    vehicles: vehicles.items,
+    workOrders: workOrders.items,
+    opportunities: opportunities.items,
+    quotes: quotes.items,
+    activities: activities.items,
+    customerSyncs: customerSyncs.items,
+    paymentSyncs: paymentSyncs.items,
+  });
   const timelineItems = buildCustomerTimeline({
     customerId,
     vehicles: vehicles.items,
@@ -642,6 +903,69 @@ export default function CustomerDetailPage() {
         <MetricTile label="Activities" value={activities.total} />
         <MetricTile label="Accounting Sync" value={customerSyncs.total + paymentSyncs.total} />
       </div>
+
+      <Section
+        title="Customer Next Actions"
+        count={nextActionItems.length}
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <ActionLink href={erpRoute('create-sales-opportunity', { customerId })}>
+              New Opportunity
+            </ActionLink>
+            <ActionLink href={erpRoute('create-work-order', { customerId })}>
+              New Work Order
+            </ActionLink>
+          </div>
+        }
+      >
+        {nextActionItems.length === 0 ? (
+          <EmptyState
+            title="No immediate customer actions"
+            description="No customer-specific blockers, due follow-ups, expiring quotes, or accounting sync issues were found in live records."
+            action={
+              <ActionLink href={erpRoute('create-quote', { customerId })}>New Quote</ActionLink>
+            }
+          />
+        ) : (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {nextActionItems.map((item) => (
+              <div key={item.id} className="rounded-md border border-gray-200 px-3 py-2">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold uppercase text-gray-500">
+                        {item.category}
+                      </span>
+                      <span
+                        className={
+                          item.priority === 'Critical'
+                            ? 'rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700'
+                            : item.priority === 'High'
+                              ? 'rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700'
+                              : 'rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-700'
+                        }
+                      >
+                        {item.priority}
+                      </span>
+                    </div>
+                    <div className="mt-1 font-semibold text-gray-900">{item.title}</div>
+                    <div className="mt-1 text-sm text-gray-600">{item.detail}</div>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    {item.status && <StatusBadge status={item.status} />}
+                    <Link
+                      href={item.href}
+                      className="text-sm font-semibold text-gray-900 hover:underline"
+                    >
+                      {item.actionLabel}
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
 
       <Section
         title="Customer Timeline"
